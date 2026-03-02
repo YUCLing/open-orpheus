@@ -1,3 +1,5 @@
+// TODO: Support register callback-style handlers, some native calls
+// requires multiple rounds of communication.
 export type HandlerFunction<
   Args extends unknown[] = unknown[],
   Return extends unknown[] | void = void,
