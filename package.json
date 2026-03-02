@@ -33,7 +33,6 @@
     "@types/electron-squirrel-startup": "^1.0.2",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
-    "better-sqlite3": "^12.6.2",
     "database": "file:./modules/database",
     "electron": "40.6.1",
     "eslint": "^8.57.1",
