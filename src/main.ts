@@ -43,6 +43,13 @@ const createWindow = () => {
   // Fix CORS issues by injecting appropriate headers for all responses
   mainWindow.webContents.session.webRequest.onHeadersReceived(
     (details, callback) => {
+      const frame = details.frame;
+      if (!frame) {
+        // No frame associated with the request, skip header modification
+        callback({});
+        return;
+      }
+
       const responseHeaders = details.responseHeaders || {};
 
       // Remove existing headers that might interfere with our CORS settings
@@ -59,8 +66,8 @@ const createWindow = () => {
         }
       }
 
-      // Set CORS headers to allow requests from any origin
-      responseHeaders["access-control-allow-origin"] = ["orpheus://orpheus"];
+      // Set CORS headers to allow requests from request origin
+      responseHeaders["access-control-allow-origin"] = [frame.origin];
       responseHeaders["access-control-allow-methods"] = ["*"];
       responseHeaders["access-control-allow-headers"] = ["*"];
       responseHeaders["access-control-allow-credentials"] = ["true"];
