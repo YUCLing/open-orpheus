@@ -16,14 +16,16 @@ if (started) {
   app.quit();
 }
 
-function getWindowSizeStatus(wnd: BrowserWindow): ["minimize" | "maximize" | "restore", number, number, number] {
+function getWindowSizeStatus(
+  wnd: BrowserWindow
+): ["minimize" | "maximize" | "restore", number, number, number] {
   const bounds = wnd.getBounds();
   return [
     wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore",
     bounds.width,
     bounds.height,
-    screen.getDisplayMatching(bounds).scaleFactor
-  ]
+    screen.getDisplayMatching(bounds).scaleFactor,
+  ];
 }
 
 const createWindow = () => {
@@ -80,7 +82,11 @@ const createWindow = () => {
 
   ["maximize", "minimize", "restore", "resize"].forEach((event) => {
     mainWindow.on(event as unknown as "maximize", () => {
-      mainWindow.webContents.send("channel.call", "winhelper.onSizeStatus", ...getWindowSizeStatus(mainWindow));
+      mainWindow.webContents.send(
+        "channel.call",
+        "winhelper.onSizeStatus",
+        ...getWindowSizeStatus(mainWindow)
+      );
     });
   });
 
@@ -94,7 +100,7 @@ const createWindow = () => {
       deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
     });
   });
-  
+
   mainWindow.on("focus", () => {
     mainWindow.webContents.send("channel.call", "winhelper.onfocus");
   });

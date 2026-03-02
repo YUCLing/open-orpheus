@@ -1,0 +1,17 @@
+{
+  "extends": "../.eslintrc.json",
+  "env": {
+    "node": true
+  },
+  "settings": {
+    "import/parsers": {
+      "@typescript-eslint/parser": [".ts", ".tsx", ".cts", ".mts"]
+    },
+    "import/resolver": {
+      "typescript": {}
+    }
+  },
+  "rules": {
+    "@typescript-eslint/no-var-requires": "off"
+  }
+}

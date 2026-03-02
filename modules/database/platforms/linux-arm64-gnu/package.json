@@ -1,0 +1,25 @@
+{
+  "name": "@database/linux-arm64-gnu",
+  "description": "Prebuilt binary package for `database` on `linux-arm64-gnu`.",
+  "version": "0.1.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "index.node",
+  "files": [
+    "index.node"
+  ],
+  "neon": {
+    "type": "binary",
+    "rust": "aarch64-unknown-linux-gnu",
+    "node": "linux-arm64-gnu",
+    "os": "linux",
+    "arch": "arm64",
+    "abi": "gnu"
+  },
+  "author": "",
+  "license": "MIT"
+}

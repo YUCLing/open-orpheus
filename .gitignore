@@ -91,6 +91,9 @@ typings/
 # Electron-Forge
 out/
 
+# Rust
+target
+
 # Netease Cloud Music Web Pack
 /web_pack/
 

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { registerCallHandler } from "../calls";
 import { sanitizeRelativePath } from "../util";
-import { webDb, storageExecsql as execsql } from "../database";
+import { webDb } from "../database";
 import { dirname } from "node:path";
 
 // TODO: Better data dir handling
@@ -39,15 +39,50 @@ registerCallHandler<[string, string, boolean, string], void>(
 registerCallHandler<[string, string], void>(
   "storage.execsql",
   async (event, taskId, sql) => {
-    const execResult = execsql(webDb, taskId, sql);
-    event.sender.send(
-      "channel.call",
-      "storage.onexecsqldone",
-      taskId,
-      execResult.errCode,
-      execResult.rows,
-      execResult.perf
-    );
+    try {
+      const execResult = webDb.executeSql(sql);
+      event.sender.send(
+        "channel.call",
+        "storage.onexecsqldone",
+        taskId,
+        ...execResult
+      );
+    } catch (error) {
+      console.error(`Error executing SQL: ${error.message}`);
+      event.sender.send(
+        "channel.call",
+        "storage.onexecsqldone",
+        taskId,
+        1,
+        undefined,
+        [0, 0, 0]
+      );
+    }
+  }
+);
+
+registerCallHandler<[string, string], void>(
+  "storage.exectransaction",
+  async (event, taskId, sql) => {
+    try {
+      const execResult = webDb.executeTransaction(sql);
+      event.sender.send(
+        "channel.call",
+        "storage.onexecsqldone",
+        taskId,
+        ...execResult
+      );
+    } catch (error) {
+      console.error(`Error executing SQL transaction: ${error.message}`);
+      event.sender.send(
+        "channel.call",
+        "storage.onexecsqldone",
+        taskId,
+        1,
+        undefined,
+        [0, 0, 0]
+      );
+    }
   }
 );
 

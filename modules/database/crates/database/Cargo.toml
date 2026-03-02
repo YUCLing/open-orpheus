@@ -1,0 +1,16 @@
+[package]
+name = "database"
+version = "0.1.0"
+description = "Database module for Open Orpheus"
+license = "MIT"
+edition = "2024"
+exclude = ["index.node"]
+
+[lib]
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+neon = "1.1"
+rusqlite = { version = "0.38.0", features = ["bundled"] }

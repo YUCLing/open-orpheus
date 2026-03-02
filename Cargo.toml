@@ -1,0 +1,3 @@
+[workspace]
+members = ["modules/database/crates/database"]
+resolver = "3"

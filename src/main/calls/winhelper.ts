@@ -8,25 +8,28 @@ registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
   false,
 ]);
 
-registerCallHandler<["minimize" | "maximize" | "hide" | "show"], void>("winhelper.showWindow", (event, show) => {
-  const mainWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!mainWindow) return;
-  
-  switch (show) {
-    case "minimize":
-      mainWindow.minimize();
-      break;
-    case "maximize":
-      mainWindow.maximize();
-      break;
-    case "hide":
-      mainWindow.hide();
-      break;
-    case "show":
-      mainWindow.show();
-      break;
+registerCallHandler<["minimize" | "maximize" | "hide" | "show"], void>(
+  "winhelper.showWindow",
+  (event, show) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!mainWindow) return;
+
+    switch (show) {
+      case "minimize":
+        mainWindow.minimize();
+        break;
+      case "maximize":
+        mainWindow.maximize();
+        break;
+      case "hide":
+        mainWindow.hide();
+        break;
+      case "show":
+        mainWindow.show();
+        break;
+    }
   }
-});
+);
 
 registerCallHandler<[string], void>(
   "winhelper.setWindowTitle",
