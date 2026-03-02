@@ -5,8 +5,14 @@ let tooltip: string | null = null;
 
 let trayIcon: Tray | null = null;
 
+let mainWnd: Electron.BrowserWindow | null = null;
+
 export function get(): Tray | null {
   return trayIcon;
+}
+
+export function bindMainWindow(mainWindow: Electron.BrowserWindow) {
+  mainWnd = mainWindow;
 }
 
 export function setIcon(newIcon: NativeImage) {
@@ -34,6 +40,14 @@ export function install() {
   if (tooltip) {
     trayIcon.setToolTip(tooltip);
   }
+  trayIcon.on("click", () => {
+    if (!mainWnd) return;
+    mainWnd.webContents.send("channel.call", "trayicon.onclick");
+  });
+  trayIcon.on("right-click", () => {
+    if (!mainWnd) return;
+    mainWnd.webContents.send("channel.call", "trayicon.onrightclick");
+  });
 }
 
 export function uninstall() {

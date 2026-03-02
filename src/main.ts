@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, screen } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
@@ -7,10 +7,23 @@ import registerOrpheusScheme from "./main/orpheus";
 
 // Channel module
 import "./main/channel";
+import { bindMainWindow as trayBindMainWindow } from "./main/tray";
+
+let quitting = false;
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+function getWindowSizeStatus(wnd: BrowserWindow): ["minimize" | "maximize" | "restore", number, number, number] {
+  const bounds = wnd.getBounds();
+  return [
+    wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore",
+    bounds.width,
+    bounds.height,
+    screen.getDisplayMatching(bounds).scaleFactor
+  ]
 }
 
 const createWindow = () => {
@@ -56,6 +69,38 @@ const createWindow = () => {
     }
   );
 
+  trayBindMainWindow(mainWindow);
+
+  ["maximize", "minimize", "restore", "resize"].forEach((event) => {
+    mainWindow.on(event as unknown as "maximize", () => {
+      mainWindow.webContents.send("channel.call", "winhelper.onSizeStatus", ...getWindowSizeStatus(mainWindow));
+    });
+  });
+
+  mainWindow.on("resized", () => {
+    const bounds = mainWindow.getBounds();
+    mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
+      top: 0,
+      left: 0,
+      right: bounds.width,
+      bottom: bounds.height,
+      deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
+    });
+  });
+  
+  mainWindow.on("focus", () => {
+    mainWindow.webContents.send("channel.call", "winhelper.onfocus");
+  });
+  mainWindow.on("blur", () => {
+    mainWindow.webContents.send("channel.call", "winhelper.onlosefocus");
+  });
+
+  mainWindow.on("close", (e) => {
+    if (quitting) return;
+    mainWindow.webContents.send("channel.call", "winhelper.onclose");
+    e.preventDefault();
+  });
+
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
 };
@@ -84,4 +129,9 @@ app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+app.on("before-quit", () => {
+  // Allow main window to be closed.
+  quitting = true;
 });

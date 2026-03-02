@@ -1,4 +1,5 @@
 import {
+  app,
   BrowserWindow,
   nativeImage,
   ThumbarButton,
@@ -10,6 +11,10 @@ import { pngFromIco } from "../util";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   console.log(...args);
+});
+
+registerCallHandler<[], void>("app.exit", () => {
+  app.quit();
 });
 
 type ThumbnailOptions = {
