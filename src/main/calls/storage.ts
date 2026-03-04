@@ -1,12 +1,24 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
+import { data as dataDir } from "../folders";
 import { registerCallHandler } from "../calls";
 import { sanitizeRelativePath } from "../util";
 import { webDb } from "../database";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
 
-// TODO: Better data dir handling
-const dataDir = "data";
+registerCallHandler<[string, string, string], [string, string]>("storage.init", (event, downloadDir, someNumStr, cacheDir) => {
+  if (!downloadDir) {
+    // TODO: find proper download dir
+    downloadDir = resolve(join(dataDir, "downloads"));
+  }
+  if (!cacheDir) {
+    cacheDir = resolve(join(dataDir, "cache"));
+  }
+  mkdirSync(downloadDir, { recursive: true });
+  mkdirSync(cacheDir, { recursive: true });
+  return [downloadDir, cacheDir];
+});
 
 registerCallHandler<[string, string, boolean, string], void>(
   "storage.readfromfile",
@@ -88,7 +100,7 @@ registerCallHandler<[string, string], void>(
 
 registerCallHandler<[string, string, string, string, boolean, string], void>(
   "storage.savetofile",
-  async (event, taskId, content, _, path, overwrite) => {
+  async (event, taskId, content, mode, path) => {
     const filePath = sanitizeRelativePath(dataDir, path);
     if (filePath === false) {
       throw new Error(`Forbidden file path access attempt: ${path}`);
@@ -97,7 +109,7 @@ registerCallHandler<[string, string, string, string, boolean, string], void>(
     await mkdir(dirname(filePath), { recursive: true });
 
     try {
-      await writeFile(filePath, content, { flag: overwrite ? "w" : "a" });
+      await writeFile(filePath, content, { flag: "w" });
       event.sender.send("channel.call", "storage.onsavetofiledone", taskId, 0);
     } catch (error) {
       event.sender.send(
@@ -110,3 +122,36 @@ registerCallHandler<[string, string, string, string, boolean, string], void>(
     }
   }
 );
+
+registerCallHandler<[string, { id: string, path: string }[], string], void>("storage.checkFilesExist", async (event, taskId, files, basePath) => {
+  const results = files.map(async (file) => {
+    const filePath = join(basePath, file.path);
+    return { id: file.id, exists: existsSync(filePath) };
+  });
+  event.sender.send("channel.call", "storage.oncheckfilesexist", taskId, true, results);
+});
+
+registerCallHandler<[string, boolean, string, number, string[]], void>("storage.downloadscanner", (event) => {
+  // TODO: Scan download dir for downloaded music
+  event.sender.send("channel.send", "storage.ondownloadscanner");
+});
+
+// TODO: Track cache
+registerCallHandler<[], {
+  bitrate: number;
+  cached: number;
+  dfsId: "",
+  format: "",
+  lastAccessTime: number,
+  lastModifyTime: number;
+  md5: string;
+  playInfoExist: boolean;
+  playInfoStr: string;
+  songId: string;
+  volumeGain: number;
+}[]>("storage.queryCacheTracks", () => []);
+
+registerCallHandler<[string], void>("storage.getTempFile", (event, songId) => {
+  console.warn(`storage.getTempFile is not implemented yet, songId: ${songId}`);
+  // Does it do anything tho?
+});

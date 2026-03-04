@@ -6,3 +6,4 @@ import "./storage";
 import "./musiclibrary";
 import "./os";
 import "./trayicon";
+import "./network";

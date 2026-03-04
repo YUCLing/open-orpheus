@@ -3,6 +3,9 @@ import { dispatcher } from "./calls";
 
 import "./calls/index";
 
+const CALL_DEBUG = false; // Set to true to enable debug logs for channel.call
+let _callDebugId = 0;
+
 const nativeCallbacks = new Map<string, (...args: unknown[]) => void>();
 
 ipcRenderer.on(
@@ -16,7 +19,9 @@ export function fireNativeCall<Args extends unknown[]>(
   command: string,
   ...args: Args
 ) {
-  console.debug(`Received nativeCall: ${command} with args:`, args);
+  if (CALL_DEBUG) {
+    console.debug(`Received nativeCall: ${command} with args:`, args);
+  }
   const callback = nativeCallbacks.get(command);
   callback?.(...args);
 }
@@ -36,6 +41,15 @@ contextBridge.exposeInMainWorld("channel", {
     callback: (...args: unknown[]) => void,
     params: unknown[]
   ) => {
+    if (CALL_DEBUG) {
+      const id = _callDebugId++;
+      console.debug("channel.call:", id, `${command} with params:`, ...params);
+      const originalCallback = callback;
+      callback = (...args) => {
+        console.debug("R:channel.call:", id, `for ${command} with args:`, ...args);
+        originalCallback(...args);
+      }
+    }
     const ret = await dispatcher.dispatch(command, callback, ...params);
     if (ret === false) {
       // No handler found for the command, forward to main process

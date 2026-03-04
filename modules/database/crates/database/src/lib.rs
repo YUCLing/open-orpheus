@@ -16,13 +16,13 @@ fn create_connection<'cx>(cx: &mut Cx<'cx>, path: String) -> JsResult<'cx, JsNum
     Ok(JsNumber::new(cx, ptr as usize as f64))
 }
 
-fn value_ref_to_js_value<'cx>(cx: &mut Cx<'cx>, val: rusqlite::types::ValueRef) -> Handle<'cx, JsValue> {
+fn value_ref_to_js_string<'cx>(cx: &mut Cx<'cx>, val: rusqlite::types::ValueRef) -> Handle<'cx, JsString> {
     match val {
-        rusqlite::types::ValueRef::Null => cx.null().upcast(),
-        rusqlite::types::ValueRef::Integer(i) => cx.number(i as f64).upcast(),
-        rusqlite::types::ValueRef::Real(f) => cx.number(f).upcast(),
-        rusqlite::types::ValueRef::Text(t) => cx.string(std::str::from_utf8(t).unwrap()).upcast(),
-        rusqlite::types::ValueRef::Blob(b) => cx.string(format!("{:?}", b)).upcast(),
+        rusqlite::types::ValueRef::Null => cx.string(""),
+        rusqlite::types::ValueRef::Integer(i) => cx.string(i.to_string()),
+        rusqlite::types::ValueRef::Real(f) => cx.string(f.to_string()),
+        rusqlite::types::ValueRef::Text(t) => cx.string(std::str::from_utf8(t).unwrap()),
+        rusqlite::types::ValueRef::Blob(b) => cx.string(format!("{:?}", b)),
     }
 }
 
@@ -59,7 +59,7 @@ fn execute_sql<'cx>(cx: &mut Cx<'cx>, ptr: f64, sql: String) -> JsResult<'cx, Js
             for i in 0..column_count {
                 let val = row.get_ref(i).unwrap();
                 let name = cx.string(&column_names[i]);
-                let js_val = value_ref_to_js_value(cx, val);
+                let js_val = value_ref_to_js_string(cx, val);
                 row_obj.prop(cx, name).set(js_val).unwrap();
             }
             results.push(row_obj);
@@ -157,7 +157,7 @@ fn execute_sqls<'cx>(cx: &mut Cx<'cx>, ptr: f64, sqls: Handle<JsArray>) -> JsRes
                 let row_obj = cx.empty_array();
                 for i in 0..column_count {
                     let val = row.get_ref(i).unwrap();
-                    let js_val = value_ref_to_js_value(cx, val);
+                    let js_val = value_ref_to_js_string(cx, val);
                     row_obj.prop(cx, i as u32).set(js_val).unwrap();
                 }
                 results.push(row_obj);

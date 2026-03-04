@@ -161,6 +161,15 @@
     "@electron-forge/plugin-base" "7.11.1"
     "@electron-forge/shared-types" "7.11.1"
 
+"@electron-forge/plugin-local-electron@^7.11.1":
+  version "7.11.1"
+  resolved "https://registry.yarnpkg.com/@electron-forge/plugin-local-electron/-/plugin-local-electron-7.11.1.tgz#78e235a48779308560f1e5876c724683a3fc7035"
+  integrity sha512-ciG7bCRaGnwJk95Y8BJlU2qrLQkJtNObUqV3RMVBvVhjcr67OF/dFCm2lfVWrl6AwVfqIGXC9cWfXXy00cqVzA==
+  dependencies:
+    "@electron-forge/plugin-base" "7.11.1"
+    "@electron-forge/shared-types" "7.11.1"
+    fs-extra "^10.0.0"
+
 "@electron-forge/plugin-vite@^7.11.1":
   version "7.11.1"
   resolved "https://registry.yarnpkg.com/@electron-forge/plugin-vite/-/plugin-vite-7.11.1.tgz#f082bedf0b91f864e1a5dfb0280ebda641837c30"
@@ -1997,6 +2006,11 @@ concat-map@0.0.1:
   resolved "https://registry.yarnpkg.com/concat-map/-/concat-map-0.0.1.tgz#d8a96bd77fd68df7793a73036a3ba0d5405d477b"
   integrity sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==
 
+cookie@^1.1.1:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/cookie/-/cookie-1.1.1.tgz#3bb9bdfc82369db9c2f69c93c9c3ceb310c88b3c"
+  integrity sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==
+
 cross-dirname@^0.1.0:
   version "0.1.0"
   resolved "https://registry.yarnpkg.com/cross-dirname/-/cross-dirname-0.1.0.tgz#b899599f30a5389f59e78c150e19f957ad16a37c"
@@ -2261,10 +2275,10 @@ electron-winstaller@^5.3.0:
   optionalDependencies:
     "@electron/windows-sign" "^1.1.2"
 
-electron@40.6.1:
-  version "40.6.1"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-40.6.1.tgz#f7dca0c028a13144abe2192ec2b6a75ef7418dfc"
-  integrity sha512-u9YfoixttdauciHV9Ut9Zf3YipJoU093kR1GSYTTXTAXqhiXI0G1A0NnL/f0O2m2UULCXaXMf2W71PloR6V9pQ==
+electron@40.7.1:
+  version "40.7.0"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-40.7.0.tgz#ed57e7a1d400bb8a93ce70c39f2ca023d28792e7"
+  integrity sha512-oQe76S/3V1rcb0+i45hAxnCH8udkRZSaHUNwglzNAEKbB94LSJ1qwbFo8+uRc2UsYZgCqSIMRcyX40GyOkD+Xw==
   dependencies:
     "@electron/get" "^2.0.0"
     "@types/node" "^24.9.0"
@@ -2818,6 +2832,11 @@ flora-colossus@^2.0.0:
   dependencies:
     debug "^4.3.4"
     fs-extra "^10.1.0"
+
+font-list@^2.0.2:
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/font-list/-/font-list-2.0.2.tgz#5133ac0c4740fb4d426c30f0b238d4db41d0bcfa"
+  integrity sha512-kNG2sY5+Nh5bbWL9kgAi+k8tuXfZ3m+6fjNGF4iUITTyex2S6wITREgr9ZqY1xw2+mFM6Bi5NPEPpRB6jLLOnw==
 
 for-each@^0.3.3, for-each@^0.3.5:
   version "0.3.5"

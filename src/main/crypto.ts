@@ -74,20 +74,20 @@ export function enData(
 }
 
 /**
- * Decrypts a double-Base64-encoded AES-128-ECB ciphertext.
+ * Decrypts a double-Base64-encoded or buffer AES-128-ECB ciphertext.
  * Exact reverse of addid3content(), unwinding each step in reverse order.
  *
  * Pipeline (reversed):
  *   Base64 #2 decode → Base64 #1 decode → AES-128-ECB decrypt → PKCS#7 unpad
  */
-export function deData(doubleBase64: string, key = DATA_AES_KEY) {
+export function deData(bufOr2Base64: string | Buffer, key = DATA_AES_KEY) {
   if (!Buffer.isBuffer(key) || key.length !== 0x10) {
     console.error("Error: deData: invalid key length, expected 16 bytes");
     return null;
   }
 
   // Reverse Base64 #2 — undo FUN_180503a00 in caller FUN_180e0a800
-  const base64Once = Buffer.from(doubleBase64, "base64").toString("utf8");
+  const base64Once = typeof bufOr2Base64 === "string" ? Buffer.from(bufOr2Base64, "base64").toString("utf8") : bufOr2Base64.toString("utf8");
 
   // Reverse Base64 #1 — undo FUN_1802ef230 inside addid3content()
   const ciphertext = Buffer.from(base64Once, "base64");

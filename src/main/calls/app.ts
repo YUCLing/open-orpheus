@@ -17,6 +17,22 @@ registerCallHandler<[], void>("app.exit", () => {
   app.quit();
 });
 
+registerCallHandler<[string, string], [string]>("app.getLocalConfig", (event, item, subItem) => {
+  // TODO: Implement this properly
+  switch (item) {
+    case "Proxy":
+      return [""]; // No Proxy
+    case "setting":
+      break;
+    case "features":
+      if (subItem === "hidpi") {
+        // Do nothing?
+      }
+      break;
+  }
+  return [""];
+});
+
 type ThumbnailOptions = {
   btnExtends: Button[];
   btnLeft?: Button;
@@ -94,3 +110,29 @@ registerCallHandler<[ThumbnailOptions], void>(
     );
   }
 );
+
+registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [true]);
+
+registerCallHandler<[], void>("app.getDefaultMusicPlayPath", () => { return });
+
+registerCallHandler<[string], void>("app.login", (event, uid) => {
+  if (uid) {
+    // Logged in
+  } else {
+    // Logged out
+  }
+});
+
+registerCallHandler<[{
+  userid: string;
+  isVip: undefined;
+  isSVip: undefined;
+  vipLevel: undefined;
+  svipLevel: undefined;
+}], void>("app.setCustomInfo", (event, info) => {
+  if (info.userid) {
+    // Logged in
+  } else {
+    // Logged out
+  }
+});

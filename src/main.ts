@@ -7,7 +7,12 @@ import registerOrpheusScheme from "./main/orpheus";
 
 // Channel module
 import "./main/channel";
+
 import { bindMainWindow as trayBindMainWindow } from "./main/tray";
+import { getWindowSizeStatus } from "./main/util";
+import { loadFromFile as loadCookiesFromFile } from "./main/cookie";
+import { data as dataDir } from "./main/folders";
+import { prepareDeviceId } from "./main/device";
 
 let quitting = false;
 
@@ -16,17 +21,8 @@ if (started) {
   app.quit();
 }
 
-function getWindowSizeStatus(
-  wnd: BrowserWindow
-): ["minimize" | "maximize" | "restore", number, number, number] {
-  const bounds = wnd.getBounds();
-  return [
-    wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore",
-    bounds.width,
-    bounds.height,
-    screen.getDisplayMatching(bounds).scaleFactor,
-  ];
-}
+app.commandLine.appendSwitch("remote-debugging-port", "6546");
+app.setPath("userData", path.resolve(path.join(dataDir, "userdata")));
 
 const createWindow = () => {
   // Create the browser window.
@@ -41,42 +37,6 @@ const createWindow = () => {
 
   // Load App URL
   mainWindow.loadURL("orpheus://orpheus/pub/app.html");
-
-  // Fix CORS issues by injecting appropriate headers for all responses
-  mainWindow.webContents.session.webRequest.onHeadersReceived(
-    (details, callback) => {
-      const frame = details.frame;
-      if (!frame) {
-        // No frame associated with the request, skip header modification
-        callback({});
-        return;
-      }
-
-      const responseHeaders = details.responseHeaders || {};
-
-      // Remove existing headers that might interfere with our CORS settings
-      for (const key in responseHeaders) {
-        if (
-          [
-            "access-control-allow-origin",
-            "access-control-allow-methods",
-            "access-control-allow-headers",
-            "access-control-allow-credentials",
-          ].includes(key.toLowerCase())
-        ) {
-          delete responseHeaders[key];
-        }
-      }
-
-      // Set CORS headers to allow requests from request origin
-      responseHeaders["access-control-allow-origin"] = [frame.origin];
-      responseHeaders["access-control-allow-methods"] = ["*"];
-      responseHeaders["access-control-allow-headers"] = ["*"];
-      responseHeaders["access-control-allow-credentials"] = ["true"];
-
-      callback({ responseHeaders });
-    }
-  );
 
   trayBindMainWindow(mainWindow);
 
@@ -121,8 +81,11 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on("ready", () => {
+app.on("ready", async () => {
   registerOrpheusScheme();
+
+  await prepareDeviceId();
+  await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
 
   createWindow();
 });

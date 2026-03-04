@@ -85,6 +85,10 @@ player.audio.addEventListener("timeupdate", () => {
     "audioplayer.onPlayProgress",
     player.currentId,
     player.audio.currentTime,
-    1
-  ); // last likely the playback rate
+    player.audio.playbackRate,
+  );
+});
+
+player.audio.addEventListener("volumechange", () => {
+  fireNativeCall("audioplayer.onVolume", player.currentId, player.audio.volume);
 });

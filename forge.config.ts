@@ -19,6 +19,13 @@ const config: ForgeConfig = {
     new MakerDeb({}),
   ],
   plugins: [
+    // Workaround during development due to https://github.com/electron/electron/issues/50040
+    {
+      name: "@electron-forge/plugin-local-electron",
+      config: {
+        electronPath: "F:\\Projects\\electron\\src\\out\\Testing"
+      }
+    },
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
       // If you are familiar with Vite configuration, it will look really familiar.

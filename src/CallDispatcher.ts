@@ -25,7 +25,7 @@ export default class CallDispatcher {
     cmd: string,
     callback: (...args: unknown[]) => void,
     ...args: unknown[]
-  ): Promise<unknown | false> {
+  ): Promise<void | false> {
     const handler = this.handlers.get(cmd);
     if (!handler) {
       return false;

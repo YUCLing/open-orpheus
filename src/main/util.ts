@@ -1,3 +1,4 @@
+import { BrowserWindow, screen } from "electron";
 // eslint-disable-next-line import/no-unresolved
 import { parseICO } from "icojs";
 import { resolve, join } from "node:path";
@@ -23,4 +24,21 @@ export function sanitizeRelativePath(
     return false;
   }
   return resolvedPath;
+}
+
+export function getWindowSizeStatus(
+  wnd: BrowserWindow
+): ["minimize" | "maximize" | "restore", number, number, number] {
+  const bounds = wnd.getBounds();
+  return [
+    wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore",
+    bounds.width,
+    bounds.height,
+    screen.getDisplayMatching(bounds).scaleFactor,
+  ];
+}
+
+export function getWindowScaleFactor(wnd: BrowserWindow): number {
+  const bounds = wnd.getBounds();
+  return screen.getDisplayMatching(bounds).scaleFactor;
 }

@@ -1,7 +1,9 @@
 import { BrowserWindow, nativeImage } from "electron";
+import path from "node:path";
+
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
-import { pngFromIco } from "../util";
+import { getWindowScaleFactor, pngFromIco } from "../util";
 
 // TODO: Implement this properly
 registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
@@ -11,21 +13,21 @@ registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
 registerCallHandler<["minimize" | "maximize" | "hide" | "show"], void>(
   "winhelper.showWindow",
   (event, show) => {
-    const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!mainWindow) return;
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd) return;
 
     switch (show) {
       case "minimize":
-        mainWindow.minimize();
+        wnd.minimize();
         break;
       case "maximize":
-        mainWindow.maximize();
+        wnd.maximize();
         break;
       case "hide":
-        mainWindow.hide();
+        wnd.hide();
         break;
       case "show":
-        mainWindow.show();
+        wnd.show();
         break;
     }
   }
@@ -41,13 +43,13 @@ registerCallHandler<[string], void>(
 registerCallHandler<[string], void>(
   "winhelper.setWindowIconFromLocalFile",
   async (event, iconPath) => {
-    const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!mainWindow) return;
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd) return;
 
     const icon = await loadFromOrpheusUrl(iconPath);
     const buf = await pngFromIco(icon.content);
     const image = nativeImage.createFromBuffer(Buffer.from(buf));
-    mainWindow.setIcon(image);
+    wnd.setIcon(image);
   }
 );
 
@@ -68,22 +70,22 @@ type WindowPosition = {
 registerCallHandler<[WindowPosition], void>(
   "winhelper.setWindowPosition",
   (event, { width, height, x, y, topmost }) => {
-    const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!mainWindow) return;
-    mainWindow.setBounds({ width, height, x, y });
-    mainWindow.setAlwaysOnTop(topmost);
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd) return;
+    wnd.setBounds({ width, height, x, y });
+    wnd.setAlwaysOnTop(topmost);
   }
 );
 
 registerCallHandler<[], [WindowPosition]>(
   "winhelper.getWindowPosition",
   (event) => {
-    const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!mainWindow)
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd)
       return [{ width: 0, height: 0, x: 0, y: 0, topmost: false }];
 
-    const bounds = mainWindow.getBounds();
-    const topmost = mainWindow.isAlwaysOnTop();
+    const bounds = wnd.getBounds();
+    const topmost = wnd.isAlwaysOnTop();
     return [
       {
         width: bounds.width,
@@ -98,18 +100,21 @@ registerCallHandler<[], [WindowPosition]>(
 
 registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
   "winhelper.setWindowSizeLimit",
-  () => {
-    // params[0] as { x: number, y: number }
-    // params[1] as { x: number, y: number }
-    // size limit??
+  (event, min, max) => {
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd) return;
+    // This API sets the size limit in physical pixels, so we need to multiply by the scale factor
+    const scaleFactor = getWindowScaleFactor(wnd);
+    wnd.setMinimumSize(min.x * scaleFactor, min.y * scaleFactor);
+    wnd.setMaximumSize(max.x * scaleFactor, max.y * scaleFactor);
   }
 );
 
 registerCallHandler<[], void>("winhelper.bringWindowToTop", (event) => {
-  const mainWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!mainWindow) return;
-  mainWindow.show();
-  mainWindow.focus();
+  const wnd = BrowserWindow.fromWebContents(event.sender);
+  if (!wnd) return;
+  wnd.show();
+  wnd.focus();
 });
 
 registerCallHandler<[unknown, unknown, unknown], void>(
@@ -141,11 +146,31 @@ registerCallHandler<[string, WindowDimensions, WindowAttributes], [boolean]>(
       width: dimensions.width,
       height: dimensions.height,
       resizable: attributes.resizable,
-      //show: attributes.visible,
+      show: attributes.visible,
       skipTaskbar: !attributes.taskbarButton,
       backgroundColor: attributes.bk_color,
+      frame: !attributes.spec_window, // is this correct?
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+      },
     });
     wnd.loadURL(url);
     return [true];
   }
 );
+
+registerCallHandler<[], void>("winhelper.destroyWindow", (event) => {
+  const wnd = BrowserWindow.fromWebContents(event.sender);
+  if (!wnd) return;
+  wnd.close();
+});
+
+// TODO: Support menu
+registerCallHandler<[{ content: string, hotkey: string, left_border_size: number, menu_type: "normal" }, number], void>("winhelper.updateMenu", () => { return });
+
+registerCallHandler<[string, number[], boolean, { id: string }], void>("winhelper.registerHotkey", (event, name, keys, isGlobal, extra) => {
+  console.warn("winhelper.registerHotkey is not implemented yet, returning dummy results.");
+  // 1409: being used
+  // 0: success
+  event.sender.send("channel.call", "winhelper.onRegisterHotkeyResult", name, isGlobal, isGlobal ? 1409 : 0, extra);
+});

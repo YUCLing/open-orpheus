@@ -24,3 +24,17 @@ registerCallHandler<[string, string[]], [boolean]>(
     return [true];
   }
 );
+
+// TODO: Observe music library changes
+registerCallHandler<[string], void>("musiclibrary.observeLibrary", () => { return });
+
+// TODO: Library adding handling
+registerCallHandler<[string, number], [boolean]>("musiclibrary.addLibrary", (event, library) => {
+  event.sender.send("channel.call", "musiclibrary.onaddend", {
+    dirs: [""],
+    library,
+    reason: "",
+    result: 0,
+  });
+  return [true];
+});

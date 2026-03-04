@@ -1,12 +1,18 @@
 import { registerCallHandler } from "../calls";
 
 // These are not needed?
+registerCallHandler<[], void>("app.statis", () => {
+  /* empty */
+});
 registerCallHandler<[], void>("app.statisV2", () => {
   /* empty */
 });
 registerCallHandler<[], void>("app.sendStatis", () => {
   /* empty */
 });
+registerCallHandler<[], []>("app.getABTestKeys", () => []);
+registerCallHandler<[Record<string, boolean>], void>("app.abtestSwitch", () => { /* empty */ });
+registerCallHandler<[Record<string, object>], void>("app.abtestSwitchV2", () => { /* empty */ });
 
 registerCallHandler<[], void>("app.getAppStartCommand", () => {
   /* empty */
@@ -22,6 +28,7 @@ registerCallHandler<
 >("app.onBootFinish", () => {
   /* empty */
 });
+registerCallHandler<[], void>("app.appStartUpEnd", () => { /* empty */ });
 
 const cooperation = {
   main: "",
@@ -30,11 +37,6 @@ const cooperation = {
 registerCallHandler<[], [typeof cooperation]>("app.getCooperation", () => [
   cooperation,
 ]);
-
-registerCallHandler<[string, string], [string]>("app.getLocalConfig", () => {
-  // TODO: Implement this properly
-  return [""];
-});
 
 registerCallHandler<[], [string]>("app.getAppStartTime", () => {
   // TODO: Implement this properly
