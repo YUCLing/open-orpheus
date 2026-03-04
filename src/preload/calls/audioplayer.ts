@@ -1,12 +1,18 @@
 import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
+import { AudioPlayInfo } from "../Player";
 
-registerCallHandler<[string, { musicurl: string }], void>(
+registerCallHandler<[string, AudioPlayInfo], void>(
   "audioplayer.load",
   async (id, playInfo) => {
-    await player.load(id, playInfo.musicurl);
+    await player.load(playInfo);
   }
 );
+
+registerCallHandler<[AudioPlayInfo], void>("audioplayer.setRefreshSongUrlResult", async (result) => {
+  if (player.currentPlayInfo?.playId !== result.playId) return;
+  await player.load(result);
+});
 
 registerCallHandler<[string], void>("audioplayer.play", async (id) => {
   if (player.currentId !== id) return;

@@ -1,3 +1,4 @@
+import { ipcRenderer } from "electron";
 import { fireNativeCall } from "./channel";
 import Player, { AudioPlayerState } from "./Player";
 
@@ -59,6 +60,20 @@ player.audio.addEventListener("ended", () => {
     playedAudioTime: player.audio.duration || 0,
     playedTime: player.audio.duration || 0,
   });
+});
+
+player.audio.addEventListener("error", async () => {
+  // What to do with general errors?
+  const id = player.currentId;
+  const playInfo = player.currentPlayInfo;
+  const [res] = await ipcRenderer.invoke("channel.call", "network.fetch", {
+    url: player.audio.src,
+    method: "HEAD",
+  });
+  if (player.currentId !== id) return; // Check if the current audio has changed
+  if (res.status === 403) {
+    fireNativeCall("audioplayer.onrequestrefreshsongurl", playInfo);
+  }
 });
 
 player.audio.addEventListener("seeked", () => {

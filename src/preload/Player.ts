@@ -5,38 +5,61 @@ export enum AudioPlayerState {
   Error = 3,
 }
 
+export type AudioPlayInfo = {
+  playId: string;
+  songId: string;
+  aiprocessorRatio: number;
+  audioFormat: string;
+  audioType: string;
+  birate: number;
+  br: string;
+  destLevel: string;
+  expireTime: number;
+  extHeader: string;
+  fileSize: number;
+  format: unknown;
+  freeTrialInfo: unknown | null;
+  freeTrialPrivilege: 
+  {
+    resConsumable: boolean;
+    userConsumable: boolean;
+    listenType: unknown | null;
+    playReason: unknown | null;
+    cannotListenReason: unknown | null;
+    freeLimitTagType: unknown | null;
+  };
+  level: string;
+  md5: string;
+  playInfoStr: string;
+  podcastCtrp: unknown | null;
+  rightSource: number;
+  songDuration: string;
+  musicurl: string;
+  songQuality: string;
+  type: number;
+}
+
 export default class Player extends EventTarget {
   private _audio: HTMLAudioElement = new Audio();
-  private _currentId: string | null = null;
+  private _playInfo: AudioPlayInfo | null = null;
 
   get audio() {
     return this._audio;
   }
 
   get currentId() {
-    return this._currentId;
+    return this._playInfo?.playId;
+  }
+
+  get currentPlayInfo() {
+    return this._playInfo;
   }
 
   constructor() {
     super();
     this._audio.addEventListener("canplay", () => {
       this.dispatchEvent(
-        new CustomEvent("load", { detail: { id: this._currentId } })
-      );
-    });
-    this._audio.addEventListener("play", () => {
-      this.dispatchEvent(
-        new CustomEvent("play", { detail: { id: this._currentId } })
-      );
-    });
-    this._audio.addEventListener("pause", () => {
-      this.dispatchEvent(
-        new CustomEvent("pause", { detail: { id: this._currentId } })
-      );
-    });
-    this._audio.addEventListener("ended", () => {
-      this.dispatchEvent(
-        new CustomEvent("ended", { detail: { id: this._currentId } })
+        new CustomEvent("load", { detail: { id: this.currentId } })
       );
     });
   }
@@ -45,11 +68,10 @@ export default class Player extends EventTarget {
     return this._audio;
   }
 
-  async load(id: string, url: string): Promise<HTMLAudioElement> {
-    this._currentId = id;
-    this._audio.src = url;
+  async load(playInfo: AudioPlayInfo): Promise<HTMLAudioElement> {
+    this._playInfo = playInfo;
+    this._audio.src = playInfo.musicurl;
     this._audio.load();
-    console.log(`Started loading audio for id: ${id} from url: ${url}`);
     return this._audio;
   }
 }
