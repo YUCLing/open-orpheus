@@ -1,0 +1,22 @@
+[package]
+name = "window"
+version = "0.1.0"
+description = "Window management module for Open Orpheus"
+license = "MIT"
+edition = "2024"
+exclude = ["index.node"]
+
+[lib]
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+neon = "1.1"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62.2"
+features = [
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging"
+]

@@ -57,7 +57,9 @@ ipcMain.on("channel.deserialData", (event, hexParams: string | ArrayBuffer) => {
 });
 
 ipcMain.on("channel.encodeAnonymousId", (event, id: string) => {
-  event.returnValue = Buffer.from(id + " " + encodeAnonymousId(id)).toString("base64");
+  event.returnValue = Buffer.from(id + " " + encodeAnonymousId(id)).toString(
+    "base64"
+  );
 });
 
 ipcMain.on("channel.serialKey", (event, key: string) => {

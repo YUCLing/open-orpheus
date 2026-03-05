@@ -2275,7 +2275,7 @@ electron-winstaller@^5.3.0:
   optionalDependencies:
     "@electron/windows-sign" "^1.1.2"
 
-electron@40.7.1:
+electron@40.7.0:
   version "40.7.0"
   resolved "https://registry.yarnpkg.com/electron/-/electron-40.7.0.tgz#ed57e7a1d400bb8a93ce70c39f2ca023d28792e7"
   integrity sha512-oQe76S/3V1rcb0+i45hAxnCH8udkRZSaHUNwglzNAEKbB94LSJ1qwbFo8+uRc2UsYZgCqSIMRcyX40GyOkD+Xw==
@@ -5538,6 +5538,11 @@ which@^2.0.1, which@^2.0.2:
   integrity sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==
   dependencies:
     isexe "^2.0.0"
+
+"window@file:./modules/window":
+  version "0.1.0"
+  dependencies:
+    "@neon-rs/load" "^0.1.82"
 
 word-wrap@^1.2.3, word-wrap@^1.2.5:
   version "1.2.5"

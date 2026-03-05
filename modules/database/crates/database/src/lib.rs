@@ -3,7 +3,13 @@
 
 use std::time::Instant;
 
-use neon::{handle::Handle, object::Object, prelude::{Context, Cx}, result::{JsResult, ResultExt}, types::{JsArray, JsNumber, JsObject, JsString, JsValue}};
+use neon::{
+    handle::Handle,
+    object::Object,
+    prelude::{Context, Cx},
+    result::{JsResult, ResultExt},
+    types::{JsArray, JsNumber, JsObject, JsString, JsValue},
+};
 use rusqlite::{Batch, Connection, fallible_iterator::FallibleIterator};
 
 #[neon::export]
@@ -16,7 +22,10 @@ fn create_connection<'cx>(cx: &mut Cx<'cx>, path: String) -> JsResult<'cx, JsNum
     Ok(JsNumber::new(cx, ptr as usize as f64))
 }
 
-fn value_ref_to_js_string<'cx>(cx: &mut Cx<'cx>, val: rusqlite::types::ValueRef) -> Handle<'cx, JsString> {
+fn value_ref_to_js_string<'cx>(
+    cx: &mut Cx<'cx>,
+    val: rusqlite::types::ValueRef,
+) -> Handle<'cx, JsString> {
     match val {
         rusqlite::types::ValueRef::Null => cx.string(""),
         rusqlite::types::ValueRef::Integer(i) => cx.string(i.to_string()),
@@ -51,7 +60,10 @@ fn execute_sql<'cx>(cx: &mut Cx<'cx>, ptr: f64, sql: String) -> JsResult<'cx, Js
             column_names.push(name.to_string());
         }
         let Ok(mut rows) = stmt.query([]) else {
-            let err_msg = cx.string(format!("Failed to execute SQL statement: {:?}", stmt.expanded_sql()));
+            let err_msg = cx.string(format!(
+                "Failed to execute SQL statement: {:?}",
+                stmt.expanded_sql()
+            ));
             return cx.throw(err_msg);
         };
         while let Ok(Some(row)) = rows.next() {
@@ -109,8 +121,14 @@ fn execute_transaction<'cx>(cx: &mut Cx<'cx>, ptr: f64, sql: String) -> JsResult
     ret
 }
 
+#[neon::export]
+fn close_connection(ptr: f64) -> bool {
+    let _ = unsafe { Box::from_raw(ptr as usize as *mut Connection) };
+    true
+}
+
 /// Execute multiple SQL statements inside an array, returns values of the last statement as an array.
-/// 
+///
 /// ## Example return
 /// ```json
 /// {
@@ -142,7 +160,10 @@ fn execute_sqls<'cx>(cx: &mut Cx<'cx>, ptr: f64, sqls: Handle<JsArray>) -> JsRes
         if i != stmts.len() - 1 {
             // For all statements except the last one, we just execute them without fetching results
             if let Err(e) = stmt.query([]) {
-                let err_msg = cx.string(format!("Failed to execute SQL statement: {}, error: {}", sql, e));
+                let err_msg = cx.string(format!(
+                    "Failed to execute SQL statement: {}, error: {}",
+                    sql, e
+                ));
                 return cx.throw(err_msg);
             }
         } else {

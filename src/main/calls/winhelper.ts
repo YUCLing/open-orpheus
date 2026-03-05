@@ -1,6 +1,8 @@
 import { BrowserWindow, nativeImage } from "electron";
 import path from "node:path";
 
+import { dragWindow } from "window";
+
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
@@ -72,6 +74,11 @@ registerCallHandler<[WindowPosition], void>(
   (event, { width, height, x, y, topmost }) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
+    const scaleFactor = getWindowScaleFactor(wnd);
+    width = Math.round(width / scaleFactor);
+    height = Math.round(height / scaleFactor);
+    x = Math.round(x / scaleFactor);
+    y = Math.round(y / scaleFactor);
     wnd.setBounds({ width, height, x, y });
     wnd.setAlwaysOnTop(topmost);
   }
@@ -81,8 +88,7 @@ registerCallHandler<[], [WindowPosition]>(
   "winhelper.getWindowPosition",
   (event) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
-    if (!wnd)
-      return [{ width: 0, height: 0, x: 0, y: 0, topmost: false }];
+    if (!wnd) return [{ width: 0, height: 0, x: 0, y: 0, topmost: false }];
 
     const bounds = wnd.getBounds();
     const topmost = wnd.isAlwaysOnTop();
@@ -103,10 +109,8 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
   (event, min, max) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
-    // This API sets the size limit in physical pixels, so we need to multiply by the scale factor
-    const scaleFactor = getWindowScaleFactor(wnd);
-    wnd.setMinimumSize(min.x * scaleFactor, min.y * scaleFactor);
-    wnd.setMaximumSize(max.x * scaleFactor, max.y * scaleFactor);
+    wnd.setMinimumSize(min.x, min.y);
+    wnd.setMaximumSize(max.x, max.y);
   }
 );
 
@@ -159,6 +163,13 @@ registerCallHandler<[string, WindowDimensions, WindowAttributes], [boolean]>(
   }
 );
 
+registerCallHandler<[], void>("winhelper.dragWindow", (event) => {
+  const wnd = BrowserWindow.fromWebContents(event.sender);
+  if (!wnd) return;
+  const hwnd = wnd.getNativeWindowHandle();
+  dragWindow(hwnd);
+});
+
 registerCallHandler<[], void>("winhelper.destroyWindow", (event) => {
   const wnd = BrowserWindow.fromWebContents(event.sender);
   if (!wnd) return;
@@ -166,11 +177,36 @@ registerCallHandler<[], void>("winhelper.destroyWindow", (event) => {
 });
 
 // TODO: Support menu
-registerCallHandler<[{ content: string, hotkey: string, left_border_size: number, menu_type: "normal" }, number], void>("winhelper.updateMenu", () => { return });
-
-registerCallHandler<[string, number[], boolean, { id: string }], void>("winhelper.registerHotkey", (event, name, keys, isGlobal, extra) => {
-  console.warn("winhelper.registerHotkey is not implemented yet, returning dummy results.");
-  // 1409: being used
-  // 0: success
-  event.sender.send("channel.call", "winhelper.onRegisterHotkeyResult", name, isGlobal, isGlobal ? 1409 : 0, extra);
+registerCallHandler<
+  [
+    {
+      content: string;
+      hotkey: string;
+      left_border_size: number;
+      menu_type: "normal";
+    },
+    number,
+  ],
+  void
+>("winhelper.updateMenu", () => {
+  return;
 });
+
+registerCallHandler<[string, number[], boolean, { id: string }], void>(
+  "winhelper.registerHotkey",
+  (event, name, keys, isGlobal, extra) => {
+    console.warn(
+      "winhelper.registerHotkey is not implemented yet, returning dummy results."
+    );
+    // 1409: being used
+    // 0: success
+    event.sender.send(
+      "channel.call",
+      "winhelper.onRegisterHotkeyResult",
+      name,
+      isGlobal,
+      isGlobal ? 1409 : 0,
+      extra
+    );
+  }
+);

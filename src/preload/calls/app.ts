@@ -11,8 +11,15 @@ registerCallHandler<[], void>("app.sendStatis", () => {
   /* empty */
 });
 registerCallHandler<[], []>("app.getABTestKeys", () => []);
-registerCallHandler<[Record<string, boolean>], void>("app.abtestSwitch", () => { /* empty */ });
-registerCallHandler<[Record<string, object>], void>("app.abtestSwitchV2", () => { /* empty */ });
+registerCallHandler<[Record<string, boolean>], void>("app.abtestSwitch", () => {
+  /* empty */
+});
+registerCallHandler<[Record<string, object>], void>(
+  "app.abtestSwitchV2",
+  () => {
+    /* empty */
+  }
+);
 
 registerCallHandler<[], void>("app.getAppStartCommand", () => {
   /* empty */
@@ -28,7 +35,9 @@ registerCallHandler<
 >("app.onBootFinish", () => {
   /* empty */
 });
-registerCallHandler<[], void>("app.appStartUpEnd", () => { /* empty */ });
+registerCallHandler<[], void>("app.appStartUpEnd", () => {
+  /* empty */
+});
 
 const cooperation = {
   main: "",

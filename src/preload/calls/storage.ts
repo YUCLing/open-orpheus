@@ -5,12 +5,17 @@ type PlayCacheInfoBase = {
   autoCacheSize: string;
   configJson: string;
   groupName: string;
-  manuSetting: unknown,
+  manuSetting: unknown;
   settingLowLimit: string;
   settingUpLimit: string;
   userSettingSize: string;
 };
-registerCallHandler<PlayCacheInfoBase[], void>("storage.setPlayCacheConfig", () => { return });
+registerCallHandler<PlayCacheInfoBase[], void>(
+  "storage.setPlayCacheConfig",
+  () => {
+    return;
+  }
+);
 
 type PlayCacheInfo = PlayCacheInfoBase & {
   autoCacheSize: number;

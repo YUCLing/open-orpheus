@@ -31,8 +31,11 @@ const cachedInstallPackageVersion = {
   mainVer: "3.1.28",
   md5: "B3025C21309C614E088032A206DFFF01",
   path: "C:\\Users\\steamuser\\AppData\\Local\\NetEase\\CloudMusic\\update\\orpheus_install.exe",
-  version: "3.1.28.205001"
+  version: "3.1.28.205001",
 };
-registerCallHandler<[], [typeof cachedInstallPackageVersion]>("update.getCachedInstallPackageVersion", () => {
-  return [cachedInstallPackageVersion];
-});
+registerCallHandler<[], [typeof cachedInstallPackageVersion]>(
+  "update.getCachedInstallPackageVersion",
+  () => {
+    return [cachedInstallPackageVersion];
+  }
+);

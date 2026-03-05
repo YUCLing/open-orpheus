@@ -7,7 +7,7 @@ type SetCookie = {
   Value: string;
   Path?: string;
   Url: string;
-}
+};
 
 type FullCookie = {
   Creation: number;
@@ -48,21 +48,27 @@ registerCallHandler<[string], [Record<string, string>]>(
   }
 );
 
-registerCallHandler<[SetCookie], [boolean]>("browser.setCookie", async (_, cookie) => {
-  try {
-    setCookie({
-      name: cookie.Name,
-      value: cookie.Value,
-      domain: cookie.Domain,
-      path: cookie.Path,
-    });
-  } catch (error) {
-    console.error(`Error setting cookie: ${error.message}`);
-    return [false];
+registerCallHandler<[SetCookie], [boolean]>(
+  "browser.setCookie",
+  async (_, cookie) => {
+    try {
+      setCookie({
+        name: cookie.Name,
+        value: cookie.Value,
+        domain: cookie.Domain,
+        path: cookie.Path,
+      });
+    } catch (error) {
+      console.error(`Error setting cookie: ${error.message}`);
+      return [false];
+    }
+    return [true];
   }
-  return [true];
-});
+);
 
-registerCallHandler<[string, string], [number]>("browser.removeCookie", async (_, url, name) => {
-  return [removeCookie(url, name)];
-});
+registerCallHandler<[string, string], [number]>(
+  "browser.removeCookie",
+  async (_, url, name) => {
+    return [removeCookie(url, name)];
+  }
+);

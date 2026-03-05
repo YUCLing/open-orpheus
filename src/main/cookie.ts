@@ -78,7 +78,9 @@ function normalizeLoadedCookie(rawCookie: StoredCookie): StoredCookie {
     normalizedCookie.path = "/";
   }
   if (normalizedCookie.expires && !(normalizedCookie.expires instanceof Date)) {
-    const parsedExpires = new Date(normalizedCookie.expires as unknown as string);
+    const parsedExpires = new Date(
+      normalizedCookie.expires as unknown as string
+    );
     if (!Number.isNaN(parsedExpires.getTime())) {
       normalizedCookie.expires = parsedExpires;
     } else {
@@ -273,32 +275,35 @@ export function setCookie(setCookieValue: cookie.SetCookie) {
   return true;
 }
 
-export function processSetCookie(firstArg: string | string[], secondArg?: string[]) {
-    const { requestUrl, setCookieHeaders } = parseProcessSetCookieArgs(
-      firstArg,
-      secondArg
-    );
+export function processSetCookie(
+  firstArg: string | string[],
+  secondArg?: string[]
+) {
+  const { requestUrl, setCookieHeaders } = parseProcessSetCookieArgs(
+    firstArg,
+    secondArg
+  );
 
-    let parsedUrl: URL | undefined;
-    if (requestUrl) {
-      try {
-        parsedUrl = new URL(requestUrl);
-      } catch {
-        parsedUrl = undefined;
-      }
+  let parsedUrl: URL | undefined;
+  if (requestUrl) {
+    try {
+      parsedUrl = new URL(requestUrl);
+    } catch {
+      parsedUrl = undefined;
     }
-
-    for (const header of setCookieHeaders) {
-      const parsedSetCookie = cookie.parseSetCookie(header) as StoredCookie;
-      if (!parsedSetCookie.domain && parsedUrl) {
-        parsedSetCookie.domain = parsedUrl.hostname.toLowerCase();
-        parsedSetCookie.hostOnly = true;
-      }
-      setCookie(parsedSetCookie);
-    }
-
-    void saveToFile(join(data, "cookies.dat"));
   }
+
+  for (const header of setCookieHeaders) {
+    const parsedSetCookie = cookie.parseSetCookie(header) as StoredCookie;
+    if (!parsedSetCookie.domain && parsedUrl) {
+      parsedSetCookie.domain = parsedUrl.hostname.toLowerCase();
+      parsedSetCookie.hostOnly = true;
+    }
+    setCookie(parsedSetCookie);
+  }
+
+  void saveToFile(join(data, "cookies.dat"));
+}
 
 ipcMain.handle("cookie.getCookieHeader", (_, url: string) => {
   return cookie.stringifyCookie(getCookies(url));

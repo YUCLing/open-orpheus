@@ -33,16 +33,38 @@ registerCallHandler<
 });
 
 // TODO: Link mediaSession
-registerCallHandler<[boolean], void>("player.setSMTCEnable", () => { return });
+registerCallHandler<[boolean], void>("player.setSMTCEnable", () => {
+  return;
+});
 
 registerCallHandler<[], void>("player.removeAll", () => {
   navigator.mediaSession.metadata = null;
 });
 
 // Dummy setup handlers that returns true
-["setTextAlign", "setLineMode", "setCurrentPlay", "setDesktopLyricTopMost", "showTranslateLyric", "setLRCColor", "setOutlineColor", "setOutlineShadow", "showHorizontalLyric", "setLRCFont", "setLock", "setFont", "setLRCSlogan", "setMiniPlayerState", "setCover", "setLikeMark", "addListElement"].forEach((cmd) => {
+[
+  "setTextAlign",
+  "setLineMode",
+  "setCurrentPlay",
+  "setDesktopLyricTopMost",
+  "showTranslateLyric",
+  "setLRCColor",
+  "setOutlineColor",
+  "setOutlineShadow",
+  "showHorizontalLyric",
+  "setLRCFont",
+  "setLock",
+  "setFont",
+  "setLRCSlogan",
+  "setMiniPlayerState",
+  "setCover",
+  "setLikeMark",
+  "addListElement",
+].forEach((cmd) => {
   registerCallHandler<[], [boolean]>(`player.${cmd}`, () => {
-    console.warn(`player.${cmd} is not implemented yet, but returning true now.`);
+    console.warn(
+      `player.${cmd} is not implemented yet, but returning true now.`
+    );
     return [true];
   });
 });

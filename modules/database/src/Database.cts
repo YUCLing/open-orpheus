@@ -19,7 +19,12 @@ declare module "./load.cjs" {
   ): {
     value: unknown[] | undefined;
   };
+  function closeConnection(ptr: number): boolean;
 }
+
+const finalizationRegistry = new FinalizationRegistry((ptr: number) => {
+  addon.closeConnection(ptr);
+});
 
 export default class Database {
   private _ptr: number;
@@ -29,17 +34,33 @@ export default class Database {
     if (this._ptr === 0) {
       throw new Error(`Failed to create database connection for path: ${path}`);
     }
+    finalizationRegistry.register(this, this._ptr);
   }
 
   executeSql(sql: string): ReturnType<typeof addon.executeSql> {
+    if (this._ptr === 0) {
+      throw new Error("Database connection is closed.");
+    }
     return addon.executeSql(this._ptr, sql);
   }
 
   executeTransaction(sql: string): ReturnType<typeof addon.executeTransaction> {
+    if (this._ptr === 0) {
+      throw new Error("Database connection is closed.");
+    }
     return addon.executeTransaction(this._ptr, sql);
   }
 
   executeSqls(sqls: string[]): ReturnType<typeof addon.executeSqls> {
+    if (this._ptr === 0) {
+      throw new Error("Database connection is closed.");
+    }
     return addon.executeSqls(this._ptr, sqls);
+  }
+
+  close(): boolean {
+    const result = addon.closeConnection(this._ptr);
+    this._ptr = 0; // Invalidate the pointer after closing
+    return result;
   }
 }

@@ -59,8 +59,8 @@ registerCallHandler<[string], [unknown]>("os.getSystemInfo", (event_, kind) => {
           height: scr.workAreaSize.height,
           x: scr.workArea.x,
           y: scr.workArea.y,
-        }
-      }
+        },
+      },
     ];
   }
   return [undefined];

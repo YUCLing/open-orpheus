@@ -23,8 +23,8 @@ const config: ForgeConfig = {
     {
       name: "@electron-forge/plugin-local-electron",
       config: {
-        electronPath: "F:\\Projects\\electron\\src\\out\\Testing"
-      }
+        electronPath: "F:\\Projects\\electron\\src\\out\\Testing",
+      },
     },
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.

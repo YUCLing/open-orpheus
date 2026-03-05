@@ -100,7 +100,7 @@ player.audio.addEventListener("timeupdate", () => {
     "audioplayer.onPlayProgress",
     player.currentId,
     player.audio.currentTime,
-    player.audio.playbackRate,
+    player.audio.playbackRate
   );
 });
 

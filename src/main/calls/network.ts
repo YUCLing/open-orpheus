@@ -47,8 +47,9 @@ registerCallHandler<
         method: request.method,
         headers: {
           ...request.headers,
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.28.205001",
-          "Cookie": stringifyCookie(getCookies(request.url)),
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.28.205001",
+          Cookie: stringifyCookie(getCookies(request.url)),
         },
         body: request.body,
       });
@@ -98,24 +99,30 @@ registerCallHandler<
   return [
     {
       code: 1,
-      error: (lastError as Error)?.message || "Network request failed after retries",
+      error:
+        (lastError as Error)?.message || "Network request failed after retries",
       retryTimes: request.retryCount - lastAttempt - 1,
     },
   ];
 });
 
-registerCallHandler<[], [{
-  dnsInvalid: boolean;
-  firstDNS: string;
-  inProxy: boolean;
-  restricted: boolean;
-  unreachable: boolean;
-}]>("network.getEnv", () => [
+registerCallHandler<
+  [],
+  [
+    {
+      dnsInvalid: boolean;
+      firstDNS: string;
+      inProxy: boolean;
+      restricted: boolean;
+      unreachable: boolean;
+    },
+  ]
+>("network.getEnv", () => [
   {
     dnsInvalid: false,
     firstDNS: dns.getServers()[0] || "",
     inProxy: false,
     restricted: false,
     unreachable: false,
-  }
+  },
 ]);

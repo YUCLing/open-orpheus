@@ -19,8 +19,7 @@ export type AudioPlayInfo = {
   fileSize: number;
   format: unknown;
   freeTrialInfo: unknown | null;
-  freeTrialPrivilege: 
-  {
+  freeTrialPrivilege: {
     resConsumable: boolean;
     userConsumable: boolean;
     listenType: unknown | null;
@@ -37,7 +36,7 @@ export type AudioPlayInfo = {
   musicurl: string;
   songQuality: string;
   type: number;
-}
+};
 
 export default class Player extends EventTarget {
   private _audio: HTMLAudioElement = new Audio();

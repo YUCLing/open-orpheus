@@ -1,10 +1,19 @@
 import { registerCallHandler } from "../calls";
 
-registerCallHandler<[number, {
-  path: string;
-  pathtype: number;
-}, boolean], [boolean]>("audioeffect.setParams", () => {
-  console.warn("audioeffect.setParams is not implemented yet, but returning void now.");
+registerCallHandler<
+  [
+    number,
+    {
+      path: string;
+      pathtype: number;
+    },
+    boolean,
+  ],
+  [boolean]
+>("audioeffect.setParams", () => {
+  console.warn(
+    "audioeffect.setParams is not implemented yet, but returning void now."
+  );
   return [true];
 });
 

@@ -9,10 +9,13 @@ registerCallHandler<[string, AudioPlayInfo], void>(
   }
 );
 
-registerCallHandler<[AudioPlayInfo], void>("audioplayer.setRefreshSongUrlResult", async (result) => {
-  if (player.currentPlayInfo?.playId !== result.playId) return;
-  await player.load(result);
-});
+registerCallHandler<[AudioPlayInfo], void>(
+  "audioplayer.setRefreshSongUrlResult",
+  async (result) => {
+    if (player.currentPlayInfo?.playId !== result.playId) return;
+    await player.load(result);
+  }
+);
 
 registerCallHandler<[string], void>("audioplayer.play", async (id) => {
   if (player.currentId !== id) return;
@@ -69,44 +72,60 @@ registerCallHandler<
 });
 
 const failedPlaybackInfo = {
-    "cacheStrategyCode": "",
-    "cdnUsed": false,
-    "deviceAudioFormat": {
-        "channels": 0,
-        "samplerate": 0,
-        "samplesize": 0
-    },
-    "hasNetworkJanks": false,
-    "hasSeekJanks": false,
-    "hasSystemJanks": false,
-    "p2pUsed": false,
-    "playAudioFormat": {
-        "channels": 0,
-        "samplerate": 0,
-        "samplesize": 0
-    },
-    "playId": "",
-    "playedPercent": 0,
-    "playedTime": 0,
-    "preloadWholeCached": false,
-    "result": false,
-    "souceType": 0,
-    "sourceAudioFormat": {
-        "channels": 0,
-        "samplerate": 0,
-        "samplesize": 0
-    },
-    "strategyCode": "",
-    "wholeCached": true
+  cacheStrategyCode: "",
+  cdnUsed: false,
+  deviceAudioFormat: {
+    channels: 0,
+    samplerate: 0,
+    samplesize: 0,
+  },
+  hasNetworkJanks: false,
+  hasSeekJanks: false,
+  hasSystemJanks: false,
+  p2pUsed: false,
+  playAudioFormat: {
+    channels: 0,
+    samplerate: 0,
+    samplesize: 0,
+  },
+  playId: "",
+  playedPercent: 0,
+  playedTime: 0,
+  preloadWholeCached: false,
+  result: false,
+  souceType: 0,
+  sourceAudioFormat: {
+    channels: 0,
+    samplerate: 0,
+    samplesize: 0,
+  },
+  strategyCode: "",
+  wholeCached: true,
 };
 // Never had successful playback, so just return failed info for now
-registerCallHandler<[{ playId: string }], [typeof failedPlaybackInfo]>("audioplayer.getPlaybackInfo", () => [failedPlaybackInfo]);
+registerCallHandler<[{ playId: string }], [typeof failedPlaybackInfo]>(
+  "audioplayer.getPlaybackInfo",
+  () => [failedPlaybackInfo]
+);
 
-registerCallHandler<[{ device: string, use_play_device: boolean }], [{ result: boolean }]>("audioplayer.immerseSurroundSupport", () => {
+registerCallHandler<
+  [{ device: string; use_play_device: boolean }],
+  [{ result: boolean }]
+>("audioplayer.immerseSurroundSupport", () => {
   return [{ result: false }];
 });
 
-registerCallHandler<[{ device: string, use_play_device: boolean, enable: boolean }], void>("audioplayer.immerseSurroundSupportWatch", () => { return });
+registerCallHandler<
+  [{ device: string; use_play_device: boolean; enable: boolean }],
+  void
+>("audioplayer.immerseSurroundSupportWatch", () => {
+  return;
+});
 
 // TODO: Audio player effect support
-registerCallHandler<[string, [{ name: string, on: boolean }]], void>("audioplayer.switchEffect", () => { return });
+registerCallHandler<[string, [{ name: string; on: boolean }]], void>(
+  "audioplayer.switchEffect",
+  () => {
+    return;
+  }
+);

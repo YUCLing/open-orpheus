@@ -46,9 +46,14 @@ contextBridge.exposeInMainWorld("channel", {
       console.debug("channel.call:", id, `${command} with params:`, ...params);
       const originalCallback = callback;
       callback = (...args) => {
-        console.debug("R:channel.call:", id, `for ${command} with args:`, ...args);
+        console.debug(
+          "R:channel.call:",
+          id,
+          `for ${command} with args:`,
+          ...args
+        );
         originalCallback(...args);
-      }
+      };
     }
     const ret = await dispatcher.dispatch(command, callback, ...params);
     if (ret === false) {

@@ -87,7 +87,10 @@ export function deData(bufOr2Base64: string | Buffer, key = DATA_AES_KEY) {
   }
 
   // Reverse Base64 #2 — undo FUN_180503a00 in caller FUN_180e0a800
-  const base64Once = typeof bufOr2Base64 === "string" ? Buffer.from(bufOr2Base64, "base64").toString("utf8") : bufOr2Base64.toString("utf8");
+  const base64Once =
+    typeof bufOr2Base64 === "string"
+      ? Buffer.from(bufOr2Base64, "base64").toString("utf8")
+      : bufOr2Base64.toString("utf8");
 
   // Reverse Base64 #1 — undo FUN_1802ef230 inside addid3content()
   const ciphertext = Buffer.from(base64Once, "base64");

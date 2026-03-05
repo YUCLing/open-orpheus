@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   build: {
     rollupOptions: {
-      external: ["font-list", "database"],
+      external: ["font-list", "database", "window"],
     },
   },
 });

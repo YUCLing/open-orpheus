@@ -1,3 +1,3 @@
 [workspace]
-members = ["modules/database/crates/database"]
+members = ["modules/database/crates/database", "modules/window/crates/window"]
 resolver = "3"
