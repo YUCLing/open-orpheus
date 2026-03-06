@@ -217,3 +217,9 @@ registerCallHandler<[string, number[], boolean, { id: string }], void>(
     );
   }
 );
+
+registerCallHandler<[boolean], void>("winhelper.setWindowFullScreen", (event, fullscreen) => {
+  const wnd = BrowserWindow.fromWebContents(event.sender);
+  if (!wnd) return;
+  wnd.setFullScreen(fullscreen);
+});
