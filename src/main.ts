@@ -14,6 +14,7 @@ import { loadFromFile as loadCookiesFromFile } from "./main/cookie";
 import { data as dataDir } from "./main/folders";
 import { prepareDeviceId } from "./main/device";
 import { addWindow } from "./main/window";
+import { readPack } from "./main/ntpk";
 
 let quitting = false;
 
@@ -90,6 +91,7 @@ app.on("ready", async () => {
 
   await prepareDeviceId();
   await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
+  await readPack();
 
   createWindow();
 });

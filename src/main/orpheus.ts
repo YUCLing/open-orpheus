@@ -1,11 +1,7 @@
 import { protocol } from "electron";
 import mime from "mime";
-import { readFile } from "node:fs/promises";
-import { extname, resolve } from "node:path";
-import { sanitizeRelativePath } from "./util";
-
-// TODO: Actual path handling
-const webPackPath = resolve("./web_pack");
+import { extname } from "node:path";
+import { readFile } from "./ntpk";
 
 protocol.registerSchemesAsPrivileged([
   { scheme: "orpheus", privileges: { secure: true, standard: true } },
@@ -30,16 +26,11 @@ class LoadError extends Error {
 async function loadFromFilePath(
   path: string
 ): Promise<{ content: Buffer<ArrayBuffer>; contentType: string }> {
-  const filePath = sanitizeRelativePath(webPackPath, path);
-  if (filePath === false) {
-    throw new LoadError("Forbidden", 403);
-  }
-
   try {
-    const fileContent = await readFile(filePath);
+    const fileContent = await readFile(path);
     const contentType =
-      mime.getType(extname(filePath)) || "application/octet-stream";
-    return { content: fileContent, contentType };
+      mime.getType(extname(path)) || "application/octet-stream";
+    return { content: Buffer.from(fileContent), contentType };
   } catch (error) {
     throw new LoadError("Not Found", 404);
   }
