@@ -6,13 +6,14 @@ import { dragWindow } from "window";
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
+import { addWindow, setMaximumSize } from "../window";
 
 // TODO: Implement this properly
 registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
   false,
 ]);
 
-registerCallHandler<["minimize" | "maximize" | "hide" | "show"], void>(
+registerCallHandler<["minimize" | "maximize" | "restore" | "hide" | "show"], void>(
   "winhelper.showWindow",
   (event, show) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
@@ -24,6 +25,9 @@ registerCallHandler<["minimize" | "maximize" | "hide" | "show"], void>(
         break;
       case "maximize":
         wnd.maximize();
+        break;
+      case "restore":
+        wnd.restore();
         break;
       case "hide":
         wnd.hide();
@@ -110,7 +114,9 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
     wnd.setMinimumSize(min.x, min.y);
-    wnd.setMaximumSize(max.x, max.y);
+    const scaleFactor = getWindowScaleFactor(wnd);
+    // Use window module to set maximum size to avoid issues with maximized windows
+    setMaximumSize(wnd, max.x * scaleFactor, max.y * scaleFactor);
   }
 );
 
@@ -158,6 +164,7 @@ registerCallHandler<[string, WindowDimensions, WindowAttributes], [boolean]>(
         preload: path.join(__dirname, "preload.js"),
       },
     });
+    addWindow(wnd);
     wnd.loadURL(url);
     return [true];
   }

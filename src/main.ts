@@ -13,6 +13,7 @@ import { getWindowSizeStatus } from "./main/util";
 import { loadFromFile as loadCookiesFromFile } from "./main/cookie";
 import { data as dataDir } from "./main/folders";
 import { prepareDeviceId } from "./main/device";
+import { addWindow } from "./main/window";
 
 let quitting = false;
 
@@ -35,6 +36,8 @@ const createWindow = () => {
       preload: path.join(__dirname, "preload.js"),
     },
   });
+
+  addWindow(mainWindow);
 
   // Load App URL
   mainWindow.loadURL("orpheus://orpheus/pub/app.html");
