@@ -47,7 +47,7 @@ export default class Player extends EventTarget {
   }
 
   get currentId() {
-    return this._playInfo?.playId;
+    return this._playInfo?.playId ?? "";
   }
 
   get currentPlayInfo() {

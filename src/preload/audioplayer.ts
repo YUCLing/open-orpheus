@@ -106,5 +106,5 @@ player.audio.addEventListener("timeupdate", () => {
 });
 
 player.audio.addEventListener("volumechange", () => {
-  fireNativeCall("audioplayer.onVolume", player.currentId, player.audio.volume);
+  fireNativeCall("audioplayer.onVolume", player.currentId, "", 0, player.audio.volume);
 });
