@@ -16,6 +16,8 @@ import { prepareDeviceId } from "./main/device";
 import { addWindow } from "./main/window";
 import { readPack } from "./main/ntpk";
 import { CORE_VERSION } from "./constants";
+import { mkdir } from "node:fs/promises";
+import { initializeDatabases } from "./main/database";
 
 let quitting = false;
 
@@ -88,6 +90,9 @@ const createWindow = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
+  // Make sure data directory exists
+  await mkdir(path.join(dataDir), { recursive: true });
+
   registerOrpheusScheme();
 
   const defaultUserAgent = session.defaultSession.getUserAgent();
@@ -96,6 +101,7 @@ app.on("ready", async () => {
   );
 
   await prepareDeviceId();
+  await initializeDatabases();
   await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
   await readPack();
 

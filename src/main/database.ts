@@ -5,5 +5,18 @@ import { Database } from "database";
 const pathToWebDb = join("data", "webdb.dat");
 const pathToMusicLibrary = join("data", "library.dat");
 
-export const webDb = new Database(pathToWebDb);
-export const musicLibraryDb = new Database(pathToMusicLibrary);
+let webDb: Database;
+let musicLibraryDb: Database;
+
+export function initializeDatabases() {
+  webDb = new Database(pathToWebDb);
+  musicLibraryDb = new Database(pathToMusicLibrary);
+}
+
+export function getWebDb() {
+  return webDb;
+}
+
+export function getMusicLibraryDb() {
+  return musicLibraryDb;
+}

@@ -1,11 +1,11 @@
-import { musicLibraryDb } from "../database";
+import { getMusicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
 
 registerCallHandler<[string, string[]], [boolean]>(
   "musiclibrary.execSql",
   async (event, taskId, sql) => {
     try {
-      const result = musicLibraryDb.executeSqls(sql);
+      const result = getMusicLibraryDb().executeSqls(sql);
       event.sender.send("channel.call", "musiclibrary.onexecsql", {
         error: 0,
         id: taskId,

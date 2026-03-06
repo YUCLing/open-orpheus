@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { data as dataDir } from "../folders";
 import { registerCallHandler } from "../calls";
 import { sanitizeRelativePath } from "../util";
-import { webDb } from "../database";
+import { getWebDb } from "../database";
 import { existsSync, mkdirSync } from "node:fs";
 
 registerCallHandler<[string, string, string], [string, string]>(
@@ -55,7 +55,7 @@ registerCallHandler<[string, string], void>(
   "storage.execsql",
   async (event, taskId, sql) => {
     try {
-      const execResult = webDb.executeSql(sql);
+      const execResult = getWebDb().executeSql(sql);
       event.sender.send(
         "channel.call",
         "storage.onexecsqldone",
@@ -80,7 +80,7 @@ registerCallHandler<[string, string], void>(
   "storage.exectransaction",
   async (event, taskId, sql) => {
     try {
-      const execResult = webDb.executeTransaction(sql);
+      const execResult = getWebDb().executeTransaction(sql);
       event.sender.send(
         "channel.call",
         "storage.onexecsqldone",
