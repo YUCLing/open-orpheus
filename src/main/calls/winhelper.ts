@@ -13,31 +13,31 @@ registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
   false,
 ]);
 
-registerCallHandler<["minimize" | "maximize" | "restore" | "hide" | "show"], void>(
-  "winhelper.showWindow",
-  (event, show) => {
-    const wnd = BrowserWindow.fromWebContents(event.sender);
-    if (!wnd) return;
+registerCallHandler<
+  ["minimize" | "maximize" | "restore" | "hide" | "show"],
+  void
+>("winhelper.showWindow", (event, show) => {
+  const wnd = BrowserWindow.fromWebContents(event.sender);
+  if (!wnd) return;
 
-    switch (show) {
-      case "minimize":
-        wnd.minimize();
-        break;
-      case "maximize":
-        wnd.maximize();
-        break;
-      case "restore":
-        wnd.restore();
-        break;
-      case "hide":
-        wnd.hide();
-        break;
-      case "show":
-        wnd.show();
-        break;
-    }
+  switch (show) {
+    case "minimize":
+      wnd.minimize();
+      break;
+    case "maximize":
+      wnd.maximize();
+      break;
+    case "restore":
+      wnd.restore();
+      break;
+    case "hide":
+      wnd.hide();
+      break;
+    case "show":
+      wnd.show();
+      break;
   }
-);
+});
 
 registerCallHandler<[string], void>(
   "winhelper.setWindowTitle",
@@ -218,8 +218,11 @@ registerCallHandler<[string, number[], boolean, { id: string }], void>(
   }
 );
 
-registerCallHandler<[boolean], void>("winhelper.setWindowFullScreen", (event, fullscreen) => {
-  const wnd = BrowserWindow.fromWebContents(event.sender);
-  if (!wnd) return;
-  wnd.setFullScreen(fullscreen);
-});
+registerCallHandler<[boolean], void>(
+  "winhelper.setWindowFullScreen",
+  (event, fullscreen) => {
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd) return;
+    wnd.setFullScreen(fullscreen);
+  }
+);

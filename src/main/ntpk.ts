@@ -21,15 +21,18 @@ function choosePackFile() {
 
 function createSource(file: string) {
   return {
-    stream: function(offset: number, length: number) {
+    stream: function (offset: number, length: number) {
       offset += 100; // Skip header
-      return createReadStream(file, { start: offset, end: length && offset + length });
+      return createReadStream(file, {
+        start: offset,
+        end: length && offset + length,
+      });
     },
-    size: async function() {
+    size: async function () {
       const stats = await stat(file);
       return stats.size - 100; // Exclude header
-    }
-  }
+    },
+  };
 }
 
 export async function readPack() {

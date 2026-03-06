@@ -15,7 +15,7 @@ function NoS3Plugin() {
         return "export default {}"; // Provide an empty module
       }
     },
-  }
+  };
 }
 
 // https://vitejs.dev/config

@@ -101,7 +101,8 @@ registerCallHandler<
     {
       code: 1,
       error:
-        (lastError as Error)?.message || (lastError ? String(lastError) : "Unknown error"),
+        (lastError as Error)?.message ||
+        (lastError ? String(lastError) : "Unknown error"),
       retryTimes: request.retryCount - lastAttempt - 1,
     },
   ];

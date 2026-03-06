@@ -177,6 +177,6 @@ registerCallHandler<[string], void>("storage.getTempFile", (event, songId) => {
     "storage.ongettempfile",
     songId,
     404, // 0 for success, 404 for not found
-    "", // the response content, empty if not found
+    "" // the response content, empty if not found
   );
 });
