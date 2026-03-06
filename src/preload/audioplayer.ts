@@ -69,6 +69,7 @@ player.audio.addEventListener("error", async () => {
   const [res] = await ipcRenderer.invoke("channel.call", "network.fetch", {
     url: player.audio.src,
     method: "HEAD",
+    retryCount: 3,
   });
   if (player.currentId !== id) return; // Check if the current audio has changed
   if (res.status === 403) {

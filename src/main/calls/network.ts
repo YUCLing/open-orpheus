@@ -32,10 +32,11 @@ registerCallHandler<
   ],
   [NetworkFetchResponse]
 >("network.fetch", async (_, request): Promise<[NetworkFetchResponse]> => {
+  const retryCount = request.retryCount ?? 1;
   let lastError: unknown;
   let lastAttempt = 0;
 
-  for (let attempt = 0; attempt <= request.retryCount; attempt++) {
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
     try {
       // Exponential backoff: wait before retrying (skip on first attempt)
       if (attempt > 0) {
@@ -100,7 +101,7 @@ registerCallHandler<
     {
       code: 1,
       error:
-        (lastError as Error)?.message || "Network request failed after retries",
+        (lastError as Error)?.message || (lastError ? String(lastError) : "Unknown error"),
       retryTimes: request.retryCount - lastAttempt - 1,
     },
   ];
