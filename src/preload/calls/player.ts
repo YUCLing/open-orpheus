@@ -60,6 +60,9 @@ registerCallHandler<[], void>("player.removeAll", () => {
   "setCover",
   "setLikeMark",
   "addListElement",
+  "setTotalTime",
+  "setLyrics",
+  "setOffset",
 ].forEach((cmd) => {
   registerCallHandler<[], [boolean]>(`player.${cmd}`, () => {
     console.warn(

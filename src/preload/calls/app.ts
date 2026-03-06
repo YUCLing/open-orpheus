@@ -1,4 +1,6 @@
+import { SECRET_KEY } from "../../constants";
 import { registerCallHandler } from "../calls";
+import { fireNativeCall } from "../channel";
 
 // These are not needed?
 registerCallHandler<[], void>("app.statis", () => {
@@ -63,3 +65,16 @@ registerCallHandler<[], [boolean]>("app.initUrls", () => {
 
 // TODO: Implement this properly
 registerCallHandler<[], [boolean]>("app.loadSkinPackets", () => [true]);
+
+registerCallHandler<[string, string, object], void>(
+  "app.getNativeData",
+  (taskId, key) => {
+    switch (key) {
+      case "secretKey":
+        fireNativeCall("app.onGetNativeData", taskId, key, {
+          secretKey: SECRET_KEY,
+        });
+        break;
+    }
+  }
+);

@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import { data as dataDir } from "../folders";
+import { data as dataDir, tempFile } from "../folders";
 import { registerCallHandler } from "../calls";
 import { sanitizeRelativePath } from "../util";
 import { getWebDb } from "../database";
@@ -169,14 +169,54 @@ registerCallHandler<
   }[]
 >("storage.queryCacheTracks", () => []);
 
-registerCallHandler<[string], void>("storage.getTempFile", (event, songId) => {
-  // Gets cached lyric response for the song.
-  // TODO: Implement proper caching logic and return actual cached response.
-  event.sender.send(
-    "channel.call",
-    "storage.ongettempfile",
-    songId,
-    404, // 0 for success, 404 for not found
-    "" // the response content, empty if not found
-  );
-});
+registerCallHandler<[string], void>(
+  "storage.getTempFile",
+  async (event, songId) => {
+    // Gets cached lyric response for the song.
+    const tempFilePath = join(tempFile, `${songId}`);
+    let content = "";
+    if (existsSync(tempFilePath)) {
+      try {
+        content = await readFile(tempFilePath, "utf-8").catch((error) => {
+          console.error(
+            `Error reading temp file for songId ${songId}: ${error.message}`
+          );
+          return "";
+        });
+      } catch (error) {
+        console.error(
+          `Error accessing temp file for songId ${songId}: ${error.message}`
+        );
+      }
+    }
+    event.sender.send(
+      "channel.call",
+      "storage.ongettempfile",
+      songId,
+      content ? 0 : 404,
+      content
+    );
+  }
+);
+
+registerCallHandler<[string, string, string], void>(
+  "storage.updatetemp",
+  (event, songId, content, type) => {
+    if (type !== "text/plain") {
+      console.error(`Unsupported temp file type: ${type}`);
+      return;
+    }
+
+    mkdir(tempFile, { recursive: true }).catch((error) => {
+      console.error(`Error creating temp directory: ${error.message}`);
+    });
+
+    writeFile(join(tempFile, `${songId}`), content, { flag: "w" }).catch(
+      (error) => {
+        console.error(
+          `Error writing temp file for songId ${songId}: ${error.message}`
+        );
+      }
+    );
+  }
+);
