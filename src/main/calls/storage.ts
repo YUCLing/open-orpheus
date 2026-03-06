@@ -170,6 +170,13 @@ registerCallHandler<
 >("storage.queryCacheTracks", () => []);
 
 registerCallHandler<[string], void>("storage.getTempFile", (event, songId) => {
-  console.warn(`storage.getTempFile is not implemented yet, songId: ${songId}`);
-  // Does it do anything tho?
+  // Gets cached lyric response for the song.
+  // TODO: Implement proper caching logic and return actual cached response.
+  event.sender.send(
+    "channel.call",
+    "storage.ongettempfile",
+    songId,
+    404, // 0 for success, 404 for not found
+    "", // the response content, empty if not found
+  );
 });
