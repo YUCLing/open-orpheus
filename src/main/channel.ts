@@ -46,7 +46,7 @@ ipcMain.on("channel.deData", (event, doubleBase64: string) => {
 ipcMain.on(
   "channel.serialData",
   (event, apiPath: string, body: string | object) => {
-    const hexParams = serialData(apiPath, body);
+    const hexParams = serialData(apiPath ?? "", body ?? "");
     event.returnValue = hexParams;
   }
 );
