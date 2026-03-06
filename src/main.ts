@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen } from "electron";
+import { app, BrowserWindow, screen, session } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
@@ -15,6 +15,7 @@ import { data as dataDir } from "./main/folders";
 import { prepareDeviceId } from "./main/device";
 import { addWindow } from "./main/window";
 import { readPack } from "./main/ntpk";
+import { CORE_VERSION } from "./constants";
 
 let quitting = false;
 
@@ -88,6 +89,11 @@ const createWindow = () => {
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
   registerOrpheusScheme();
+
+  const defaultUserAgent = session.defaultSession.getUserAgent();
+  session.defaultSession.setUserAgent(
+    `${defaultUserAgent} NeteaseMusicDesktop/${CORE_VERSION}`
+  );
 
   await prepareDeviceId();
   await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));

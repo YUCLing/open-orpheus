@@ -4,6 +4,7 @@ import { stringifyCookie } from "cookie";
 import { registerCallHandler } from "../calls";
 import { getCookies, processSetCookie } from "../cookie";
 import { deserialData } from "../crypto";
+import { session } from "electron";
 
 let globalFailCount = 0;
 let globalSucCount = 0;
@@ -48,8 +49,7 @@ registerCallHandler<
         method: request.method,
         headers: {
           ...request.headers,
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.28.205001",
+          "User-Agent": session.defaultSession.getUserAgent(),
           Cookie: stringifyCookie(getCookies(request.url)),
         },
         body: request.body,

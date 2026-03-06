@@ -1,3 +1,4 @@
+import { BUILD, CORE_VERSION, NATIVE_VERSION, VERSION } from "../../constants";
 import { registerCallHandler } from "../calls";
 
 registerCallHandler<[string], [string, string]>(
@@ -5,9 +6,9 @@ registerCallHandler<[string], [string, string]>(
   (module) => {
     // TODO: Implement this properly
     if (module === "core") {
-      return ["3.1.28.205001", "64"];
+      return [CORE_VERSION, "64"];
     } else if (module === "native") {
-      return ["60316", "64"];
+      return [NATIVE_VERSION, "64"];
     }
     return ["", "64"] as unknown as [string, string];
   }
@@ -15,8 +16,8 @@ registerCallHandler<[string], [string, string]>(
 
 const visualVersion = {
   app_platform: "64",
-  build: "205001",
-  version: "3.1.28",
+  build: BUILD,
+  version: VERSION,
 };
 registerCallHandler<[], [typeof visualVersion]>(
   "update.getVisualVersion",
@@ -27,11 +28,11 @@ registerCallHandler<[], [typeof visualVersion]>(
 );
 
 const cachedInstallPackageVersion = {
-  buildVer: "205001",
-  mainVer: "3.1.28",
+  buildVer: BUILD,
+  mainVer: VERSION,
   md5: "B3025C21309C614E088032A206DFFF01",
   path: "C:\\Users\\steamuser\\AppData\\Local\\NetEase\\CloudMusic\\update\\orpheus_install.exe",
-  version: "3.1.28.205001",
+  version: CORE_VERSION,
 };
 registerCallHandler<[], [typeof cachedInstallPackageVersion]>(
   "update.getCachedInstallPackageVersion",
