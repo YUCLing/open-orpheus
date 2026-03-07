@@ -1,6 +1,9 @@
-import { app, BrowserWindow, screen, session } from "electron";
+import { app, BrowserWindow, dialog, screen, session } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
+
+// Handle errors as early as possible
+import "./error";
 
 // Orpheus scheme
 import registerOrpheusScheme from "./main/orpheus";
@@ -26,7 +29,6 @@ if (started) {
   app.quit();
 }
 
-app.commandLine.appendSwitch("remote-debugging-port", "6546");
 app.setPath("userData", path.resolve(path.join(dataDir, "userdata")));
 
 const createWindow = () => {
@@ -81,31 +83,38 @@ const createWindow = () => {
     mainWindow.webContents.send("channel.call", "winhelper.onclose");
     e.preventDefault();
   });
-
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
 };
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
-  // Make sure data directory exists
-  await mkdir(path.join(dataDir), { recursive: true });
+  try {
+    // Make sure data directory exists
+    await mkdir(path.join(dataDir), { recursive: true });
 
-  registerOrpheusScheme();
+    registerOrpheusScheme();
 
-  const defaultUserAgent = session.defaultSession.getUserAgent();
-  session.defaultSession.setUserAgent(
-    `${defaultUserAgent} NeteaseMusicDesktop/${CORE_VERSION}`
-  );
+    const defaultUserAgent = session.defaultSession.getUserAgent();
+    session.defaultSession.setUserAgent(
+      `${defaultUserAgent} NeteaseMusicDesktop/${CORE_VERSION}`
+    );
 
-  await prepareDeviceId();
-  await initializeDatabases();
-  await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
-  await readPack();
+    initializeDatabases();
 
-  createWindow();
+    await prepareDeviceId();
+    await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
+    await readPack();
+
+    createWindow();
+  } catch (error) {
+    dialog.showErrorBox(
+      "Initialization Failed",
+      "An error occurred during application initialization. Open Orpheus will now exit.\n\nDetails:\n" +
+        (error.stack || error.message)
+    );
+    app.exit(1);
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

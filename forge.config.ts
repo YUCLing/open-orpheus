@@ -7,6 +7,9 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
+import { resolve, join, dirname } from "node:path";
+import { cp, mkdir } from "node:fs/promises";
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -49,6 +52,29 @@ const config: ForgeConfig = {
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
   ],
+  hooks: {
+    async packageAfterCopy(_forgeConfig, buildPath) {
+      const requiredNativePackages = (await import("./nativemodules.json"))
+        .default;
+
+      const sourceNodeModulesPath = resolve("node_modules");
+      const destNodeModulesPath = resolve(buildPath, "node_modules");
+
+      await Promise.all(
+        requiredNativePackages.map(async (packageName) => {
+          const sourcePath = join(sourceNodeModulesPath, packageName);
+          const destPath = join(destNodeModulesPath, packageName);
+
+          await mkdir(dirname(destPath), { recursive: true });
+          await cp(sourcePath, destPath, {
+            dereference: true,
+            recursive: true,
+            preserveTimestamps: true,
+          });
+        })
+      );
+    },
+  },
 };
 
 export default config;

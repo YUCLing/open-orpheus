@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 
+import nativeModules from "./nativemodules.json";
+
 // unzipper has a dependency on @aws-sdk/client-s3, which is not needed in
 // our context and causes build issues. This plugin mocks it out.
 function NoS3Plugin() {
@@ -22,7 +24,7 @@ function NoS3Plugin() {
 export default defineConfig({
   build: {
     rollupOptions: {
-      external: ["font-list", "database", "window"],
+      external: nativeModules,
     },
   },
   plugins: [NoS3Plugin()],
