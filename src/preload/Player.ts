@@ -73,4 +73,11 @@ export default class Player extends EventTarget {
     this._audio.load();
     return this._audio;
   }
+
+  stop() {
+    this._audio.pause();
+    this._audio.currentTime = 0;
+    this._audio.src = "";
+    this._playInfo = null;
+  }
 }

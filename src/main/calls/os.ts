@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import os from "node:os";
 
-import { BrowserWindow, screen } from "electron";
+import { BrowserWindow, screen, shell } from "electron";
 import { getFonts } from "font-list";
 
 import { sanitizeRelativePath } from "../util";
@@ -76,4 +76,8 @@ registerCallHandler<string[], [string, string[]]>(
 
 registerCallHandler<[], [string, string[]]>("os.querySystemFonts", async () => {
   return ["success", await getFonts()];
+});
+
+registerCallHandler<[string], void>("os.navigateExternal", (event, url) => {
+  shell.openExternal(url);
 });

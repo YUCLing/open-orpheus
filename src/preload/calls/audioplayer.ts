@@ -27,6 +27,11 @@ registerCallHandler<[string, string], void>("audioplayer.pause", (id) => {
   player.audio.pause();
 });
 
+registerCallHandler<[string], void>("audioplayer.stop", (id) => {
+  if (player.currentId !== id) return;
+  player.stop();
+});
+
 registerCallHandler<[string, string, number], void>(
   "audioplayer.seek",
   (id, opId, time) => {
