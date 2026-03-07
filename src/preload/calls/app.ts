@@ -71,8 +71,12 @@ registerCallHandler<[string, string, object], void>(
   (taskId, key) => {
     switch (key) {
       case "secretKey":
-        fireNativeCall("app.onGetNativeData", taskId, key, {
-          secretKey: SECRET_KEY,
+        // Frontend only register the call AFTER this call,
+        // so setImmediate to ensure the callback is registered
+        setImmediate(() => {
+          fireNativeCall("app.onGetNativeData", taskId, key, {
+            secretKey: SECRET_KEY,
+          });
         });
         break;
     }
