@@ -161,15 +161,6 @@
     "@electron-forge/plugin-base" "7.11.1"
     "@electron-forge/shared-types" "7.11.1"
 
-"@electron-forge/plugin-local-electron@^7.11.1":
-  version "7.11.1"
-  resolved "https://registry.yarnpkg.com/@electron-forge/plugin-local-electron/-/plugin-local-electron-7.11.1.tgz#78e235a48779308560f1e5876c724683a3fc7035"
-  integrity sha512-ciG7bCRaGnwJk95Y8BJlU2qrLQkJtNObUqV3RMVBvVhjcr67OF/dFCm2lfVWrl6AwVfqIGXC9cWfXXy00cqVzA==
-  dependencies:
-    "@electron-forge/plugin-base" "7.11.1"
-    "@electron-forge/shared-types" "7.11.1"
-    fs-extra "^10.0.0"
-
 "@electron-forge/plugin-vite@^7.11.1":
   version "7.11.1"
   resolved "https://registry.yarnpkg.com/@electron-forge/plugin-vite/-/plugin-vite-7.11.1.tgz#f082bedf0b91f864e1a5dfb0280ebda641837c30"
@@ -2294,10 +2285,10 @@ electron-winstaller@^5.3.0:
   optionalDependencies:
     "@electron/windows-sign" "^1.1.2"
 
-electron@40.7.0:
-  version "40.7.0"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-40.7.0.tgz#ed57e7a1d400bb8a93ce70c39f2ca023d28792e7"
-  integrity sha512-oQe76S/3V1rcb0+i45hAxnCH8udkRZSaHUNwglzNAEKbB94LSJ1qwbFo8+uRc2UsYZgCqSIMRcyX40GyOkD+Xw==
+electron@40.8.0:
+  version "40.8.0"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-40.8.0.tgz#d149210300bf7df95e5d3db4a40d388e12ef7549"
+  integrity sha512-WoPq0Nr9Yx3g7T6VnJXdwa/rr2+VRyH3a+K+ezfMKBlf6WjxE/LmhMQabKbb6yjm9RbZhJBRcYyoLph421O2mQ==
   dependencies:
     "@electron/get" "^2.0.0"
     "@types/node" "^24.9.0"
