@@ -8,6 +8,7 @@ import {
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { pngFromIco } from "../util";
+import os from "node:os";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   console.log(...args);
@@ -68,6 +69,10 @@ type Button = {
 registerCallHandler<[ThumbnailOptions], void>(
   "app.setThumbnail",
   async (event, options) => {
+    if (os.platform() !== "win32") {
+      // Thumbnail buttons are only supported on Windows, ignore on other platforms
+      return;
+    }
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
     if (!mainWindow) return;
     {

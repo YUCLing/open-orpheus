@@ -1,5 +1,6 @@
 import { BrowserWindow, nativeImage } from "electron";
 import path from "node:path";
+import os from "node:os";
 
 import { dragWindow } from "window";
 
@@ -78,7 +79,9 @@ registerCallHandler<[WindowPosition], void>(
   (event, { width, height, x, y, topmost }) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
-    const scaleFactor = getWindowScaleFactor(wnd);
+    // TODO: Confirm macOS desired behavior, Windows and Linux (Wayland) is already tested to be correct
+    const scaleFactor =
+      os.platform() === "win32" ? getWindowScaleFactor(wnd) : 1;
     width = Math.round(width / scaleFactor);
     height = Math.round(height / scaleFactor);
     x = Math.round(x / scaleFactor);
@@ -114,7 +117,8 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
     wnd.setMinimumSize(min.x, min.y);
-    const scaleFactor = getWindowScaleFactor(wnd);
+    const scaleFactor =
+      os.platform() === "win32" ? getWindowScaleFactor(wnd) : 1;
     // Use window module to set maximum size to avoid issues with maximized windows
     setMaximumSize(wnd, max.x * scaleFactor, max.y * scaleFactor);
   }

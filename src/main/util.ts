@@ -2,6 +2,7 @@ import { BrowserWindow, screen } from "electron";
 // eslint-disable-next-line import/no-unresolved
 import { parseICO } from "icojs";
 import { resolve, join } from "node:path";
+import os from "node:os";
 
 export async function pngFromIco(
   icoData: ArrayBuffer | Buffer<ArrayBufferLike>
@@ -30,11 +31,14 @@ export function getWindowSizeStatus(
   wnd: BrowserWindow
 ): ["minimize" | "maximize" | "restore", number, number, number] {
   const bounds = wnd.getBounds();
+  const screenScaleFactor = screen.getDisplayMatching(bounds).scaleFactor;
+  // TODO: Confirm macOS desired behavior, Windows and Linux (Wayland) is already tested to be correct
+  const scaleFactor = os.platform() === "win32" ? 1 : screenScaleFactor;
   return [
     wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore",
-    bounds.width,
-    bounds.height,
-    screen.getDisplayMatching(bounds).scaleFactor,
+    bounds.width * scaleFactor,
+    bounds.height * scaleFactor,
+    screenScaleFactor,
   ];
 }
 
