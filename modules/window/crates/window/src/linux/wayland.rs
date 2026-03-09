@@ -230,14 +230,7 @@ fn feed(
 fn on_event(oid: u32, op: u16, msg: &[u8]) {
     // wl_display::delete_id — server confirms the client ID is fully released.
     if oid == 1 && op == EVT_DELETE_ID {
-        if let Some(dead) = ru32(msg, 8) {
-            // Only log objects we were actually tracking to avoid spam from
-            // objects belonging to other Wayland connections on a reused fd.
-            if let Some(iface) = iface_of(dead) {
-                eprintln!("[wayland] delete_id({}) iface={:?}", dead, iface);
-            }
-            purge(dead);
-        }
+        if let Some(dead) = ru32(msg, 8) { purge(dead); }
         return;
     }
 
@@ -279,10 +272,6 @@ fn on_pointer_event(ptr_id: u32, op: u16, msg: &[u8]) {
                 let seat_id = POINTER_SEAT.get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| map.get(&ptr_id).copied());
-                eprintln!(
-                    "[wayland] EVT_BUTTON ptr={} serial={} surf={:?} seat={:?}",
-                    ptr_id, serial, surf_id, seat_id
-                );
                 if let (Some(surf_id), Some(seat_id)) = (surf_id, seat_id) {
                     if let Some(m) = LAST_BUTTON.get() {
                         if let Ok(mut opt) = m.lock() {
@@ -336,7 +325,6 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
         // Record the seat association so send_xdg_toplevel_move can look it up.
         (Iface::WlSeat, REQ_GET_POINTER) => {
             if let Some(new_id) = ru32(msg, 8) {
-                eprintln!("[wayland] new WlPointer id={} from seat={}", new_id, oid);
                 set_iface(new_id, Iface::WlPointer);
                 if let Some(m) = POINTER_SEAT.get() {
                     if let Ok(mut map) = m.lock() { map.insert(new_id, oid); }
@@ -395,7 +383,6 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
 fn purge(id: u32) {
     match iface_of(id) {
         Some(Iface::WlPointer) => {
-            eprintln!("[wayland] purge WlPointer id={}", id);
             if let Some(m) = POINTER_FOCUS.get() { if let Ok(mut map) = m.lock() { map.remove(&id); } }
             if let Some(m) = POINTER_SEAT.get()  { if let Ok(mut map) = m.lock() { map.remove(&id); } }
         }
@@ -476,7 +463,6 @@ fn is_wayland_socket(addr: *const c_void, addrlen: u32) -> bool {
 // IS_WAYLAND is intentionally left true — we know this process uses Wayland.
 
 fn reset_connection_state(old_fd: RawFd) {
-    eprintln!("[wayland] fd {} closed — resetting connection state", old_fd);
     if let Some(m) = WAYLAND_FD.get()    { let _ = m.lock().map(|mut g| *g = None); }
     if let Some(m) = IFACES.get() {
         let _ = m.lock().map(|mut g| {
@@ -667,10 +653,6 @@ pub(super) fn send_xdg_toplevel_move() -> bool {
     // Use write(2) directly rather than going through sendmsg to avoid
     // re-entering our own hook.  xdg_toplevel::move carries no file descriptors
     // so plain write(2) on the Unix socket is sufficient and atomic (< PIPE_BUF).
-    eprintln!(
-        "[wayland] send_xdg_toplevel_move: sending move toplevel={} seat={} serial={} wl_surf={}",
-        top_id, seat_id, serial, wl_surf_id
-    );
     let ret = unsafe { libc::write(fd, buf.as_ptr() as *const c_void, 16) };
     if ret != 16 {
         eprintln!(
