@@ -4,6 +4,11 @@ use x11rb::{connection::Connection, protocol::xproto::{ClientMessageData, Client
 mod wayland;
 
 #[neon::export]
+fn is_wayland() -> bool {
+    wayland::is_wayland()
+}
+
+#[neon::export]
 fn drag_window<'cx>(cx: &mut Cx<'cx>, handle: Handle<JsBuffer>) -> NeonResult<()> {
     if wayland::is_wayland() {
         wayland::send_xdg_toplevel_move();

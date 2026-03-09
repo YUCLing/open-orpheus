@@ -2,12 +2,18 @@ import { BrowserWindow, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
-import { dragWindow } from "window";
+import { dragWindow, isWayland } from "window";
 
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
 import { addWindow, setMaximumSize } from "../window";
+
+function shouldApplyScaleFactor() {
+  // TODO: Confirm macOS desired behavior, Windows and Linux is already tested to be correct
+  return os.platform() === "win32" ||
+    (os.platform() === "linux" && !isWayland());
+}
 
 // TODO: Implement this properly
 registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
@@ -79,9 +85,7 @@ registerCallHandler<[WindowPosition], void>(
   (event, { width, height, x, y, topmost }) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
-    // TODO: Confirm macOS desired behavior, Windows and Linux (Wayland) is already tested to be correct
-    const scaleFactor =
-      os.platform() === "win32" ? getWindowScaleFactor(wnd) : 1;
+    const scaleFactor = shouldApplyScaleFactor() ? getWindowScaleFactor(wnd) : 1;
     width = Math.round(width / scaleFactor);
     height = Math.round(height / scaleFactor);
     x = Math.round(x / scaleFactor);
@@ -117,8 +121,7 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
     wnd.setMinimumSize(min.x, min.y);
-    const scaleFactor =
-      os.platform() === "win32" ? getWindowScaleFactor(wnd) : 1;
+    const scaleFactor = shouldApplyScaleFactor() ? getWindowScaleFactor(wnd) : 1;
     // Use window module to set maximum size to avoid issues with maximized windows
     setMaximumSize(wnd, max.x * scaleFactor, max.y * scaleFactor);
   }
