@@ -2,6 +2,11 @@
 //
 // Strategy (stable-first, no libwayland symbol dependency):
 //   • Hook connect(2)  — identify the Wayland Unix socket fd by its path.
+//   • Hook close(2)    — detect when the tracked fd is closed so all
+//                        per-connection state can be reset before the OS recycles
+//                        the fd integer.  Without this, a reconnect that reuses
+//                        the same fd number would silently corrupt the object map
+//                        (root cause of the DevTools-open regression).
 //   • Hook recvmsg(2)  — parse server→client events (wl_os_recvmsg_cloexec in
 //                        wayland-os.c is the only inbound path used by libwayland).
 //   • Hook sendmsg(2)  — parse client→server requests BEFORE they are sent so
@@ -98,6 +103,10 @@ const REQ_GET_TOPLEVEL:    u16 = 1; // xdg_surface::get_toplevel(id: new_id)
 
 // xdg_toplevel requests
 const REQ_MOVE:            u16 = 5; // xdg_toplevel::move(seat: obj, serial: uint)
+
+// wl_pointer::release (destructor, since version 3) is opcode 1.
+// opcode 0 is wl_pointer::set_cursor — do NOT treat it as a destructor.
+const WL_POINTER_RELEASE:  u16 = 1;
 
 // Opcode 0 = destructor for: wl_surface, wl_pointer (release), xdg_surface, xdg_toplevel
 const REQ_DESTROY:         u16 = 0;
@@ -220,9 +229,15 @@ fn feed(
 
 fn on_event(oid: u32, op: u16, msg: &[u8]) {
     // wl_display::delete_id — server confirms the client ID is fully released.
-    // Clean up any state we have for it.
     if oid == 1 && op == EVT_DELETE_ID {
-        if let Some(dead) = ru32(msg, 8) { purge(dead); }
+        if let Some(dead) = ru32(msg, 8) {
+            // Only log objects we were actually tracking to avoid spam from
+            // objects belonging to other Wayland connections on a reused fd.
+            if let Some(iface) = iface_of(dead) {
+                eprintln!("[wayland] delete_id({}) iface={:?}", dead, iface);
+            }
+            purge(dead);
+        }
         return;
     }
 
@@ -264,6 +279,10 @@ fn on_pointer_event(ptr_id: u32, op: u16, msg: &[u8]) {
                 let seat_id = POINTER_SEAT.get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| map.get(&ptr_id).copied());
+                eprintln!(
+                    "[wayland] EVT_BUTTON ptr={} serial={} surf={:?} seat={:?}",
+                    ptr_id, serial, surf_id, seat_id
+                );
                 if let (Some(surf_id), Some(seat_id)) = (surf_id, seat_id) {
                     if let Some(m) = LAST_BUTTON.get() {
                         if let Ok(mut opt) = m.lock() {
@@ -317,6 +336,7 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
         // Record the seat association so send_xdg_toplevel_move can look it up.
         (Iface::WlSeat, REQ_GET_POINTER) => {
             if let Some(new_id) = ru32(msg, 8) {
+                eprintln!("[wayland] new WlPointer id={} from seat={}", new_id, oid);
                 set_iface(new_id, Iface::WlPointer);
                 if let Some(m) = POINTER_SEAT.get() {
                     if let Ok(mut map) = m.lock() { map.insert(new_id, oid); }
@@ -356,8 +376,13 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
 
         // Destructor requests — the client frees the ID immediately on send;
         // we must clean up without waiting for the server's delete_id event.
-        (Iface::WlSurface | Iface::WlPointer |
-         Iface::XdgSurface | Iface::XdgToplevel, REQ_DESTROY) => {
+        // NOTE: wl_pointer's destructor is opcode 1 (release), NOT opcode 0
+        //       (set_cursor).  Conflating them would purge the pointer on every
+        //       cursor-shape change.
+        (Iface::WlSurface | Iface::XdgSurface | Iface::XdgToplevel, REQ_DESTROY) => {
+            purge(oid);
+        }
+        (Iface::WlPointer, WL_POINTER_RELEASE) => {
             purge(oid);
         }
 
@@ -370,6 +395,7 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
 fn purge(id: u32) {
     match iface_of(id) {
         Some(Iface::WlPointer) => {
+            eprintln!("[wayland] purge WlPointer id={}", id);
             if let Some(m) = POINTER_FOCUS.get() { if let Ok(mut map) = m.lock() { map.remove(&id); } }
             if let Some(m) = POINTER_SEAT.get()  { if let Ok(mut map) = m.lock() { map.remove(&id); } }
         }
@@ -441,9 +467,42 @@ fn is_wayland_socket(addr: *const c_void, addrlen: u32) -> bool {
     false
 }
 
+// ── Connection reset ──────────────────────────────────────────────────────
+//
+// Called when the tracked Wayland fd is closed.  Clears all per-connection
+// state so that when Chromium reconnects (possibly reusing the same fd number)
+// hook_connect properly re-initialises everything from a clean slate.
+//
+// IS_WAYLAND is intentionally left true — we know this process uses Wayland.
+
+fn reset_connection_state(old_fd: RawFd) {
+    eprintln!("[wayland] fd {} closed — resetting connection state", old_fd);
+    if let Some(m) = WAYLAND_FD.get()    { let _ = m.lock().map(|mut g| *g = None); }
+    if let Some(m) = IFACES.get() {
+        let _ = m.lock().map(|mut g| {
+            g.clear();
+            g.insert(1, Iface::WlDisplay); // wl_display is always object ID 1
+        });
+    }
+    if let Some(m) = POINTER_FOCUS.get() { let _ = m.lock().map(|mut g| g.clear()); }
+    if let Some(m) = POINTER_SEAT.get()  { let _ = m.lock().map(|mut g| g.clear()); }
+    if let Some(m) = XDG_TO_WL.get()    { let _ = m.lock().map(|mut g| g.clear()); }
+    if let Some(m) = WL_TO_TOP.get()    { let _ = m.lock().map(|mut g| g.clear()); }
+    if let Some(m) = TOP_TO_XDG.get()   { let _ = m.lock().map(|mut g| g.clear()); }
+    // Clear LAST_BUTTON: the snapshotted wl_surface_id is invalid after
+    // reconnection (new connection uses different object IDs).
+    if let Some(m) = LAST_BUTTON.get()  { let _ = m.lock().map(|mut g| *g = None); }
+    if let Some(m) = RX_BUFS.get()      { let _ = m.lock().map(|mut g| g.remove(&old_fd)); }
+    if let Some(m) = TX_BUFS.get()      { let _ = m.lock().map(|mut g| g.remove(&old_fd)); }
+}
+
 // ── Hook callbacks ─────────────────────────────────────────────────────────
 
 /// connect(2) — detect the Wayland socket fd.
+/// Uses `if opt.is_none()` so multiple simultaneous Wayland connections
+/// (e.g. GPU process) don't override the first one we tracked.  After a
+/// reset_connection_state() call WAYLAND_FD is set back to None, so the
+/// next connect to a Wayland socket is properly picked up as the new main fd.
 unsafe extern "win64" fn hook_connect(reg: *mut Registers, orig: usize, _: usize) -> usize {
     let f: extern "C" fn(c_int, *const c_void, u32) -> c_int = unsafe { mem::transmute(orig) };
     let fd      = unsafe { (*reg).rdi as c_int };
@@ -462,6 +521,19 @@ unsafe extern "win64" fn hook_connect(reg: *mut Registers, orig: usize, _: usize
     }
 
     ret as usize
+}
+
+/// close(2) — detect when the tracked Wayland fd is closed so we can reset
+/// all per-connection state.  Without this, if the OS recycles the same fd
+/// integer for a new Wayland connection, is_wayland_fd would return true for
+/// the new connection while IFACES etc. still hold stale data from the old one.
+unsafe extern "win64" fn hook_close(reg: *mut Registers, orig: usize, _: usize) -> usize {
+    let f: extern "C" fn(c_int) -> c_int = unsafe { mem::transmute(orig) };
+    let fd = unsafe { (*reg).rdi as c_int };
+    if is_wayland_fd(fd) {
+        reset_connection_state(fd);
+    }
+    f(fd) as usize
 }
 
 /// recvmsg(2) — intercept server→client Wayland events.
@@ -595,6 +667,10 @@ pub(super) fn send_xdg_toplevel_move() -> bool {
     // Use write(2) directly rather than going through sendmsg to avoid
     // re-entering our own hook.  xdg_toplevel::move carries no file descriptors
     // so plain write(2) on the Unix socket is sufficient and atomic (< PIPE_BUF).
+    eprintln!(
+        "[wayland] send_xdg_toplevel_move: sending move toplevel={} seat={} serial={} wl_surf={}",
+        top_id, seat_id, serial, wl_surf_id
+    );
     let ret = unsafe { libc::write(fd, buf.as_ptr() as *const c_void, 16) };
     if ret != 16 {
         eprintln!(
@@ -627,13 +703,15 @@ pub(super) fn init_wayland_hook() {
 
     unsafe {
         let connect_addr = dlsym(RTLD_DEFAULT, c"connect".as_ptr());
+        let close_addr   = dlsym(RTLD_DEFAULT, c"close".as_ptr());
         let recvmsg_addr = dlsym(RTLD_DEFAULT, c"recvmsg".as_ptr());
         let sendmsg_addr = dlsym(RTLD_DEFAULT, c"sendmsg".as_ptr());
 
         for (name, addr, cb) in [
-            ("connect", connect_addr, hook_connect  as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
-            ("recvmsg", recvmsg_addr, hook_recvmsg  as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
-            ("sendmsg", sendmsg_addr, hook_sendmsg  as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
+            ("connect", connect_addr, hook_connect as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
+            ("close",   close_addr,   hook_close   as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
+            ("recvmsg", recvmsg_addr, hook_recvmsg as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
+            ("sendmsg", sendmsg_addr, hook_sendmsg as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
         ] {
             if addr.is_null() {
                 eprintln!("[wayland] symbol not found: {}", name);
