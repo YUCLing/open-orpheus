@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeImage } from "electron";
+import { BrowserWindow, Menu, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
@@ -8,12 +8,23 @@ import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
 import { addWindow, setMaximumSize } from "../window";
+import { appMenuItemToMenuItem, buildMenu } from "../menu";
+import { setMenu } from "../tray";
 
 function shouldApplyScaleFactor() {
   // TODO: Confirm macOS desired behavior, Windows and Linux is already tested to be correct
-  return os.platform() === "win32" ||
-    (os.platform() === "linux" && !isWayland());
+  return (
+    os.platform() === "win32" || (os.platform() === "linux" && !isWayland())
+  );
 }
+
+type MenuContainer = {
+  content: string;
+  hotkey: string;
+  left_border_size: number;
+  menu_type: "normal";
+};
+type MenuRequest = (MenuContainer | number)[];
 
 // TODO: Implement this properly
 registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
@@ -85,7 +96,9 @@ registerCallHandler<[WindowPosition], void>(
   (event, { width, height, x, y, topmost }) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
-    const scaleFactor = shouldApplyScaleFactor() ? getWindowScaleFactor(wnd) : 1;
+    const scaleFactor = shouldApplyScaleFactor()
+      ? getWindowScaleFactor(wnd)
+      : 1;
     width = Math.round(width / scaleFactor);
     height = Math.round(height / scaleFactor);
     x = Math.round(x / scaleFactor);
@@ -121,7 +134,9 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
     wnd.setMinimumSize(min.x, min.y);
-    const scaleFactor = shouldApplyScaleFactor() ? getWindowScaleFactor(wnd) : 1;
+    const scaleFactor = shouldApplyScaleFactor()
+      ? getWindowScaleFactor(wnd)
+      : 1;
     // Use window module to set maximum size to avoid issues with maximized windows
     setMaximumSize(wnd, max.x * scaleFactor, max.y * scaleFactor);
   }
@@ -190,21 +205,26 @@ registerCallHandler<[], void>("winhelper.destroyWindow", (event) => {
   wnd.close();
 });
 
-// TODO: Support menu
-registerCallHandler<
-  [
-    {
-      content: string;
-      hotkey: string;
-      left_border_size: number;
-      menu_type: "normal";
-    },
-    number,
-  ],
-  void
->("winhelper.updateMenu", () => {
-  return;
-});
+registerCallHandler<MenuRequest, void>(
+  "winhelper.updateMenu",
+  async (event, ...args) => {
+    if (args.length % 2 !== 0) {
+      return;
+    }
+    const menu = new Menu();
+    for (let i = 0; i < args.length; i += 2) {
+      const data = args[i] as MenuContainer;
+      const menuItems = JSON.parse(data.content);
+      // TODO: support advanced menu items here.
+      for (const item of menuItems) {
+        menu.append(
+          await appMenuItemToMenuItem(event.sender, item, args[i + 1] as number)
+        );
+      }
+    }
+    setMenu(menu);
+  }
+);
 
 registerCallHandler<[string, number[], boolean, { id: string }], void>(
   "winhelper.registerHotkey",
@@ -231,5 +251,22 @@ registerCallHandler<[boolean], void>(
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
     wnd.setFullScreen(fullscreen);
+  }
+);
+
+registerCallHandler<MenuRequest, void>(
+  "winhelper.popupMenu",
+  async (event, ...args) => {
+    if (args.length % 2 !== 0) {
+      return;
+    }
+    for (let i = 0; i < args.length; i += 2) {
+      const data = args[i] as MenuContainer;
+      const items = JSON.parse(data.content);
+      const wnd = BrowserWindow.fromWebContents(event.sender);
+      if (!wnd) return;
+      const menu = await buildMenu(event.sender, items, args[i + 1] as number);
+      menu.popup({ window: wnd });
+    }
   }
 );
