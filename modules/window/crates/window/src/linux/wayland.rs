@@ -29,11 +29,22 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use ilhook::x64::{CallbackOption, HookFlags, HookType, Hooker, Registers};
+use ilhook::x64::{CallbackOption, HookFlags, HookPoint, HookType, Hooker, Registers};
 use libc::{
     AF_UNIX, RTLD_DEFAULT, c_int, c_void, msghdr,
     sa_family_t, sockaddr, sockaddr_un, ssize_t, dlsym,
 };
+
+// ── Hook handle storage ───────────────────────────────────────────────────
+//
+// `HookPoint` removes the hook when dropped.  We keep the raw pointers in a
+// global Vec so `remove_wayland_hook` can reconstruct and drop them later.
+// The newtype makes the raw pointer `Send`-able for the `OnceLock<Mutex<…>>`.
+
+struct HookHandle(*mut HookPoint);
+unsafe impl Send for HookHandle {}
+
+static HOOK_HANDLES: OnceLock<Mutex<Vec<HookHandle>>> = OnceLock::new();
 
 // ── Global state ───────────────────────────────────────────────────────────
 
@@ -682,32 +693,62 @@ pub(super) fn init_wayland_hook() {
     LAST_BUTTON .get_or_init(|| Mutex::new(None));
     RX_BUFS     .get_or_init(|| Mutex::new(HashMap::new()));
     TX_BUFS     .get_or_init(|| Mutex::new(HashMap::new()));
+    HOOK_HANDLES.get_or_init(|| Mutex::new(Vec::new()));
 
     unsafe {
-        let connect_addr = dlsym(RTLD_DEFAULT, c"connect".as_ptr());
-        let close_addr   = dlsym(RTLD_DEFAULT, c"close".as_ptr());
-        let recvmsg_addr = dlsym(RTLD_DEFAULT, c"recvmsg".as_ptr());
-        let sendmsg_addr = dlsym(RTLD_DEFAULT, c"sendmsg".as_ptr());
+        // Resolve all symbols first.  If any is missing the entire hook setup
+        // is aborted so the process is never left in a half-hooked state.
+        let targets: &[(&str, unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize)] = &[
+            ("connect", hook_connect),
+            ("close",   hook_close),
+            ("recvmsg", hook_recvmsg),
+            ("sendmsg", hook_sendmsg),
+        ];
 
-        for (name, addr, cb) in [
-            ("connect", connect_addr, hook_connect as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
-            ("close",   close_addr,   hook_close   as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
-            ("recvmsg", recvmsg_addr, hook_recvmsg as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
-            ("sendmsg", sendmsg_addr, hook_sendmsg as unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize),
-        ] {
+        let mut addrs = Vec::with_capacity(targets.len());
+        for (name, _) in targets {
+            let addr = dlsym(RTLD_DEFAULT, std::ffi::CString::new(*name).unwrap().as_ptr());
             if addr.is_null() {
-                eprintln!("[wayland] symbol not found: {}", name);
-                continue;
+                eprintln!("[wayland] symbol not found: {} — hook setup aborted", name);
+                return;
             }
+            addrs.push(addr);
+        }
+
+        // All symbols resolved — install hooks and collect handles.
+        let handles = HOOK_HANDLES.get().unwrap();
+        let Ok(mut vec) = handles.lock() else { return };
+
+        for ((name, cb), addr) in targets.iter().zip(addrs) {
             match Hooker::new(
                 addr as usize,
-                HookType::Retn(cb),
+                HookType::Retn(*cb),
                 CallbackOption::None,
                 0,
                 HookFlags::empty(),
             ).hook() {
-                Ok(h)  => { let _ = Box::into_raw(Box::new(h)); }
-                Err(e) => eprintln!("[wayland] failed to hook {}: {:?}", name, e),
+                Ok(h) => vec.push(HookHandle(Box::into_raw(Box::new(h)))),
+                Err(e) => {
+                    eprintln!("[wayland] failed to hook {}: {:?} — rolling back", name, e);
+                    // Drop all hooks installed so far to leave the process clean.
+                    for h in vec.drain(..) { drop(Box::from_raw(h.0)); }
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/// Removes all installed Wayland hooks and resets connection state.
+/// Safe to call from any thread; idempotent if called multiple times.
+pub(super) fn remove_wayland_hook() {
+    if let Some(fd) = wayland_fd() {
+        reset_connection_state(fd);
+    }
+    if let Some(m) = HOOK_HANDLES.get() {
+        if let Ok(mut vec) = m.lock() {
+            for h in vec.drain(..) {
+                unsafe { drop(Box::from_raw(h.0)); }
             }
         }
     }

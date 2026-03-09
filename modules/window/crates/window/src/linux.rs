@@ -75,3 +75,12 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
 
     Ok(())
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn on_unload() {
+    wayland::remove_wayland_hook();
+}
+
+#[used]
+#[unsafe(link_section = ".fini_array")]
+static DESTRUCTOR: extern "C" fn() = on_unload;
