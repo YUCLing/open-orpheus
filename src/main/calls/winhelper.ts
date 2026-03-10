@@ -7,9 +7,8 @@ import { dragWindow, isWayland } from "window";
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
-import { addWindow, setMaximumSize } from "../window";
-import { appMenuItemToMenuItem, buildMenu } from "../menu";
-import { setMenu } from "../tray";
+import { getMenus, setMaximumSize } from "../window";
+import { AppMenuItem, appMenuItemToMenuItem } from "../menu";
 
 function shouldApplyScaleFactor() {
   // TODO: Confirm macOS desired behavior, Windows and Linux is already tested to be correct
@@ -24,7 +23,7 @@ type MenuContainer = {
   left_border_size: number;
   menu_type: "normal";
 };
-type MenuRequest = (MenuContainer | number)[];
+type MenuRequest = [MenuContainer, number];
 
 // TODO: Implement this properly
 registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
@@ -186,7 +185,6 @@ registerCallHandler<[string, WindowDimensions, WindowAttributes], [boolean]>(
         preload: path.join(__dirname, "preload.js"),
       },
     });
-    addWindow(wnd);
     wnd.loadURL(url);
     return [true];
   }
@@ -204,27 +202,6 @@ registerCallHandler<[], void>("winhelper.destroyWindow", (event) => {
   if (!wnd) return;
   wnd.close();
 });
-
-registerCallHandler<MenuRequest, void>(
-  "winhelper.updateMenu",
-  async (event, ...args) => {
-    if (args.length % 2 !== 0) {
-      return;
-    }
-    const menu = new Menu();
-    for (let i = 0; i < args.length; i += 2) {
-      const data = args[i] as MenuContainer;
-      const menuItems = JSON.parse(data.content);
-      // TODO: support advanced menu items here.
-      for (const item of menuItems) {
-        menu.append(
-          await appMenuItemToMenuItem(event.sender, item, args[i + 1] as number)
-        );
-      }
-    }
-    setMenu(menu);
-  }
-);
 
 registerCallHandler<[string, number[], boolean, { id: string }], void>(
   "winhelper.registerHotkey",
@@ -255,18 +232,40 @@ registerCallHandler<[boolean], void>(
 );
 
 registerCallHandler<MenuRequest, void>(
-  "winhelper.popupMenu",
-  async (event, ...args) => {
-    if (args.length % 2 !== 0) {
+  "winhelper.updateMenu",
+  async (event, data, id) => {
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd) return;
+    const menus = getMenus(wnd);
+    const menu = menus[id];
+    if (!menu) {
       return;
     }
-    for (let i = 0; i < args.length; i += 2) {
-      const data = args[i] as MenuContainer;
-      const items = JSON.parse(data.content);
-      const wnd = BrowserWindow.fromWebContents(event.sender);
-      if (!wnd) return;
-      const menu = await buildMenu(event.sender, items, args[i + 1] as number);
-      menu.popup({ window: wnd });
+    const menuItems = JSON.parse(data.content) as AppMenuItem[];
+    for (const item of menuItems) {
+      for (const oldItem of menu) {
+        if (item.menu_id === oldItem.menu_id) {
+          Object.assign(oldItem, item);
+          break;
+        }
+      }
     }
+    // TODO: Update the menu on the fly
+  }
+);
+
+registerCallHandler<MenuRequest, void>(
+  "winhelper.popupMenu",
+  async (event, data, id) => {
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    if (!wnd) return;
+    const menus = getMenus(wnd);
+    const items = JSON.parse(data.content);
+    menus[id] = items;
+    const nativeMenu = new Menu();
+    for (const item of items) {
+      nativeMenu.append(await appMenuItemToMenuItem(event.sender, item, id));
+    }
+    nativeMenu.popup({ window: wnd });
   }
 );

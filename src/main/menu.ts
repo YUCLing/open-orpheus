@@ -20,10 +20,12 @@ export type AppMenuItem = {
   menu_id: string | null;
 };
 
+export type AppMenu = AppMenuItem[];
+
 export async function appMenuItemToMenuItem(
   webContent: WebContents,
   item: AppMenuItem,
-  parentId: number
+  menuId: number
 ): Promise<MenuItem> {
   let icon: NativeImage | undefined = undefined;
   if (item.image_path) {
@@ -36,6 +38,7 @@ export async function appMenuItemToMenuItem(
     }
   }
   return new MenuItem({
+    id: item.menu_id || undefined,
     label: item.text,
     enabled: item.enable,
     type: item.separator ? "separator" : "normal",
@@ -47,7 +50,7 @@ export async function appMenuItemToMenuItem(
         "channel.call",
         "winhelper.onmenuclick",
         item.menu_id,
-        parentId
+        menuId
       );
     },
   });
@@ -56,11 +59,11 @@ export async function appMenuItemToMenuItem(
 export async function buildMenu(
   webContent: WebContents,
   items: AppMenuItem[],
-  parentId: number
+  menuId: number
 ): Promise<Menu> {
   const menu = new Menu();
   for (const item of items) {
-    const menuItem = await appMenuItemToMenuItem(webContent, item, parentId);
+    const menuItem = await appMenuItemToMenuItem(webContent, item, menuId);
     menu.append(menuItem);
   }
   return menu;

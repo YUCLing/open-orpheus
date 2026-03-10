@@ -1,13 +1,19 @@
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
+import { AppMenu } from "./menu";
 
 type WindowProperties = {
   maximumSize?: { x: number; y: number };
+  menus: AppMenu[];
+  customProps: Record<string, unknown>;
 };
 
 const windowProperties = new Map<BrowserWindow, WindowProperties>();
 
-export function addWindow(wnd: BrowserWindow) {
-  windowProperties.set(wnd, {});
+app.on("browser-window-created", (event, wnd) => {
+  windowProperties.set(wnd, {
+    menus: [],
+    customProps: {},
+  });
   wnd.on("closed", () => {
     windowProperties.delete(wnd);
   });
@@ -22,7 +28,7 @@ export function addWindow(wnd: BrowserWindow) {
       wnd.setMaximumSize(props.maximumSize.x, props.maximumSize.y);
     }
   });
-}
+});
 
 export function setMaximumSize(wnd: BrowserWindow, x: number, y: number) {
   if (wnd.isMaximized()) {
@@ -32,4 +38,19 @@ export function setMaximumSize(wnd: BrowserWindow, x: number, y: number) {
   if (props) {
     props.maximumSize = { x, y };
   }
+}
+
+export function getMenus(wnd: BrowserWindow): AppMenu[] {
+  const props = windowProperties.get(wnd);
+  return props ? props.menus : [];
+}
+
+export function setWindowProp<T>(wnd: BrowserWindow, prop: string, value: T) {
+  const customProps = windowProperties.get(wnd).customProps;
+  customProps[prop] = value;
+}
+
+export function getWindowProp<T>(wnd: BrowserWindow, prop: string): T {
+  const customProps = windowProperties.get(wnd).customProps;
+  return customProps[prop] as T;
 }

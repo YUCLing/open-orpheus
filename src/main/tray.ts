@@ -1,4 +1,5 @@
 import { Menu, NativeImage, Tray } from "electron";
+import os from "node:os";
 
 let icon: NativeImage | null = null;
 let tooltip: string | null = null;
@@ -53,7 +54,8 @@ export function install() {
   }
   trayIcon.on("click", () => {
     if (!mainWnd) return;
-    mainWnd.webContents.send("channel.call", "trayicon.onclick");
+    // Linux can only receives click, so treat click as right click instead.
+    mainWnd.webContents.send("channel.call", os.platform() !== "linux" ? "trayicon.onclick" : "trayicon.onrightclick");
   });
   trayIcon.on("right-click", () => {
     if (!mainWnd) return;
