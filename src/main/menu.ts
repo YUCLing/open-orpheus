@@ -1,6 +1,7 @@
 import {
   Menu,
   MenuItem,
+  MenuItemConstructorOptions,
   nativeImage,
   NativeImage,
   WebContents,
@@ -13,7 +14,7 @@ export type AppMenuItem = {
   menu: boolean;
   enable: boolean;
   separator: boolean;
-  children: null; // TODO: Confirm if this is always null
+  children: AppMenuItem[] | null; // TODO: Confirm if this is always null
   hotkey?: string;
   image_color: string;
   image_path?: string;
@@ -22,12 +23,8 @@ export type AppMenuItem = {
 
 export type AppMenu = AppMenuItem[];
 
-export async function appMenuItemToMenuItem(
-  webContent: WebContents,
-  item: AppMenuItem,
-  menuId: number
-): Promise<MenuItem> {
-  let icon: NativeImage | undefined = undefined;
+async function appMenuItemToMenuItemOptions(webContent: WebContents, item: AppMenuItem, menuId: number): Promise<MenuItemConstructorOptions> {
+    let icon: NativeImage | undefined = undefined;
   if (item.image_path) {
     try {
       const buf = await loadFromOrpheusUrl(item.image_path);
@@ -37,12 +34,11 @@ export async function appMenuItemToMenuItem(
       /* empty */
     }
   }
-  return new MenuItem({
+  const options: MenuItemConstructorOptions = {
     id: item.menu_id || undefined,
     label: item.text,
     enabled: item.enable,
     type: item.separator ? "separator" : "normal",
-    submenu: item.menu ? [] : undefined, // TODO: Confirm if this is always empty array when menu is true
     accelerator: item.hotkey,
     icon,
     click: () => {
@@ -53,7 +49,24 @@ export async function appMenuItemToMenuItem(
         menuId
       );
     },
-  });
+  };
+  return options;
+}
+
+export async function appMenuItemToMenuItem(
+  webContent: WebContents,
+  item: AppMenuItem,
+  menuId: number
+): Promise<MenuItem> {
+  const options = await appMenuItemToMenuItemOptions(webContent, item, menuId);
+  if (item.children) {
+    options.type = "submenu";
+    options.submenu = [];
+    for (const child of item.children) {
+      options.submenu.push(await appMenuItemToMenuItemOptions(webContent, child, menuId));
+    }
+  }
+  return new MenuItem(options);
 }
 
 export async function buildMenu(
