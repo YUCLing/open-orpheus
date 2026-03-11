@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { Database } from "database";
+import { Database } from "@open-orpheus/database";
 
 const pathToWebDb = join("data", "webdb.dat");
 const pathToMusicLibrary = join("data", "library.dat");

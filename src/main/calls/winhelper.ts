@@ -2,7 +2,7 @@ import { BrowserWindow, Menu, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
-import { dragWindow, isWayland } from "window";
+import { dragWindow, isWayland } from "@open-orpheus/window";
 
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
