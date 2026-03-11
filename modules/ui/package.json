@@ -1,7 +1,7 @@
 {
-  "name": "@open-orpheus/window",
+  "name": "@open-orpheus/ui",
   "version": "0.1.0",
-  "description": "Window management module for Open Orpheus",
+  "description": "Native UI module for Open Orpheus",
   "main": "./lib/index.cjs",
   "scripts": {
     "test": "tsc &&cargo test",
@@ -45,7 +45,7 @@
   },
   "neon": {
     "type": "library",
-    "org": "@window",
+    "org": "@open-orpheus",
     "platforms": "common",
     "load": "./src/load.cts"
   }

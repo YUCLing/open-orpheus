@@ -29,13 +29,15 @@
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron/fuses": "^1.8.0",
+    "@open-orpheus/database": "file:./modules/database",
+    "@open-orpheus/ui": "file:./modules/ui",
+    "@open-orpheus/window": "file:./modules/window",
     "@types/better-sqlite3": "^7.6.13",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/unzipper": "^0.10.11",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "cookie": "^1.1.1",
-    "database": "file:./modules/database",
     "electron": "40.8.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.8",
@@ -47,8 +49,7 @@
     "prettier": "^3.8.1",
     "typescript": "~4.5.4",
     "unzipper": "^0.12.3",
-    "vite": "^5.4.21",
-    "window": "file:./modules/window"
+    "vite": "^5.4.21"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1"

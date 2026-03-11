@@ -862,6 +862,21 @@
     mkdirp "^1.0.4"
     rimraf "^3.0.2"
 
+"@open-orpheus/database@file:./modules/database":
+  version "0.1.0"
+  dependencies:
+    "@neon-rs/load" "^0.1.82"
+
+"@open-orpheus/ui@file:./modules/ui":
+  version "0.1.0"
+  dependencies:
+    "@neon-rs/load" "^0.1.82"
+
+"@open-orpheus/window@file:./modules/window":
+  version "0.1.0"
+  dependencies:
+    "@neon-rs/load" "^0.1.82"
+
 "@rollup/rollup-android-arm-eabi@4.59.0":
   version "4.59.0"
   resolved "https://registry.yarnpkg.com/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.59.0.tgz#a6742c74c7d9d6d604ef8a48f99326b4ecda3d82"
@@ -2070,11 +2085,6 @@ data-view-byte-offset@^1.0.1:
     call-bound "^1.0.2"
     es-errors "^1.3.0"
     is-data-view "^1.0.1"
-
-"database@file:./modules/database":
-  version "0.1.0"
-  dependencies:
-    "@neon-rs/load" "^0.1.82"
 
 debug@4, debug@^4.0.1, debug@^4.1.0, debug@^4.1.1, debug@^4.3.1, debug@^4.3.2, debug@^4.3.3, debug@^4.3.4, debug@^4.4.1, debug@^4.4.3:
   version "4.4.3"
@@ -5608,11 +5618,6 @@ which@^2.0.1, which@^2.0.2:
   integrity sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==
   dependencies:
     isexe "^2.0.0"
-
-"window@file:./modules/window":
-  version "0.1.0"
-  dependencies:
-    "@neon-rs/load" "^0.1.82"
 
 word-wrap@^1.2.3, word-wrap@^1.2.5:
   version "1.2.5"

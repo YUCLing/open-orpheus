@@ -1,0 +1,16 @@
+[package]
+name = "ui"
+version = "0.1.0"
+description = "Native UI module for Open Orpheus"
+license = "MIT"
+edition = "2024"
+exclude = ["index.node"]
+
+[lib]
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+egui = "0.33.3"
+neon = "1.1"

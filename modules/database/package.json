@@ -1,5 +1,5 @@
 {
-  "name": "database",
+  "name": "@open-orpheus/database",
   "version": "0.1.0",
   "description": "Database module for Open Orpheus",
   "main": "./lib/index.cjs",
@@ -45,7 +45,7 @@
   },
   "neon": {
     "type": "library",
-    "org": "@database",
+    "org": "@open-orpheus",
     "platforms": "common",
     "load": "./src/load.cts"
   }
