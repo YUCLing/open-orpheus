@@ -1,4 +1,5 @@
 import { registerCallHandler } from "../calls";
+import { fireNativeCall } from "../channel";
 
 registerCallHandler<
   [
@@ -16,6 +17,9 @@ registerCallHandler<
 >("player.setInfo", (playInfo) => {
   if (!playInfo.playId) {
     navigator.mediaSession.metadata = null;
+    ["nexttrack", "previoustrack", "stop"].forEach((action) => {
+      navigator.mediaSession.setActionHandler(action as MediaSessionAction, null);
+    });
     return;
   }
   navigator.mediaSession.metadata = new MediaMetadata({
@@ -29,6 +33,15 @@ registerCallHandler<
         type: "image/jpeg",
       },
     ],
+  });
+  navigator.mediaSession.setActionHandler("nexttrack", () => {
+    fireNativeCall("winhelper.onHotkey", "next_1", true);
+  });
+  navigator.mediaSession.setActionHandler("previoustrack", () => {
+    fireNativeCall("winhelper.onHotkey", "prev_1", true);
+  });
+  navigator.mediaSession.setActionHandler("stop", () => {
+    fireNativeCall("winhelper.onHotkey", "stop", true);
   });
 });
 
