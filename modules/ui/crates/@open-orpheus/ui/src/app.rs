@@ -51,11 +51,6 @@ impl App {
             tx.send(event_loop.create_proxy()).unwrap();
             let mut app_inner = AppInner {
                 windows: HashMap::default(),
-                window_states: HashMap::default(),
-                window_painters: HashMap::default(),
-                window_viewport_ids: HashMap::default(),
-                window_run_ui: HashMap::default(),
-                default_run_ui: Box::new(|_| {}),
             };
             event_loop.run_app(&mut app_inner).unwrap();
         });
@@ -95,13 +90,16 @@ impl App {
     }
 }
 
+struct WindowState {
+    window: Arc<Window>,
+    viewport_id: ViewportId,
+    egui_state: State,
+    painter: Painter,
+    run_ui: RunUI,
+}
+
 struct AppInner {
-    windows: HashMap<WindowId, Arc<Window>>,
-    window_states: HashMap<WindowId, State>,
-    window_painters: HashMap<WindowId, Painter>,
-    window_viewport_ids: HashMap<WindowId, ViewportId>,
-    window_run_ui: HashMap<WindowId, Box<dyn FnMut(&Context) + Send>>,
-    default_run_ui: Box<dyn FnMut(&Context) + Send>,
+    windows: HashMap<WindowId, WindowState>,
 }
 
 impl ApplicationHandler<Request> for AppInner {
@@ -111,35 +109,31 @@ impl ApplicationHandler<Request> for AppInner {
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let Some(window) = self.windows.get(&window_id) else {
+        let Some(window_state) = self.windows.get_mut(&window_id) else {
             return;
         };
-        let state = self.window_states.get_mut(&window_id).unwrap();
+        let window = &window_state.window;
+        let state = &mut window_state.egui_state;
         let res = state.on_window_event(window, &event);
         if res.repaint {
             window.request_redraw();
         }
         match event {
             WindowEvent::RedrawRequested => {
-                let painter = self.window_painters.get_mut(&window_id).unwrap();
+                let painter = &mut window_state.painter;
 
                 let raw_input = state.take_egui_input(window);
                 let ctx = state.egui_ctx().clone();
 
-                let run_ui = self
-                    .window_run_ui
-                    .get_mut(&window_id)
-                    .unwrap_or(&mut self.default_run_ui);
-
-                let full_output = ctx.run(raw_input, run_ui);
+                let full_output = ctx.run(raw_input, window_state.run_ui.0.as_mut());
 
                 state.handle_platform_output(window, full_output.platform_output);
 
                 let paint_jobs = ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
-                let viewport_id = self.window_viewport_ids.get(&window_id).unwrap();
+                let viewport_id = window_state.viewport_id;
 
                 painter.paint_and_update_textures(
-                    *viewport_id,
+                    viewport_id,
                     full_output.pixels_per_point,
                     [1.0, 1.0, 1.0, 1.0],
                     &paint_jobs,
@@ -149,15 +143,13 @@ impl ApplicationHandler<Request> for AppInner {
             }
             WindowEvent::CloseRequested => {
                 self.windows.remove(&window_id);
-                self.window_states.remove(&window_id);
-                self.window_painters.remove(&window_id);
-                self.window_viewport_ids.remove(&window_id);
             }
             WindowEvent::Resized(size) => {
-                let painter = self.window_painters.get_mut(&window_id).unwrap();
-                let viewport_id = self.window_viewport_ids.get(&window_id).unwrap();
+                let window_state = self.windows.get_mut(&window_id).unwrap();
+                let painter = &mut window_state.painter;
+                let viewport_id = window_state.viewport_id;
                 painter.on_window_resized(
-                    *viewport_id,
+                    viewport_id,
                     NonZeroU32::new(size.width).unwrap(),
                     NonZeroU32::new(size.height).unwrap(),
                 );
@@ -175,34 +167,29 @@ impl ApplicationHandler<Request> for AppInner {
                     egui_winit::create_winit_window_attributes(&ctx, viewport_builder);
                 let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
                 let id = window.id();
-                self.window_states.insert(
-                    id,
-                    State::new(ctx.clone(), viewport_id, &window, None, None, None),
-                );
-                let window_clone = window.clone();
-                let painter = smol::block_on(async move {
-                    let mut painter = Painter::new(
-                        ctx,
-                        WgpuConfiguration::default(),
-                        false,
-                        RendererOptions::default(),
-                    )
-                    .await;
-                    painter
-                        .set_window(viewport_id, Some(window_clone))
-                        .await
-                        .unwrap();
-                    painter
-                });
-                self.window_painters.insert(id, painter);
-                self.window_viewport_ids.insert(id, viewport_id);
-                self.window_run_ui.insert(id, run_ui.0);
-                self.windows.insert(id, window);
+                let window_state = WindowState {
+                    window: window.clone(),
+                    viewport_id,
+                    egui_state: State::new(ctx.clone(), viewport_id, &window, None, None, None),
+                    painter: smol::block_on(async move {
+                        let mut painter = Painter::new(
+                            ctx,
+                            WgpuConfiguration::default(),
+                            false,
+                            RendererOptions::default(),
+                        )
+                        .await;
+                        painter.set_window(viewport_id, Some(window)).await.unwrap();
+                        painter
+                    }),
+                    run_ui,
+                };
+                self.windows.insert(id, window_state);
                 sender.send(id).unwrap();
             }
             Request::ShowWindow(window_id) => {
-                if let Some(window) = self.windows.get(&window_id) {
-                    window.set_visible(true);
+                if let Some(window_state) = self.windows.get(&window_id) {
+                    window_state.window.set_visible(true);
                 }
             }
         }
