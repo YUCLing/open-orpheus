@@ -6,7 +6,8 @@ import * as addon from "./load.cjs";
 declare module "./load.cjs" {
   function createApp(): number;
   function createWindow(appPtr: number): number;
-  function createMenu(): number;
+  // TODO: Types
+  function createMenu(appPtr: number, menuData: any): number;
   function showMenu(menuPtr: number): void;
 }
 

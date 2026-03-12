@@ -1,13 +1,14 @@
+import App from "./App.cjs";
 import { createMenu, showMenu } from "./load.cjs";
 
 export default class Menu {
-  private ptr: number;
+  private _ptr: number;
 
-  constructor() {
-    this.ptr = createMenu();
+  constructor(app: App, menuData: any) {
+    this._ptr = createMenu((app as unknown as { _ptr: number })._ptr, menuData);
   }
 
   show(): void {
-    showMenu(this.ptr);
+    showMenu(this._ptr);
   }
 }

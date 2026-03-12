@@ -11,6 +11,10 @@ use winit::{
     window::{Window, WindowId},
 };
 
+use crate::app::fonts::get_font_definitions;
+
+mod base64_loader;
+mod fonts;
 pub mod menu;
 
 struct RunUI(Box<dyn FnMut(&Context) + Send>);
@@ -33,6 +37,7 @@ enum Request {
     ShowWindow(WindowId),
 }
 
+#[derive(Clone)]
 pub struct App {
     event_loop_proxy: OnceCell<EventLoopProxy<Request>>,
 }
@@ -65,6 +70,8 @@ impl App {
         run_ui: impl FnMut(&Context) + Send + 'static,
     ) -> (Context, WindowId) {
         let ctx = Context::default();
+        ctx.add_image_loader(Arc::new(base64_loader::Base64Loader {}));
+        ctx.set_fonts(get_font_definitions());
         let (sender, receiver) = oneshot::channel();
         self.event_loop_proxy
             .get()
@@ -105,7 +112,7 @@ struct AppInner {
 impl ApplicationHandler<Request> for AppInner {
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        _event_loop: &ActiveEventLoop,
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
@@ -158,7 +165,7 @@ impl ApplicationHandler<Request> for AppInner {
         }
     }
 
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {}
+    fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Request) {
         match event {

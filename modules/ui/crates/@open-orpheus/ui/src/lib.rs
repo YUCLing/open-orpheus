@@ -1,6 +1,10 @@
 use egui::{ViewportBuilder, ViewportId};
+use neon::types::extract::Json;
 
-use crate::app::App;
+use crate::app::{
+    App,
+    menu::{Menu, MenuData},
+};
 
 mod app;
 
@@ -35,6 +39,15 @@ fn create_window(app_ptr: f64) {
             .await;
         app.show_window(id).await;
     });
+}
+
+/// Not final API.
+#[neon::export]
+fn create_menu(app_ptr: f64, menu_data: Json<MenuData>) {
+    let app = unsafe { &mut *(app_ptr as usize as *mut App) };
+
+    let menu = Menu::new(app, menu_data.0);
+    menu.show();
 }
 
 // Use #[neon::main] to add additional behavior at module loading time.
