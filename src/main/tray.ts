@@ -55,7 +55,10 @@ export function install() {
   trayIcon.on("click", () => {
     if (!mainWnd) return;
     // Linux can only receives click, so treat click as right click instead.
-    mainWnd.webContents.send("channel.call", os.platform() !== "linux" ? "trayicon.onclick" : "trayicon.onrightclick");
+    mainWnd.webContents.send(
+      "channel.call",
+      os.platform() !== "linux" ? "trayicon.onclick" : "trayicon.onrightclick"
+    );
   });
   trayIcon.on("right-click", () => {
     if (!mainWnd) return;

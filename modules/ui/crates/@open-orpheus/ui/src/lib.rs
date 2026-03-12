@@ -1,17 +1,40 @@
-use crate::menu::Menu;
+use egui::{ViewportBuilder, ViewportId};
 
-mod menu;
+use crate::app::App;
+
+mod app;
 
 // Use #[neon::export] to export Rust functions as JavaScript functions.
 // See more at: https://docs.rs/neon/latest/neon/attr.export.html
 
 #[neon::export]
-fn create_menu() -> f64 {
-    let menu = Menu::new();
+fn create_app() -> f64 {
+    smol::block_on(async {
+        let app = App::new().await;
+        let ptr = Box::into_raw(Box::new(app));
+        ptr as usize as f64
+    })
+}
 
-    let ptr = Box::into_raw(Box::new(menu));
-
-    ptr as usize as f64
+/// For testing purposes.
+#[neon::export]
+fn create_window(app_ptr: f64) {
+    let app = unsafe { &mut *(app_ptr as usize as *mut App) };
+    let viewport_id = ViewportId::from_hash_of("test");
+    let viewport_builder = ViewportBuilder::default()
+        .with_always_on_top()
+        .with_visible(true)
+        .with_title("EGUI Test");
+    smol::block_on(async {
+        let (_ctx, id) = app
+            .create_egui_window(viewport_id, viewport_builder, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.label("Hello, World!");
+                });
+            })
+            .await;
+        app.show_window(id).await;
+    });
 }
 
 // Use #[neon::main] to add additional behavior at module loading time.

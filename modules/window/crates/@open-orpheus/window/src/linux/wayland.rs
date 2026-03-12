@@ -31,8 +31,8 @@ use std::{
 
 use ilhook::x64::{CallbackOption, HookFlags, HookPoint, HookType, Hooker, Registers};
 use libc::{
-    AF_UNIX, RTLD_DEFAULT, c_int, c_void, msghdr,
-    sa_family_t, sockaddr, sockaddr_un, ssize_t, dlsym,
+    AF_UNIX, RTLD_DEFAULT, c_int, c_void, dlsym, msghdr, sa_family_t, sockaddr, sockaddr_un,
+    ssize_t,
 };
 
 // ── Hook handle storage ───────────────────────────────────────────────────
@@ -48,19 +48,19 @@ static HOOK_HANDLES: OnceLock<Mutex<Vec<HookHandle>>> = OnceLock::new();
 
 // ── Global state ───────────────────────────────────────────────────────────
 
-static IS_WAYLAND:    OnceLock<bool>                         = OnceLock::new();
-static WAYLAND_FD:    OnceLock<Mutex<Option<RawFd>>>         = OnceLock::new();
-static IFACES:        OnceLock<Mutex<HashMap<u32, Iface>>>   = OnceLock::new();
-static POINTER_FOCUS: OnceLock<Mutex<HashMap<u32, u32>>>     = OnceLock::new(); // ptr_id → wl_surface_id
-static POINTER_SEAT:  OnceLock<Mutex<HashMap<u32, u32>>>     = OnceLock::new(); // ptr_id → seat_id
-static XDG_TO_WL:     OnceLock<Mutex<HashMap<u32, u32>>>     = OnceLock::new(); // xdg_surface_id → wl_surface_id
-static WL_TO_TOP:     OnceLock<Mutex<HashMap<u32, u32>>>     = OnceLock::new(); // wl_surface_id → xdg_toplevel_id
-static TOP_TO_XDG:    OnceLock<Mutex<HashMap<u32, u32>>>     = OnceLock::new(); // xdg_toplevel_id → xdg_surface_id
+static IS_WAYLAND: OnceLock<bool> = OnceLock::new();
+static WAYLAND_FD: OnceLock<Mutex<Option<RawFd>>> = OnceLock::new();
+static IFACES: OnceLock<Mutex<HashMap<u32, Iface>>> = OnceLock::new();
+static POINTER_FOCUS: OnceLock<Mutex<HashMap<u32, u32>>> = OnceLock::new(); // ptr_id → wl_surface_id
+static POINTER_SEAT: OnceLock<Mutex<HashMap<u32, u32>>> = OnceLock::new(); // ptr_id → seat_id
+static XDG_TO_WL: OnceLock<Mutex<HashMap<u32, u32>>> = OnceLock::new(); // xdg_surface_id → wl_surface_id
+static WL_TO_TOP: OnceLock<Mutex<HashMap<u32, u32>>> = OnceLock::new(); // wl_surface_id → xdg_toplevel_id
+static TOP_TO_XDG: OnceLock<Mutex<HashMap<u32, u32>>> = OnceLock::new(); // xdg_toplevel_id → xdg_surface_id
 // Snapshot of the last button-press: (seat_id, serial, wl_surface_id)
 // seat_id is captured at press time so pointer object lifecycle changes
 // (e.g. DevTools opening/closing destroys and re-creates wl_pointer) cannot
 // invalidate the recorded values before send_xdg_toplevel_move is called.
-static LAST_BUTTON:   OnceLock<Mutex<Option<(u32, u32, u32)>>> = OnceLock::new();
+static LAST_BUTTON: OnceLock<Mutex<Option<(u32, u32, u32)>>> = OnceLock::new();
 // Per-fd reassembly buffers — messages can span multiple sendmsg/recvmsg calls.
 static RX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
 static TX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
@@ -86,41 +86,41 @@ enum Iface {
 // and start at 0.
 
 // wl_display events (server → client)
-const EVT_DELETE_ID:       u16 = 1; // wl_display::delete_id(id: uint)
+const EVT_DELETE_ID: u16 = 1; // wl_display::delete_id(id: uint)
 
 // wl_display requests (client → server)
-const REQ_GET_REGISTRY:    u16 = 1; // wl_display::get_registry(id: new_id)
+const REQ_GET_REGISTRY: u16 = 1; // wl_display::get_registry(id: new_id)
 
 // wl_registry requests
-const REQ_BIND:            u16 = 0; // wl_registry::bind(name, iface_str, ver, new_id)
+const REQ_BIND: u16 = 0; // wl_registry::bind(name, iface_str, ver, new_id)
 
 // wl_compositor requests
-const REQ_CREATE_SURFACE:  u16 = 0; // wl_compositor::create_surface(id: new_id)
+const REQ_CREATE_SURFACE: u16 = 0; // wl_compositor::create_surface(id: new_id)
 
 // wl_seat requests
-const REQ_GET_POINTER:     u16 = 0; // wl_seat::get_pointer(id: new_id)
+const REQ_GET_POINTER: u16 = 0; // wl_seat::get_pointer(id: new_id)
 
 // wl_pointer events (server → client)
-const EVT_ENTER:           u16 = 0; // wl_pointer::enter(serial, surface, sx_fixed, sy_fixed)
-const EVT_LEAVE:           u16 = 1; // wl_pointer::leave(serial, surface)
-const EVT_BUTTON:          u16 = 3; // wl_pointer::button(serial, time, button, state)
-const BTN_PRESSED:         u32 = 1; // wl_pointer_button_state::pressed
+const EVT_ENTER: u16 = 0; // wl_pointer::enter(serial, surface, sx_fixed, sy_fixed)
+const EVT_LEAVE: u16 = 1; // wl_pointer::leave(serial, surface)
+const EVT_BUTTON: u16 = 3; // wl_pointer::button(serial, time, button, state)
+const BTN_PRESSED: u32 = 1; // wl_pointer_button_state::pressed
 
 // xdg_wm_base requests
 const REQ_GET_XDG_SURFACE: u16 = 2; // xdg_wm_base::get_xdg_surface(id: new_id, surface: obj)
 
 // xdg_surface requests
-const REQ_GET_TOPLEVEL:    u16 = 1; // xdg_surface::get_toplevel(id: new_id)
+const REQ_GET_TOPLEVEL: u16 = 1; // xdg_surface::get_toplevel(id: new_id)
 
 // xdg_toplevel requests
-const REQ_MOVE:            u16 = 5; // xdg_toplevel::move(seat: obj, serial: uint)
+const REQ_MOVE: u16 = 5; // xdg_toplevel::move(seat: obj, serial: uint)
 
 // wl_pointer::release (destructor, since version 3) is opcode 1.
 // opcode 0 is wl_pointer::set_cursor — do NOT treat it as a destructor.
-const WL_POINTER_RELEASE:  u16 = 1;
+const WL_POINTER_RELEASE: u16 = 1;
 
 // Opcode 0 = destructor for: wl_surface, wl_pointer (release), xdg_surface, xdg_toplevel
-const REQ_DESTROY:         u16 = 0;
+const REQ_DESTROY: u16 = 0;
 
 // ── Wire helpers ──────────────────────────────────────────────────────────
 
@@ -128,12 +128,16 @@ const REQ_DESTROY:         u16 = 0;
 /// Returns `(object_id, opcode, total_message_size)` or `None` if malformed.
 #[inline]
 fn parse_header(buf: &[u8]) -> Option<(u32, u16, usize)> {
-    if buf.len() < 8 { return None; }
-    let oid  = u32::from_ne_bytes(buf[0..4].try_into().unwrap());
+    if buf.len() < 8 {
+        return None;
+    }
+    let oid = u32::from_ne_bytes(buf[0..4].try_into().unwrap());
     let word = u32::from_ne_bytes(buf[4..8].try_into().unwrap());
-    let op   = (word & 0xFFFF) as u16;
-    let sz   = (word >> 16) as usize;
-    if sz < 8 { return None; }
+    let op = (word & 0xFFFF) as u16;
+    let sz = (word >> 16) as usize;
+    if sz < 8 {
+        return None;
+    }
     Some((oid, op, sz))
 }
 
@@ -152,18 +156,28 @@ fn ru32(buf: &[u8], offset: usize) -> Option<u32> {
 /// wire protocol encodes as (interface: string, version: uint, new_id: uint) because
 /// the `new_id` argument has no static interface in the XML.
 fn parse_wl_str(buf: &[u8], offset: usize) -> Option<(&str, usize)> {
-    if offset + 4 > buf.len() { return None; }
+    if offset + 4 > buf.len() {
+        return None;
+    }
     let raw_len = ru32(buf, offset)? as usize;
-    if raw_len == 0 { return Some(("", offset + 4)); }
+    if raw_len == 0 {
+        return Some(("", offset + 4));
+    }
     let data_start = offset + 4;
-    let data_end   = data_start + raw_len;
-    if data_end > buf.len() { return None; }
+    let data_end = data_start + raw_len;
+    if data_end > buf.len() {
+        return None;
+    }
     let nul = buf[data_start..data_end]
-        .iter().position(|&b| b == 0).unwrap_or(raw_len);
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(raw_len);
     let s = std::str::from_utf8(&buf[data_start..data_start + nul]).ok()?;
     let padded = (raw_len + 3) & !3;
     let next = data_start + padded;
-    if next > buf.len() { return None; }
+    if next > buf.len() {
+        return None;
+    }
     Some((s, next))
 }
 
@@ -172,19 +186,25 @@ fn parse_wl_str(buf: &[u8], offset: usize) -> Option<(&str, usize)> {
 fn wayland_fd() -> Option<RawFd> {
     WAYLAND_FD.get()?.lock().ok().and_then(|g| *g)
 }
-fn is_wayland_fd(fd: RawFd) -> bool { wayland_fd() == Some(fd) }
+fn is_wayland_fd(fd: RawFd) -> bool {
+    wayland_fd() == Some(fd)
+}
 
 fn iface_of(id: u32) -> Option<Iface> {
     IFACES.get()?.lock().ok()?.get(&id).copied()
 }
 fn set_iface(id: u32, iface: Iface) {
     if let Some(m) = IFACES.get() {
-        if let Ok(mut map) = m.lock() { map.insert(id, iface); }
+        if let Ok(mut map) = m.lock() {
+            map.insert(id, iface);
+        }
     }
 }
 fn del_iface(id: u32) {
     if let Some(m) = IFACES.get() {
-        if let Ok(mut map) = m.lock() { map.remove(&id); }
+        if let Ok(mut map) = m.lock() {
+            map.remove(&id);
+        }
     }
 }
 
@@ -220,19 +240,28 @@ fn feed(
         let mut msgs = Vec::new();
         let mut off = 0;
         loop {
-            let Some((oid, op, sz)) = parse_header(&buf[off..]) else { break };
-            if off + sz > buf.len() { break }
+            let Some((oid, op, sz)) = parse_header(&buf[off..]) else {
+                break;
+            };
+            if off + sz > buf.len() {
+                break;
+            }
             msgs.push((oid, op, buf[off..off + sz].to_vec()));
             off += sz;
         }
         buf.drain(..off);
-        if buf.len() > 4 << 20 { buf.clear(); } // 4 MiB guard against sync loss
+        if buf.len() > 4 << 20 {
+            buf.clear();
+        } // 4 MiB guard against sync loss
         msgs
     };
 
     for (oid, op, msg) in msgs {
-        if is_event { on_event(oid, op, &msg); }
-        else        { on_request(oid, op, &msg); }
+        if is_event {
+            on_event(oid, op, &msg);
+        } else {
+            on_request(oid, op, &msg);
+        }
     }
 }
 
@@ -241,7 +270,9 @@ fn feed(
 fn on_event(oid: u32, op: u16, msg: &[u8]) {
     // wl_display::delete_id — server confirms the client ID is fully released.
     if oid == 1 && op == EVT_DELETE_ID {
-        if let Some(dead) = ru32(msg, 8) { purge(dead); }
+        if let Some(dead) = ru32(msg, 8) {
+            purge(dead);
+        }
         return;
     }
 
@@ -256,31 +287,37 @@ fn on_pointer_event(ptr_id: u32, op: u16, msg: &[u8]) {
             // enter(serial: uint, surface: object, sx: fixed, sy: fixed) — 24 B
             if let Some(surf_id) = ru32(msg, 12) {
                 if let Some(m) = POINTER_FOCUS.get() {
-                    if let Ok(mut map) = m.lock() { map.insert(ptr_id, surf_id); }
+                    if let Ok(mut map) = m.lock() {
+                        map.insert(ptr_id, surf_id);
+                    }
                 }
             }
         }
         EVT_LEAVE => {
             // A pointer can focus at most one surface at a time; just remove it.
             if let Some(m) = POINTER_FOCUS.get() {
-                if let Ok(mut map) = m.lock() { map.remove(&ptr_id); }
+                if let Ok(mut map) = m.lock() {
+                    map.remove(&ptr_id);
+                }
             }
         }
         EVT_BUTTON => {
             // button(serial: uint, time: uint, button: uint, state: uint) — 24 B
             let serial = ru32(msg, 8);
-            let state  = ru32(msg, 20);
+            let state = ru32(msg, 20);
             // Record only press events; the serial from a press is what
             // xdg_toplevel::move requires.
             if let (Some(serial), Some(BTN_PRESSED)) = (serial, state) {
-                let surf_id = POINTER_FOCUS.get()
+                let surf_id = POINTER_FOCUS
+                    .get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| map.get(&ptr_id).copied());
                 // Snapshot seat_id now — if the pointer object is later destroyed
                 // (e.g. DevTools opening causes a wl_pointer release + re-create)
                 // the POINTER_SEAT entry for ptr_id will be purged, making a
                 // deferred lookup return None.  Capturing it here keeps it valid.
-                let seat_id = POINTER_SEAT.get()
+                let seat_id = POINTER_SEAT
+                    .get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| map.get(&ptr_id).copied());
                 if let (Some(surf_id), Some(seat_id)) = (surf_id, seat_id) {
@@ -304,7 +341,9 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
     match (iface, op) {
         // wl_display::get_registry(id: new_id)
         (Iface::WlDisplay, REQ_GET_REGISTRY) => {
-            if let Some(new_id) = ru32(msg, 8) { set_iface(new_id, Iface::WlRegistry); }
+            if let Some(new_id) = ru32(msg, 8) {
+                set_iface(new_id, Iface::WlRegistry);
+            }
         }
 
         // wl_registry::bind(name: uint, interface: string, version: uint, id: new_id)
@@ -318,18 +357,22 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
                 if let Some(new_id) = ru32(msg, after + 4) {
                     let iface = match iface_name {
                         "wl_compositor" => Some(Iface::WlCompositor),
-                        "wl_seat"       => Some(Iface::WlSeat),
-                        "xdg_wm_base"   => Some(Iface::XdgWmBase),
-                        _               => None,
+                        "wl_seat" => Some(Iface::WlSeat),
+                        "xdg_wm_base" => Some(Iface::XdgWmBase),
+                        _ => None,
                     };
-                    if let Some(iface) = iface { set_iface(new_id, iface); }
+                    if let Some(iface) = iface {
+                        set_iface(new_id, iface);
+                    }
                 }
             }
         }
 
         // wl_compositor::create_surface(id: new_id)
         (Iface::WlCompositor, REQ_CREATE_SURFACE) => {
-            if let Some(new_id) = ru32(msg, 8) { set_iface(new_id, Iface::WlSurface); }
+            if let Some(new_id) = ru32(msg, 8) {
+                set_iface(new_id, Iface::WlSurface);
+            }
         }
 
         // wl_seat::get_pointer(id: new_id)
@@ -338,7 +381,9 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
             if let Some(new_id) = ru32(msg, 8) {
                 set_iface(new_id, Iface::WlPointer);
                 if let Some(m) = POINTER_SEAT.get() {
-                    if let Ok(mut map) = m.lock() { map.insert(new_id, oid); }
+                    if let Ok(mut map) = m.lock() {
+                        map.insert(new_id, oid);
+                    }
                 }
             }
         }
@@ -348,7 +393,9 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
             if let (Some(xdg_id), Some(wl_id)) = (ru32(msg, 8), ru32(msg, 12)) {
                 set_iface(xdg_id, Iface::XdgSurface);
                 if let Some(m) = XDG_TO_WL.get() {
-                    if let Ok(mut map) = m.lock() { map.insert(xdg_id, wl_id); }
+                    if let Ok(mut map) = m.lock() {
+                        map.insert(xdg_id, wl_id);
+                    }
                 }
             }
         }
@@ -358,16 +405,21 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
             if let Some(top_id) = ru32(msg, 8) {
                 set_iface(top_id, Iface::XdgToplevel);
                 if let Some(m) = TOP_TO_XDG.get() {
-                    if let Ok(mut map) = m.lock() { map.insert(top_id, oid); }
+                    if let Ok(mut map) = m.lock() {
+                        map.insert(top_id, oid);
+                    }
                 }
                 // Populate the direct wl_surface → xdg_toplevel lookup used by
                 // send_xdg_toplevel_move; this avoids a reverse scan at drag time.
-                let wl_id = XDG_TO_WL.get()
+                let wl_id = XDG_TO_WL
+                    .get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| map.get(&oid).copied());
                 if let Some(wl_id) = wl_id {
                     if let Some(m) = WL_TO_TOP.get() {
-                        if let Ok(mut map) = m.lock() { map.insert(wl_id, top_id); }
+                        if let Ok(mut map) = m.lock() {
+                            map.insert(wl_id, top_id);
+                        }
                     }
                 }
             }
@@ -394,29 +446,68 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
 fn purge(id: u32) {
     match iface_of(id) {
         Some(Iface::WlPointer) => {
-            if let Some(m) = POINTER_FOCUS.get() { if let Ok(mut map) = m.lock() { map.remove(&id); } }
-            if let Some(m) = POINTER_SEAT.get()  { if let Ok(mut map) = m.lock() { map.remove(&id); } }
+            if let Some(m) = POINTER_FOCUS.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.remove(&id);
+                }
+            }
+            if let Some(m) = POINTER_SEAT.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.remove(&id);
+                }
+            }
         }
         Some(Iface::WlSurface) => {
-            if let Some(m) = XDG_TO_WL.get()     { if let Ok(mut map) = m.lock() { map.retain(|_, &mut v| v != id); } }
-            if let Some(m) = WL_TO_TOP.get()      { if let Ok(mut map) = m.lock() { map.remove(&id); } }
-            if let Some(m) = POINTER_FOCUS.get()  { if let Ok(mut map) = m.lock() { map.retain(|_, &mut v| v != id); } }
+            if let Some(m) = XDG_TO_WL.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.retain(|_, &mut v| v != id);
+                }
+            }
+            if let Some(m) = WL_TO_TOP.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.remove(&id);
+                }
+            }
+            if let Some(m) = POINTER_FOCUS.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.retain(|_, &mut v| v != id);
+                }
+            }
         }
         Some(Iface::XdgSurface) => {
             // Cascade: purge any xdg_toplevel that depends on this xdg_surface.
             // Locks are dropped before the recursive call.
-            let owned_top = TOP_TO_XDG.get()
+            let owned_top = TOP_TO_XDG
+                .get()
                 .and_then(|m| m.lock().ok())
                 .and_then(|map| map.iter().find(|(_, v)| **v == id).map(|(k, _)| *k));
-            if let Some(tid) = owned_top { purge(tid); }
-            if let Some(m) = XDG_TO_WL.get() { if let Ok(mut map) = m.lock() { map.remove(&id); } }
+            if let Some(tid) = owned_top {
+                purge(tid);
+            }
+            if let Some(m) = XDG_TO_WL.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.remove(&id);
+                }
+            }
         }
         Some(Iface::XdgToplevel) => {
-            if let Some(m) = TOP_TO_XDG.get() { if let Ok(mut map) = m.lock() { map.remove(&id); } }
-            if let Some(m) = WL_TO_TOP.get()  { if let Ok(mut map) = m.lock() { map.retain(|_, &mut v| v != id); } }
+            if let Some(m) = TOP_TO_XDG.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.remove(&id);
+                }
+            }
+            if let Some(m) = WL_TO_TOP.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.retain(|_, &mut v| v != id);
+                }
+            }
         }
         Some(Iface::WlSeat) => {
-            if let Some(m) = POINTER_SEAT.get() { if let Ok(mut map) = m.lock() { map.retain(|_, &mut v| v != id); } }
+            if let Some(m) = POINTER_SEAT.get() {
+                if let Ok(mut map) = m.lock() {
+                    map.retain(|_, &mut v| v != id);
+                }
+            }
         }
         _ => {}
     }
@@ -434,17 +525,20 @@ fn is_wayland_socket(addr: *const c_void, addrlen: u32) -> bool {
         return false;
     }
     let sa = unsafe { &*(addr as *const sockaddr) };
-    if sa.sa_family as i32 != AF_UNIX { return false; }
+    if sa.sa_family as i32 != AF_UNIX {
+        return false;
+    }
 
     let sun = unsafe { &*(addr as *const sockaddr_un) };
     let path_offset = mem::size_of::<sa_family_t>();
     let path_len = (addrlen as usize)
         .saturating_sub(path_offset)
         .min(sun.sun_path.len());
-    if path_len == 0 { return false; }
+    if path_len == 0 {
+        return false;
+    }
 
-    let raw =
-        unsafe { std::slice::from_raw_parts(sun.sun_path.as_ptr() as *const u8, path_len) };
+    let raw = unsafe { std::slice::from_raw_parts(sun.sun_path.as_ptr() as *const u8, path_len) };
 
     // Abstract Unix sockets begin with a NUL byte; filesystem sockets are C-strings.
     let candidate = if raw[0] == 0 {
@@ -453,10 +547,14 @@ fn is_wayland_socket(addr: *const c_void, addrlen: u32) -> bool {
         let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
         &raw[..end]
     };
-    if candidate.is_empty() { return false; }
+    if candidate.is_empty() {
+        return false;
+    }
 
     // Fast path: path contains the literal string "wayland".
-    if candidate.windows(7).any(|w| w == b"wayland") { return true; }
+    if candidate.windows(7).any(|w| w == b"wayland") {
+        return true;
+    }
 
     // Slower path: compare the filename component against $WAYLAND_DISPLAY.
     if let Ok(disp) = std::env::var("WAYLAND_DISPLAY") {
@@ -474,23 +572,41 @@ fn is_wayland_socket(addr: *const c_void, addrlen: u32) -> bool {
 // IS_WAYLAND is intentionally left true — we know this process uses Wayland.
 
 fn reset_connection_state(old_fd: RawFd) {
-    if let Some(m) = WAYLAND_FD.get()    { let _ = m.lock().map(|mut g| *g = None); }
+    if let Some(m) = WAYLAND_FD.get() {
+        let _ = m.lock().map(|mut g| *g = None);
+    }
     if let Some(m) = IFACES.get() {
         let _ = m.lock().map(|mut g| {
             g.clear();
             g.insert(1, Iface::WlDisplay); // wl_display is always object ID 1
         });
     }
-    if let Some(m) = POINTER_FOCUS.get() { let _ = m.lock().map(|mut g| g.clear()); }
-    if let Some(m) = POINTER_SEAT.get()  { let _ = m.lock().map(|mut g| g.clear()); }
-    if let Some(m) = XDG_TO_WL.get()    { let _ = m.lock().map(|mut g| g.clear()); }
-    if let Some(m) = WL_TO_TOP.get()    { let _ = m.lock().map(|mut g| g.clear()); }
-    if let Some(m) = TOP_TO_XDG.get()   { let _ = m.lock().map(|mut g| g.clear()); }
+    if let Some(m) = POINTER_FOCUS.get() {
+        let _ = m.lock().map(|mut g| g.clear());
+    }
+    if let Some(m) = POINTER_SEAT.get() {
+        let _ = m.lock().map(|mut g| g.clear());
+    }
+    if let Some(m) = XDG_TO_WL.get() {
+        let _ = m.lock().map(|mut g| g.clear());
+    }
+    if let Some(m) = WL_TO_TOP.get() {
+        let _ = m.lock().map(|mut g| g.clear());
+    }
+    if let Some(m) = TOP_TO_XDG.get() {
+        let _ = m.lock().map(|mut g| g.clear());
+    }
     // Clear LAST_BUTTON: the snapshotted wl_surface_id is invalid after
     // reconnection (new connection uses different object IDs).
-    if let Some(m) = LAST_BUTTON.get()  { let _ = m.lock().map(|mut g| *g = None); }
-    if let Some(m) = RX_BUFS.get()      { let _ = m.lock().map(|mut g| g.remove(&old_fd)); }
-    if let Some(m) = TX_BUFS.get()      { let _ = m.lock().map(|mut g| g.remove(&old_fd)); }
+    if let Some(m) = LAST_BUTTON.get() {
+        let _ = m.lock().map(|mut g| *g = None);
+    }
+    if let Some(m) = RX_BUFS.get() {
+        let _ = m.lock().map(|mut g| g.remove(&old_fd));
+    }
+    if let Some(m) = TX_BUFS.get() {
+        let _ = m.lock().map(|mut g| g.remove(&old_fd));
+    }
 }
 
 // ── Hook callbacks ─────────────────────────────────────────────────────────
@@ -502,8 +618,8 @@ fn reset_connection_state(old_fd: RawFd) {
 /// next connect to a Wayland socket is properly picked up as the new main fd.
 unsafe extern "win64" fn hook_connect(reg: *mut Registers, orig: usize, _: usize) -> usize {
     let f: extern "C" fn(c_int, *const c_void, u32) -> c_int = unsafe { mem::transmute(orig) };
-    let fd      = unsafe { (*reg).rdi as c_int };
-    let addr    = unsafe { (*reg).rsi as *const c_void };
+    let fd = unsafe { (*reg).rdi as c_int };
+    let addr = unsafe { (*reg).rsi as *const c_void };
     let addrlen = unsafe { (*reg).rdx as u32 };
 
     let ret = f(fd, addr, addrlen);
@@ -512,7 +628,9 @@ unsafe extern "win64" fn hook_connect(reg: *mut Registers, orig: usize, _: usize
         IS_WAYLAND.set(true).ok();
         if let Some(guard) = WAYLAND_FD.get() {
             if let Ok(mut opt) = guard.lock() {
-                if opt.is_none() { *opt = Some(fd); }
+                if opt.is_none() {
+                    *opt = Some(fd);
+                }
             }
         }
     }
@@ -537,8 +655,8 @@ unsafe extern "win64" fn hook_close(reg: *mut Registers, orig: usize, _: usize) 
 /// libwayland uses wl_os_recvmsg_cloexec (wayland-os.c) which calls recvmsg.
 unsafe extern "win64" fn hook_recvmsg(reg: *mut Registers, orig: usize, _: usize) -> usize {
     let f: extern "C" fn(c_int, *mut msghdr, c_int) -> ssize_t = unsafe { mem::transmute(orig) };
-    let fd    = unsafe { (*reg).rdi as c_int };
-    let hdr   = unsafe { (*reg).rsi as *mut msghdr };
+    let fd = unsafe { (*reg).rdi as c_int };
+    let hdr = unsafe { (*reg).rsi as *mut msghdr };
     let flags = unsafe { (*reg).rdx as c_int };
 
     let ret = f(fd, hdr, flags);
@@ -549,9 +667,13 @@ unsafe extern "win64" fn hook_recvmsg(reg: *mut Registers, orig: usize, _: usize
             let mut remaining = ret as usize;
             let mut packet = Vec::with_capacity(remaining);
             for i in 0..h.msg_iovlen {
-                if remaining == 0 { break; }
+                if remaining == 0 {
+                    break;
+                }
                 let iov = unsafe { &*h.msg_iov.add(i) };
-                if iov.iov_base.is_null() || iov.iov_len == 0 { continue; }
+                if iov.iov_base.is_null() || iov.iov_len == 0 {
+                    continue;
+                }
                 let take = iov.iov_len.min(remaining);
                 packet.extend_from_slice(unsafe {
                     std::slice::from_raw_parts(iov.iov_base as *const u8, take)
@@ -571,8 +693,8 @@ unsafe extern "win64" fn hook_recvmsg(reg: *mut Registers, orig: usize, _: usize
 /// the syscall returns.
 unsafe extern "win64" fn hook_sendmsg(reg: *mut Registers, orig: usize, _: usize) -> usize {
     let f: extern "C" fn(c_int, *const msghdr, c_int) -> ssize_t = unsafe { mem::transmute(orig) };
-    let fd    = unsafe { (*reg).rdi as c_int };
-    let hdr   = unsafe { (*reg).rsi as *const msghdr };
+    let fd = unsafe { (*reg).rdi as c_int };
+    let hdr = unsafe { (*reg).rsi as *const msghdr };
     let flags = unsafe { (*reg).rdx as c_int };
 
     if is_wayland_fd(fd) && !hdr.is_null() {
@@ -581,12 +703,16 @@ unsafe extern "win64" fn hook_sendmsg(reg: *mut Registers, orig: usize, _: usize
             let mut packet = Vec::new();
             for i in 0..h.msg_iovlen {
                 let iov = unsafe { &*h.msg_iov.add(i) };
-                if iov.iov_base.is_null() || iov.iov_len == 0 { continue; }
+                if iov.iov_base.is_null() || iov.iov_len == 0 {
+                    continue;
+                }
                 packet.extend_from_slice(unsafe {
                     std::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len)
                 });
             }
-            if !packet.is_empty() { feed_outbound(fd, &packet); }
+            if !packet.is_empty() {
+                feed_outbound(fd, &packet);
+            }
         }
     }
 
@@ -605,7 +731,8 @@ pub(super) fn send_xdg_toplevel_move() -> bool {
     // Retrieve the button-press snapshot captured in on_pointer_event.
     // seat_id was snapshotted at press time, so pointer lifecycle changes
     // (DevTools open/close, pointer re-creation) cannot invalidate it.
-    let Some((seat_id, serial, wl_surf_id)) = LAST_BUTTON.get()
+    let Some((seat_id, serial, wl_surf_id)) = LAST_BUTTON
+        .get()
         .and_then(|m| m.lock().ok())
         .and_then(|g| *g)
     else {
@@ -614,21 +741,20 @@ pub(super) fn send_xdg_toplevel_move() -> bool {
     };
 
     // Primary: direct wl_surface → xdg_toplevel mapping populated at get_toplevel time.
-    let top_id = WL_TO_TOP.get()
+    let top_id = WL_TO_TOP
+        .get()
         .and_then(|m| m.lock().ok())
         .and_then(|map| map.get(&wl_surf_id).copied())
         .filter(|&id| iface_of(id) == Some(Iface::XdgToplevel))
         // Fallback: reverse-search through xdg_surface when the direct entry is stale.
         .or_else(|| {
-            let xdg_id = XDG_TO_WL.get()
+            let xdg_id = XDG_TO_WL
+                .get()
                 .and_then(|m| m.lock().ok())
-                .and_then(|map| {
-                    map.iter()
-                        .find(|(_, v)| **v == wl_surf_id)
-                        .map(|(k, _)| *k)
-                });
+                .and_then(|map| map.iter().find(|(_, v)| **v == wl_surf_id).map(|(k, _)| *k));
             xdg_id.and_then(|xid| {
-                TOP_TO_XDG.get()
+                TOP_TO_XDG
+                    .get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| {
                         map.iter()
@@ -642,7 +768,10 @@ pub(super) fn send_xdg_toplevel_move() -> bool {
         });
 
     let Some(top_id) = top_id else {
-        eprintln!("[wayland] send_xdg_toplevel_move: no live xdg_toplevel for wl_surface {}", wl_surf_id);
+        eprintln!(
+            "[wayland] send_xdg_toplevel_move: no live xdg_toplevel for wl_surface {}",
+            wl_surf_id
+        );
         return false;
     };
 
@@ -686,28 +815,34 @@ pub(super) fn init_wayland_hook() {
         Mutex::new(m)
     });
     POINTER_FOCUS.get_or_init(|| Mutex::new(HashMap::new()));
-    POINTER_SEAT .get_or_init(|| Mutex::new(HashMap::new()));
-    XDG_TO_WL   .get_or_init(|| Mutex::new(HashMap::new()));
-    WL_TO_TOP   .get_or_init(|| Mutex::new(HashMap::new()));
-    TOP_TO_XDG  .get_or_init(|| Mutex::new(HashMap::new()));
-    LAST_BUTTON .get_or_init(|| Mutex::new(None));
-    RX_BUFS     .get_or_init(|| Mutex::new(HashMap::new()));
-    TX_BUFS     .get_or_init(|| Mutex::new(HashMap::new()));
+    POINTER_SEAT.get_or_init(|| Mutex::new(HashMap::new()));
+    XDG_TO_WL.get_or_init(|| Mutex::new(HashMap::new()));
+    WL_TO_TOP.get_or_init(|| Mutex::new(HashMap::new()));
+    TOP_TO_XDG.get_or_init(|| Mutex::new(HashMap::new()));
+    LAST_BUTTON.get_or_init(|| Mutex::new(None));
+    RX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
+    TX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
     HOOK_HANDLES.get_or_init(|| Mutex::new(Vec::new()));
 
     unsafe {
         // Resolve all symbols first.  If any is missing the entire hook setup
         // is aborted so the process is never left in a half-hooked state.
-        let targets: &[(&str, unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize)] = &[
+        let targets: &[(
+            &str,
+            unsafe extern "win64" fn(*mut Registers, usize, usize) -> usize,
+        )] = &[
             ("connect", hook_connect),
-            ("close",   hook_close),
+            ("close", hook_close),
             ("recvmsg", hook_recvmsg),
             ("sendmsg", hook_sendmsg),
         ];
 
         let mut addrs = Vec::with_capacity(targets.len());
         for (name, _) in targets {
-            let addr = dlsym(RTLD_DEFAULT, std::ffi::CString::new(*name).unwrap().as_ptr());
+            let addr = dlsym(
+                RTLD_DEFAULT,
+                std::ffi::CString::new(*name).unwrap().as_ptr(),
+            );
             if addr.is_null() {
                 eprintln!("[wayland] symbol not found: {} — hook setup aborted", name);
                 return;
@@ -726,12 +861,16 @@ pub(super) fn init_wayland_hook() {
                 CallbackOption::None,
                 0,
                 HookFlags::empty(),
-            ).hook() {
+            )
+            .hook()
+            {
                 Ok(h) => vec.push(HookHandle(Box::into_raw(Box::new(h)))),
                 Err(e) => {
                     eprintln!("[wayland] failed to hook {}: {:?} — rolling back", name, e);
                     // Drop all hooks installed so far to leave the process clean.
-                    for h in vec.drain(..) { drop(Box::from_raw(h.0)); }
+                    for h in vec.drain(..) {
+                        drop(Box::from_raw(h.0));
+                    }
                     return;
                 }
             }
@@ -748,7 +887,9 @@ pub(super) fn remove_wayland_hook() {
     if let Some(m) = HOOK_HANDLES.get() {
         if let Ok(mut vec) = m.lock() {
             for h in vec.drain(..) {
-                unsafe { drop(Box::from_raw(h.0)); }
+                unsafe {
+                    drop(Box::from_raw(h.0));
+                }
             }
         }
     }

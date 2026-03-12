@@ -23,8 +23,12 @@ export type AppMenuItem = {
 
 export type AppMenu = AppMenuItem[];
 
-async function appMenuItemToMenuItemOptions(webContent: WebContents, item: AppMenuItem, menuId: number): Promise<MenuItemConstructorOptions> {
-    let icon: NativeImage | undefined = undefined;
+async function appMenuItemToMenuItemOptions(
+  webContent: WebContents,
+  item: AppMenuItem,
+  menuId: number
+): Promise<MenuItemConstructorOptions> {
+  let icon: NativeImage | undefined = undefined;
   if (item.image_path) {
     try {
       const buf = await loadFromOrpheusUrl(item.image_path);
@@ -63,7 +67,9 @@ export async function appMenuItemToMenuItem(
     options.type = "submenu";
     options.submenu = [];
     for (const child of item.children) {
-      options.submenu.push(await appMenuItemToMenuItemOptions(webContent, child, menuId));
+      options.submenu.push(
+        await appMenuItemToMenuItemOptions(webContent, child, menuId)
+      );
     }
   }
   return new MenuItem(options);

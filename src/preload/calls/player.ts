@@ -18,7 +18,10 @@ registerCallHandler<
   if (!playInfo.playId) {
     navigator.mediaSession.metadata = null;
     ["nexttrack", "previoustrack", "stop"].forEach((action) => {
-      navigator.mediaSession.setActionHandler(action as MediaSessionAction, null);
+      navigator.mediaSession.setActionHandler(
+        action as MediaSessionAction,
+        null
+      );
     });
     return;
   }

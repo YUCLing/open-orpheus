@@ -1,1 +1,6 @@
-["font-list", "@open-orpheus/database", "@open-orpheus/window", "@open-orpheus/ui"]
+[
+  "font-list",
+  "@open-orpheus/database",
+  "@open-orpheus/window",
+  "@open-orpheus/ui"
+]

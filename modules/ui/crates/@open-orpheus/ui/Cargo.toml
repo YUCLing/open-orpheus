@@ -13,4 +13,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 egui = "0.33.3"
+egui-wgpu = { version = "0.33.3", features = ["winit"] }
+egui-winit = "0.33.3"
 neon = "1.1"
+oneshot = { version = "0.2.1", features = ["async"] }
+smol = "2.0.2"
+winit = "0.30.12"
