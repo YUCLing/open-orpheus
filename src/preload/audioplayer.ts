@@ -114,3 +114,18 @@ player.audio.addEventListener("volumechange", () => {
     player.audio.volume
   );
 });
+
+navigator.mediaSession.setActionHandler("nexttrack", () => {
+  fireNativeCall("winhelper.onHotkey", "next_1", true);
+});
+navigator.mediaSession.setActionHandler("previoustrack", () => {
+  fireNativeCall("winhelper.onHotkey", "prev_1", true);
+});
+navigator.mediaSession.setActionHandler("stop", () => {
+  fireNativeCall("winhelper.onHotkey", "stop", true);
+});
+["play", "pause"].forEach((action: MediaSessionAction) => {
+  navigator.mediaSession.setActionHandler(action, () => {
+    fireNativeCall("winhelper.onHotkey", "play_pause_3", true);
+  });
+});

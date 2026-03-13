@@ -1,5 +1,7 @@
+import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
-import { fireNativeCall } from "../channel";
+
+let currentMetadata: MediaMetadata | null = null;
 
 registerCallHandler<
   [
@@ -16,35 +18,18 @@ registerCallHandler<
   void
 >("player.setInfo", (playInfo) => {
   if (!playInfo.playId) {
-    navigator.mediaSession.metadata = null;
-    ["nexttrack", "previoustrack", "stop"].forEach((action) => {
-      navigator.mediaSession.setActionHandler(
-        action as MediaSessionAction,
-        null
-      );
-    });
+    navigator.mediaSession.metadata = currentMetadata = null;
     return;
   }
-  navigator.mediaSession.metadata = new MediaMetadata({
+  navigator.mediaSession.metadata = currentMetadata = new MediaMetadata({
     title: playInfo.songName,
     artist: playInfo.artistName,
     album: playInfo.albumName,
-    artwork: [
-      {
-        src: playInfo.url + "?param=512y512",
-        sizes: "512x512",
-        type: "image/jpeg",
-      },
-    ],
-  });
-  navigator.mediaSession.setActionHandler("nexttrack", () => {
-    fireNativeCall("winhelper.onHotkey", "next_1", true);
-  });
-  navigator.mediaSession.setActionHandler("previoustrack", () => {
-    fireNativeCall("winhelper.onHotkey", "prev_1", true);
-  });
-  navigator.mediaSession.setActionHandler("stop", () => {
-    fireNativeCall("winhelper.onHotkey", "stop", true);
+    artwork: [96, 128, 192, 256, 384, 512].map((size) => ({
+      src: playInfo.url + `?param=${size}y${size}`,
+      sizes: `${size}x${size}`,
+      type: "image/jpeg",
+    })),
   });
 });
 
@@ -86,4 +71,10 @@ registerCallHandler<[], void>("player.removeAll", () => {
     );
     return [true];
   });
+});
+
+player.addEventListener("load", () => {
+  if (!currentMetadata) return;
+  // Ensure media session update
+  navigator.mediaSession.metadata = currentMetadata;
 });
