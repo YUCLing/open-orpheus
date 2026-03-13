@@ -11,9 +11,14 @@ use winit::{
     dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
-    platform::wayland::EventLoopBuilderExtWayland,
     window::{Window, WindowId},
 };
+
+#[cfg(windows)]
+use winit::platform::windows::EventLoopBuilderExtWindows;
+
+#[cfg(target_os = "linux")]
+use winit::platform::wayland::EventLoopBuilderExtWayland;
 
 use crate::app::fonts::get_font_definitions;
 
