@@ -45,11 +45,9 @@ impl ImageLoader for Base64Loader {
         }
     }
 
-    fn forget(&self, _uri: &str) {
-    }
+    fn forget(&self, _uri: &str) {}
 
-    fn forget_all(&self) {
-    }
+    fn forget_all(&self) {}
 
     fn byte_size(&self) -> usize {
         0

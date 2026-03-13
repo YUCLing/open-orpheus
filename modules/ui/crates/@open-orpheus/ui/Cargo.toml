@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 base64 = "0.22.1"
-egui = "0.33.3"
+egui = { version = "0.33.3", no-default-features = true }
 egui-wgpu = { version = "0.33.3", features = ["winit"] }
 egui-winit = "0.33.3"
 egui_extras = { version = "0.33.3", features = ["svg", "image"] }
@@ -21,8 +21,9 @@ font-kit = { version = "0.14.3", features = ["source-fontconfig-dlopen"] }
 image = { version = "0.25.10", features = ["jpeg", "png"] }
 neon = { version = "1.1", features = ["serde"] }
 oneshot = { version = "0.2.1", features = ["async"] }
+rand = "0.10.0"
 resvg = "0.45.1"
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive", "rc"] }
 serde_json = "1.0.149"
 smol = "2.0.2"
 winit = "0.30.12"

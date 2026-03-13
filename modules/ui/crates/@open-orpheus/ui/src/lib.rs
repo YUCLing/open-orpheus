@@ -7,6 +7,7 @@ use crate::app::{
 };
 
 mod app;
+mod util;
 
 // Use #[neon::export] to export Rust functions as JavaScript functions.
 // See more at: https://docs.rs/neon/latest/neon/attr.export.html

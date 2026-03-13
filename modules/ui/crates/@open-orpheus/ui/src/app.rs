@@ -1,10 +1,14 @@
-use std::{cell::OnceCell, num::NonZeroU32, sync::Arc};
+use std::{
+    num::NonZeroU32,
+    sync::{Arc, OnceLock},
+};
 
-use egui::{Context, ViewportBuilder, ViewportId, ahash::HashMap};
+use egui::{Context, Vec2, ViewportBuilder, ViewportId, ahash::HashMap};
 use egui_wgpu::{RendererOptions, WgpuConfiguration, winit::Painter};
 use egui_winit::State;
 use winit::{
     application::ApplicationHandler,
+    dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
     platform::wayland::EventLoopBuilderExtWayland,
@@ -19,9 +23,17 @@ pub mod menu;
 
 struct RunUI(Box<dyn FnMut(&Context) + Send>);
 
+struct WindowMessageHandler(Box<dyn FnMut(WindowId, &WindowEvent, &Window) -> bool + Send>);
+
 impl std::fmt::Debug for RunUI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("RunUI").finish()
+    }
+}
+
+impl std::fmt::Debug for WindowMessageHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("WindowMessageHandler").finish()
     }
 }
 
@@ -35,17 +47,30 @@ enum Request {
         oneshot::Sender<WindowId>,
     ),
     ShowWindow(WindowId),
+    RepaintWindow(WindowId),
+    CloseWindow(WindowId),
+    ResizeWindow(WindowId, Vec2),
+    SetWindowPosition(WindowId, LogicalPosition<f64>),
+    GetWindowOuterRect(
+        WindowId,
+        oneshot::Sender<Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,
+    ),
+    GetMonitorRects(
+        WindowId,
+        oneshot::Sender<Vec<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,
+    ),
+    SetWindowMessageHandler(WindowId, WindowMessageHandler),
 }
 
 #[derive(Clone)]
 pub struct App {
-    event_loop_proxy: OnceCell<EventLoopProxy<Request>>,
+    event_loop_proxy: OnceLock<EventLoopProxy<Request>>,
 }
 
 impl App {
     pub async fn new() -> Self {
         let app = App {
-            event_loop_proxy: OnceCell::new(),
+            event_loop_proxy: OnceLock::new(),
         };
         let (tx, rx) = oneshot::channel();
         std::thread::spawn(move || {
@@ -95,6 +120,94 @@ impl App {
             .send_event(Request::ShowWindow(window))
             .unwrap();
     }
+
+    pub async fn repaint_window(&self, window: WindowId) {
+        self.event_loop_proxy
+            .get()
+            .unwrap()
+            .send_event(Request::RepaintWindow(window))
+            .unwrap();
+    }
+
+    pub async fn close_window(&self, window: WindowId) {
+        self.event_loop_proxy
+            .get()
+            .unwrap()
+            .send_event(Request::CloseWindow(window))
+            .unwrap();
+    }
+
+    pub async fn set_window_message_handler(
+        &self,
+        window: WindowId,
+        handler: impl FnMut(WindowId, &WindowEvent, &Window) -> bool + Send + 'static,
+    ) {
+        self.event_loop_proxy
+            .get()
+            .unwrap()
+            .send_event(Request::SetWindowMessageHandler(
+                window,
+                WindowMessageHandler(Box::new(handler)),
+            ))
+            .unwrap();
+    }
+
+    pub async fn resize_window(&self, window: WindowId, size: Vec2) {
+        self.event_loop_proxy
+            .get()
+            .unwrap()
+            .send_event(Request::ResizeWindow(window, size))
+            .unwrap();
+    }
+
+    pub async fn set_window_position(&self, window: WindowId, pos: LogicalPosition<f64>) {
+        self.event_loop_proxy
+            .get()
+            .unwrap()
+            .send_event(Request::SetWindowPosition(window, pos))
+            .unwrap();
+    }
+
+    /// Returns the window's outer position and size in physical pixels, or
+    /// `None` if the window no longer exists or the platform doesn't support it
+    /// (e.g. Wayland top-level windows).
+    pub async fn get_window_outer_rect(
+        &self,
+        window: WindowId,
+    ) -> Option<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
+        let (tx, rx) = oneshot::channel();
+        self.event_loop_proxy
+            .get()
+            .unwrap()
+            .send_event(Request::GetWindowOuterRect(window, tx))
+            .unwrap();
+        rx.await.ok().flatten()
+    }
+
+    /// Returns monitor geometry for all monitors as (position, size) in physical pixels,
+    /// queried via the window thread using any existing window as context.
+    pub async fn get_monitor_rects(
+        &self,
+        any_window: winit::window::WindowId,
+    ) -> Vec<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .event_loop_proxy
+            .get()
+            .unwrap()
+            .send_event(Request::GetMonitorRects(any_window, tx))
+            .is_err()
+        {
+            return vec![];
+        }
+        rx.await.unwrap_or_default()
+    }
+
+    /// Returns monitor geometry for all monitors as (position, size) in physical pixels,
+    /// queried via the window thread using any existing window as context.
+    pub async fn get_monitors(&self) -> Vec<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
+        vec![]
+    }
 }
 
 struct WindowState {
@@ -103,6 +216,7 @@ struct WindowState {
     egui_state: State,
     painter: Painter,
     run_ui: RunUI,
+    message_handler: Option<WindowMessageHandler>,
 }
 
 struct AppInner {
@@ -120,6 +234,11 @@ impl ApplicationHandler<Request> for AppInner {
             return;
         };
         let window = &window_state.window;
+        if let Some(handler) = window_state.message_handler.as_mut() {
+            if handler.0(window_id, &event, window) {
+                return;
+            }
+        }
         let state = &mut window_state.egui_state;
         let res = state.on_window_event(window, &event);
         if res.repaint {
@@ -190,6 +309,7 @@ impl ApplicationHandler<Request> for AppInner {
                         painter
                     }),
                     run_ui,
+                    message_handler: None,
                 };
                 self.windows.insert(id, window_state);
                 sender.send(id).unwrap();
@@ -197,6 +317,56 @@ impl ApplicationHandler<Request> for AppInner {
             Request::ShowWindow(window_id) => {
                 if let Some(window_state) = self.windows.get(&window_id) {
                     window_state.window.set_visible(true);
+                }
+            }
+            Request::RepaintWindow(window_id) => {
+                if let Some(window_state) = self.windows.get(&window_id) {
+                    window_state.window.request_redraw();
+                }
+            }
+            Request::CloseWindow(window_id) => {
+                self.windows.remove(&window_id);
+            }
+            Request::SetWindowMessageHandler(window_id, handler) => {
+                if let Some(window_state) = self.windows.get_mut(&window_id) {
+                    window_state.message_handler = Some(handler);
+                }
+            }
+            Request::SetWindowPosition(window_id, pos) => {
+                if let Some(window_state) = self.windows.get(&window_id) {
+                    window_state.window.set_outer_position(pos);
+                }
+            }
+            Request::GetWindowOuterRect(window_id, sender) => {
+                let result = self.windows.get(&window_id).and_then(|ws| {
+                    let pos = ws.window.outer_position().ok()?;
+                    let size = ws.window.outer_size();
+                    Some((pos, size))
+                });
+                let _ = sender.send(result);
+            }
+            Request::GetMonitorRects(window_id, sender) => {
+                let rects = self
+                    .windows
+                    .get(&window_id)
+                    .map(|ws| {
+                        ws.window
+                            .available_monitors()
+                            .filter_map(|m| {
+                                let pos = m.position();
+                                let size = m.size();
+                                Some((pos, size))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let _ = sender.send(rects);
+            }
+            Request::ResizeWindow(window_id, size) => {
+                if let Some(window_state) = self.windows.get(&window_id) {
+                    let _ = window_state
+                        .window
+                        .request_inner_size(winit::dpi::LogicalSize::new(size.x, size.y));
                 }
             }
         }
