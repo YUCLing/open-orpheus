@@ -47,7 +47,7 @@ const createWindow = () => {
 
   trayBindMainWindow(mainWindow);
 
-  ["maximize", "minimize", "restore", "resize"].forEach((event) => {
+  ["maximize", "minimize", "restore", "resized"].forEach((event) => {
     mainWindow.on(event as unknown as "maximize", () => {
       mainWindow.webContents.send(
         "channel.call",
