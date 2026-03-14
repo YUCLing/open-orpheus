@@ -1,17 +1,20 @@
 use egui::{ViewportBuilder, ViewportId};
 use neon::types::extract::Json;
 
+#[cfg(not(target_os = "macos"))]
 use crate::app::{
     App,
     menu::{Menu, MenuData},
 };
 
+#[cfg(not(target_os = "macos"))]
 mod app;
 mod util;
 
 // Use #[neon::export] to export Rust functions as JavaScript functions.
 // See more at: https://docs.rs/neon/latest/neon/attr.export.html
 
+#[cfg(not(target_os = "macos"))]
 #[neon::export]
 fn create_app() -> f64 {
     smol::block_on(async {
@@ -22,6 +25,7 @@ fn create_app() -> f64 {
 }
 
 /// For testing purposes.
+#[cfg(not(target_os = "macos"))]
 #[neon::export]
 fn create_window(app_ptr: f64) {
     let app = unsafe { &mut *(app_ptr as usize as *mut App) };
@@ -43,6 +47,7 @@ fn create_window(app_ptr: f64) {
 }
 
 /// Not final API.
+#[cfg(not(target_os = "macos"))]
 #[neon::export]
 fn create_menu(app_ptr: f64, menu_data: Json<MenuData>) {
     let app = unsafe { &mut *(app_ptr as usize as *mut App) };

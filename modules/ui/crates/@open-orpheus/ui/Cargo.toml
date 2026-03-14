@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 base64 = "0.22.1"
-egui = { version = "0.33.3", no-default-features = true }
+egui = { version = "0.33.3", default-features = false }
 egui-wgpu = { version = "0.33.3", features = ["winit"] }
 egui-winit = "0.33.3"
 egui_extras = { version = "0.33.3", features = ["svg", "image"] }
