@@ -14,7 +14,7 @@ import "./main/channel";
 import { bindMainWindow as trayBindMainWindow } from "./main/tray";
 import { getWindowSizeStatus } from "./main/util";
 import { loadFromFile as loadCookiesFromFile } from "./main/cookie";
-import { data as dataDir } from "./main/folders";
+import { data as dataDir, userdata as userdataDir } from "./main/folders";
 import { prepareDeviceId } from "./main/device";
 import { readPack } from "./main/ntpk";
 import { CORE_VERSION } from "./constants";
@@ -28,7 +28,7 @@ if (started) {
   app.quit();
 }
 
-app.setPath("userData", path.resolve(path.join(dataDir, "userdata")));
+app.setPath("userData", userdataDir);
 
 const createWindow = () => {
   // Create the browser window.

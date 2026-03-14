@@ -2,12 +2,12 @@ import { createReadStream, existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { normalize, resolve } from "node:path";
 import unzipper from "unzipper";
+import { pack as base } from "./folders";
 
 const webPackFile = choosePackFile();
 const files = new Map<string, unzipper.File>();
 
 function choosePackFile() {
-  const base = resolve("./package");
   const webPack = resolve(base, "web.pack");
   if (existsSync(webPack)) {
     return webPack;
