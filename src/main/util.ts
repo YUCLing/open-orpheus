@@ -1,7 +1,7 @@
 import { BrowserWindow, screen } from "electron";
 // eslint-disable-next-line import/no-unresolved
 import { parseICO } from "icojs";
-import { resolve, join } from "node:path";
+import { resolve, join, normalize } from "node:path";
 import os from "node:os";
 
 export async function pngFromIco(
@@ -20,7 +20,8 @@ export function sanitizeRelativePath(
   path: string
 ): string | false {
   const resolvedBase = resolve(base);
-  const resolvedPath = resolve(join(resolvedBase, path));
+  const normalizedPath = normalize(path);
+  const resolvedPath = resolve(join(resolvedBase, os.platform() === "win32" ? normalizedPath : normalizedPath.replaceAll("\\", "/")));
   if (!resolvedPath.startsWith(resolvedBase)) {
     return false;
   }
