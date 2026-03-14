@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { AppMenu } from "./menu";
 
 type WindowProperties = {
@@ -27,6 +27,13 @@ app.on("browser-window-created", (event, wnd) => {
     if (props?.maximumSize) {
       wnd.setMaximumSize(props.maximumSize.x, props.maximumSize.y);
     }
+  });
+
+  wnd.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
   });
 });
 
