@@ -1,0 +1,54 @@
+name: Build Bundles
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: GitHub Actions runner label
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build on ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: |
+            yarn.lock
+            modules/database/yarn.lock
+            modules/ui/yarn.lock
+            modules/window/yarn.lock
+
+      - name: Build native modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for module in modules/database modules/ui modules/window; do
+            echo "Building ${module}"
+            pushd "${module}" > /dev/null
+            yarn --frozen-lockfile
+            yarn build
+            popd > /dev/null
+          done
+
+      - name: Install root dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Build application bundles
+        run: yarn make
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ inputs.runner }}
+          path: out/make/**
+          if-no-files-found: error

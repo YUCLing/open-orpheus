@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: ${{ matrix.runner }}
