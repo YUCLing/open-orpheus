@@ -2,3 +2,6 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import "./preload/channel";
+
+// BetterNCM integration
+import "./betterncm/preload";
