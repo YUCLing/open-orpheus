@@ -145,12 +145,15 @@ type AudioDeviceInfo = AudioDeviceInit & {
   type: string;
 };
 
-registerCallHandler<[string, { device: AudioDeviceInit, type: string }], void>("audioplayer.init", async (kind, { device }) => {
-  if (kind === "device") {
-    // TODO: Do we store this on native side?
-    await player.audio.setSinkId(device.deviceId);
+registerCallHandler<[string, { device: AudioDeviceInit; type: string }], void>(
+  "audioplayer.init",
+  async (kind, { device }) => {
+    if (kind === "device") {
+      // TODO: Do we store this on native side?
+      await player.audio.setSinkId(device.deviceId);
+    }
   }
-});
+);
 
 function mediaDeviceInfoToDevice(device: MediaDeviceInfo): AudioDeviceInfo {
   return {
@@ -160,43 +163,53 @@ function mediaDeviceInfoToDevice(device: MediaDeviceInfo): AudioDeviceInfo {
     type: "Chromium",
   };
 }
-registerCallHandler<[string], void>("audioplayer.enmeratorDevices", (deviceType) => {
-  navigator.mediaDevices.enumerateDevices().then((devices) => {
-    const filteredDevices = devices.filter((device) => {
-      if (deviceType === "getOutDevices") {
-        return device.kind === "audiooutput";
-      }
-      return false;
-    });
-    let defaultDeviceInfo: MediaDeviceInfo | null = null;
-    let currentAudioOutputDeviceInfo: MediaDeviceInfo | null = null;
-    fireNativeCall(
-      "audioplayer.onEnmeratorDevices",
-      deviceType,
-      [
-        {
-          devices: filteredDevices.map((device) => {
-            if (device.deviceId === player.audio.sinkId) {
-              currentAudioOutputDeviceInfo = device;
-            } else if (device.deviceId === "default") {
-              defaultDeviceInfo = device;
-            }
-            return mediaDeviceInfoToDevice(device);
-          }),
-          type: "Chromium",
+registerCallHandler<[string], void>(
+  "audioplayer.enmeratorDevices",
+  (deviceType) => {
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const filteredDevices = devices.filter((device) => {
+        if (deviceType === "getOutDevices") {
+          return device.kind === "audiooutput";
         }
-      ],
-      currentAudioOutputDeviceInfo ? mediaDeviceInfoToDevice(currentAudioOutputDeviceInfo) : (defaultDeviceInfo ? mediaDeviceInfoToDevice(defaultDeviceInfo) : { deviceId: "default", id: -1, name: "Default", type: "Wasapi" }),
-    );
-  });
-});
+        return false;
+      });
+      let defaultDeviceInfo: MediaDeviceInfo | null = null;
+      let currentAudioOutputDeviceInfo: MediaDeviceInfo | null = null;
+      fireNativeCall(
+        "audioplayer.onEnmeratorDevices",
+        deviceType,
+        [
+          {
+            devices: filteredDevices.map((device) => {
+              if (device.deviceId === player.audio.sinkId) {
+                currentAudioOutputDeviceInfo = device;
+              } else if (device.deviceId === "default") {
+                defaultDeviceInfo = device;
+              }
+              return mediaDeviceInfoToDevice(device);
+            }),
+            type: "Chromium",
+          },
+        ],
+        currentAudioOutputDeviceInfo
+          ? mediaDeviceInfoToDevice(currentAudioOutputDeviceInfo)
+          : defaultDeviceInfo
+            ? mediaDeviceInfoToDevice(defaultDeviceInfo)
+            : { deviceId: "default", id: -1, name: "Default", type: "Wasapi" }
+      );
+    });
+  }
+);
 
 const systemMasterVolume = {
   muted: false,
   realVolume: 1, // Actual system volume if not muted
   volume: 1,
 };
-registerCallHandler<[], [typeof systemMasterVolume]>("audioplayer.getSystemMasterVolume", () => {
-  // TODO: Implement actual system master volume retrieval.
-  return [systemMasterVolume];
-});
+registerCallHandler<[], [typeof systemMasterVolume]>(
+  "audioplayer.getSystemMasterVolume",
+  () => {
+    // TODO: Implement actual system master volume retrieval.
+    return [systemMasterVolume];
+  }
+);
