@@ -2,3 +2,4 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import "./preload/channel";
+import "./preload/miniprogram";
