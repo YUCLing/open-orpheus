@@ -21,6 +21,12 @@ import { CORE_VERSION } from "./constants";
 import { mkdir } from "node:fs/promises";
 import { initializeDatabases } from "./main/database";
 
+// BetterNCM integration
+import {
+  patchMainWindowForBetterNCM,
+  registerBetterNCMScheme,
+} from "./betterncm/main";
+
 let quitting = false;
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -80,6 +86,8 @@ const createWindow = () => {
     mainWindow.webContents.send("channel.call", "winhelper.onclose");
     e.preventDefault();
   });
+
+  patchMainWindowForBetterNCM(mainWindow);
 };
 
 // This method will be called when Electron has finished
@@ -91,6 +99,7 @@ app.on("ready", async () => {
     await mkdir(path.join(dataDir), { recursive: true });
 
     registerOrpheusScheme();
+    registerBetterNCMScheme();
 
     const defaultUserAgent = session.defaultSession.getUserAgent();
     session.defaultSession.setUserAgent(

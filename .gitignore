@@ -99,3 +99,6 @@ target
 
 # User Data
 /data/
+
+# BetterNCM Framework
+/betterncm/framework.*

@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 
 import nativeModules from "./nativemodules.json";
+import BetterNCMPlugin from "./better-ncm-plugin";
 
 // unzipper has a dependency on @aws-sdk/client-s3, which is not needed in
 // our context and causes build issues. This plugin mocks it out.
@@ -27,5 +28,5 @@ export default defineConfig({
       external: nativeModules,
     },
   },
-  plugins: [NoS3Plugin()],
+  plugins: [NoS3Plugin(), BetterNCMPlugin()],
 });
