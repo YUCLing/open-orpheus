@@ -13,7 +13,6 @@ use crate::app::fonts::get_font_definitions;
 
 mod base64_loader;
 mod fonts;
-pub mod menu;
 
 struct RunUI(Box<dyn FnMut(&Context) + Send>);
 

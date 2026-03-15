@@ -16,6 +16,7 @@ impl ImageLoader for Base64Loader {
         uri: &str,
         size_hint: egui::SizeHint,
     ) -> egui::load::ImageLoadResult {
+        // TODO: Support more advanced features.
         if !uri.starts_with("base64://") {
             return ImageLoadResult::Err(LoadError::NotSupported);
         }

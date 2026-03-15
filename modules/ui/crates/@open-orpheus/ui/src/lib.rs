@@ -4,12 +4,10 @@ use egui::{ViewportBuilder, ViewportId};
 use libuv_sys2::{uv_close, uv_handle_t, uv_timer_init, uv_timer_start, uv_timer_stop, uv_timer_t};
 use neon::{object::Object, prelude::{Context, Cx}, result::{JsResult}, types::{JsArray, extract::Json}};
 
-use crate::app::{
-    App,
-    menu::{Menu, MenuData},
-};
+use crate::{app::App, components::menu::structs::MenuData};
 
 mod app;
+mod components;
 mod napi;
 mod util;
 
@@ -103,8 +101,7 @@ fn create_window(app_ptr: f64) {
 fn create_menu(app_ptr: f64, menu_data: Json<MenuData>) {
     let app = unsafe { &mut *(app_ptr as usize as *mut App) };
 
-    let menu = Menu::new(app, menu_data.0);
-    menu.show();
+
 }
 
 // Use #[neon::main] to add additional behavior at module loading time.
