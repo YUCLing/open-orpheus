@@ -12,7 +12,32 @@ registerCallHandler<[], void>("app.statisV2", () => {
 registerCallHandler<[], void>("app.sendStatis", () => {
   /* empty */
 });
-registerCallHandler<[], []>("app.getABTestKeys", () => []);
+
+// Need more info on these
+registerCallHandler<[], string[]>("app.getABTestKeys", () => [
+    //"PH-PC-DAWNLOG-NEW",
+    //"PC-blur-enable",
+    //"PH-PC-P2P-Enable",
+    //"PC-GPU-enable",
+    //"PC-httpdns-resource-enable",
+    //"PC-httpdns-enable",
+    //"PC-httpdns-api-enable",
+    //"PC-cronet-enable-ver",
+    //"PH-PC-SYSTEM_LOCK_RECOVER_NEW",
+    //"PH-PC-Xunlei-SDK-Strategy",
+    //"PH-PC-API-HORSERACE",
+    //"PH-PC-HIDE_ZERO_SIZE",
+    //"PH-PC-REQUEST_RANGE_ALIGN",
+    //"PH-PC-newNetLibV2",
+    "PH-PC-newAPMLIBV2", // 新主页和播放器样式
+    //"PH-PC-TASKBAR_ICON_WINDOW",
+    //"PH-PC-IPV6Enable",
+    //"PH-PC-PERF_MONITOR_ENABLE",
+    //"PH-PC-SAFEMODE-CLEAN-V3",
+    //"PH-PC-BOOTMONITOR",
+    //"PH-PC-AsyncDNS",
+    //"PH-PC-HTTPDNS_IPRACE",
+]);
 registerCallHandler<[Record<string, boolean>], void>("app.abtestSwitch", () => {
   /* empty */
 });
