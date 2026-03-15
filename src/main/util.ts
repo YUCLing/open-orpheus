@@ -28,6 +28,10 @@ export function sanitizeRelativePath(
   return resolvedPath;
 }
 
+export function getWindowState(wnd: BrowserWindow): "minimize" | "maximize" | "restore" {
+  return wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore";
+}
+
 export function getWindowSizeStatus(
   wnd: BrowserWindow
 ): ["minimize" | "maximize" | "restore", number, number, number] {
@@ -36,7 +40,7 @@ export function getWindowSizeStatus(
   // TODO: Confirm macOS desired behavior, Windows and Linux (Wayland) is already tested to be correct
   const scaleFactor = os.platform() === "win32" ? 1 : screenScaleFactor;
   return [
-    wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore",
+    getWindowState(wnd),
     bounds.width * scaleFactor,
     bounds.height * scaleFactor,
     screenScaleFactor,

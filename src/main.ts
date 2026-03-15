@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, screen, session } from "electron";
 import path from "node:path";
+import os from "node:os";
 import started from "electron-squirrel-startup";
 
 // Handle errors as early as possible
@@ -47,8 +48,9 @@ const createWindow = () => {
 
   trayBindMainWindow(mainWindow);
 
-  ["maximize", "minimize", "restore", "resized"].forEach((event) => {
+  ["maximize", "minimize", "restore", os.platform() === "linux" ? "resize" : "resized"].forEach((event) => {
     mainWindow.on(event as unknown as "maximize", () => {
+      // resize is triggered instead of restore on Linux (Wayland)
       mainWindow.webContents.send(
         "channel.call",
         "winhelper.onSizeStatus",
@@ -57,16 +59,31 @@ const createWindow = () => {
     });
   });
 
-  mainWindow.on("resized", () => {
-    const bounds = mainWindow.getBounds();
-    mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
-      top: 0,
-      left: 0,
-      right: bounds.width,
-      bottom: bounds.height,
-      deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
+  const sendResizeDone = () => {
+      const bounds = mainWindow.getBounds();
+      mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
+        top: 0,
+        left: 0,
+        right: bounds.width,
+        bottom: bounds.height,
+        deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
+      });
+  };
+
+  if (os.platform() !== "linux") {
+    mainWindow.on("resized", sendResizeDone);
+  } else {
+    let resizeEndTimer: NodeJS.Timeout | undefined;
+
+    mainWindow.on("resize", () => {
+      if (resizeEndTimer) {
+        clearTimeout(resizeEndTimer);
+      }
+
+      // Linux does not emit "resized", so debounce "resize" to emulate resize-end.
+      resizeEndTimer = setTimeout(sendResizeDone, 150);
     });
-  });
+  }
 
   mainWindow.on("focus", () => {
     mainWindow.webContents.send("channel.call", "winhelper.onfocus");
