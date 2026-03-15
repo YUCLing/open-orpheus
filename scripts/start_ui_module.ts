@@ -2,11 +2,13 @@
 
 import { App, Menu } from "@open-orpheus/ui";
 
-import { readPack, readFile } from "./src/main/ntpk.ts";
+import Pack from "../src/main/Pack.ts";
 
 setInterval(() => {
   // keep alive
 }, 1000);
+
+const pack = new Pack("../package/web.pack");
 
 async function patchMenuItem(item: any) {
   if (item.image_path) {
@@ -15,7 +17,7 @@ async function patchMenuItem(item: any) {
     if (url.protocol === "orpheus:" && url.hostname === "orpheus") {
       const path = url.pathname;
       try {
-        const buf = await readFile(path);
+        const buf = await pack.readFile(path);
         if (path.endsWith(".svg")) {
           item.image_path = `base64://svg${buf.toString("base64")}`;
         } else {
@@ -45,7 +47,7 @@ async function parseMenuData(menuData: any) {
 }
 
 async function main() {
-  await readPack();
+  await pack.readPack();
 
   const app = new App();
 

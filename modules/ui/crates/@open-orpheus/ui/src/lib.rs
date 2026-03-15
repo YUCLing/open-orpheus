@@ -1,31 +1,83 @@
-use egui::{ViewportBuilder, ViewportId};
-use neon::types::extract::Json;
+use std::ffi::c_void;
 
-#[cfg(not(target_os = "macos"))]
+use egui::{ViewportBuilder, ViewportId};
+use libuv_sys2::{uv_close, uv_handle_t, uv_timer_init, uv_timer_start, uv_timer_stop, uv_timer_t};
+use neon::{object::Object, prelude::{Context, Cx}, result::{JsResult}, types::{JsArray, extract::Json}};
+
 use crate::app::{
     App,
     menu::{Menu, MenuData},
 };
 
-#[cfg(not(target_os = "macos"))]
 mod app;
+mod napi;
 mod util;
 
 // Use #[neon::export] to export Rust functions as JavaScript functions.
 // See more at: https://docs.rs/neon/latest/neon/attr.export.html
 
-#[cfg(not(target_os = "macos"))]
+unsafe extern "C" fn on_timer(handle: *mut uv_timer_t) {
+  let state_ptr = unsafe { *handle }.data as *mut App;
+  if state_ptr.is_null() {
+    return;
+  }
+  let state = unsafe { &mut *state_ptr };
+
+  state.pump_events();
+}
+
+unsafe extern "C" fn on_close(handle: *mut uv_handle_t) {
+  // The uv_timer_t is a uv_handle_t; free the handle allocation.
+  let timer = handle as *mut uv_timer_t;
+  drop(unsafe { Box::from_raw(timer) });
+}
+
 #[neon::export]
-fn create_app() -> f64 {
+fn create_app<'cx>(mut cx: &mut Cx<'cx>) -> JsResult<'cx, JsArray> {
     smol::block_on(async {
         let app = App::new().await;
+        let loop_ptr = napi::get_uv_loop_from_neon(&mut cx).or_else(|x| cx.throw_error(x))?;
         let ptr = Box::into_raw(Box::new(app));
-        ptr as usize as f64
+        let timer = Box::into_raw(Box::new(unsafe { std::mem::zeroed::<uv_timer_t>() }));
+        unsafe { (*timer).data = ptr as *mut c_void };
+        let rc = unsafe { uv_timer_init(loop_ptr, timer) };
+        if rc != 0 {
+            unsafe {
+            drop(Box::from_raw(ptr));
+            drop(Box::from_raw(timer));
+            }
+            return cx.throw_error(format!("uv_timer_init failed: {rc}"));
+        }
+
+        let rc = unsafe { uv_timer_start(timer, Some(on_timer), 0, 3) };
+        if rc != 0 {
+            unsafe {
+            drop(Box::from_raw(ptr));
+            drop(Box::from_raw(timer));
+            }
+            return cx.throw_error(format!("uv_timer_start failed: {rc}"));
+        }
+        let ret = cx.empty_array();
+        let val = cx.number(ptr as usize as f64);
+        ret.set(cx, 0, val)?;
+        let val = cx.number(timer as usize as f64);
+        ret.set(cx, 1, val)?;
+        Ok(ret)
     })
 }
 
+#[neon::export]
+fn destroy_app(app_ptr: f64, timer_ptr: f64) {
+    let app_ptr = app_ptr as usize as *mut App;
+    let timer_ptr = timer_ptr as usize as *mut uv_timer_t;
+    unsafe {
+        uv_timer_stop(timer_ptr);
+        uv_close(timer_ptr as *mut uv_handle_t, Some(on_close));
+    }
+    let _app = unsafe { Box::from_raw(app_ptr) };
+}
+
 /// For testing purposes.
-#[cfg(not(target_os = "macos"))]
 #[neon::export]
 fn create_window(app_ptr: f64) {
     let app = unsafe { &mut *(app_ptr as usize as *mut App) };
@@ -47,7 +99,6 @@ fn create_window(app_ptr: f64) {
 }
 
 /// Not final API.
-#[cfg(not(target_os = "macos"))]
 #[neon::export]
 fn create_menu(app_ptr: f64, menu_data: Json<MenuData>) {
     let app = unsafe { &mut *(app_ptr as usize as *mut App) };

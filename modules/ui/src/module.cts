@@ -4,7 +4,8 @@ import * as addon from "./load.cjs";
 // Use this declaration to assign types to the addon's exports,
 // which otherwise by default are `any`.
 declare module "./load.cjs" {
-  function createApp(): number;
+  function createApp(): [number, number];
+  function destroyApp(appPtr: number, checkPtr: number): void;
   function createWindow(appPtr: number): number;
   // TODO: Types
   function createMenu(appPtr: number, menuData: any): number;

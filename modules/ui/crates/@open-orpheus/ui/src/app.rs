@@ -1,24 +1,13 @@
 use std::{
-    num::NonZeroU32,
-    sync::{Arc, OnceLock},
+    num::NonZeroU32, sync::Arc, thread::ThreadId, time::Duration
 };
 
 use egui::{Context, Vec2, ViewportBuilder, ViewportId, ahash::HashMap};
 use egui_wgpu::{RendererOptions, WgpuConfiguration, winit::Painter};
 use egui_winit::State;
 use winit::{
-    application::ApplicationHandler,
-    dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
-    event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
-    window::{Window, WindowId},
+    application::ApplicationHandler, dpi::{LogicalPosition, PhysicalPosition, PhysicalSize}, event::WindowEvent, event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy}, platform::pump_events::EventLoopExtPumpEvents, window::{Window, WindowId}
 };
-
-#[cfg(windows)]
-use winit::platform::windows::EventLoopBuilderExtWindows;
-
-#[cfg(target_os = "linux")]
-use winit::platform::wayland::EventLoopBuilderExtWayland;
 
 use crate::app::fonts::get_font_definitions;
 
@@ -39,6 +28,28 @@ impl std::fmt::Debug for RunUI {
 impl std::fmt::Debug for WindowMessageHandler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("WindowMessageHandler").finish()
+    }
+}
+
+#[derive(Clone)]
+struct EventLoopWrapper(usize, ThreadId);
+
+impl EventLoopWrapper {
+    pub fn new(event_loop: EventLoop<Request>, app_inner: AppInner) -> Self {
+        Self(Box::into_raw(Box::new((event_loop, app_inner))) as usize, std::thread::current().id())
+    }
+
+    pub fn get(&self) -> &mut (EventLoop<Request>, AppInner) {
+        if self.1 != std::thread::current().id() {
+            panic!("Trying to access event loop from other thread!");
+        }
+        unsafe { &mut *(self.0 as *mut (EventLoop<Request>, AppInner)) }
+    }
+}
+
+impl Drop for EventLoopWrapper {
+    fn drop(&mut self) {
+        unsafe { drop(Box::from_raw(self.0 as *mut (EventLoop<Request>, AppInner))) }
     }
 }
 
@@ -69,28 +80,29 @@ enum Request {
 
 #[derive(Clone)]
 pub struct App {
-    event_loop_proxy: OnceLock<EventLoopProxy<Request>>,
+    event_loop: Arc<EventLoopWrapper>,
+    event_loop_proxy: EventLoopProxy<Request>,
 }
 
 impl App {
     pub async fn new() -> Self {
-        let app = App {
-            event_loop_proxy: OnceLock::new(),
+        let event_loop = EventLoop::<Request>::with_user_event()
+            .build()
+            .unwrap();
+        let event_loop_proxy = event_loop.create_proxy();
+        let app_inner = AppInner {
+            windows: HashMap::default(),
         };
-        let (tx, rx) = oneshot::channel();
-        std::thread::spawn(move || {
-            let event_loop = EventLoop::<Request>::with_user_event()
-                .with_any_thread(true)
-                .build()
-                .unwrap();
-            tx.send(event_loop.create_proxy()).unwrap();
-            let mut app_inner = AppInner {
-                windows: HashMap::default(),
-            };
-            event_loop.run_app(&mut app_inner).unwrap();
-        });
-        app.event_loop_proxy.set(rx.await.unwrap()).unwrap();
-        app
+        App {
+            event_loop: Arc::new(EventLoopWrapper::new(event_loop, app_inner)),
+            event_loop_proxy,
+        }
+    }
+
+    /// This MUST NOT be called from other threads.
+    pub fn pump_events(&mut self) {
+        let (event_loop, app_inner) = self.event_loop.get();
+        let status = event_loop.pump_app_events(Some(Duration::ZERO), app_inner);
     }
 
     pub async fn create_egui_window(
@@ -104,8 +116,6 @@ impl App {
         ctx.set_fonts(get_font_definitions());
         let (sender, receiver) = oneshot::channel();
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::CreateWindow(
                 ctx.clone(),
                 viewport_id,
@@ -120,24 +130,18 @@ impl App {
     pub async fn show_window(&self, window: WindowId) {
         // TODO: wait for window show
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::ShowWindow(window))
             .unwrap();
     }
 
     pub async fn repaint_window(&self, window: WindowId) {
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::RepaintWindow(window))
             .unwrap();
     }
 
     pub async fn close_window(&self, window: WindowId) {
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::CloseWindow(window))
             .unwrap();
     }
@@ -148,8 +152,6 @@ impl App {
         handler: impl FnMut(WindowId, &WindowEvent, &Window) -> bool + Send + 'static,
     ) {
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::SetWindowMessageHandler(
                 window,
                 WindowMessageHandler(Box::new(handler)),
@@ -159,16 +161,12 @@ impl App {
 
     pub async fn resize_window(&self, window: WindowId, size: Vec2) {
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::ResizeWindow(window, size))
             .unwrap();
     }
 
     pub async fn set_window_position(&self, window: WindowId, pos: LogicalPosition<f64>) {
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::SetWindowPosition(window, pos))
             .unwrap();
     }
@@ -182,8 +180,6 @@ impl App {
     ) -> Option<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
         let (tx, rx) = oneshot::channel();
         self.event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::GetWindowOuterRect(window, tx))
             .unwrap();
         rx.await.ok().flatten()
@@ -198,8 +194,6 @@ impl App {
         let (tx, rx) = oneshot::channel();
         if self
             .event_loop_proxy
-            .get()
-            .unwrap()
             .send_event(Request::GetMonitorRects(any_window, tx))
             .is_err()
         {
