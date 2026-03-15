@@ -28,12 +28,12 @@ export default class Pack {
   }
 
   async readPack() {
-      const zipper = await unzipper.Open.custom(createSource(this.path));
-      for (const file of zipper.files) {
-        if (file.type === "File") {
-          this.files.set(normalize("/" + file.path), file);
-        }
+    const zipper = await unzipper.Open.custom(createSource(this.path));
+    for (const file of zipper.files) {
+      if (file.type === "File") {
+        this.files.set(normalize("/" + file.path), file);
       }
+    }
   }
 
   async readFile(path: string): Promise<Buffer> {

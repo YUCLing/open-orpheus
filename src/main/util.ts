@@ -21,15 +21,28 @@ export function sanitizeRelativePath(
 ): string | false {
   const resolvedBase = resolve(base);
   const normalizedPath = normalize(path);
-  const resolvedPath = resolve(join(resolvedBase, os.platform() === "win32" ? normalizedPath : normalizedPath.replaceAll("\\", "/")));
+  const resolvedPath = resolve(
+    join(
+      resolvedBase,
+      os.platform() === "win32"
+        ? normalizedPath
+        : normalizedPath.replaceAll("\\", "/")
+    )
+  );
   if (!resolvedPath.startsWith(resolvedBase)) {
     return false;
   }
   return resolvedPath;
 }
 
-export function getWindowState(wnd: BrowserWindow): "minimize" | "maximize" | "restore" {
-  return wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore";
+export function getWindowState(
+  wnd: BrowserWindow
+): "minimize" | "maximize" | "restore" {
+  return wnd.isMinimized()
+    ? "minimize"
+    : wnd.isMaximized()
+      ? "maximize"
+      : "restore";
 }
 
 export function getWindowSizeStatus(

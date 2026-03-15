@@ -1,12 +1,15 @@
-use std::{
-    num::NonZeroU32, sync::Arc, thread::ThreadId, time::Duration
-};
+use std::{num::NonZeroU32, sync::Arc, thread::ThreadId, time::Duration};
 
 use egui::{Context, Vec2, ViewportBuilder, ViewportId, ahash::HashMap};
 use egui_wgpu::{RendererOptions, WgpuConfiguration, winit::Painter};
 use egui_winit::State;
 use winit::{
-    application::ApplicationHandler, dpi::{LogicalPosition, PhysicalPosition, PhysicalSize}, event::WindowEvent, event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy}, platform::pump_events::EventLoopExtPumpEvents, window::{Window, WindowId}
+    application::ApplicationHandler,
+    dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
+    platform::pump_events::EventLoopExtPumpEvents,
+    window::{Window, WindowId},
 };
 
 use crate::app::fonts::get_font_definitions;
@@ -35,7 +38,10 @@ struct EventLoopWrapper(usize, ThreadId);
 
 impl EventLoopWrapper {
     pub fn new(event_loop: EventLoop<Request>, app_inner: AppInner) -> Self {
-        Self(Box::into_raw(Box::new((event_loop, app_inner))) as usize, std::thread::current().id())
+        Self(
+            Box::into_raw(Box::new((event_loop, app_inner))) as usize,
+            std::thread::current().id(),
+        )
     }
 
     pub fn get(&self) -> &mut (EventLoop<Request>, AppInner) {
@@ -81,27 +87,77 @@ enum Request {
 pub struct App {
     event_loop: Arc<EventLoopWrapper>,
     event_loop_proxy: EventLoopProxy<Request>,
+    /// Whether the event loop is running on a Wayland compositor.
+    /// Detected once at construction time from the actual display handle.
+    is_wayland: bool,
 }
 
 impl App {
-    pub async fn new() -> Self {
-        let event_loop = EventLoop::<Request>::with_user_event()
-            .build()
-            .unwrap();
+    /// `prefer_wayland`: `Some(true)` forces Wayland, `Some(false)` forces X11,
+    /// `None` lets winit auto-select.
+    pub async fn new(prefer_wayland: Option<bool>) -> Self {
+        let mut builder = EventLoop::<Request>::with_user_event();
+
+        #[cfg(target_os = "linux")]
+        {
+            use winit::platform::wayland::EventLoopBuilderExtWayland;
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            match prefer_wayland {
+                Some(true) => {
+                    builder.with_wayland();
+                }
+                Some(false) => {
+                    builder.with_x11();
+                }
+                None => {}
+            }
+        }
+
+        let event_loop = builder.build().unwrap();
         let event_loop_proxy = event_loop.create_proxy();
+
+        // Detect the backend that was *actually* selected by the compositor.
+        let is_wayland = {
+            #[cfg(target_os = "linux")]
+            {
+                use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+                matches!(
+                    event_loop.display_handle().unwrap().as_raw(),
+                    RawDisplayHandle::Wayland(_)
+                )
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                false
+            }
+        };
+
         let app_inner = AppInner {
             windows: HashMap::default(),
         };
         App {
             event_loop: Arc::new(EventLoopWrapper::new(event_loop, app_inner)),
             event_loop_proxy,
+            is_wayland,
         }
+    }
+
+    /// Returns `true` if the underlying event loop is connected to a Wayland compositor.
+    pub fn is_wayland(&self) -> bool {
+        self.is_wayland
     }
 
     /// This MUST NOT be called from other threads.
     pub fn pump_events(&mut self) {
         let (event_loop, app_inner) = self.event_loop.get();
-        let status = event_loop.pump_app_events(Some(Duration::ZERO), app_inner);
+        let _status = event_loop.pump_app_events(Some(Duration::ZERO), app_inner);
+    }
+
+    pub fn create_context() -> Context {
+        let ctx = Context::default();
+        ctx.add_image_loader(Arc::new(base64_loader::Base64Loader {}));
+        ctx.set_fonts(get_font_definitions());
+        ctx
     }
 
     pub async fn create_egui_window(
@@ -110,9 +166,7 @@ impl App {
         viewport_builder: ViewportBuilder,
         run_ui: impl FnMut(&Context) + Send + 'static,
     ) -> (Context, WindowId) {
-        let ctx = Context::default();
-        ctx.add_image_loader(Arc::new(base64_loader::Base64Loader {}));
-        ctx.set_fonts(get_font_definitions());
+        let ctx = Self::create_context();
         let (sender, receiver) = oneshot::channel();
         self.event_loop_proxy
             .send_event(Request::CreateWindow(
@@ -259,7 +313,7 @@ impl ApplicationHandler<Request> for AppInner {
                 painter.paint_and_update_textures(
                     viewport_id,
                     full_output.pixels_per_point,
-                    [1.0, 1.0, 1.0, 1.0],
+                    [0.0, 0.0, 0.0, 0.0],
                     &paint_jobs,
                     &full_output.textures_delta,
                     Vec::new(),
@@ -269,14 +323,18 @@ impl ApplicationHandler<Request> for AppInner {
                 self.windows.remove(&window_id);
             }
             WindowEvent::Resized(size) => {
-                let window_state = self.windows.get_mut(&window_id).unwrap();
+                let Some(window_state) = self.windows.get_mut(&window_id) else {
+                    return;
+                };
+                let Some(w) = NonZeroU32::new(size.width) else {
+                    return;
+                };
+                let Some(h) = NonZeroU32::new(size.height) else {
+                    return;
+                };
                 let painter = &mut window_state.painter;
                 let viewport_id = window_state.viewport_id;
-                painter.on_window_resized(
-                    viewport_id,
-                    NonZeroU32::new(size.width).unwrap(),
-                    NonZeroU32::new(size.height).unwrap(),
-                );
+                painter.on_window_resized(viewport_id, w, h);
             }
             _ => {}
         }
@@ -299,7 +357,7 @@ impl ApplicationHandler<Request> for AppInner {
                         let mut painter = Painter::new(
                             ctx,
                             WgpuConfiguration::default(),
-                            false,
+                            true,
                             RendererOptions::default(),
                         )
                         .await;
@@ -323,7 +381,14 @@ impl ApplicationHandler<Request> for AppInner {
                 }
             }
             Request::CloseWindow(window_id) => {
-                self.windows.remove(&window_id);
+                if let Some(mut ws) = self.windows.remove(&window_id) {
+                    // Explicitly release the wgpu surface before dropping the
+                    // window; otherwise the GPU may still hold a reference and
+                    // the driver/validation layer will crash.
+                    smol::block_on(async {
+                        ws.painter.set_window(ws.viewport_id, None).await.ok();
+                    });
+                }
             }
             Request::SetWindowMessageHandler(window_id, handler) => {
                 if let Some(window_state) = self.windows.get_mut(&window_id) {

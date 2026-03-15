@@ -4,7 +4,10 @@ import { extname } from "node:path";
 import { readFile } from "./ntpk";
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: "orpheus", privileges: { secure: true, standard: true, supportFetchAPI: true } },
+  {
+    scheme: "orpheus",
+    privileges: { secure: true, standard: true, supportFetchAPI: true },
+  },
 ]);
 
 class NetworkError extends Error {

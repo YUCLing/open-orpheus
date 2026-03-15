@@ -2,9 +2,17 @@ use std::ffi::c_void;
 
 use egui::{ViewportBuilder, ViewportId};
 use libuv_sys2::{uv_close, uv_handle_t, uv_timer_init, uv_timer_start, uv_timer_stop, uv_timer_t};
-use neon::{object::Object, prelude::{Context, Cx}, result::{JsResult}, types::{JsArray, extract::Json}};
+use neon::{
+    object::Object,
+    prelude::{Context, Cx},
+    result::JsResult,
+    types::{JsArray, extract::Json},
+};
 
-use crate::{app::App, components::menu::structs::MenuData};
+use crate::{
+    app::App,
+    components::menu::{Menu, MenuData},
+};
 
 mod app;
 mod components;
@@ -15,25 +23,25 @@ mod util;
 // See more at: https://docs.rs/neon/latest/neon/attr.export.html
 
 unsafe extern "C" fn on_timer(handle: *mut uv_timer_t) {
-  let state_ptr = unsafe { *handle }.data as *mut App;
-  if state_ptr.is_null() {
-    return;
-  }
-  let state = unsafe { &mut *state_ptr };
+    let state_ptr = unsafe { *handle }.data as *mut App;
+    if state_ptr.is_null() {
+        return;
+    }
+    let state = unsafe { &mut *state_ptr };
 
-  state.pump_events();
+    state.pump_events();
 }
 
 unsafe extern "C" fn on_close(handle: *mut uv_handle_t) {
-  // The uv_timer_t is a uv_handle_t; free the handle allocation.
-  let timer = handle as *mut uv_timer_t;
-  drop(unsafe { Box::from_raw(timer) });
+    // The uv_timer_t is a uv_handle_t; free the handle allocation.
+    let timer = handle as *mut uv_timer_t;
+    drop(unsafe { Box::from_raw(timer) });
 }
 
 #[neon::export]
-fn create_app<'cx>(mut cx: &mut Cx<'cx>) -> JsResult<'cx, JsArray> {
+fn create_app<'cx>(mut cx: &mut Cx<'cx>, prefer_wayland: Option<bool>) -> JsResult<'cx, JsArray> {
     smol::block_on(async {
-        let app = App::new().await;
+        let app = App::new(prefer_wayland).await;
         let loop_ptr = napi::get_uv_loop_from_neon(&mut cx).or_else(|x| cx.throw_error(x))?;
         let ptr = Box::into_raw(Box::new(app));
         let timer = Box::into_raw(Box::new(unsafe { std::mem::zeroed::<uv_timer_t>() }));
@@ -41,8 +49,8 @@ fn create_app<'cx>(mut cx: &mut Cx<'cx>) -> JsResult<'cx, JsArray> {
         let rc = unsafe { uv_timer_init(loop_ptr, timer) };
         if rc != 0 {
             unsafe {
-            drop(Box::from_raw(ptr));
-            drop(Box::from_raw(timer));
+                drop(Box::from_raw(ptr));
+                drop(Box::from_raw(timer));
             }
             return cx.throw_error(format!("uv_timer_init failed: {rc}"));
         }
@@ -50,8 +58,8 @@ fn create_app<'cx>(mut cx: &mut Cx<'cx>) -> JsResult<'cx, JsArray> {
         let rc = unsafe { uv_timer_start(timer, Some(on_timer), 0, 3) };
         if rc != 0 {
             unsafe {
-            drop(Box::from_raw(ptr));
-            drop(Box::from_raw(timer));
+                drop(Box::from_raw(ptr));
+                drop(Box::from_raw(timer));
             }
             return cx.throw_error(format!("uv_timer_start failed: {rc}"));
         }
@@ -99,9 +107,8 @@ fn create_window(app_ptr: f64) {
 /// Not final API.
 #[neon::export]
 fn create_menu(app_ptr: f64, menu_data: Json<MenuData>) {
-    let app = unsafe { &mut *(app_ptr as usize as *mut App) };
-
-
+    let app = unsafe { &*(app_ptr as usize as *mut App) };
+    Menu::new(app, menu_data.0).show();
 }
 
 // Use #[neon::main] to add additional behavior at module loading time.

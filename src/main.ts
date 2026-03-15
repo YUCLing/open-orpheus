@@ -48,7 +48,12 @@ const createWindow = () => {
 
   trayBindMainWindow(mainWindow);
 
-  ["maximize", "minimize", "restore", os.platform() === "linux" ? "resize" : "resized"].forEach((event) => {
+  [
+    "maximize",
+    "minimize",
+    "restore",
+    os.platform() === "linux" ? "resize" : "resized",
+  ].forEach((event) => {
     mainWindow.on(event as unknown as "maximize", () => {
       // resize is triggered instead of restore on Linux (Wayland)
       mainWindow.webContents.send(
@@ -60,14 +65,14 @@ const createWindow = () => {
   });
 
   const sendResizeDone = () => {
-      const bounds = mainWindow.getBounds();
-      mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
-        top: 0,
-        left: 0,
-        right: bounds.width,
-        bottom: bounds.height,
-        deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
-      });
+    const bounds = mainWindow.getBounds();
+    mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
+      top: 0,
+      left: 0,
+      right: bounds.width,
+      bottom: bounds.height,
+      deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
+    });
   };
 
   if (os.platform() !== "linux") {

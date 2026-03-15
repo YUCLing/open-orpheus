@@ -3894,9 +3894,11 @@ dependencies = [
  "neon",
  "oneshot",
  "rand 0.10.0",
+ "raw-window-handle",
  "resvg",
  "serde",
  "serde_json",
+ "smithay-client-toolkit 0.20.0",
  "smol",
  "winit",
 ]

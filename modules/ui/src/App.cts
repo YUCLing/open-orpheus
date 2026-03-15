@@ -8,8 +8,8 @@ export default class App {
   private _ptr: number;
   private _timerPtr: number;
 
-  constructor() {
-    [this._ptr, this._timerPtr] = createApp();
+  constructor(preferWayland: boolean | null = null) {
+    [this._ptr, this._timerPtr] = createApp(preferWayland);
     finalizer.register(this, [this._ptr, this._timerPtr]);
   }
 

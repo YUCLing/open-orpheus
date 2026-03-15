@@ -28,3 +28,15 @@ serde = { version = "1.0.228", features = ["derive", "rc"] }
 serde_json = "1.0.149"
 smol = "2.0.2"
 winit = "0.30.12"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Wayland menu backend: layer-shell overlay surfaces + input handling.
+# `default-features = false` avoids pulling in xkbcommon (C library).
+# Escape-key dismiss is skipped; the menu still auto-closes on focus loss
+# via LayerShellHandler::closed.  Re-enable the `xkbcommon` feature if
+# full keyboard support is later required.
+smithay-client-toolkit = { version = "0.20", default-features = false, features = [
+    "calloop", # calloop EventLoop + WaylandSource
+] }
+# Raw window/display handles to hand the wl_surface to wgpu.
+raw-window-handle = "0.6"
