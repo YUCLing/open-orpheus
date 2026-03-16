@@ -1,62 +1,25 @@
-use std::{num::NonZeroU32, sync::Arc, thread::ThreadId, time::Duration};
+use std::{num::NonZeroU32, sync::Arc, time::Duration};
 
-use egui::{Context, Vec2, ViewportBuilder, ViewportId, ahash::HashMap};
+use egui::{Context, ViewportBuilder, ViewportId, ahash::HashMap};
 use egui_wgpu::{RendererOptions, WgpuConfiguration, winit::Painter};
 use egui_winit::State;
 use winit::{
     application::ApplicationHandler,
-    dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
+    dpi::{PhysicalPosition, PhysicalSize},
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
     platform::pump_events::EventLoopExtPumpEvents,
     window::{Window, WindowId},
 };
 
-use crate::app::fonts::get_font_definitions;
+use crate::app::{
+    fonts::get_font_definitions,
+    wrappers::{EventLoopWrapper, RunUI, WindowMessageHandler},
+};
 
 mod base64_loader;
 mod fonts;
-
-struct RunUI(Box<dyn FnMut(&Context) + Send>);
-
-struct WindowMessageHandler(Box<dyn FnMut(WindowId, &WindowEvent, &Window) -> bool + Send>);
-
-impl std::fmt::Debug for RunUI {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("RunUI").finish()
-    }
-}
-
-impl std::fmt::Debug for WindowMessageHandler {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("WindowMessageHandler").finish()
-    }
-}
-
-#[derive(Clone)]
-struct EventLoopWrapper(usize, ThreadId);
-
-impl EventLoopWrapper {
-    pub fn new(event_loop: EventLoop<Request>, app_inner: AppInner) -> Self {
-        Self(
-            Box::into_raw(Box::new((event_loop, app_inner))) as usize,
-            std::thread::current().id(),
-        )
-    }
-
-    pub fn get(&self) -> &mut (EventLoop<Request>, AppInner) {
-        if self.1 != std::thread::current().id() {
-            panic!("Trying to access event loop from other thread!");
-        }
-        unsafe { &mut *(self.0 as *mut (EventLoop<Request>, AppInner)) }
-    }
-}
-
-impl Drop for EventLoopWrapper {
-    fn drop(&mut self) {
-        unsafe { drop(Box::from_raw(self.0 as *mut (EventLoop<Request>, AppInner))) }
-    }
-}
+mod wrappers;
 
 #[derive(Debug)]
 enum Request {
@@ -70,8 +33,6 @@ enum Request {
     ShowWindow(WindowId),
     RepaintWindow(WindowId),
     CloseWindow(WindowId),
-    ResizeWindow(WindowId, Vec2),
-    SetWindowPosition(WindowId, LogicalPosition<f64>),
     GetWindowOuterRect(
         WindowId,
         oneshot::Sender<Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,
@@ -134,6 +95,7 @@ impl App {
 
         let app_inner = AppInner {
             windows: HashMap::default(),
+            proxy: event_loop_proxy.clone(),
         };
         App {
             event_loop: Arc::new(EventLoopWrapper::new(event_loop, app_inner)),
@@ -187,12 +149,6 @@ impl App {
             .unwrap();
     }
 
-    pub async fn repaint_window(&self, window: WindowId) {
-        self.event_loop_proxy
-            .send_event(Request::RepaintWindow(window))
-            .unwrap();
-    }
-
     pub async fn close_window(&self, window: WindowId) {
         self.event_loop_proxy
             .send_event(Request::CloseWindow(window))
@@ -209,18 +165,6 @@ impl App {
                 window,
                 WindowMessageHandler(Box::new(handler)),
             ))
-            .unwrap();
-    }
-
-    pub async fn resize_window(&self, window: WindowId, size: Vec2) {
-        self.event_loop_proxy
-            .send_event(Request::ResizeWindow(window, size))
-            .unwrap();
-    }
-
-    pub async fn set_window_position(&self, window: WindowId, pos: LogicalPosition<f64>) {
-        self.event_loop_proxy
-            .send_event(Request::SetWindowPosition(window, pos))
             .unwrap();
     }
 
@@ -254,12 +198,6 @@ impl App {
         }
         rx.await.unwrap_or_default()
     }
-
-    /// Returns monitor geometry for all monitors as (position, size) in physical pixels,
-    /// queried via the window thread using any existing window as context.
-    pub async fn get_monitors(&self) -> Vec<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
-        vec![]
-    }
 }
 
 struct WindowState {
@@ -273,6 +211,7 @@ struct WindowState {
 
 struct AppInner {
     windows: HashMap<WindowId, WindowState>,
+    proxy: EventLoopProxy<Request>,
 }
 
 impl ApplicationHandler<Request> for AppInner {
@@ -293,7 +232,7 @@ impl ApplicationHandler<Request> for AppInner {
         }
         let state = &mut window_state.egui_state;
         let res = state.on_window_event(window, &event);
-        if res.repaint {
+        if res.repaint && !matches!(event, WindowEvent::RedrawRequested) {
             window.request_redraw();
         }
         match event {
@@ -349,6 +288,23 @@ impl ApplicationHandler<Request> for AppInner {
                     egui_winit::create_winit_window_attributes(&ctx, viewport_builder);
                 let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
                 let id = window.id();
+                let proxy = self.proxy.clone();
+                let ctx_repaint = ctx.clone();
+                ctx.set_request_repaint_callback(move |info| {
+                    let proxy = proxy.clone();
+                    if info.delay == Duration::ZERO {
+                        let _ = proxy.send_event(Request::RepaintWindow(id));
+                    } else {
+                        let ctx = ctx_repaint.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(info.delay);
+                            // Only repaint if no pass has occurred since the request.
+                            if ctx.cumulative_pass_nr() == info.current_cumulative_pass_nr {
+                                let _ = proxy.send_event(Request::RepaintWindow(id));
+                            }
+                        });
+                    }
+                });
                 let window_state = WindowState {
                     window: window.clone(),
                     viewport_id,
@@ -395,11 +351,6 @@ impl ApplicationHandler<Request> for AppInner {
                     window_state.message_handler = Some(handler);
                 }
             }
-            Request::SetWindowPosition(window_id, pos) => {
-                if let Some(window_state) = self.windows.get(&window_id) {
-                    window_state.window.set_outer_position(pos);
-                }
-            }
             Request::GetWindowOuterRect(window_id, sender) => {
                 let result = self.windows.get(&window_id).and_then(|ws| {
                     let pos = ws.window.outer_position().ok()?;
@@ -424,13 +375,6 @@ impl ApplicationHandler<Request> for AppInner {
                     })
                     .unwrap_or_default();
                 let _ = sender.send(rects);
-            }
-            Request::ResizeWindow(window_id, size) => {
-                if let Some(window_state) = self.windows.get(&window_id) {
-                    let _ = window_state
-                        .window
-                        .request_inner_size(winit::dpi::LogicalSize::new(size.x, size.y));
-                }
             }
         }
     }
