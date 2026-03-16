@@ -3,7 +3,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pack as base } from "./folders";
-import Pack from "./Pack";
+import WebPack from "./packs/WebPack";
 
 function choosePackFile() {
   const webPack = resolve(base, "web.pack");
@@ -18,7 +18,7 @@ function choosePackFile() {
 }
 
 const webPackFile = choosePackFile();
-const pack = new Pack(webPackFile);
+const pack = new WebPack(webPackFile);
 
 export const readPack = pack.readPack.bind(pack);
 export const readFile = pack.readFile.bind(pack);

@@ -2,13 +2,13 @@
 
 import { App, Menu } from "@open-orpheus/ui";
 
-import Pack from "../src/main/Pack.ts";
+import WebPack from "../src/main/packs/WebPack.ts";
 
 setInterval(() => {
   // keep alive
 }, 1000);
 
-const pack = new Pack("../package/web.pack");
+const pack = new WebPack("../package/web.pack");
 
 async function patchMenuItem(item: any) {
   if (item.image_path) {
