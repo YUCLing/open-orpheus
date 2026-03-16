@@ -3898,7 +3898,6 @@ dependencies = [
  "resvg",
  "serde",
  "serde_json",
- "smithay-client-toolkit 0.20.0",
  "smol",
  "winit",
 ]
