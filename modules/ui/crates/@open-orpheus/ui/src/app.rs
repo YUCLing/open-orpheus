@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, sync::Arc, time::Duration};
+use std::{num::NonZeroU32, sync::{Arc, Mutex}, time::Duration};
 
 use egui::{Context, ViewportBuilder, ViewportId, ViewportInfo, ahash::HashMap};
 use egui_wgpu::{RendererOptions, WgpuConfiguration, winit::Painter};
@@ -57,6 +57,10 @@ pub struct App {
     resource_handler: ResourceHandler,
     /// Parsed skin for menus, loaded once at startup from `menu/skin.xml`.
     pub menu_skin: Arc<MenuSkin>,
+    /// Shared image cache for `orpheus://orpheus/…` URIs.
+    web_pack_cache: pack_loader::PackImageCache,
+    /// Shared image cache for `native://skin/…` URIs.
+    skin_pack_cache: pack_loader::PackImageCache,
 }
 
 impl App {
@@ -118,6 +122,8 @@ impl App {
             is_wayland,
             resource_handler,
             menu_skin,
+            web_pack_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            skin_pack_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -150,9 +156,11 @@ impl App {
         let ctx = Self::create_context();
         ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_web_pack(
             self.resource_handler.clone(),
+            Some(self.web_pack_cache.clone()),
         )));
         ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_skin_pack(
             self.resource_handler.clone(),
+            Some(self.skin_pack_cache.clone()),
         )));
         ctx
     }

@@ -178,6 +178,12 @@ fn create_window(app_ptr: f64) {
     });
 }
 
+/// Drops the `Menu` referenced by `menu_ptr`.
+#[neon::export]
+fn destroy_menu(menu_ptr: f64) {
+    let _ = unsafe { Box::from_raw(menu_ptr as usize as *mut Menu) };
+}
+
 /// Creates a `Menu` and returns an opaque pointer to it.
 #[neon::export]
 fn create_menu(app_ptr: f64, menu_data: Json<MenuData>) -> f64 {

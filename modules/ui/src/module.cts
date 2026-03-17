@@ -13,6 +13,7 @@ declare module "./load.cjs" {
   function destroyApp(appPtr: number, checkPtr: number): void;
   function createWindow(appPtr: number): number;
   // TODO: Types
+  function destroyMenu(menuPtr: number): void;
   function createMenu(appPtr: number, menuData: any): number;
   function showMenu(menuPtr: number): void;
   function setMenuOnClick(

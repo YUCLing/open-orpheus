@@ -9,11 +9,17 @@ use egui::load::{ImageLoadResult, ImageLoader, ImagePoll, LoadError};
 
 use crate::resource::ResourceHandler;
 
-enum LoadState {
+pub(super) enum LoadState {
     Loading,
     Ready(Arc<egui::ColorImage>),
     Failed,
 }
+
+/// A sharable image-cache handle that can be pre-created in [`App`] and
+/// injected into a [`PackLoader`] so the application controls its lifetime.
+///
+/// [`App`]: crate::app::App
+pub(super) type PackImageCache = Arc<Mutex<HashMap<String, LoadState>>>;
 
 type ReadFn = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync>;
 
@@ -28,33 +34,35 @@ pub(super) struct PackLoader {
 }
 
 impl PackLoader {
-    fn new(scheme: &'static str, read_fn: ReadFn) -> Self {
+    fn new(scheme: &'static str, read_fn: ReadFn, cache: Option<PackImageCache>) -> Self {
         Self {
             scheme,
             read_fn,
-            cache: Arc::new(Mutex::new(HashMap::new())),
+            cache: cache.unwrap_or_else(|| Arc::new(Mutex::new(HashMap::new()))),
         }
     }
 
     /// Handles `orpheus://orpheus/<path>` via [`ResourceHandler::read_web_pack`].
-    pub(super) fn for_web_pack(resource_handler: ResourceHandler) -> Self {
+    pub(super) fn for_web_pack(resource_handler: ResourceHandler, cache: Option<PackImageCache>) -> Self {
         Self::new(
             "orpheus://orpheus",
             Arc::new(move |path: String| {
                 let h = resource_handler.clone();
                 Box::pin(async move { h.read_web_pack(&path).await })
             }),
+            cache,
         )
     }
 
     /// Handles `native://skin/<path>` via [`ResourceHandler::read_skin_pack`].
-    pub(super) fn for_skin_pack(resource_handler: ResourceHandler) -> Self {
+    pub(super) fn for_skin_pack(resource_handler: ResourceHandler, cache: Option<PackImageCache>) -> Self {
         Self::new(
             "native://skin",
             Arc::new(move |path: String| {
                 let h = resource_handler.clone();
                 Box::pin(async move { h.read_skin_pack(&path).await })
             }),
+            cache,
         )
     }
 }

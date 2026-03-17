@@ -1,11 +1,16 @@
 import App from "./App.cjs";
-import { createMenu, showMenu, setMenuOnClick } from "./module.cjs";
+import { createMenu, destroyMenu, showMenu, setMenuOnClick } from "./module.cjs";
+
+const finalizer = new FinalizationRegistry((ptr: number) => {
+  destroyMenu(ptr);
+});
 
 export default class Menu {
   private _ptr: number;
 
   constructor(app: App, menuData: any) {
     this._ptr = createMenu((app as unknown as { _ptr: number })._ptr, menuData);
+    finalizer.register(this, this._ptr);
   }
 
   show(): void {
