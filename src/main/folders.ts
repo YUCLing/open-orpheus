@@ -1,8 +1,8 @@
 import { app } from "electron";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 export const pack = resolve(
-  app.isPackaged ? app.getPath("exe") : ".",
+  app.isPackaged ? dirname(app.getPath("exe")) : ".",
   "package"
 );
 
