@@ -25,7 +25,7 @@ async function main() {
   await skinPack.readPack();
 
   const app = await App.create({
-    preferWayland: true,
+    preferWayland: false,
     readWebPack: webPack.readFile.bind(webPack),
     readSkinPack: skinPack.readFile.bind(skinPack),
   });
