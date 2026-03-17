@@ -62,7 +62,11 @@ pub struct App {
 impl App {
     /// `prefer_wayland`: `Some(true)` forces Wayland, `Some(false)` forces X11,
     /// `None` lets winit auto-select.
-    pub fn new(prefer_wayland: Option<bool>, resource_handler: ResourceHandler, menu_skin_xml: &[u8]) -> Self {
+    pub fn new(
+        prefer_wayland: Option<bool>,
+        resource_handler: ResourceHandler,
+        menu_skin_xml: &[u8],
+    ) -> Self {
         let menu_skin = Arc::new(parse_menu_skin(menu_skin_xml));
 
         let mut builder = EventLoop::<Request>::with_user_event();
@@ -144,12 +148,12 @@ impl App {
     /// the `ResourceHandler` without any JS-side base64 conversion.
     fn create_context_with_resources(&self) -> Context {
         let ctx = Self::create_context();
-        ctx.add_image_loader(Arc::new(
-            pack_loader::PackLoader::for_web_pack(self.resource_handler.clone()),
-        ));
-        ctx.add_image_loader(Arc::new(
-            pack_loader::PackLoader::for_skin_pack(self.resource_handler.clone()),
-        ));
+        ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_web_pack(
+            self.resource_handler.clone(),
+        )));
+        ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_skin_pack(
+            self.resource_handler.clone(),
+        )));
         ctx
     }
 
@@ -287,7 +291,9 @@ impl ApplicationHandler<Request> for AppInner {
         }
         match event {
             WindowEvent::RedrawRequested => {
-                let Some(painter) = &mut self.painter else { return };
+                let Some(painter) = &mut self.painter else {
+                    return;
+                };
                 let viewport_id = window_state.viewport_id;
 
                 // Update viewport info (focus, size, DPI, etc.) before taking egui input
@@ -306,7 +312,9 @@ impl ApplicationHandler<Request> for AppInner {
                 let ctx = state.egui_ctx().clone();
 
                 // Inject the current viewport info so egui widgets can query window state.
-                raw_input.viewports.insert(viewport_id, window_state.viewport_info.clone());
+                raw_input
+                    .viewports
+                    .insert(viewport_id, window_state.viewport_info.clone());
 
                 let egui::FullOutput {
                     platform_output,
@@ -428,9 +436,12 @@ impl ApplicationHandler<Request> for AppInner {
                 }
 
                 smol::block_on(
-                    self.painter.as_mut().unwrap()
-                        .set_window(viewport_id, Some(window.clone()))
-                ).unwrap();
+                    self.painter
+                        .as_mut()
+                        .unwrap()
+                        .set_window(viewport_id, Some(window.clone())),
+                )
+                .unwrap();
 
                 // Populate initial viewport info before the first frame.
                 let mut viewport_info = ViewportInfo::default();

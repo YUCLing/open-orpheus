@@ -12,10 +12,7 @@ use std::sync::{
 use std::time::Duration;
 
 use egui::{Color32, ViewportBuilder, ViewportId};
-use winit::{
-    dpi::LogicalPosition,
-    event::WindowEvent,
-};
+use winit::{dpi::LogicalPosition, event::WindowEvent};
 
 use crate::{
     app::App,
@@ -75,7 +72,10 @@ impl Menu {
                 for item in items.iter() {
                     if let Some(style) = &item.style {
                         if !map.contains_key(style.as_str()) {
-                            let xml = app.resource_handler().read_skin_pack(&format!("/{}", style)).await;
+                            let xml = app
+                                .resource_handler()
+                                .read_skin_pack(&format!("/{}", style))
+                                .await;
                             map.insert(style.clone(), parse_element_template(&xml));
                         }
                     }
@@ -109,7 +109,10 @@ impl Menu {
             // for RightOf we compute and clamp to the monitor.
             let logical_pos: Option<LogicalPosition<f64>> = match &position {
                 MenuPosition::AtCursor => None,
-                MenuPosition::RightOf { parent_window_id, row_y_offset } => {
+                MenuPosition::RightOf {
+                    parent_window_id,
+                    row_y_offset,
+                } => {
                     let desired = if let Some((parent_pos, parent_size)) =
                         app.get_window_outer_rect(*parent_window_id).await
                     {
@@ -159,47 +162,63 @@ impl Menu {
                                     let mut handle_click = |id: String| {
                                         *pending_click_for_closure.lock().unwrap() = Some(id);
                                     };
-                                    draw_menu_items(ui, &items, &skin, &templates, |idx, response| {
-                                        let item = &items[idx];
-                                        let parent_hover = &parent_item_hovered[idx];
-                                        let is_submenu_open = &submenu_open[idx];
-                                        let is_hovered = response.hovered();
-                                        parent_hover.store(is_hovered, Ordering::Relaxed);
-                                        if is_hovered {
-                                            if let Some(children) = &item.children {
-                                                if !is_submenu_open.swap(true, Ordering::Relaxed) {
-                                                    if let Some(&parent_wid) = self_window_id.get()
+                                    draw_menu_items(
+                                        ui,
+                                        &items,
+                                        &skin,
+                                        &templates,
+                                        |idx, response| {
+                                            let item = &items[idx];
+                                            let parent_hover = &parent_item_hovered[idx];
+                                            let is_submenu_open = &submenu_open[idx];
+                                            let is_hovered = response.hovered();
+                                            parent_hover.store(is_hovered, Ordering::Relaxed);
+                                            if is_hovered {
+                                                if let Some(children) = &item.children {
+                                                    if !is_submenu_open
+                                                        .swap(true, Ordering::Relaxed)
                                                     {
-                                                        // Increment *before* spawn so the root's
-                                                        // focus-loss guard already sees count > 0
-                                                        // when the OS moves focus to the new window.
-                                                        open_submenu_count
-                                                            .fetch_add(1, Ordering::Relaxed);
-                                                        smol::spawn(Self::show_menu_with_items(
-                                                            app_for_closure.clone(),
-                                                            children.clone(),
-                                                            MenuPosition::RightOf {
-                                                                parent_window_id: parent_wid,
-                                                                row_y_offset: response.rect.top(),
-                                                            },
-                                                            Some(parent_hover.clone()),
-                                                            Some(is_submenu_open.clone()),
-                                                            false,
-                                                            open_submenu_count.clone(),
-                                                            click_handler_for_closure.clone(),
-                                                            close_all_for_closure.clone(),
-                                                        ))
-                                                        .detach();
+                                                        if let Some(&parent_wid) =
+                                                            self_window_id.get()
+                                                        {
+                                                            // Increment *before* spawn so the root's
+                                                            // focus-loss guard already sees count > 0
+                                                            // when the OS moves focus to the new window.
+                                                            open_submenu_count
+                                                                .fetch_add(1, Ordering::Relaxed);
+                                                            smol::spawn(
+                                                                Self::show_menu_with_items(
+                                                                    app_for_closure.clone(),
+                                                                    children.clone(),
+                                                                    MenuPosition::RightOf {
+                                                                        parent_window_id:
+                                                                            parent_wid,
+                                                                        row_y_offset: response
+                                                                            .rect
+                                                                            .top(),
+                                                                    },
+                                                                    Some(parent_hover.clone()),
+                                                                    Some(is_submenu_open.clone()),
+                                                                    false,
+                                                                    open_submenu_count.clone(),
+                                                                    click_handler_for_closure
+                                                                        .clone(),
+                                                                    close_all_for_closure.clone(),
+                                                                ),
+                                                            )
+                                                            .detach();
+                                                        }
                                                     }
                                                 }
+                                                return Some(hover_fill);
                                             }
-                                            return Some(hover_fill);
-                                        }
-                                        if response.is_pointer_button_down_on() {
-                                            return Some(press_fill);
-                                        }
-                                        None
-                                    }, &mut handle_click);
+                                            if response.is_pointer_button_down_on() {
+                                                return Some(press_fill);
+                                            }
+                                            None
+                                        },
+                                        &mut handle_click,
+                                    );
                                 });
                             });
                     }
@@ -296,7 +315,8 @@ impl Menu {
                 .await;
 
                 loop {
-                    if close_requested.load(Ordering::Relaxed) || close_all.load(Ordering::Relaxed) {
+                    if close_requested.load(Ordering::Relaxed) || close_all.load(Ordering::Relaxed)
+                    {
                         app.close_window(window_id).await;
                         break;
                     }
@@ -324,7 +344,12 @@ impl Menu {
         let app = self.app.clone();
         #[cfg(target_os = "linux")]
         if app.is_wayland() {
-            smol::spawn(wayland::show_wayland_overlay(app, menu_data.content.clone(), self.click_handler.clone())).detach();
+            smol::spawn(wayland::show_wayland_overlay(
+                app,
+                menu_data.content.clone(),
+                self.click_handler.clone(),
+            ))
+            .detach();
             return;
         }
         let close_all = Arc::new(AtomicBool::new(false));

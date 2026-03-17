@@ -9,9 +9,9 @@ import Pack from "./Pack";
 const PUBLIC_KEY = crypto.createPublicKey({
   key: Buffer.from(
     "305c300d06092a864886f70d0101010500034b003048024100" +
-    "b057e5f79eaca212f43cc51de0da2349d13b0ac7de87eb52" +
-    "da23096f0b1594cab08f87ff1a6a05808046a67e359b902f" +
-    "8982a1ad987a83ae62246dd3b64ee6f50203010001",
+      "b057e5f79eaca212f43cc51de0da2349d13b0ac7de87eb52" +
+      "da23096f0b1594cab08f87ff1a6a05808046a67e359b902f" +
+      "8982a1ad987a83ae62246dd3b64ee6f50203010001",
     "hex"
   ),
   format: "der",

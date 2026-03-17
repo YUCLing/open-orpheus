@@ -15,7 +15,10 @@ declare module "./load.cjs" {
   // TODO: Types
   function createMenu(appPtr: number, menuData: any): number;
   function showMenu(menuPtr: number): void;
-  function setMenuOnClick(menuPtr: number, callback: (id: string) => void): void;
+  function setMenuOnClick(
+    menuPtr: number,
+    callback: (id: string) => void
+  ): void;
 }
 
 export = addon;

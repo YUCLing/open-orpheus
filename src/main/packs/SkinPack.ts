@@ -10,14 +10,14 @@ const ZIP_PASSWORD = "apos189nbxdftgor";
 // 2048-bit RSA PUBLICKEYBLOB from cloudmusic_64.dll (CryptImportKey arg in FUN_180d275e0)
 const PUBLIC_KEY_BLOB = Buffer.from(
   "0602000000240000525341310008000001000100" +
-  "d1ee7e93d64501567ebb95e0bb39fc49020ebc893fa18ae1c6e0f4ed70a6430b" +
-  "1cd103359d1cd0c8c2dfb949170d87eefea153d157ce6c1609e88a20a1537377" +
-  "d9e70f5f06f12bf81ce3424a9efbdd3a68fdb36e8bbed73f51a78e9e9758c525" +
-  "be0e27feabd55c21bb610073589415e01ad61bf0aebf31be648021d38a9d8541" +
-  "dc45a86fd0d93da65cf4c88a6655bf9136ef66ded52b9fc52db43e088cd48c08" +
-  "6569863e306831aebbb00dba7c3519b95bf2d0a584b1af0914c9fa986cfee361" +
-  "28ac233fd17b39a252b696773d2ee9ae8f43a609f48eeb7c20ecf4e9af9fc753" +
-  "fad79643286360902d8a8dd48c5c40d0555b8962b4e2726ad52e65e1fd9a71a8",
+    "d1ee7e93d64501567ebb95e0bb39fc49020ebc893fa18ae1c6e0f4ed70a6430b" +
+    "1cd103359d1cd0c8c2dfb949170d87eefea153d157ce6c1609e88a20a1537377" +
+    "d9e70f5f06f12bf81ce3424a9efbdd3a68fdb36e8bbed73f51a78e9e9758c525" +
+    "be0e27feabd55c21bb610073589415e01ad61bf0aebf31be648021d38a9d8541" +
+    "dc45a86fd0d93da65cf4c88a6655bf9136ef66ded52b9fc52db43e088cd48c08" +
+    "6569863e306831aebbb00dba7c3519b95bf2d0a584b1af0914c9fa986cfee361" +
+    "28ac233fd17b39a252b696773d2ee9ae8f43a609f48eeb7c20ecf4e9af9fc753" +
+    "fad79643286360902d8a8dd48c5c40d0555b8962b4e2726ad52e65e1fd9a71a8",
   "hex"
 );
 
@@ -83,7 +83,9 @@ function verifySignature(sig: Buffer, data: Buffer): boolean {
   return verify.verify(PUBLIC_KEY_PEM, sigBE);
 }
 
-async function parseHeader(file: string): Promise<{ sigSize: number; zipOffset: number }> {
+async function parseHeader(
+  file: string
+): Promise<{ sigSize: number; zipOffset: number }> {
   const fh = await open(file, "r");
   try {
     const buf = Buffer.alloc(16);
@@ -91,8 +93,7 @@ async function parseHeader(file: string): Promise<{ sigSize: number; zipOffset: 
 
     if (buf.readUInt32LE(0) !== 0x4b50544e /* "NTPK" */)
       throw new Error("Invalid .skin magic");
-    if (buf.readUInt32LE(4) !== 0)
-      throw new Error("Unsupported .skin version");
+    if (buf.readUInt32LE(4) !== 0) throw new Error("Unsupported .skin version");
 
     const sigSize = buf.readUInt32LE(12);
     return { sigSize, zipOffset: 16 + sigSize };
@@ -144,7 +145,9 @@ export default class SkinPack extends Pack {
       }
     }
 
-    const zipper = await unzipper.Open.custom(createSource(this.path, zipOffset));
+    const zipper = await unzipper.Open.custom(
+      createSource(this.path, zipOffset)
+    );
     for (const file of zipper.files) {
       if (file.type === "File") {
         const key = normalize("/" + file.path);

@@ -8,7 +8,9 @@ use neon::{
     object::Object,
     prelude::{Context, Cx},
     result::JsResult,
-    types::{JsArray, JsBuffer, JsFunction, JsObject, JsPromise, buffer::TypedArray, extract::Json},
+    types::{
+        JsArray, JsBuffer, JsFunction, JsObject, JsPromise, buffer::TypedArray, extract::Json,
+    },
 };
 
 use crate::{
@@ -42,7 +44,8 @@ mod util;
 fn js_pack_handler(
     func: Arc<Root<JsFunction>>,
     channel: Channel,
-) -> impl Fn(&str) -> std::pin::Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync + 'static {
+) -> impl Fn(&str) -> std::pin::Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync + 'static
+{
     move |path: &str| {
         let path = path.to_owned();
         let func = func.clone();
@@ -96,9 +99,7 @@ unsafe extern "C" fn on_close(handle: *mut uv_handle_t) {
 
 #[neon::export]
 fn create_app<'cx>(mut cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<'cx, JsArray> {
-    let prefer_wayland = options
-        .prop(cx, "preferWayland")
-        .get()?;
+    let prefer_wayland = options.prop(cx, "preferWayland").get()?;
     let read_web_pack = options
         .prop(cx, "readWebPack")
         .get::<Handle<JsFunction>>()?
@@ -107,9 +108,7 @@ fn create_app<'cx>(mut cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<
         .prop(cx, "readSkinPack")
         .get::<Handle<JsFunction>>()?
         .root(cx);
-    let menu_skin_xml: Handle<JsBuffer> = options
-        .prop(cx, "menuSkinXml")
-        .get()?;
+    let menu_skin_xml: Handle<JsBuffer> = options.prop(cx, "menuSkinXml").get()?;
     let menu_skin_xml = TypedArray::as_slice(&*menu_skin_xml, cx).to_vec();
 
     let channel = cx.channel();

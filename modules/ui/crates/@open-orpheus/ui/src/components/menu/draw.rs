@@ -76,38 +76,65 @@ pub fn draw_menu_items(
     for (idx, item) in items.iter().enumerate() {
         if item.separator {
             egui::Frame::new()
-                .inner_margin(Margin { top: 4, bottom: 4, ..h_margin })
-                .show(ui, |ui| { ui.separator(); });
+                .inner_margin(Margin {
+                    top: 4,
+                    bottom: 4,
+                    ..h_margin
+                })
+                .show(ui, |ui| {
+                    ui.separator();
+                });
             continue;
         }
 
         // Style template row (e.g. playback controls with icon buttons).
         if let Some(tpl) = item.style.as_ref().and_then(|s| templates.get(s.as_str())) {
             if let Some(btns) = &item.btns {
-                let mut frame = egui::Frame::new()
-                    .begin(ui);
-                frame.content_ui.set_width(ui.available_width() - left_pad - right_pad);
+                let mut frame = egui::Frame::new().begin(ui);
+                frame
+                    .content_ui
+                    .set_width(ui.available_width() - left_pad - right_pad);
                 frame.content_ui.set_min_height(tpl.height);
                 let mut btn_idx = 0usize;
-                render_layout_node(&mut frame.content_ui, &tpl.layout, btns, &mut btn_idx, text_color, on_click);
+                render_layout_node(
+                    &mut frame.content_ui,
+                    &tpl.layout,
+                    btns,
+                    &mut btn_idx,
+                    text_color,
+                    on_click,
+                );
                 frame.end(ui);
                 continue;
             }
         }
 
         // Normal text item.
-        let mut frame = egui::Frame::new()
-            .inner_margin(h_margin)
-            .begin(ui);
-        frame.content_ui.set_width(ui.available_width() - left_pad - right_pad);
-        let color = if item.enable { text_color } else { disabled_color };
+        let mut frame = egui::Frame::new().inner_margin(h_margin).begin(ui);
+        frame
+            .content_ui
+            .set_width(ui.available_width() - left_pad - right_pad);
+        let color = if item.enable {
+            text_color
+        } else {
+            disabled_color
+        };
         frame.content_ui.horizontal(|ui| {
             if let Some(image) = &item.image_path {
                 ui.add(egui::Image::new(image).tint(color));
             }
-            ui.add(egui::Label::new(egui::RichText::new(&item.text).color(color)));
-            let right_icon = item.check_image_path.as_deref().map(|s| s.to_owned())
-                .or_else(|| item.children.is_some().then(|| "native://skin/menu/sub_icon.svg".to_owned()));
+            ui.add(egui::Label::new(
+                egui::RichText::new(&item.text).color(color),
+            ));
+            let right_icon = item
+                .check_image_path
+                .as_deref()
+                .map(|s| s.to_owned())
+                .or_else(|| {
+                    item.children
+                        .is_some()
+                        .then(|| "native://skin/menu/sub_icon.svg".to_owned())
+                });
             if let Some(icon) = right_icon {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add(egui::Image::new(icon.as_str()).tint(color));
@@ -157,15 +184,23 @@ pub fn render_layout_node(
                 }
             });
         }
-        LayoutNode::Container { width, height, children } => {
+        LayoutNode::Container {
+            width,
+            height,
+            children,
+        } => {
             if children.is_empty() {
                 // No children — act as a sized spacer in the current direction.
                 let space = width.or(*height).unwrap_or(0.0);
                 ui.add_space(space);
             } else {
                 egui::Frame::new().show(ui, |ui| {
-                    if let Some(w) = width  { ui.set_width(*w); }
-                    if let Some(h) = height { ui.set_height(*h); }
+                    if let Some(w) = width {
+                        ui.set_width(*w);
+                    }
+                    if let Some(h) = height {
+                        ui.set_height(*h);
+                    }
                     for child in children {
                         render_layout_node(ui, child, btns, btn_idx, text_color, on_btn_click);
                     }
@@ -173,21 +208,29 @@ pub fn render_layout_node(
             }
         }
         // Fixed spacer: width takes priority (horizontal context); height used in vertical.
-        LayoutNode::Control { width: Some(w), .. } => { ui.add_space(*w); }
-        LayoutNode::Control { height: Some(h), .. } => { ui.add_space(*h); }
+        LayoutNode::Control { width: Some(w), .. } => {
+            ui.add_space(*w);
+        }
+        LayoutNode::Control {
+            height: Some(h), ..
+        } => {
+            ui.add_space(*h);
+        }
         // Fill: consume remaining space in the current layout direction.
         LayoutNode::Control { .. } => {
             let rem = ui.available_width().max(ui.available_height());
-            if rem > 0.0 { ui.add_space(rem); }
+            if rem > 0.0 {
+                ui.add_space(rem);
+            }
         }
         LayoutNode::Button { width, height } => {
             if let Some(btn) = btns.get(*btn_idx) {
                 if let Some(images) = parse_btn_url(&btn.url) {
-                    let btn_size   = Vec2::new(*width, *height);
+                    let btn_size = Vec2::new(*width, *height);
                     let (_id, btn_rect) = ui.allocate_space(btn_size);
-                    let hover_pos  = ui.input(|i| i.pointer.hover_pos());
-                    let hovered    = hover_pos.is_some_and(|p| btn_rect.contains(p));
-                    let pressed    = hovered && ui.input(|i| i.pointer.any_down());
+                    let hover_pos = ui.input(|i| i.pointer.hover_pos());
+                    let hovered = hover_pos.is_some_and(|p| btn_rect.contains(p));
+                    let pressed = hovered && ui.input(|i| i.pointer.any_down());
                     let hot_or_normal = images.hot.as_ref().unwrap_or(&images.normal);
                     let state = if !btn.enable {
                         images.disabled.as_ref().unwrap_or(&images.normal)

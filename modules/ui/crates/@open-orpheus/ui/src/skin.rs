@@ -132,24 +132,42 @@ fn parse_dui_attrs(attrs: &str) -> MenuSkin {
         let mut in_single = false;
         while pos < attrs.len() {
             match bytes[pos] {
-                b'\'' => { in_single = !in_single; pos += 1; }
+                b'\'' => {
+                    in_single = !in_single;
+                    pos += 1;
+                }
                 b'"' if !in_single => break,
-                _ => { pos += 1; }
+                _ => {
+                    pos += 1;
+                }
             }
         }
         let val = &attrs[val_start..pos];
         pos += 1; // skip closing '"'
 
         match key {
-            "maxwidth" => { if let Ok(v) = val.parse::<f32>() { skin.max_width = v; } }
-            "minwidth" => { if let Ok(v) = val.parse::<f32>() { skin.min_width = v; } }
-            "inset" => { skin.inset = parse_quad(val).unwrap_or(skin.inset); }
+            "maxwidth" => {
+                if let Ok(v) = val.parse::<f32>() {
+                    skin.max_width = v;
+                }
+            }
+            "minwidth" => {
+                if let Ok(v) = val.parse::<f32>() {
+                    skin.min_width = v;
+                }
+            }
+            "inset" => {
+                skin.inset = parse_quad(val).unwrap_or(skin.inset);
+            }
             "bkimage" => {
                 if let Some(path) = extract_single_quoted(val, "file") {
                     let corner = extract_single_quoted(val, "corner")
                         .and_then(parse_quad)
                         .unwrap_or([0.0; 4]);
-                    skin.bk_image = Some(NinePatch { path: path.to_owned(), corner });
+                    skin.bk_image = Some(NinePatch {
+                        path: path.to_owned(),
+                        corner,
+                    });
                 }
             }
             "itemhotimage" => {
@@ -194,14 +212,14 @@ fn parse_argb_color(s: &str) -> Option<egui::Color32> {
         let v = u32::from_str_radix(s, 16).ok()?;
         let a = ((v >> 24) & 0xFF) as u8;
         let r = ((v >> 16) & 0xFF) as u8;
-        let g = ((v >>  8) & 0xFF) as u8;
-        let b = ( v        & 0xFF) as u8;
+        let g = ((v >> 8) & 0xFF) as u8;
+        let b = (v & 0xFF) as u8;
         Some(egui::Color32::from_rgba_unmultiplied(r, g, b, a))
     } else if s.len() == 6 {
         let v = u32::from_str_radix(s, 16).ok()?;
         let r = ((v >> 16) & 0xFF) as u8;
-        let g = ((v >>  8) & 0xFF) as u8;
-        let b = ( v        & 0xFF) as u8;
+        let g = ((v >> 8) & 0xFF) as u8;
+        let b = (v & 0xFF) as u8;
         Some(egui::Color32::from_rgb(r, g, b))
     } else {
         None
@@ -222,11 +240,18 @@ pub enum LayoutNode {
     /// `<VerticalLayout>` — arranges children top-to-bottom.
     Vertical(Vec<LayoutNode>),
     /// `<Container>` — optional explicit dimensions; children rendered inside.
-    Container { width: Option<f32>, height: Option<f32>, children: Vec<LayoutNode> },
+    Container {
+        width: Option<f32>,
+        height: Option<f32>,
+        children: Vec<LayoutNode>,
+    },
     /// `<Button>` — mapped by document order to the `btns` array entry at that index.
     Button { width: f32, height: f32 },
     /// `<Control>` — fixed spacer or fill (fill when both dims are `None`).
-    Control { width: Option<f32>, height: Option<f32> },
+    Control {
+        width: Option<f32>,
+        height: Option<f32>,
+    },
 }
 
 /// Parsed `MenuElementTemplate` from an `element_*.xml` skin file.
@@ -273,20 +298,30 @@ pub fn parse_element_template(xml: &[u8]) -> ElementTemplate {
                 for attr in e.attributes().flatten() {
                     if let Ok(v) = attr.unescape_value() {
                         match attr.key.as_ref() {
-                            b"width"    => { w = v.parse().ok(); }
-                            b"height"   => { h = v.parse().ok(); }
+                            b"width" => {
+                                w = v.parse().ok();
+                            }
+                            b"height" => {
+                                h = v.parse().ok();
+                            }
                             b"minwidth" if name == b"MenuElement" => {
-                                if let Ok(f) = v.parse() { tpl.min_width = f; }
+                                if let Ok(f) = v.parse() {
+                                    tpl.min_width = f;
+                                }
                             }
                             b"maxwidth" if name == b"MenuElement" => {
-                                if let Ok(f) = v.parse() { tpl.max_width = f; }
+                                if let Ok(f) = v.parse() {
+                                    tpl.max_width = f;
+                                }
                             }
                             _ => {}
                         }
                     }
                 }
                 if name == b"MenuElement" {
-                    if let Some(hv) = h { tpl.height = hv; }
+                    if let Some(hv) = h {
+                        tpl.height = hv;
+                    }
                 }
                 stack.push((name, w, h, vec![]));
             }
@@ -296,19 +331,30 @@ pub fn parse_element_template(xml: &[u8]) -> ElementTemplate {
                 for attr in e.attributes().flatten() {
                     if let Ok(v) = attr.unescape_value() {
                         match attr.key.as_ref() {
-                            b"width"  => { w = v.parse().ok(); }
-                            b"height" => { h = v.parse().ok(); }
+                            b"width" => {
+                                w = v.parse().ok();
+                            }
+                            b"height" => {
+                                h = v.parse().ok();
+                            }
                             _ => {}
                         }
                     }
                 }
                 let node = match e.name().as_ref() {
-                    b"Button"    => Some(LayoutNode::Button {
-                        width:  w.unwrap_or(24.0),
+                    b"Button" => Some(LayoutNode::Button {
+                        width: w.unwrap_or(24.0),
                         height: h.unwrap_or(24.0),
                     }),
-                    b"Control"   => Some(LayoutNode::Control { width: w, height: h }),
-                    b"Container" => Some(LayoutNode::Container { width: w, height: h, children: vec![] }),
+                    b"Control" => Some(LayoutNode::Control {
+                        width: w,
+                        height: h,
+                    }),
+                    b"Container" => Some(LayoutNode::Container {
+                        width: w,
+                        height: h,
+                        children: vec![],
+                    }),
                     _ => None,
                 };
                 if let (Some(node), Some((_, _, _, children))) = (node, stack.last_mut()) {
@@ -319,8 +365,12 @@ pub fn parse_element_template(xml: &[u8]) -> ElementTemplate {
                 if let Some((name, w, h, children)) = stack.pop() {
                     let node: Option<LayoutNode> = match name.as_slice() {
                         b"HorizontalLayout" => Some(LayoutNode::Horizontal(children)),
-                        b"VerticalLayout"   => Some(LayoutNode::Vertical(children)),
-                        b"Container"        => Some(LayoutNode::Container { width: w, height: h, children }),
+                        b"VerticalLayout" => Some(LayoutNode::Vertical(children)),
+                        b"Container" => Some(LayoutNode::Container {
+                            width: w,
+                            height: h,
+                            children,
+                        }),
                         b"MenuElementLayout" => {
                             // This is the layout root — children are the direct horizontal
                             // siblings inside the layout (Containers, VerticalLayout, etc.).
@@ -355,7 +405,7 @@ pub struct BtnState {
 
 impl BtnState {
     fn from_dui_value(val: &str) -> Option<Self> {
-        let uri   = extract_single_quoted(val, "file")?.to_owned();
+        let uri = extract_single_quoted(val, "file")?.to_owned();
         let color = extract_single_quoted(val, "svg_color").and_then(parse_argb_color);
         Some(Self { uri, color })
     }
@@ -364,9 +414,9 @@ impl BtnState {
 /// Per-state image data parsed from a `MenuItemBtn.url` DUI attribute string.
 #[derive(Clone, Debug)]
 pub struct BtnImages {
-    pub normal:   BtnState,
-    pub hot:      Option<BtnState>,
-    pub pushed:   Option<BtnState>,
+    pub normal: BtnState,
+    pub hot: Option<BtnState>,
+    pub pushed: Option<BtnState>,
     pub disabled: Option<BtnState>,
 }
 
@@ -376,48 +426,76 @@ pub struct BtnImages {
 /// `normalimage="file='…' svg_color='#b3483228'" hotimage="file='…' svg_color='#ff483228'"`.
 /// Returns `None` if no valid `normalimage` key is found.
 pub fn parse_btn_url(url: &str) -> Option<BtnImages> {
-    let mut normal:   Option<BtnState> = None;
-    let mut hot:      Option<BtnState> = None;
-    let mut pushed:   Option<BtnState> = None;
+    let mut normal: Option<BtnState> = None;
+    let mut hot: Option<BtnState> = None;
+    let mut pushed: Option<BtnState> = None;
     let mut disabled: Option<BtnState> = None;
 
     let mut pos = 0;
     let bytes = url.as_bytes();
 
     while pos < url.len() {
-        while pos < url.len() && matches!(bytes[pos], b' ' | b'\t' | b'\n' | b'\r') { pos += 1; }
-        if pos >= url.len() { break; }
+        while pos < url.len() && matches!(bytes[pos], b' ' | b'\t' | b'\n' | b'\r') {
+            pos += 1;
+        }
+        if pos >= url.len() {
+            break;
+        }
 
         let key_start = pos;
-        while pos < url.len() && bytes[pos] != b'=' { pos += 1; }
-        if pos >= url.len() { break; }
+        while pos < url.len() && bytes[pos] != b'=' {
+            pos += 1;
+        }
+        if pos >= url.len() {
+            break;
+        }
         let key = url[key_start..pos].trim();
         pos += 1;
 
-        if pos >= url.len() || bytes[pos] != b'"' { break; }
+        if pos >= url.len() || bytes[pos] != b'"' {
+            break;
+        }
         pos += 1;
         let val_start = pos;
         let mut in_single = false;
         while pos < url.len() {
             match bytes[pos] {
-                b'\'' => { in_single = !in_single; pos += 1; }
+                b'\'' => {
+                    in_single = !in_single;
+                    pos += 1;
+                }
                 b'"' if !in_single => break,
-                _ => { pos += 1; }
+                _ => {
+                    pos += 1;
+                }
             }
         }
         let val = &url[val_start..pos];
         pos += 1;
 
         match key {
-            "normalimage"   => { normal   = BtnState::from_dui_value(val); }
-            "hotimage"      => { hot      = BtnState::from_dui_value(val); }
-            "pushedimage"   => { pushed   = BtnState::from_dui_value(val); }
-            "disabledimage" => { disabled = BtnState::from_dui_value(val); }
+            "normalimage" => {
+                normal = BtnState::from_dui_value(val);
+            }
+            "hotimage" => {
+                hot = BtnState::from_dui_value(val);
+            }
+            "pushedimage" => {
+                pushed = BtnState::from_dui_value(val);
+            }
+            "disabledimage" => {
+                disabled = BtnState::from_dui_value(val);
+            }
             _ => {}
         }
     }
 
-    Some(BtnImages { normal: normal?, hot, pushed, disabled })
+    Some(BtnImages {
+        normal: normal?,
+        hot,
+        pushed,
+        disabled,
+    })
 }
 
 #[cfg(test)]
@@ -441,14 +519,18 @@ mod tests {
         assert_eq!(skin.item_hot_image.as_deref(), Some("menu/hover.png"));
         assert_eq!(
             skin.item_disabled_bk_color,
-            Some(egui::Color32::from_rgba_unmultiplied(0x99, 0x99, 0x9D, 0xFF))
+            Some(egui::Color32::from_rgba_unmultiplied(
+                0x99, 0x99, 0x9D, 0xFF
+            ))
         );
     }
 
     #[test]
     fn parse_argb() {
         let c = parse_argb_color("#FF99999D").unwrap();
-        assert_eq!(c, egui::Color32::from_rgba_unmultiplied(0x99, 0x99, 0x9D, 0xFF));
+        assert_eq!(
+            c,
+            egui::Color32::from_rgba_unmultiplied(0x99, 0x99, 0x9D, 0xFF)
+        );
     }
 }
-

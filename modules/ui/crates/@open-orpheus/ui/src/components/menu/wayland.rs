@@ -1,14 +1,15 @@
 use std::{
+    sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
     time::Duration,
-    sync::atomic::{AtomicBool, Ordering},
 };
 
 use egui::{Color32, Margin, ViewportBuilder, ViewportId};
 
 use crate::{
     app::App,
-    skin::{ElementTemplate, parse_element_template}, util::random_string,
+    skin::{ElementTemplate, parse_element_template},
+    util::random_string,
 };
 
 use super::{
@@ -34,7 +35,10 @@ pub async fn show_wayland_overlay(
             for item in level.iter() {
                 if let Some(style) = &item.style {
                     if !map.contains_key(style.as_str()) {
-                        let xml = app.resource_handler().read_skin_pack(&format!("/{}", style)).await;
+                        let xml = app
+                            .resource_handler()
+                            .read_skin_pack(&format!("/{}", style))
+                            .await;
                         map.insert(style.clone(), parse_element_template(&xml));
                     }
                 }
@@ -73,8 +77,7 @@ pub async fn show_wayland_overlay(
 
     // Tracks when the cursor last left all open menu areas; used to auto-close
     // the deepest submenu after a short idle period.
-    let submenu_idle_since: Arc<Mutex<Option<std::time::Instant>>> =
-        Arc::new(Mutex::new(None));
+    let submenu_idle_since: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
 
     let builder = ViewportBuilder::default()
         .with_always_on_top()
@@ -139,35 +142,42 @@ pub async fn show_wayland_overlay(
                                 .inner_margin(Margin::ZERO)
                                 .fill(Color32::WHITE)
                                 .show(ui, |ui| {
-                                ui.set_width(level_width);
-                                ui.style_mut().interaction.selectable_labels = false;
-                                ui.style_mut().spacing.item_spacing.y = 0.0;
+                                    ui.set_width(level_width);
+                                    ui.style_mut().interaction.selectable_labels = false;
+                                    ui.style_mut().spacing.item_spacing.y = 0.0;
 
-                                let hover_fill = Color32::from_rgb(225, 235, 252);
-                                let mut handle_click = |id: String| {
-                                    *pending_click_for_closure.lock().unwrap() = Some(id);
-                                };
-                                draw_menu_items(ui, &level_items, &skin, &templates, |idx, response| {
-                                    let item = &level_items[idx];
-                                    if response.hovered() {
-                                        hovered_at_depth = Some(depth);
-                                        if let Some(children) = &item.children {
-                                            let sub_pos = egui::Pos2::new(
-                                                response.rect.right(),
-                                                response.rect.top(),
-                                            );
-                                            trigger_item_hovered = true;
-                                            pending_submenu =
-                                                Some((depth, sub_pos, children.clone()));
-                                        }
-                                        return Some(hover_fill);
-                                    }
-                                    if response.is_pointer_button_down_on() {
-                                        return Some(Color32::from_rgb(198, 216, 249));
-                                    }
-                                    None
-                                }, &mut handle_click);
-                            });
+                                    let hover_fill = Color32::from_rgb(225, 235, 252);
+                                    let mut handle_click = |id: String| {
+                                        *pending_click_for_closure.lock().unwrap() = Some(id);
+                                    };
+                                    draw_menu_items(
+                                        ui,
+                                        &level_items,
+                                        &skin,
+                                        &templates,
+                                        |idx, response| {
+                                            let item = &level_items[idx];
+                                            if response.hovered() {
+                                                hovered_at_depth = Some(depth);
+                                                if let Some(children) = &item.children {
+                                                    let sub_pos = egui::Pos2::new(
+                                                        response.rect.right(),
+                                                        response.rect.top(),
+                                                    );
+                                                    trigger_item_hovered = true;
+                                                    pending_submenu =
+                                                        Some((depth, sub_pos, children.clone()));
+                                                }
+                                                return Some(hover_fill);
+                                            }
+                                            if response.is_pointer_button_down_on() {
+                                                return Some(Color32::from_rgb(198, 216, 249));
+                                            }
+                                            None
+                                        },
+                                        &mut handle_click,
+                                    );
+                                });
                         });
                     area_rects.push(area_resp.response.rect);
                 }
@@ -200,7 +210,11 @@ pub async fn show_wayland_overlay(
                     let cursor_in_deepest = area_rects
                         .get(levels_guard.len() - 1)
                         .copied()
-                        .map(|r| ctx.input(|i| i.pointer.hover_pos().map(|p| r.contains(p)).unwrap_or(true)))
+                        .map(|r| {
+                            ctx.input(|i| {
+                                i.pointer.hover_pos().map(|p| r.contains(p)).unwrap_or(true)
+                            })
+                        })
                         .unwrap_or(true);
                     !cursor_in_deepest && !trigger_item_hovered
                 };

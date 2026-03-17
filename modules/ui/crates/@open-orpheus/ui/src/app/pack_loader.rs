@@ -15,8 +15,7 @@ enum LoadState {
     Failed,
 }
 
-type ReadFn =
-    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync>;
+type ReadFn = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync>;
 
 /// A generic pack-file image loader.
 ///
@@ -65,12 +64,7 @@ impl ImageLoader for PackLoader {
         self.scheme
     }
 
-    fn load(
-        &self,
-        ctx: &egui::Context,
-        uri: &str,
-        size_hint: egui::SizeHint,
-    ) -> ImageLoadResult {
+    fn load(&self, ctx: &egui::Context, uri: &str, size_hint: egui::SizeHint) -> ImageLoadResult {
         if !uri.starts_with(self.scheme) {
             return ImageLoadResult::Err(LoadError::NotSupported);
         }
@@ -87,9 +81,9 @@ impl ImageLoader for PackLoader {
                     return ImageLoadResult::Ok(ImagePoll::Pending { size: None });
                 }
                 Some(LoadState::Failed) => {
-                    return ImageLoadResult::Err(LoadError::Loading(
-                        format!("failed to load pack resource: {uri}"),
-                    ));
+                    return ImageLoadResult::Err(LoadError::Loading(format!(
+                        "failed to load pack resource: {uri}"
+                    )));
                 }
                 None => {}
             }

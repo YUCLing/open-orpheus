@@ -124,21 +124,26 @@ registerCallHandler<[ThumbnailOptions], void>(
   }
 );
 
-registerCallHandler<[string, string], [boolean]>("app.loadSkinPackets", async (event, name) => {
-  try {
-    await loadSkinPack(name);
-    if (os.platform() === "linux" && isWayland()) {
-      // We create app here because App's initialization requires the skin pack to be loaded
-      await createApp(true);
+registerCallHandler<[string, string], [boolean]>(
+  "app.loadSkinPackets",
+  async (event, name) => {
+    try {
+      await loadSkinPack(name);
+      if (os.platform() === "linux" && isWayland()) {
+        // We create app here because App's initialization requires the skin pack to be loaded
+        await createApp(true);
+      }
+      return [true];
+    } catch (e) {
+      console.error("Failed to load skin pack", e);
+      return [false];
     }
-    return [true];
-  } catch (e) {
-    console.error("Failed to load skin pack", e);
-    return [false];
   }
-});
+);
 
-registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [false]);
+registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [
+  false,
+]);
 
 registerCallHandler<[], void>("app.getDefaultMusicPlayPath", () => {
   return;

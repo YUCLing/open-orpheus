@@ -20,6 +20,6 @@ export async function createApp(isWayland: boolean) {
     readSkinPack: (path: string) => {
       const skinPack = getSkinPack();
       return skinPack.readFile(path);
-    }
+    },
   });
 }
