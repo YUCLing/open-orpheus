@@ -1,6 +1,6 @@
 use std::{num::NonZeroU32, sync::Arc, time::Duration};
 
-use egui::{Context, ViewportBuilder, ViewportId, ahash::HashMap};
+use egui::{Context, ViewportBuilder, ViewportId, ViewportInfo, ahash::HashMap};
 use egui_wgpu::{RendererOptions, WgpuConfiguration, winit::Painter};
 use egui_winit::State;
 use winit::{
@@ -16,9 +16,12 @@ use crate::app::{
     fonts::get_font_definitions,
     wrappers::{EventLoopWrapper, RunUI, WindowMessageHandler},
 };
+use crate::resource::ResourceHandler;
+use crate::skin::{MenuSkin, parse_menu_skin};
 
 mod base64_loader;
 mod fonts;
+mod pack_loader;
 mod wrappers;
 
 #[derive(Debug)]
@@ -51,12 +54,17 @@ pub struct App {
     /// Whether the event loop is running on a Wayland compositor.
     /// Detected once at construction time from the actual display handle.
     is_wayland: bool,
+    resource_handler: ResourceHandler,
+    /// Parsed skin for menus, loaded once at startup from `menu/skin.xml`.
+    pub menu_skin: Arc<MenuSkin>,
 }
 
 impl App {
     /// `prefer_wayland`: `Some(true)` forces Wayland, `Some(false)` forces X11,
     /// `None` lets winit auto-select.
-    pub async fn new(prefer_wayland: Option<bool>) -> Self {
+    pub fn new(prefer_wayland: Option<bool>, resource_handler: ResourceHandler, menu_skin_xml: &[u8]) -> Self {
+        let menu_skin = Arc::new(parse_menu_skin(menu_skin_xml));
+
         let mut builder = EventLoop::<Request>::with_user_event();
 
         #[cfg(target_os = "linux")]
@@ -95,18 +103,27 @@ impl App {
 
         let app_inner = AppInner {
             windows: HashMap::default(),
+            painter: None,
             proxy: event_loop_proxy.clone(),
+            last_resized_window: None,
         };
+
         App {
             event_loop: Arc::new(EventLoopWrapper::new(event_loop, app_inner)),
             event_loop_proxy,
             is_wayland,
+            resource_handler,
+            menu_skin,
         }
     }
 
     /// Returns `true` if the underlying event loop is connected to a Wayland compositor.
     pub fn is_wayland(&self) -> bool {
         self.is_wayland
+    }
+
+    pub fn resource_handler(&self) -> &ResourceHandler {
+        &self.resource_handler
     }
 
     /// This MUST NOT be called from other threads.
@@ -122,13 +139,27 @@ impl App {
         ctx
     }
 
+    /// Creates an egui `Context` with all loaders, including pack loaders that
+    /// resolve `orpheus://orpheus/…` and `native://skin/…` URIs directly from
+    /// the `ResourceHandler` without any JS-side base64 conversion.
+    fn create_context_with_resources(&self) -> Context {
+        let ctx = Self::create_context();
+        ctx.add_image_loader(Arc::new(
+            pack_loader::PackLoader::for_web_pack(self.resource_handler.clone()),
+        ));
+        ctx.add_image_loader(Arc::new(
+            pack_loader::PackLoader::for_skin_pack(self.resource_handler.clone()),
+        ));
+        ctx
+    }
+
     pub async fn create_egui_window(
         &self,
         viewport_id: ViewportId,
         viewport_builder: ViewportBuilder,
         run_ui: impl FnMut(&Context) + Send + 'static,
     ) -> (Context, WindowId) {
-        let ctx = Self::create_context();
+        let ctx = self.create_context_with_resources();
         let (sender, receiver) = oneshot::channel();
         self.event_loop_proxy
             .send_event(Request::CreateWindow(
@@ -146,6 +177,12 @@ impl App {
         // TODO: wait for window show
         self.event_loop_proxy
             .send_event(Request::ShowWindow(window))
+            .unwrap();
+    }
+
+    pub async fn repaint_window(&self, window: WindowId) {
+        self.event_loop_proxy
+            .send_event(Request::RepaintWindow(window))
             .unwrap();
     }
 
@@ -204,14 +241,18 @@ struct WindowState {
     window: Arc<Window>,
     viewport_id: ViewportId,
     egui_state: State,
-    painter: Painter,
     run_ui: RunUI,
     message_handler: Option<WindowMessageHandler>,
+    viewport_info: ViewportInfo,
 }
 
 struct AppInner {
     windows: HashMap<WindowId, WindowState>,
+    painter: Option<Painter>,
     proxy: EventLoopProxy<Request>,
+    /// Tracks the last window that received a `Resized` event so the painter can
+    /// be notified when the resize phase ends (macOS CoreAnimation sync).
+    last_resized_window: Option<WindowId>,
 }
 
 impl ApplicationHandler<Request> for AppInner {
@@ -221,6 +262,15 @@ impl ApplicationHandler<Request> for AppInner {
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        // macOS CoreAnimation resize sync: on any event following a resize, notify
+        // the painter that the resize phase has ended so it can flush pending frames.
+        if self.last_resized_window == Some(window_id) {
+            if let (Some(ws), Some(painter)) = (self.windows.get(&window_id), &mut self.painter) {
+                painter.on_window_resize_state_change(ws.viewport_id, false);
+            }
+            self.last_resized_window = None;
+        }
+
         let Some(window_state) = self.windows.get_mut(&window_id) else {
             return;
         };
@@ -237,43 +287,104 @@ impl ApplicationHandler<Request> for AppInner {
         }
         match event {
             WindowEvent::RedrawRequested => {
-                let painter = &mut window_state.painter;
-
-                let raw_input = state.take_egui_input(window);
-                let ctx = state.egui_ctx().clone();
-
-                let full_output = ctx.run(raw_input, window_state.run_ui.0.as_mut());
-
-                state.handle_platform_output(window, full_output.platform_output);
-
-                let paint_jobs = ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+                let Some(painter) = &mut self.painter else { return };
                 let viewport_id = window_state.viewport_id;
 
-                painter.paint_and_update_textures(
-                    viewport_id,
-                    full_output.pixels_per_point,
-                    [0.0, 0.0, 0.0, 0.0],
-                    &paint_jobs,
-                    &full_output.textures_delta,
-                    Vec::new(),
+                // Update viewport info (focus, size, DPI, etc.) before taking egui input
+                // so that ctx.input(|i| i.viewport()) returns accurate data this frame.
+                egui_winit::update_viewport_info(
+                    &mut window_state.viewport_info,
+                    state.egui_ctx(),
+                    window,
+                    false,
                 );
+
+                // Point the shared Painter at this viewport's surface before painting.
+                smol::block_on(painter.set_window(viewport_id, Some(window.clone()))).ok();
+
+                let mut raw_input = state.take_egui_input(window);
+                let ctx = state.egui_ctx().clone();
+
+                // Inject the current viewport info so egui widgets can query window state.
+                raw_input.viewports.insert(viewport_id, window_state.viewport_info.clone());
+
+                let egui::FullOutput {
+                    platform_output,
+                    textures_delta,
+                    shapes,
+                    pixels_per_point,
+                    viewport_output,
+                } = ctx.run(raw_input, window_state.run_ui.0.as_mut());
+
+                state.handle_platform_output(window, platform_output);
+
+                // Apply viewport commands (title changes, resize requests, decorations…)
+                for (id, vp_out) in viewport_output {
+                    if id == viewport_id {
+                        let mut actions_requested = vec![];
+                        egui_winit::process_viewport_commands(
+                            &ctx,
+                            &mut window_state.viewport_info,
+                            vp_out.commands,
+                            window,
+                            &mut actions_requested,
+                        );
+                        // actions_requested (e.g. Screenshot) are not currently handled
+                    }
+                }
+
+                // Skip GPU work for minimized windows.
+                let is_visible = window_state.viewport_info.minimized != Some(true);
+                if is_visible {
+                    let paint_jobs = ctx.tessellate(shapes, pixels_per_point);
+                    painter.paint_and_update_textures(
+                        viewport_id,
+                        pixels_per_point,
+                        [0.0, 0.0, 0.0, 0.0],
+                        &paint_jobs,
+                        &textures_delta,
+                        Vec::new(),
+                    );
+                }
+
+                // Prevent CPU spin on macOS when the window is minimized.
+                #[cfg(target_os = "macos")]
+                if window.is_minimized() == Some(true) {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
             }
             WindowEvent::CloseRequested => {
-                self.windows.remove(&window_id);
+                if let Some(ws) = self.windows.remove(&window_id) {
+                    // Release the wgpu surface for this viewport only.
+                    if let Some(painter) = &mut self.painter {
+                        smol::block_on(painter.set_window(ws.viewport_id, None)).ok();
+                    }
+                    if self.windows.is_empty() {
+                        if let Some(mut painter) = self.painter.take() {
+                            painter.destroy();
+                        }
+                    }
+                }
             }
             WindowEvent::Resized(size) => {
-                let Some(window_state) = self.windows.get_mut(&window_id) else {
-                    return;
-                };
                 let Some(w) = NonZeroU32::new(size.width) else {
                     return;
                 };
                 let Some(h) = NonZeroU32::new(size.height) else {
                     return;
                 };
-                let painter = &mut window_state.painter;
+                let Some(window_state) = self.windows.get_mut(&window_id) else {
+                    return;
+                };
                 let viewport_id = window_state.viewport_id;
-                painter.on_window_resized(viewport_id, w, h);
+                if let Some(painter) = &mut self.painter {
+                    painter.on_window_resized(viewport_id, w, h);
+                    // Mark this viewport as being in a resize phase; the painter uses
+                    // this on macOS to synchronise with CoreAnimation transactions.
+                    painter.on_window_resize_state_change(viewport_id, true);
+                }
+                // NLL: window_state borrow ends here; self fields are accessible again.
+                self.last_resized_window = Some(window_id);
             }
             _ => {}
         }
@@ -298,30 +409,39 @@ impl ApplicationHandler<Request> for AppInner {
                         let ctx = ctx_repaint.clone();
                         std::thread::spawn(move || {
                             std::thread::sleep(info.delay);
-                            // Only repaint if no pass has occurred since the request.
                             if ctx.cumulative_pass_nr() == info.current_cumulative_pass_nr {
                                 let _ = proxy.send_event(Request::RepaintWindow(id));
                             }
                         });
                     }
                 });
+
+                // Create the shared Painter once; reuse it for every subsequent window.
+                if self.painter.is_none() {
+                    let painter = smol::block_on(Painter::new(
+                        ctx.clone(),
+                        WgpuConfiguration::default(),
+                        true,
+                        RendererOptions::default(),
+                    ));
+                    self.painter = Some(painter);
+                }
+
+                smol::block_on(
+                    self.painter.as_mut().unwrap()
+                        .set_window(viewport_id, Some(window.clone()))
+                ).unwrap();
+
+                // Populate initial viewport info before the first frame.
+                let mut viewport_info = ViewportInfo::default();
+                egui_winit::update_viewport_info(&mut viewport_info, &ctx, &window, true);
                 let window_state = WindowState {
-                    window: window.clone(),
+                    egui_state: State::new(ctx, viewport_id, &window, None, None, None),
+                    window,
                     viewport_id,
-                    egui_state: State::new(ctx.clone(), viewport_id, &window, None, None, None),
-                    painter: smol::block_on(async move {
-                        let mut painter = Painter::new(
-                            ctx,
-                            WgpuConfiguration::default(),
-                            true,
-                            RendererOptions::default(),
-                        )
-                        .await;
-                        painter.set_window(viewport_id, Some(window)).await.unwrap();
-                        painter
-                    }),
                     run_ui,
                     message_handler: None,
+                    viewport_info,
                 };
                 self.windows.insert(id, window_state);
                 sender.send(id).unwrap();
@@ -337,13 +457,18 @@ impl ApplicationHandler<Request> for AppInner {
                 }
             }
             Request::CloseWindow(window_id) => {
-                if let Some(mut ws) = self.windows.remove(&window_id) {
-                    // Explicitly release the wgpu surface before dropping the
-                    // window; otherwise the GPU may still hold a reference and
-                    // the driver/validation layer will crash.
-                    smol::block_on(async {
-                        ws.painter.set_window(ws.viewport_id, None).await.ok();
-                    });
+                if let Some(ws) = self.windows.remove(&window_id) {
+                    // Release the wgpu surface for this viewport only.
+                    // The shared Painter itself stays alive for other windows.
+                    if let Some(painter) = &mut self.painter {
+                        smol::block_on(painter.set_window(ws.viewport_id, None)).ok();
+                    }
+                    // If this was the last window, destroy the shared Painter now.
+                    if self.windows.is_empty() {
+                        if let Some(mut painter) = self.painter.take() {
+                            painter.destroy();
+                        }
+                    }
                 }
             }
             Request::SetWindowMessageHandler(window_id, handler) => {

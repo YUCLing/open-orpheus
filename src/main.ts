@@ -17,10 +17,10 @@ import { getWindowSizeStatus } from "./main/util";
 import { loadFromFile as loadCookiesFromFile } from "./main/cookie";
 import { data as dataDir, userdata as userdataDir } from "./main/folders";
 import { prepareDeviceId } from "./main/device";
-import { readPack } from "./main/ntpk";
 import { CORE_VERSION } from "./constants";
 import { mkdir } from "node:fs/promises";
 import { initializeDatabases } from "./main/database";
+import { webPack } from "./main/pack";
 
 let quitting = false;
 
@@ -123,7 +123,7 @@ app.on("ready", async () => {
 
     await prepareDeviceId();
     await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
-    await readPack();
+    await webPack.readPack();
 
     createWindow();
   } catch (error) {

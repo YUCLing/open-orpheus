@@ -1,7 +1,7 @@
 import { protocol } from "electron";
 import mime from "mime";
 import { extname } from "node:path";
-import { readFile } from "./ntpk";
+import { readFile } from "./pack";
 
 protocol.registerSchemesAsPrivileged([
   {

@@ -3,56 +3,36 @@
 import { App, Menu } from "@open-orpheus/ui";
 
 import WebPack from "../src/main/packs/WebPack.ts";
+import SkinPack from "../src/main/packs/SkinPack.ts";
 
 setInterval(() => {
   // keep alive
 }, 1000);
 
-const pack = new WebPack("../package/web.pack");
+const webPack = new WebPack("../package/web.pack");
+const skinPack = new SkinPack("../package/common.skin");
 
-async function patchMenuItem(item: any) {
-  if (item.image_path) {
-    const url = new URL(item.image_path);
-    item.image_path = null;
-    if (url.protocol === "orpheus:" && url.hostname === "orpheus") {
-      const path = url.pathname;
-      try {
-        const buf = await pack.readFile(path);
-        if (path.endsWith(".svg")) {
-          item.image_path = `base64://svg${buf.toString("base64")}`;
-        } else {
-          item.image_path = `base64://raw${buf.toString("base64")}`;
-        }
-      } catch {
-        /* empty */
-      }
-    }
-  }
-  if (item.children) {
-    for (const child of item.children) {
-      await patchMenuItem(child);
-    }
-  }
-}
-
-async function parseMenuData(menuData: any) {
-  menuData.content = JSON.parse(menuData.content);
-  menuData.hotkey = JSON.parse(menuData.hotkey);
-
-  for (const item of menuData.content) {
-    await patchMenuItem(item);
-  }
-
-  return menuData;
+function parseMenuData(menuData: any) {
+  return {
+    ...menuData,
+    content: JSON.parse(menuData.content),
+    hotkey: JSON.parse(menuData.hotkey),
+  };
 }
 
 async function main() {
-  await pack.readPack();
+  await webPack.readPack();
+  await skinPack.readPack();
 
-  const app = new App();
+  const app = await App.create({
+    preferWayland: true,
+    readWebPack: webPack.readFile.bind(webPack),
+    readSkinPack: skinPack.readFile.bind(skinPack),
+  });
 
-  //const menu = new Menu(app, await parseMenuData(MENU_DATA));
-  const menu2 = new Menu(app, await parseMenuData(MENU_DATA_2));
+  //const menu = new Menu(app, parseMenuData(MENU_DATA));
+  const menu2 = new Menu(app, parseMenuData(MENU_DATA_2));
+  menu2.show();
 }
 
 main();

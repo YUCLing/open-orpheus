@@ -118,6 +118,11 @@ function createSource(file: string, zipOffset: number) {
 }
 
 export default class SkinPack extends Pack {
+  // Stores pre-buffered file contents. unzipper.File.buffer() with a password
+  // can only be called once per instance (the encrypted stream is consumed),
+  // so we eagerly read all entries during readPack() instead.
+  private buffers: Map<string, Buffer> = new Map();
+
   async readPack(verify = true): Promise<void> {
     const { sigSize, zipOffset } = await parseHeader(this.path);
 
@@ -142,14 +147,16 @@ export default class SkinPack extends Pack {
     const zipper = await unzipper.Open.custom(createSource(this.path, zipOffset));
     for (const file of zipper.files) {
       if (file.type === "File") {
-        this.files.set(normalize("/" + file.path), file);
+        const key = normalize("/" + file.path);
+        this.files.set(key, file);
+        this.buffers.set(key, await file.buffer(ZIP_PASSWORD));
       }
     }
   }
 
   async readFile(path: string): Promise<Buffer> {
-    const file = this.files.get(normalize(path));
-    if (!file) throw new Error(`File not found in skin pack: ${path}`);
-    return await file.buffer(ZIP_PASSWORD);
+    const buf = this.buffers.get(normalize(path));
+    if (!buf) throw new Error(`File not found in skin pack: ${path}`);
+    return buf;
   }
 }

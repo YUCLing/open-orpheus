@@ -3,12 +3,14 @@ import path from "node:path";
 import os from "node:os";
 
 import { dragWindow, isWayland } from "@open-orpheus/window";
+import { Menu as NativeMenu } from "@open-orpheus/ui";
 
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
 import { getMenus, setMaximumSize } from "../window";
 import { AppMenuItem, appMenuItemToMenuItem } from "../menu";
+import { getApp } from "../ui";
 
 function shouldApplyScaleFactor() {
   // TODO: Confirm macOS desired behavior, Windows and Linux is already tested to be correct
@@ -254,18 +256,34 @@ registerCallHandler<MenuRequest, void>(
   }
 );
 
+function parseMenuData(menuData: MenuRequest[0]) {
+  return {
+    ...menuData,
+    content: JSON.parse(menuData.content),
+    hotkey: JSON.parse(menuData.hotkey),
+  };
+}
 registerCallHandler<MenuRequest, void>(
   "winhelper.popupMenu",
   async (event, data, id) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
     const menus = getMenus(wnd);
-    const items = JSON.parse(data.content);
-    menus[id] = items;
-    const nativeMenu = new Menu();
-    for (const item of items) {
-      nativeMenu.append(await appMenuItemToMenuItem(event.sender, item, id));
+    if (os.platform() === "linux" && isWayland()) {
+      const menu = new NativeMenu(getApp(), parseMenuData(data));
+      menus[id] = menu as unknown as AppMenuItem[]; // Only Wayland is using NativeMenu, so this cast is safe
+      menu.onClick((itemId) => {
+        event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
+      });
+      menu.show();
+    } else {
+      const items = JSON.parse(data.content);
+      menus[id] = items;
+      const nativeMenu = new Menu();
+      for (const item of items) {
+        nativeMenu.append(await appMenuItemToMenuItem(event.sender, item, id));
+      }
+      nativeMenu.popup({ window: wnd });
     }
-    nativeMenu.popup({ window: wnd });
   }
 );

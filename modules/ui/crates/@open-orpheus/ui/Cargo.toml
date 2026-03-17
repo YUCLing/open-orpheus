@@ -20,7 +20,8 @@ egui_extras = { version = "0.33.3", features = ["svg", "image"] }
 font-kit = { version = "0.14.3", features = ["source-fontconfig-dlopen"] }
 image = { version = "0.25.10", features = ["jpeg", "png"] }
 libuv-sys2 = "~1.52.1"
-neon = { version = "1.1", features = ["serde", "sys"] }
+neon = { version = "1.1", features = ["serde", "sys", "futures"] }
+quick-xml = "0.37"
 oneshot = { version = "0.2.1", features = ["async"] }
 rand = "0.10.0"
 resvg = "0.45.1"

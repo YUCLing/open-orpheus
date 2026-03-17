@@ -1,5 +1,5 @@
 import App from "./App.cjs";
-import { createMenu, showMenu } from "./load.cjs";
+import { createMenu, showMenu, setMenuOnClick } from "./module.cjs";
 
 export default class Menu {
   private _ptr: number;
@@ -10,5 +10,9 @@ export default class Menu {
 
   show(): void {
     showMenu(this._ptr);
+  }
+
+  onClick(callback: (id: string) => void): void {
+    setMenuOnClick(this._ptr, callback);
   }
 }

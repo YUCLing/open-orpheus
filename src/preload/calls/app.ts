@@ -88,9 +88,6 @@ registerCallHandler<[], [boolean]>("app.initUrls", () => {
   return [true];
 });
 
-// TODO: Implement this properly
-registerCallHandler<[], [boolean]>("app.loadSkinPackets", () => [true]);
-
 registerCallHandler<[string, string, object], void>(
   "app.getNativeData",
   (taskId, key) => {

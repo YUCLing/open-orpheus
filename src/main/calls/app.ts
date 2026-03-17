@@ -5,10 +5,15 @@ import {
   ThumbarButton,
   WebContents,
 } from "electron";
+
+import { isWayland } from "@open-orpheus/window";
+
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { pngFromIco } from "../util";
 import os from "node:os";
+import { loadSkinPack } from "../pack";
+import { createApp } from "../ui";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   console.log(...args);
@@ -119,7 +124,21 @@ registerCallHandler<[ThumbnailOptions], void>(
   }
 );
 
-registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [true]);
+registerCallHandler<[string, string], [boolean]>("app.loadSkinPackets", async (event, name) => {
+  try {
+    await loadSkinPack(name);
+    if (os.platform() === "linux" && isWayland()) {
+      // We create app here because App's initialization requires the skin pack to be loaded
+      await createApp(true);
+    }
+    return [true];
+  } catch (e) {
+    console.error("Failed to load skin pack", e);
+    return [false];
+  }
+});
+
+registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [false]);
 
 registerCallHandler<[], void>("app.getDefaultMusicPlayPath", () => {
   return;
