@@ -1,7 +1,7 @@
 use std::{ffi::c_void, sync::Arc};
 
 use egui::{ViewportBuilder, ViewportId};
-use libuv_sys2::{uv_close, uv_handle_t, uv_timer_init, uv_timer_start, uv_timer_stop, uv_timer_t};
+use libuv_sys2::{uv_close, uv_handle, uv_handle_get_data, uv_handle_set_data, uv_handle_t, uv_timer_init, uv_timer_start, uv_timer_stop, uv_timer_t};
 use neon::{
     event::Channel,
     handle::{Handle, Root},
@@ -82,7 +82,7 @@ fn js_pack_handler(
 }
 
 unsafe extern "C" fn on_timer(handle: *mut uv_timer_t) {
-    let state_ptr = unsafe { *handle }.data as *mut App;
+    let state_ptr = unsafe { uv_handle_get_data(uv_handle!(handle)) } as *mut App;
     if state_ptr.is_null() {
         return;
     }
@@ -118,7 +118,7 @@ fn create_app<'cx>(mut cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<
     let loop_ptr = napi::get_uv_loop_from_neon(&mut cx).or_else(|x| cx.throw_error(x))?;
     let ptr = Box::into_raw(Box::new(app));
     let timer = Box::into_raw(Box::new(unsafe { std::mem::zeroed::<uv_timer_t>() }));
-    unsafe { (*timer).data = ptr as *mut c_void };
+    unsafe { uv_handle_set_data(uv_handle!(timer), ptr as *mut c_void) };
     let rc = unsafe { uv_timer_init(loop_ptr, timer) };
     if rc != 0 {
         unsafe {
