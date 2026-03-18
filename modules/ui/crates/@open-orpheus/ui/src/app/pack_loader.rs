@@ -43,7 +43,10 @@ impl PackLoader {
     }
 
     /// Handles `orpheus://orpheus/<path>` via [`ResourceHandler::read_web_pack`].
-    pub(super) fn for_web_pack(resource_handler: ResourceHandler, cache: Option<PackImageCache>) -> Self {
+    pub(super) fn for_web_pack(
+        resource_handler: ResourceHandler,
+        cache: Option<PackImageCache>,
+    ) -> Self {
         Self::new(
             "orpheus://orpheus",
             Arc::new(move |path: String| {
@@ -55,7 +58,10 @@ impl PackLoader {
     }
 
     /// Handles `native://skin/<path>` via [`ResourceHandler::read_skin_pack`].
-    pub(super) fn for_skin_pack(resource_handler: ResourceHandler, cache: Option<PackImageCache>) -> Self {
+    pub(super) fn for_skin_pack(
+        resource_handler: ResourceHandler,
+        cache: Option<PackImageCache>,
+    ) -> Self {
         Self::new(
             "native://skin",
             Arc::new(move |path: String| {

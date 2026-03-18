@@ -1,5 +1,10 @@
 import App from "./App.cjs";
-import { createMenu, destroyMenu, showMenu, setMenuOnClick } from "./module.cjs";
+import {
+  createMenu,
+  destroyMenu,
+  showMenu,
+  setMenuOnClick,
+} from "./module.cjs";
 
 const finalizer = new FinalizationRegistry((ptr: number) => {
   destroyMenu(ptr);

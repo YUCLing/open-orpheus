@@ -1,4 +1,8 @@
-use std::{num::NonZeroU32, sync::{Arc, Mutex}, time::Duration};
+use std::{
+    num::NonZeroU32,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use egui::{Context, ViewportBuilder, ViewportId, ViewportInfo, ahash::HashMap};
 use egui_wgpu::{RendererOptions, WgpuConfiguration, winit::Painter};
@@ -19,7 +23,6 @@ use crate::app::{
 use crate::resource::ResourceHandler;
 use crate::skin::{MenuSkin, parse_menu_skin};
 
-mod base64_loader;
 mod fonts;
 mod pack_loader;
 mod wrappers;
@@ -27,7 +30,6 @@ mod wrappers;
 #[derive(Debug)]
 enum Request {
     CreateWindow(
-        Context,
         ViewportId,
         ViewportBuilder,
         RunUI,
@@ -35,6 +37,7 @@ enum Request {
     ),
     ShowWindow(WindowId),
     RepaintWindow(WindowId),
+    RepaintViewport(ViewportId),
     CloseWindow(WindowId),
     GetWindowOuterRect(
         WindowId,
@@ -52,15 +55,11 @@ pub struct App {
     event_loop: Arc<EventLoopWrapper>,
     event_loop_proxy: EventLoopProxy<Request>,
     /// Whether the event loop is running on a Wayland compositor.
-    /// Detected once at construction time from the actual display handle.
     is_wayland: bool,
+    ctx: Context,
     resource_handler: ResourceHandler,
-    /// Parsed skin for menus, loaded once at startup from `menu/skin.xml`.
-    pub menu_skin: Arc<MenuSkin>,
-    /// Shared image cache for `orpheus://orpheus/…` URIs.
-    web_pack_cache: pack_loader::PackImageCache,
-    /// Shared image cache for `native://skin/…` URIs.
-    skin_pack_cache: pack_loader::PackImageCache,
+    /// The loaded menu skin
+    pub menu_skin: Arc<MenuSkin>, // TODO: Make it replacable (maybe also make it Option)
 }
 
 impl App {
@@ -109,21 +108,60 @@ impl App {
             }
         };
 
+        let web_pack_cache: pack_loader::PackImageCache =
+            Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let skin_pack_cache: pack_loader::PackImageCache =
+            Arc::new(Mutex::new(std::collections::HashMap::new()));
+
+        let ctx = Self::create_context();
+        ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_web_pack(
+            resource_handler.clone(),
+            Some(web_pack_cache.clone()),
+        )));
+        ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_skin_pack(
+            resource_handler.clone(),
+            Some(skin_pack_cache.clone()),
+        )));
+
+        let proxy_for_repaint = event_loop_proxy.clone();
+        let ctx_for_repaint = ctx.clone();
+        ctx.set_request_repaint_callback(move |info| {
+            let proxy = proxy_for_repaint.clone();
+            let viewport_id = info.viewport_id;
+            if info.delay == Duration::ZERO {
+                let _ = proxy.send_event(Request::RepaintViewport(viewport_id));
+            } else {
+                let ctx = ctx_for_repaint.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(info.delay);
+                    if ctx.cumulative_pass_nr() == info.current_cumulative_pass_nr {
+                        let _ = proxy.send_event(Request::RepaintViewport(viewport_id));
+                    }
+                });
+            }
+        });
+
+        let painter = smol::block_on(Painter::new(
+            ctx.clone(),
+            WgpuConfiguration::default(),
+            true,
+            RendererOptions::default(),
+        ));
+
         let app_inner = AppInner {
             windows: HashMap::default(),
-            painter: None,
-            proxy: event_loop_proxy.clone(),
+            ctx: ctx.clone(),
+            painter: Some(painter),
             last_resized_window: None,
         };
 
         App {
             event_loop: Arc::new(EventLoopWrapper::new(event_loop, app_inner)),
             event_loop_proxy,
+            ctx,
             is_wayland,
             resource_handler,
             menu_skin,
-            web_pack_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            skin_pack_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -144,24 +182,7 @@ impl App {
 
     pub fn create_context() -> Context {
         let ctx = Context::default();
-        ctx.add_image_loader(Arc::new(base64_loader::Base64Loader {}));
         ctx.set_fonts(get_font_definitions());
-        ctx
-    }
-
-    /// Creates an egui `Context` with all loaders, including pack loaders that
-    /// resolve `orpheus://orpheus/…` and `native://skin/…` URIs directly from
-    /// the `ResourceHandler` without any JS-side base64 conversion.
-    fn create_context_with_resources(&self) -> Context {
-        let ctx = Self::create_context();
-        ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_web_pack(
-            self.resource_handler.clone(),
-            Some(self.web_pack_cache.clone()),
-        )));
-        ctx.add_image_loader(Arc::new(pack_loader::PackLoader::for_skin_pack(
-            self.resource_handler.clone(),
-            Some(self.skin_pack_cache.clone()),
-        )));
         ctx
     }
 
@@ -171,18 +192,16 @@ impl App {
         viewport_builder: ViewportBuilder,
         run_ui: impl FnMut(&Context) + Send + 'static,
     ) -> (Context, WindowId) {
-        let ctx = self.create_context_with_resources();
         let (sender, receiver) = oneshot::channel();
         self.event_loop_proxy
             .send_event(Request::CreateWindow(
-                ctx.clone(),
                 viewport_id,
                 viewport_builder,
                 RunUI(Box::new(run_ui)),
                 sender,
             ))
             .unwrap();
-        (ctx, receiver.await.unwrap())
+        (self.ctx.clone(), receiver.await.unwrap())
     }
 
     pub async fn show_window(&self, window: WindowId) {
@@ -260,8 +279,8 @@ struct WindowState {
 
 struct AppInner {
     windows: HashMap<WindowId, WindowState>,
+    ctx: Context,
     painter: Option<Painter>,
-    proxy: EventLoopProxy<Request>,
     /// Tracks the last window that received a `Resized` event so the painter can
     /// be notified when the resize phase ends (macOS CoreAnimation sync).
     last_resized_window: Option<WindowId>,
@@ -313,13 +332,11 @@ impl ApplicationHandler<Request> for AppInner {
                     false,
                 );
 
-                // Point the shared Painter at this viewport's surface before painting.
                 smol::block_on(painter.set_window(viewport_id, Some(window.clone()))).ok();
 
                 let mut raw_input = state.take_egui_input(window);
                 let ctx = state.egui_ctx().clone();
 
-                // Inject the current viewport info so egui widgets can query window state.
                 raw_input
                     .viewports
                     .insert(viewport_id, window_state.viewport_info.clone());
@@ -334,7 +351,6 @@ impl ApplicationHandler<Request> for AppInner {
 
                 state.handle_platform_output(window, platform_output);
 
-                // Apply viewport commands (title changes, resize requests, decorations…)
                 for (id, vp_out) in viewport_output {
                     if id == viewport_id {
                         let mut actions_requested = vec![];
@@ -410,38 +426,12 @@ impl ApplicationHandler<Request> for AppInner {
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Request) {
         match event {
-            Request::CreateWindow(ctx, viewport_id, viewport_builder, run_ui, sender) => {
+            Request::CreateWindow(viewport_id, viewport_builder, run_ui, sender) => {
+                let ctx = self.ctx.clone();
                 let window_attributes =
                     egui_winit::create_winit_window_attributes(&ctx, viewport_builder);
                 let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
                 let id = window.id();
-                let proxy = self.proxy.clone();
-                let ctx_repaint = ctx.clone();
-                ctx.set_request_repaint_callback(move |info| {
-                    let proxy = proxy.clone();
-                    if info.delay == Duration::ZERO {
-                        let _ = proxy.send_event(Request::RepaintWindow(id));
-                    } else {
-                        let ctx = ctx_repaint.clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(info.delay);
-                            if ctx.cumulative_pass_nr() == info.current_cumulative_pass_nr {
-                                let _ = proxy.send_event(Request::RepaintWindow(id));
-                            }
-                        });
-                    }
-                });
-
-                // Create the shared Painter once; reuse it for every subsequent window.
-                if self.painter.is_none() {
-                    let painter = smol::block_on(Painter::new(
-                        ctx.clone(),
-                        WgpuConfiguration::default(),
-                        true,
-                        RendererOptions::default(),
-                    ));
-                    self.painter = Some(painter);
-                }
 
                 smol::block_on(
                     self.painter
@@ -451,7 +441,7 @@ impl ApplicationHandler<Request> for AppInner {
                 )
                 .unwrap();
 
-                // Populate initial viewport info before the first frame.
+                // Setup viewport info.
                 let mut viewport_info = ViewportInfo::default();
                 egui_winit::update_viewport_info(&mut viewport_info, &ctx, &window, true);
                 let window_state = WindowState {
@@ -464,6 +454,15 @@ impl ApplicationHandler<Request> for AppInner {
                 };
                 self.windows.insert(id, window_state);
                 sender.send(id).unwrap();
+            }
+            Request::RepaintViewport(viewport_id) => {
+                if let Some(ws) = self
+                    .windows
+                    .values()
+                    .find(|ws| ws.viewport_id == viewport_id)
+                {
+                    ws.window.request_redraw();
+                }
             }
             Request::ShowWindow(window_id) => {
                 if let Some(window_state) = self.windows.get(&window_id) {
