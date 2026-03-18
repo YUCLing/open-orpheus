@@ -10,7 +10,7 @@ declare module "./load.cjs" {
     readSkinPack: (path: string) => Promise<Buffer>;
   }): [number, number];
   function destroyApp(appPtr: number, checkPtr: number): void;
-  function loadSkin(appPtr: number, path: string): Promise<void>;
+  function loadMenuSkin(appPtr: number, path: string): Promise<void>;
   function createWindow(appPtr: number): number;
   // TODO: Types
   function destroyMenu(menuPtr: number): void;

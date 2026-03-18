@@ -176,7 +176,7 @@ fn create_window(app_ptr: f64) {
 }
 
 #[neon::export]
-fn load_skin<'cx>(cx: &mut Cx<'cx>, app_ptr: f64, path: String) -> Handle<'cx, JsPromise> {
+fn load_menu_skin<'cx>(cx: &mut Cx<'cx>, app_ptr: f64, path: String) -> Handle<'cx, JsPromise> {
     let (deferred, promise) = cx.promise();
     let channel = cx.channel();
     smol::spawn(async move {

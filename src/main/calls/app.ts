@@ -130,7 +130,7 @@ registerCallHandler<[string, string], [boolean]>(
     try {
       await loadSkinPack(name);
       if (os.platform() === "linux" && isWayland()) {
-        await getApp().loadSkin("/menu/skin.xml");
+        await getApp().loadMenuSkin("/menu/skin.xml");
       }
       return [true];
     } catch (e) {

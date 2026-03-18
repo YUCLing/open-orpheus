@@ -30,7 +30,7 @@ async function main() {
     readSkinPack: skinPack.readFile.bind(skinPack),
   });
 
-  await app.loadSkin("/menu/skin.xml");
+  await app.loadMenuSkin("/menu/skin.xml");
 
   //const menu = new Menu(app, parseMenuData(MENU_DATA));
   const menu2 = new Menu(app, parseMenuData(MENU_DATA_2));
