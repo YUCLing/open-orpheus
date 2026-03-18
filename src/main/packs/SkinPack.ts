@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import { normalize } from "node:path";
 import unzipper from "unzipper";
 import Pack from "./Pack";
 
@@ -119,9 +118,6 @@ function createSource(file: string, zipOffset: number) {
 }
 
 export default class SkinPack extends Pack {
-  // Stores pre-buffered file contents. unzipper.File.buffer() with a password
-  // can only be called once per instance (the encrypted stream is consumed),
-  // so we eagerly read all entries during readPack() instead.
   private buffers: Map<string, Buffer> = new Map();
 
   async readPack(verify = true): Promise<void> {
@@ -150,16 +146,23 @@ export default class SkinPack extends Pack {
     );
     for (const file of zipper.files) {
       if (file.type === "File") {
-        const key = normalize("/" + file.path);
+        const key = this.normalizePath("/" + file.path);
         this.files.set(key, file);
-        this.buffers.set(key, await file.buffer(ZIP_PASSWORD));
       }
     }
   }
 
   async readFile(path: string): Promise<Buffer> {
-    const buf = this.buffers.get(normalize(path));
-    if (!buf) throw new Error(`File not found in skin pack: ${path}`);
+    path = this.normalizePath(path);
+    const file = this.files.get(path);
+    if (!file) {
+      throw new Error(`File ${path} isn't found in skin pack.`);
+    }
+    let buf = this.buffers.get(path);
+    if (!buf) {
+      buf = await file.buffer(ZIP_PASSWORD);
+      this.buffers.set(path, buf);
+    }
     return buf;
   }
 }

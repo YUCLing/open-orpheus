@@ -129,10 +129,6 @@ registerCallHandler<[string, string], [boolean]>(
   async (event, name) => {
     try {
       await loadSkinPack(name);
-      if (os.platform() === "linux" && isWayland()) {
-        // We create app here because App's initialization requires the skin pack to be loaded
-        await createApp(true);
-      }
       return [true];
     } catch (e) {
       console.error("Failed to load skin pack", e);
@@ -140,6 +136,23 @@ registerCallHandler<[string, string], [boolean]>(
     }
   }
 );
+
+registerCallHandler<
+  [
+    {
+      patchVersion: string;
+    },
+  ],
+  void
+>("app.onBootFinish", async () => {
+  // Currently UI module only supports Wayland properly.
+  if (os.platform() === "linux" && isWayland()) {
+    await createApp(true);
+  }
+});
+registerCallHandler<[], void>("app.appStartUpEnd", () => {
+  /* empty */
+});
 
 registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [
   false,

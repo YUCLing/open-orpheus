@@ -52,20 +52,6 @@ registerCallHandler<[], void>("app.getAppStartCommand", () => {
   /* empty */
 });
 
-registerCallHandler<
-  [
-    {
-      patchVersion: string;
-    },
-  ],
-  void
->("app.onBootFinish", () => {
-  /* empty */
-});
-registerCallHandler<[], void>("app.appStartUpEnd", () => {
-  /* empty */
-});
-
 const cooperation = {
   main: "",
   sub: "",

@@ -1,3 +1,5 @@
+import { normalize } from "node:path";
+
 import unzipper from "unzipper";
 
 export default abstract class Pack {
@@ -10,6 +12,13 @@ export default abstract class Pack {
 
   constructor(path: string) {
     this.path = path;
+  }
+
+  protected normalizePath(path: string): string {
+    if (!path.startsWith("/")) {
+      path = "/" + path;
+    }
+    return normalize(path);
   }
 
   abstract readPack(verify?: boolean): Promise<void>;
