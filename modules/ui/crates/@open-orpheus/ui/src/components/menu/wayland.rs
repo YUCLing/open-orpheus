@@ -148,7 +148,8 @@ pub async fn show_wayland_overlay(
 
                                     let hover_fill = Color32::from_rgb(225, 235, 252);
                                     let mut handle_click = |id: String, close: bool| {
-                                        *pending_click_for_closure.lock().unwrap() = Some((id, close));
+                                        *pending_click_for_closure.lock().unwrap() =
+                                            Some((id, close));
                                     };
                                     draw_menu_items(
                                         ui,

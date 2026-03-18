@@ -272,6 +272,13 @@ pub fn measure_items(
     let skin = skin.clone();
     crate::util::measure_ui(App::create_context(), skin.max_width, move |ui| {
         ui.style_mut().spacing.item_spacing.y = 0.0;
-        draw_menu_items(ui, items_ref, &skin, &templates, |_, _| None, &mut |_, _| {});
+        draw_menu_items(
+            ui,
+            items_ref,
+            &skin,
+            &templates,
+            |_, _| None,
+            &mut |_, _| {},
+        );
     })
 }

@@ -1,10 +1,8 @@
 use libuv_sys2::uv_loop_t;
 use neon::prelude::*;
-use std::{
-    ffi::{CStr, c_char, c_void},
-    ptr,
-    sync::OnceLock,
-};
+#[cfg(unix)]
+use std::ffi::{CStr, c_char};
+use std::{ffi::c_void, ptr, sync::OnceLock};
 
 // N-API types
 const NAPI_OK: i32 = 0;

@@ -160,7 +160,8 @@ impl Menu {
                                 ui.vertical(|ui| {
                                     ui.style_mut().spacing.item_spacing.y = 0.0;
                                     let mut handle_click = |id: String, close: bool| {
-                                        *pending_click_for_closure.lock().unwrap() = Some((id, close));
+                                        *pending_click_for_closure.lock().unwrap() =
+                                            Some((id, close));
                                     };
                                     draw_menu_items(
                                         ui,

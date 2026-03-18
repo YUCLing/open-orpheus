@@ -55,6 +55,7 @@ pub struct App {
     event_loop: Arc<EventLoopWrapper>,
     event_loop_proxy: EventLoopProxy<Request>,
     /// Whether the event loop is running on a Wayland compositor.
+    #[cfg(target_os = "linux")]
     is_wayland: bool,
     ctx: Context,
     resource_handler: ResourceHandler,
@@ -66,7 +67,7 @@ impl App {
     /// `prefer_wayland`: `Some(true)` forces Wayland, `Some(false)` forces X11,
     /// `None` lets winit auto-select.
     pub fn new(
-        prefer_wayland: Option<bool>,
+        #[cfg(target_os = "linux")] prefer_wayland: Option<bool>,
         resource_handler: ResourceHandler,
         menu_skin_xml: &[u8],
     ) -> Self {
@@ -93,19 +94,13 @@ impl App {
         let event_loop_proxy = event_loop.create_proxy();
 
         // Detect the backend that was *actually* selected by the compositor.
+        #[cfg(target_os = "linux")]
         let is_wayland = {
-            #[cfg(target_os = "linux")]
-            {
-                use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
-                matches!(
-                    event_loop.display_handle().unwrap().as_raw(),
-                    RawDisplayHandle::Wayland(_)
-                )
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                false
-            }
+            use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+            matches!(
+                event_loop.display_handle().unwrap().as_raw(),
+                RawDisplayHandle::Wayland(_)
+            )
         };
 
         let web_pack_cache: pack_loader::PackImageCache =
@@ -159,6 +154,7 @@ impl App {
             event_loop: Arc::new(EventLoopWrapper::new(event_loop, app_inner)),
             event_loop_proxy,
             ctx,
+            #[cfg(target_os = "linux")]
             is_wayland,
             resource_handler,
             menu_skin,
@@ -166,6 +162,7 @@ impl App {
     }
 
     /// Returns `true` if the underlying event loop is connected to a Wayland compositor.
+    #[cfg(target_os = "linux")]
     pub fn is_wayland(&self) -> bool {
         self.is_wayland
     }
