@@ -52,6 +52,7 @@ enum Request {
 
 #[derive(Clone)]
 pub struct App {
+    /// The event loop that is used to pump events from main thead only.
     event_loop: Arc<EventLoopWrapper>,
     event_loop_proxy: EventLoopProxy<Request>,
     /// Whether the event loop is running on a Wayland compositor.
@@ -59,8 +60,8 @@ pub struct App {
     is_wayland: bool,
     ctx: Context,
     resource_handler: ResourceHandler,
-    /// The loaded menu skin
-    pub menu_skin: Arc<MenuSkin>, // TODO: Make it replacable (maybe also make it Option)
+    /// The currently loaded menu skin
+    pub menu_skin: Option<Arc<MenuSkin>>,
 }
 
 impl App {
@@ -69,10 +70,7 @@ impl App {
     pub fn new(
         #[cfg(target_os = "linux")] prefer_wayland: Option<bool>,
         resource_handler: ResourceHandler,
-        menu_skin_xml: &[u8],
     ) -> Self {
-        let menu_skin = Arc::new(parse_menu_skin(menu_skin_xml));
-
         let mut builder = EventLoop::<Request>::with_user_event();
 
         #[cfg(target_os = "linux")]
@@ -157,8 +155,14 @@ impl App {
             #[cfg(target_os = "linux")]
             is_wayland,
             resource_handler,
-            menu_skin,
+            menu_skin: None,
         }
+    }
+
+    pub async fn load_menu_skin(&mut self, path: &str) -> Result<(), String> {
+        let data = self.resource_handler.read_skin_pack(path).await;
+        self.menu_skin = Some(Arc::new(parse_menu_skin(&data)));
+        Ok(())
     }
 
     /// Returns `true` if the underlying event loop is connected to a Wayland compositor.

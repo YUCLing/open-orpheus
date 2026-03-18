@@ -8,9 +8,9 @@ declare module "./load.cjs" {
     preferWayland?: boolean | null;
     readWebPack: (path: string) => Promise<Buffer>;
     readSkinPack: (path: string) => Promise<Buffer>;
-    menuSkinXml: Buffer;
   }): [number, number];
   function destroyApp(appPtr: number, checkPtr: number): void;
+  function loadSkin(appPtr: number, path: string): Promise<void>;
   function createWindow(appPtr: number): number;
   // TODO: Types
   function destroyMenu(menuPtr: number): void;

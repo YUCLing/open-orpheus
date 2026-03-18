@@ -13,7 +13,7 @@ import { loadFromOrpheusUrl } from "../orpheus";
 import { pngFromIco } from "../util";
 import os from "node:os";
 import { loadSkinPack } from "../pack";
-import { createApp } from "../ui";
+import { getApp } from "../ui";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   console.log(...args);
@@ -129,6 +129,9 @@ registerCallHandler<[string, string], [boolean]>(
   async (event, name) => {
     try {
       await loadSkinPack(name);
+      if (os.platform() === "linux" && isWayland()) {
+        await getApp().loadSkin("/menu/skin.xml");
+      }
       return [true];
     } catch (e) {
       console.error("Failed to load skin pack", e);
@@ -145,10 +148,7 @@ registerCallHandler<
   ],
   void
 >("app.onBootFinish", async () => {
-  // Currently UI module only supports Wayland properly.
-  if (os.platform() === "linux" && isWayland()) {
-    await createApp(true);
-  }
+  /* empty */
 });
 registerCallHandler<[], void>("app.appStartUpEnd", () => {
   /* empty */

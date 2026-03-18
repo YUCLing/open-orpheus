@@ -108,16 +108,13 @@ fn create_app<'cx>(mut cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<
         .prop(cx, "readSkinPack")
         .get::<Handle<JsFunction>>()?
         .root(cx);
-    let menu_skin_xml: Handle<JsBuffer> = options.prop(cx, "menuSkinXml").get()?;
-    let menu_skin_xml = TypedArray::as_slice(&*menu_skin_xml, cx).to_vec();
-
     let channel = cx.channel();
     let resource_handler = ResourceHandler::new(
         js_pack_handler(Arc::new(read_web_pack), channel.clone()),
         js_pack_handler(Arc::new(read_skin_pack), channel),
     );
 
-    let app = App::new(prefer_wayland, resource_handler, &menu_skin_xml);
+    let app = App::new(prefer_wayland, resource_handler);
     let loop_ptr = napi::get_uv_loop_from_neon(&mut cx).or_else(|x| cx.throw_error(x))?;
     let ptr = Box::into_raw(Box::new(app));
     let timer = Box::into_raw(Box::new(unsafe { std::mem::zeroed::<uv_timer_t>() }));
@@ -176,6 +173,30 @@ fn create_window(app_ptr: f64) {
             .await;
         app.show_window(id).await;
     });
+}
+
+#[neon::export]
+fn load_skin<'cx>(cx: &mut Cx<'cx>, app_ptr: f64, path: String) -> Handle<'cx, JsPromise> {
+    let (deferred, promise) = cx.promise();
+    let channel = cx.channel();
+    smol::spawn(async move {
+        let app = unsafe { &mut *(app_ptr as usize as *mut App) };
+        let result = app.load_menu_skin(&path).await;
+        channel.send(|mut cx| {
+            match result {
+                Ok(_) => {
+                    let val = cx.undefined();
+                    deferred.resolve(&mut cx, val);
+                },
+                Err(e) => {
+                    let val = cx.string(e);
+                    deferred.reject(&mut cx, val);
+                }
+            }
+            Ok(())
+        });
+    }).detach();
+    promise
 }
 
 /// Drops the `Menu` referenced by `menu_ptr`.

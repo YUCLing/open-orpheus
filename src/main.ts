@@ -3,6 +3,8 @@ import path from "node:path";
 import os from "node:os";
 import started from "electron-squirrel-startup";
 
+import { isWayland } from "@open-orpheus/window";
+
 // Handle errors as early as possible
 import "./error";
 
@@ -21,6 +23,7 @@ import { CORE_VERSION } from "./constants";
 import { mkdir } from "node:fs/promises";
 import { initializeDatabases } from "./main/database";
 import { webPack } from "./main/pack";
+import { createApp } from "./main/ui";
 
 let quitting = false;
 
@@ -124,6 +127,10 @@ app.on("ready", async () => {
     await prepareDeviceId();
     await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
     await webPack.readPack();
+
+    if (os.platform() === "linux" && isWayland()) {
+      await createApp(true);
+    }
 
     createWindow();
   } catch (error) {

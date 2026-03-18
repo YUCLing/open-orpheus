@@ -25,7 +25,7 @@ pub async fn show_wayland_overlay(
     items: Arc<Vec<MenuItem>>,
     click_handler: Option<Arc<dyn Fn(String) + Send + Sync + 'static>>,
 ) {
-    let skin = app.menu_skin.clone();
+    let skin = app.menu_skin.clone().expect("load_skin must be called before creating menus");
 
     // Load element templates recursively across the full item tree.
     let templates: Arc<std::collections::HashMap<String, ElementTemplate>> = {

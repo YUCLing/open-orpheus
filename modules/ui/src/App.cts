@@ -1,4 +1,4 @@
-import { createApp, createWindow, destroyApp } from "./module.cjs";
+import { createApp, createWindow, destroyApp, loadSkin } from "./module.cjs";
 
 const finalizer = new FinalizationRegistry((ptrs: [number, number]) => {
   destroyApp(...ptrs);
@@ -18,11 +18,14 @@ export default class App {
   }
 
   static async create(options: CreateAppOptions): Promise<App> {
-    const menuSkinXml = await options.readSkinPack("/menu/skin.xml");
-    const [ptr, timerPtr] = createApp({ ...options, menuSkinXml });
+    const [ptr, timerPtr] = createApp({ ...options });
     const app = new App(ptr, timerPtr);
     finalizer.register(app, [ptr, timerPtr]);
     return app;
+  }
+
+  loadSkin(path: string) {
+    return loadSkin(this._ptr, path);
   }
 
   createWindow() {

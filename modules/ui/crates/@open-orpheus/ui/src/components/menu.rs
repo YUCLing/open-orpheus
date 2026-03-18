@@ -66,7 +66,7 @@ impl Menu {
         close_all: Arc<AtomicBool>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
         Box::pin(async move {
-            let skin = app.menu_skin.clone();
+            let skin = app.menu_skin.clone().expect("load_skin must be called before creating menus");
             let templates: Arc<std::collections::HashMap<String, ElementTemplate>> = {
                 let mut map = std::collections::HashMap::new();
                 for item in items.iter() {
