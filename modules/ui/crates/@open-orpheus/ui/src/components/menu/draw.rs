@@ -60,7 +60,7 @@ pub fn draw_menu_items(
     skin: &MenuSkin,
     templates: &std::collections::HashMap<String, ElementTemplate>,
     mut on_item: impl FnMut(usize, &egui::Response) -> Option<Color32>,
-    on_click: &mut dyn FnMut(String),
+    on_click: &mut dyn FnMut(String, bool),
 ) {
     let [top_pad, left_pad, bottom_pad, right_pad] = skin.inset;
     let text_color = Color32::from_rgb(30, 30, 30);
@@ -102,7 +102,7 @@ pub fn draw_menu_items(
                     btns,
                     &mut btn_idx,
                     text_color,
-                    on_click,
+                    &mut |id| on_click(id, false),
                 );
                 frame.end(ui);
                 continue;
@@ -148,7 +148,7 @@ pub fn draw_menu_items(
         }
         if response.clicked() && item.enable && item.children.is_none() {
             if let Some(id) = &item.menu_id {
-                on_click(id.clone());
+                on_click(id.clone(), true);
             }
         }
         frame.paint(ui);
@@ -272,6 +272,6 @@ pub fn measure_items(
     let skin = skin.clone();
     crate::util::measure_ui(App::create_context(), skin.max_width, move |ui| {
         ui.style_mut().spacing.item_spacing.y = 0.0;
-        draw_menu_items(ui, items_ref, &skin, &templates, |_, _| None, &mut |_| {});
+        draw_menu_items(ui, items_ref, &skin, &templates, |_, _| None, &mut |_, _| {});
     })
 }

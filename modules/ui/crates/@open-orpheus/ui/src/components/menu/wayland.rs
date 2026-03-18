@@ -69,7 +69,7 @@ pub async fn show_wayland_overlay(
     let dismiss = Arc::new(AtomicBool::new(false));
 
     // Pending click ID: written by the egui render closure, drained by the poll loop.
-    let pending_click: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let pending_click: Arc<Mutex<Option<(String, bool)>>> = Arc::new(Mutex::new(None));
 
     // Stays false while we're waiting for the compositor to report cursor position;
     // set to true once the root position is committed (so we don't flash at (0,0)).
@@ -147,8 +147,8 @@ pub async fn show_wayland_overlay(
                                     ui.style_mut().spacing.item_spacing.y = 0.0;
 
                                     let hover_fill = Color32::from_rgb(225, 235, 252);
-                                    let mut handle_click = |id: String| {
-                                        *pending_click_for_closure.lock().unwrap() = Some(id);
+                                    let mut handle_click = |id: String, close: bool| {
+                                        *pending_click_for_closure.lock().unwrap() = Some((id, close));
                                     };
                                     draw_menu_items(
                                         ui,
@@ -315,12 +315,14 @@ pub async fn show_wayland_overlay(
             break;
         }
         let pending_id = pending_click.lock().unwrap().take();
-        if let Some(id) = pending_id {
+        if let Some((id, should_close)) = pending_id {
             if let Some(handler) = &click_handler {
                 handler(id);
             }
-            app.close_window(window_id).await;
-            break;
+            if should_close {
+                app.close_window(window_id).await;
+                break;
+            }
         }
         smol::Timer::after(Duration::from_millis(16)).await;
     }

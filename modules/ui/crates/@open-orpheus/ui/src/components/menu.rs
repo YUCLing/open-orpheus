@@ -100,7 +100,7 @@ impl Menu {
 
             // Slot for the pending click ID: written by the egui render closure,
             // read and drained by the polling loop.
-            let pending_click: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            let pending_click: Arc<Mutex<Option<(String, bool)>>> = Arc::new(Mutex::new(None));
             // Shared slot written just after create_egui_window so the render
             // closure (which shares it) can learn its own window_id lazily.
             let self_window_id: Arc<OnceLock<winit::window::WindowId>> = Arc::new(OnceLock::new());
@@ -159,8 +159,8 @@ impl Menu {
                                 ui.style_mut().interaction.selectable_labels = false;
                                 ui.vertical(|ui| {
                                     ui.style_mut().spacing.item_spacing.y = 0.0;
-                                    let mut handle_click = |id: String| {
-                                        *pending_click_for_closure.lock().unwrap() = Some(id);
+                                    let mut handle_click = |id: String, close: bool| {
+                                        *pending_click_for_closure.lock().unwrap() = Some((id, close));
                                     };
                                     draw_menu_items(
                                         ui,
@@ -263,13 +263,15 @@ impl Menu {
                         break;
                     }
                     let pending_id = pending_click.lock().unwrap().take();
-                    if let Some(id) = pending_id {
+                    if let Some((id, should_close)) = pending_id {
                         if let Some(handler) = &click_handler {
                             handler(id);
                         }
-                        close_all.store(true, Ordering::Relaxed);
-                        app.close_window(window_id).await;
-                        break;
+                        if should_close {
+                            close_all.store(true, Ordering::Relaxed);
+                            app.close_window(window_id).await;
+                            break;
+                        }
                     }
                     let hovered = parent_hovered.load(Ordering::Relaxed)
                         || self_hovered.load(Ordering::Relaxed);
@@ -323,13 +325,15 @@ impl Menu {
                         break;
                     }
                     let pending_id = pending_click.lock().unwrap().take();
-                    if let Some(id) = pending_id {
+                    if let Some((id, should_close)) = pending_id {
                         if let Some(handler) = &click_handler {
                             handler(id);
                         }
-                        close_all.store(true, Ordering::Relaxed);
-                        app.close_window(window_id).await;
-                        break;
+                        if should_close {
+                            close_all.store(true, Ordering::Relaxed);
+                            app.close_window(window_id).await;
+                            break;
+                        }
                     }
                     // Close only when this window has truly lost focus *and* no
                     // submenu is currently open.  Doing this check in the poll loop
