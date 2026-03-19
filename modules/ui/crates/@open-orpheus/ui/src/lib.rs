@@ -102,6 +102,7 @@ unsafe extern "C" fn on_close(handle: *mut uv_handle_t) {
 
 #[neon::export]
 fn create_app<'cx>(mut cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<'cx, JsArray> {
+    #[cfg(target_os = "linux")]
     let prefer_wayland = options.prop(cx, "preferWayland").get()?;
     let read_web_pack = options
         .prop(cx, "readWebPack")
@@ -117,7 +118,11 @@ fn create_app<'cx>(mut cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<
         js_pack_handler(Arc::new(read_skin_pack), channel),
     );
 
-    let app = App::new(prefer_wayland, resource_handler);
+    let app = App::new(
+        #[cfg(target_os = "linux")]
+        prefer_wayland,
+        resource_handler,
+    );
     let loop_ptr = napi::get_uv_loop_from_neon(&mut cx).or_else(|x| cx.throw_error(x))?;
     let ptr = Box::into_raw(Box::new(app));
     let timer = Box::into_raw(Box::new(unsafe { std::mem::zeroed::<uv_timer_t>() }));
