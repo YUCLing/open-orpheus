@@ -22,6 +22,6 @@ features = [
 ]
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ilhook = "2.3.0"
+retour = "0.4.0-alpha.4"
 libc = "0.2.182"
 x11rb = "0.13.2"
