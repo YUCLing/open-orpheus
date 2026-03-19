@@ -15,13 +15,9 @@ use std::time::Duration;
 use egui::{Color32, ViewportBuilder, ViewportId};
 use winit::{dpi::LogicalPosition, event::WindowEvent};
 
-use crate::{
-    app::App,
-    skin::{ElementTemplate, parse_element_template},
-    util::random_string,
-};
+use crate::{app::App, util::random_string};
 
-use draw::{clamp_to_screen, draw_menu_items, measure_items};
+use draw::{clamp_to_screen, draw_menu_items, load_templates, measure_items};
 
 pub struct Menu {
     app: App,
@@ -86,21 +82,7 @@ impl Menu {
                 .menu_skin
                 .clone()
                 .expect("load_skin must be called before creating menus");
-            let templates: Arc<std::collections::HashMap<String, ElementTemplate>> = {
-                let mut map = std::collections::HashMap::new();
-                for item in items.iter() {
-                    if let Some(style) = &item.style {
-                        if !map.contains_key(style.as_str()) {
-                            let xml = app
-                                .resource_handler()
-                                .read_skin_pack(&format!("/{}", style))
-                                .await;
-                            map.insert(style.clone(), parse_element_template(&xml));
-                        }
-                    }
-                }
-                Arc::new(map)
-            };
+            let templates = load_templates(&app, &items).await;
 
             let parent_item_hovered: Vec<Arc<AtomicBool>> = items
                 .iter()
@@ -191,14 +173,13 @@ impl Menu {
                                         &skin,
                                         &templates,
                                         &overrides_guard,
-                                        |idx, response| {
-                                            let item = &items[idx];
+                                        |idx, effective_item, response| {
                                             let parent_hover = &parent_item_hovered[idx];
                                             let is_submenu_open = &submenu_open[idx];
                                             let is_hovered = response.hovered();
                                             parent_hover.store(is_hovered, Ordering::Relaxed);
                                             if is_hovered {
-                                                if let Some(children) = &item.children {
+                                                if let Some(children) = &effective_item.children {
                                                     if !is_submenu_open
                                                         .swap(true, Ordering::Relaxed)
                                                     {

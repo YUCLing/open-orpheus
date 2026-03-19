@@ -5,10 +5,37 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
     app::App,
-    skin::{ElementTemplate, LayoutNode, MenuSkin, parse_btn_url},
+    skin::{ElementTemplate, LayoutNode, MenuSkin, parse_btn_url, parse_element_template},
 };
 
 use super::types::{MenuItem, MenuItemBtn, MenuItemPatch};
+
+/// Load [`ElementTemplate`]s for every distinct `style` referenced by `items`,
+/// recursively including any children. Returns a map keyed by style name.
+pub async fn load_templates(
+    app: &App,
+    items: &[MenuItem],
+) -> Arc<std::collections::HashMap<String, ElementTemplate>> {
+    let mut map = std::collections::HashMap::new();
+    let mut stack: Vec<&[MenuItem]> = vec![items];
+    while let Some(level) = stack.pop() {
+        for item in level {
+            if let Some(style) = &item.style {
+                if !map.contains_key(style.as_str()) {
+                    let xml = app
+                        .resource_handler()
+                        .read_skin_pack(&format!("/{}", style))
+                        .await;
+                    map.insert(style.clone(), parse_element_template(&xml));
+                }
+            }
+            if let Some(children) = &item.children {
+                stack.push(children);
+            }
+        }
+    }
+    Arc::new(map)
+}
 
 /// Compute the final logical position for a popup window of `size`, trying to
 /// stay inside the monitor that contains `desired_pos`.
@@ -60,7 +87,7 @@ pub fn draw_menu_items(
     skin: &MenuSkin,
     templates: &std::collections::HashMap<String, ElementTemplate>,
     overrides: &std::collections::HashMap<String, MenuItemPatch>,
-    mut on_item: impl FnMut(usize, &egui::Response) -> Option<Color32>,
+    mut on_item: impl FnMut(usize, &MenuItem, &egui::Response) -> Option<Color32>,
     on_click: &mut dyn FnMut(String, bool),
 ) {
     let [top_pad, left_pad, bottom_pad, right_pad] = skin.inset;
@@ -162,7 +189,7 @@ pub fn draw_menu_items(
         });
         let rect = frame.frame.outer_rect(frame.content_ui.min_rect());
         let response = ui.allocate_rect(rect, Sense::click());
-        if let Some(fill) = on_item(idx, &response) {
+        if let Some(fill) = on_item(idx, effective_item, &response) {
             frame.frame.fill = fill;
         }
         if response.clicked() && effective_item.enable && effective_item.children.is_none() {
@@ -297,7 +324,7 @@ pub fn measure_items(
             &skin,
             &templates,
             &std::collections::HashMap::new(),
-            |_, _| None,
+            |_, _, _| None,
             &mut |_, _| {},
         );
     })

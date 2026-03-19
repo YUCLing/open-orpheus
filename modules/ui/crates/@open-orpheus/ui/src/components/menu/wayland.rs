@@ -7,14 +7,10 @@ use std::{
 
 use egui::{Color32, Margin, ViewportBuilder, ViewportId};
 
-use crate::{
-    app::App,
-    skin::{ElementTemplate, parse_element_template},
-    util::random_string,
-};
+use crate::{app::App, util::random_string};
 
 use super::{
-    draw::{draw_menu_items, measure_items},
+    draw::{draw_menu_items, load_templates, measure_items},
     types::{MenuItem, MenuItemPatch},
 };
 
@@ -32,28 +28,7 @@ pub async fn show_wayland_overlay(
         .clone()
         .expect("load_skin must be called before creating menus");
 
-    // Load element templates recursively across the full item tree.
-    let templates: Arc<std::collections::HashMap<String, ElementTemplate>> = {
-        let mut map = std::collections::HashMap::new();
-        let mut stack: Vec<Arc<Vec<MenuItem>>> = vec![items.clone()];
-        while let Some(level) = stack.pop() {
-            for item in level.iter() {
-                if let Some(style) = &item.style {
-                    if !map.contains_key(style.as_str()) {
-                        let xml = app
-                            .resource_handler()
-                            .read_skin_pack(&format!("/{}", style))
-                            .await;
-                        map.insert(style.clone(), parse_element_template(&xml));
-                    }
-                }
-                if let Some(children) = &item.children {
-                    stack.push(children.clone());
-                }
-            }
-        }
-        Arc::new(map)
-    };
+    let templates = load_templates(&app, &items).await;
 
     // Large enough to cover any monitor; transparency hides the rest.
     const OVERLAY_W: f32 = 8192.0;
@@ -163,20 +138,7 @@ pub async fn show_wayland_overlay(
                                         &skin,
                                         &templates,
                                         &overrides_guard,
-                                        |idx, response| {
-                                            let item = &level_items[idx];
-                                            let effective_item_owned;
-                                            let effective_item = match item
-                                                .menu_id
-                                                .as_ref()
-                                                .and_then(|id| overrides_guard.get(id.as_str()))
-                                            {
-                                                Some(patch) => {
-                                                    effective_item_owned = patch.apply_to(item);
-                                                    &effective_item_owned
-                                                }
-                                                None => item,
-                                            };
+                                        |_idx, effective_item, response| {
                                             if response.hovered() {
                                                 hovered_at_depth = Some(depth);
                                                 if let Some(children) = &effective_item.children {
