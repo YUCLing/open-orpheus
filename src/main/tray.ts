@@ -54,10 +54,13 @@ export function install() {
   }
   trayIcon.on("click", () => {
     if (!mainWnd) return;
-    // Linux can only receives click, so treat click as right click instead.
+    // Linux can only receives click, so a different behavior is used
+    // The `onclick` will be send when main window is invisible, and `onrightclick` will be send when main window is visible
     mainWnd.webContents.send(
       "channel.call",
-      os.platform() !== "linux" ? "trayicon.onclick" : "trayicon.onrightclick"
+      os.platform() !== "linux" || !mainWnd.isVisible()
+        ? "trayicon.onclick"
+        : "trayicon.onrightclick"
     );
   });
   trayIcon.on("right-click", () => {
