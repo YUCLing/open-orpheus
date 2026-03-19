@@ -11,7 +11,9 @@ use crate::app::{AppInner, Request};
 
 pub struct RunUI(pub Box<dyn FnMut(&Context) + Send>);
 
-pub struct WindowMessageHandler(pub Box<dyn FnMut(WindowId, &WindowEvent, &Window) -> bool + Send>);
+type WindowMessageHandlerFn = Box<dyn FnMut(WindowId, &WindowEvent, &Window) -> bool + Send>;
+
+pub struct WindowMessageHandler(pub WindowMessageHandlerFn);
 
 impl std::fmt::Debug for RunUI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -36,6 +38,7 @@ impl EventLoopWrapper {
         )
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn get(&self) -> &mut (EventLoop<Request>, AppInner) {
         if self.1 != std::thread::current().id() {
             panic!("Trying to access event loop from other thread!");

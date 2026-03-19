@@ -1,11 +1,12 @@
 use std::{pin::Pin, sync::Arc};
 
+type ResourceFn =
+    Arc<Box<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync>>;
+
 #[derive(Clone)]
 pub struct ResourceHandler {
-    read_web_pack:
-        Arc<Box<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync>>,
-    read_skin_pack:
-        Arc<Box<dyn Fn(&str) -> Pin<Box<dyn Future<Output = Vec<u8>> + Send>> + Send + Sync>>,
+    read_web_pack: ResourceFn,
+    read_skin_pack: ResourceFn,
 }
 
 impl ResourceHandler {

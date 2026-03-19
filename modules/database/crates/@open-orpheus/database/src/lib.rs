@@ -43,7 +43,7 @@ fn execute_sql<'cx>(cx: &mut Cx<'cx>, ptr: f64, sql: String) -> JsResult<'cx, Js
 
     let t0 = Instant::now();
 
-    let mut batch = Batch::new(&conn, &sql);
+    let mut batch = Batch::new(conn, &sql);
     let mut results = Vec::new();
     let prev_changes = conn.total_changes();
 
@@ -68,9 +68,9 @@ fn execute_sql<'cx>(cx: &mut Cx<'cx>, ptr: f64, sql: String) -> JsResult<'cx, Js
         };
         while let Ok(Some(row)) = rows.next() {
             let row_obj = cx.empty_object();
-            for i in 0..column_count {
+            for (i, col_name) in column_names.iter().enumerate() {
                 let val = row.get_ref(i).unwrap();
-                let name = cx.string(&column_names[i]);
+                let name = cx.string(col_name.as_str());
                 let js_val = value_ref_to_js_string(cx, val);
                 row_obj.prop(cx, name).set(js_val).unwrap();
             }
@@ -153,7 +153,7 @@ fn execute_sqls<'cx>(cx: &mut Cx<'cx>, ptr: f64, sqls: Handle<JsArray>) -> JsRes
 
     let mut value: Option<Handle<JsValue>> = None;
     for (i, sql) in stmts.iter().enumerate() {
-        let Ok(mut stmt) = conn.prepare(&sql) else {
+        let Ok(mut stmt) = conn.prepare(sql) else {
             let err_msg = cx.string(format!("Failed to prepare SQL statement: {}", sql));
             return cx.throw(err_msg);
         };

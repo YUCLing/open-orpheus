@@ -277,6 +277,8 @@ impl Default for ElementTemplate {
 
 /// Parse an `element_*.xml` bytes slice into an [`ElementTemplate`].
 ///
+type ParseStackEntry = (Vec<u8>, Option<f32>, Option<f32>, Vec<LayoutNode>);
+
 /// Builds a [`LayoutNode`] tree that mirrors the DOM directly. The only
 /// structural contract is that `<Button>` elements appear in the order they
 /// map to the `btns` array — their container hierarchy is irrelevant and
@@ -287,7 +289,7 @@ pub fn parse_element_template(xml: &[u8]) -> ElementTemplate {
 
     let mut tpl = ElementTemplate::default();
     // Each frame: (tag_name_bytes, width_attr, height_attr, child_nodes)
-    let mut stack: Vec<(Vec<u8>, Option<f32>, Option<f32>, Vec<LayoutNode>)> = vec![];
+    let mut stack: Vec<ParseStackEntry> = vec![];
 
     loop {
         match reader.read_event() {
@@ -318,10 +320,10 @@ pub fn parse_element_template(xml: &[u8]) -> ElementTemplate {
                         }
                     }
                 }
-                if name == b"MenuElement" {
-                    if let Some(hv) = h {
-                        tpl.height = hv;
-                    }
+                if name == b"MenuElement"
+                    && let Some(hv) = h
+                {
+                    tpl.height = hv;
                 }
                 stack.push((name, w, h, vec![]));
             }

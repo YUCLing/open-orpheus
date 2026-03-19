@@ -146,7 +146,6 @@ impl Menu {
                 .create_egui_window(ViewportId::from_hash_of(random_string(10)), builder, {
                     let self_window_id = self_window_id.clone();
                     let open_submenu_count = open_submenu_count.clone();
-                    let templates = templates;
                     let click_handler_for_closure = click_handler.clone();
                     let close_all_for_closure = close_all.clone();
                     let pending_click_for_closure = pending_click.clone();
@@ -179,43 +178,32 @@ impl Menu {
                                             let is_hovered = response.hovered();
                                             parent_hover.store(is_hovered, Ordering::Relaxed);
                                             if is_hovered {
-                                                if let Some(children) = &effective_item.children {
-                                                    if !is_submenu_open
+                                                if let Some(children) = &effective_item.children
+                                                    && !is_submenu_open
                                                         .swap(true, Ordering::Relaxed)
-                                                    {
-                                                        if let Some(&parent_wid) =
-                                                            self_window_id.get()
-                                                        {
-                                                            // Increment *before* spawn so the root's
-                                                            // focus-loss guard already sees count > 0
-                                                            // when the OS moves focus to the new window.
-                                                            open_submenu_count
-                                                                .fetch_add(1, Ordering::Relaxed);
-                                                            smol::spawn(
-                                                                Self::show_menu_with_items(
-                                                                    app_for_closure.clone(),
-                                                                    children.clone(),
-                                                                    MenuPosition::RightOf {
-                                                                        parent_window_id:
-                                                                            parent_wid,
-                                                                        row_y_offset: response
-                                                                            .rect
-                                                                            .top(),
-                                                                    },
-                                                                    Some(parent_hover.clone()),
-                                                                    Some(is_submenu_open.clone()),
-                                                                    false,
-                                                                    open_submenu_count.clone(),
-                                                                    click_handler_for_closure
-                                                                        .clone(),
-                                                                    close_all_for_closure.clone(),
-                                                                    item_overrides_for_closure
-                                                                        .clone(),
-                                                                ),
-                                                            )
-                                                            .detach();
-                                                        }
-                                                    }
+                                                    && let Some(&parent_wid) = self_window_id.get()
+                                                {
+                                                    // Increment *before* spawn so the root's
+                                                    // focus-loss guard already sees count > 0
+                                                    // when the OS moves focus to the new window.
+                                                    open_submenu_count
+                                                        .fetch_add(1, Ordering::Relaxed);
+                                                    smol::spawn(Self::show_menu_with_items(
+                                                        app_for_closure.clone(),
+                                                        children.clone(),
+                                                        MenuPosition::RightOf {
+                                                            parent_window_id: parent_wid,
+                                                            row_y_offset: response.rect.top(),
+                                                        },
+                                                        Some(parent_hover.clone()),
+                                                        Some(is_submenu_open.clone()),
+                                                        false,
+                                                        open_submenu_count.clone(),
+                                                        click_handler_for_closure.clone(),
+                                                        close_all_for_closure.clone(),
+                                                        item_overrides_for_closure.clone(),
+                                                    ))
+                                                    .detach();
                                                 }
                                                 return Some(hover_fill);
                                             }

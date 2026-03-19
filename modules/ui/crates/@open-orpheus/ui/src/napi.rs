@@ -43,10 +43,7 @@ fn resolve_napi_get_uv_event_loop() -> Result<NapiGetUvEventLoop, String> {
             ));
         }
 
-        let symbol = dlsym(
-            handle,
-            b"napi_get_uv_event_loop\0".as_ptr().cast::<c_char>(),
-        );
+        let symbol = dlsym(handle, c"napi_get_uv_event_loop".as_ptr());
         if symbol.is_null() {
             let err = dlerror();
             let msg = if err.is_null() {
@@ -72,7 +69,7 @@ fn resolve_napi_get_uv_event_loop() -> Result<NapiGetUvEventLoop, String> {
             ));
         }
 
-        let symbol = GetProcAddress(module, b"napi_get_uv_event_loop\0".as_ptr());
+        let symbol = GetProcAddress(module, c"napi_get_uv_event_loop".as_ptr());
         if symbol.is_null() {
             return Err(format!(
                 "failed to resolve napi_get_uv_event_loop: {}",

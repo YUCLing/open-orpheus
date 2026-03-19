@@ -234,17 +234,17 @@ fn iface_of(id: u32) -> Option<Iface> {
     IFACES.get()?.lock().ok()?.get(&id).copied()
 }
 fn set_iface(id: u32, iface: Iface) {
-    if let Some(m) = IFACES.get() {
-        if let Ok(mut map) = m.lock() {
-            map.insert(id, iface);
-        }
+    if let Some(m) = IFACES.get()
+        && let Ok(mut map) = m.lock()
+    {
+        map.insert(id, iface);
     }
 }
 fn del_iface(id: u32) {
-    if let Some(m) = IFACES.get() {
-        if let Ok(mut map) = m.lock() {
-            map.remove(&id);
-        }
+    if let Some(m) = IFACES.get()
+        && let Ok(mut map) = m.lock()
+    {
+        map.remove(&id);
     }
 }
 
@@ -325,20 +325,19 @@ fn on_pointer_event(ptr_id: u32, op: u16, msg: &[u8]) {
     match op {
         EVT_ENTER => {
             // enter(serial: uint, surface: object, sx: fixed, sy: fixed) — 24 B
-            if let Some(surf_id) = ru32(msg, 12) {
-                if let Some(m) = POINTER_FOCUS.get() {
-                    if let Ok(mut map) = m.lock() {
-                        map.insert(ptr_id, surf_id);
-                    }
-                }
+            if let Some(surf_id) = ru32(msg, 12)
+                && let Some(m) = POINTER_FOCUS.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.insert(ptr_id, surf_id);
             }
         }
         EVT_LEAVE => {
             // A pointer can focus at most one surface at a time; just remove it.
-            if let Some(m) = POINTER_FOCUS.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.remove(&ptr_id);
-                }
+            if let Some(m) = POINTER_FOCUS.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.remove(&ptr_id);
             }
         }
         EVT_BUTTON => {
@@ -360,12 +359,11 @@ fn on_pointer_event(ptr_id: u32, op: u16, msg: &[u8]) {
                     .get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| map.get(&ptr_id).copied());
-                if let (Some(surf_id), Some(seat_id)) = (surf_id, seat_id) {
-                    if let Some(m) = LAST_BUTTON.get() {
-                        if let Ok(mut opt) = m.lock() {
-                            *opt = Some((seat_id, serial, surf_id));
-                        }
-                    }
+                if let (Some(surf_id), Some(seat_id)) = (surf_id, seat_id)
+                    && let Some(m) = LAST_BUTTON.get()
+                    && let Ok(mut opt) = m.lock()
+                {
+                    *opt = Some((seat_id, serial, surf_id));
                 }
             }
         }
@@ -420,10 +418,10 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
         (Iface::WlSeat, REQ_GET_POINTER) => {
             if let Some(new_id) = ru32(msg, 8) {
                 set_iface(new_id, Iface::WlPointer);
-                if let Some(m) = POINTER_SEAT.get() {
-                    if let Ok(mut map) = m.lock() {
-                        map.insert(new_id, oid);
-                    }
+                if let Some(m) = POINTER_SEAT.get()
+                    && let Ok(mut map) = m.lock()
+                {
+                    map.insert(new_id, oid);
                 }
             }
         }
@@ -432,10 +430,10 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
         (Iface::XdgWmBase, REQ_GET_XDG_SURFACE) => {
             if let (Some(xdg_id), Some(wl_id)) = (ru32(msg, 8), ru32(msg, 12)) {
                 set_iface(xdg_id, Iface::XdgSurface);
-                if let Some(m) = XDG_TO_WL.get() {
-                    if let Ok(mut map) = m.lock() {
-                        map.insert(xdg_id, wl_id);
-                    }
+                if let Some(m) = XDG_TO_WL.get()
+                    && let Ok(mut map) = m.lock()
+                {
+                    map.insert(xdg_id, wl_id);
                 }
             }
         }
@@ -444,10 +442,10 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
         (Iface::XdgSurface, REQ_GET_TOPLEVEL) => {
             if let Some(top_id) = ru32(msg, 8) {
                 set_iface(top_id, Iface::XdgToplevel);
-                if let Some(m) = TOP_TO_XDG.get() {
-                    if let Ok(mut map) = m.lock() {
-                        map.insert(top_id, oid);
-                    }
+                if let Some(m) = TOP_TO_XDG.get()
+                    && let Ok(mut map) = m.lock()
+                {
+                    map.insert(top_id, oid);
                 }
                 // Populate the direct wl_surface → xdg_toplevel lookup used by
                 // send_xdg_toplevel_move; this avoids a reverse scan at drag time.
@@ -455,12 +453,11 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
                     .get()
                     .and_then(|m| m.lock().ok())
                     .and_then(|map| map.get(&oid).copied());
-                if let Some(wl_id) = wl_id {
-                    if let Some(m) = WL_TO_TOP.get() {
-                        if let Ok(mut map) = m.lock() {
-                            map.insert(wl_id, top_id);
-                        }
-                    }
+                if let Some(wl_id) = wl_id
+                    && let Some(m) = WL_TO_TOP.get()
+                    && let Ok(mut map) = m.lock()
+                {
+                    map.insert(wl_id, top_id);
                 }
             }
         }
@@ -486,32 +483,32 @@ fn on_request(oid: u32, op: u16, msg: &[u8]) {
 fn purge(id: u32) {
     match iface_of(id) {
         Some(Iface::WlPointer) => {
-            if let Some(m) = POINTER_FOCUS.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.remove(&id);
-                }
+            if let Some(m) = POINTER_FOCUS.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.remove(&id);
             }
-            if let Some(m) = POINTER_SEAT.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.remove(&id);
-                }
+            if let Some(m) = POINTER_SEAT.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.remove(&id);
             }
         }
         Some(Iface::WlSurface) => {
-            if let Some(m) = XDG_TO_WL.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.retain(|_, &mut v| v != id);
-                }
+            if let Some(m) = XDG_TO_WL.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.retain(|_, &mut v| v != id);
             }
-            if let Some(m) = WL_TO_TOP.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.remove(&id);
-                }
+            if let Some(m) = WL_TO_TOP.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.remove(&id);
             }
-            if let Some(m) = POINTER_FOCUS.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.retain(|_, &mut v| v != id);
-                }
+            if let Some(m) = POINTER_FOCUS.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.retain(|_, &mut v| v != id);
             }
         }
         Some(Iface::XdgSurface) => {
@@ -524,29 +521,29 @@ fn purge(id: u32) {
             if let Some(tid) = owned_top {
                 purge(tid);
             }
-            if let Some(m) = XDG_TO_WL.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.remove(&id);
-                }
+            if let Some(m) = XDG_TO_WL.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.remove(&id);
             }
         }
         Some(Iface::XdgToplevel) => {
-            if let Some(m) = TOP_TO_XDG.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.remove(&id);
-                }
+            if let Some(m) = TOP_TO_XDG.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.remove(&id);
             }
-            if let Some(m) = WL_TO_TOP.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.retain(|_, &mut v| v != id);
-                }
+            if let Some(m) = WL_TO_TOP.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.retain(|_, &mut v| v != id);
             }
         }
         Some(Iface::WlSeat) => {
-            if let Some(m) = POINTER_SEAT.get() {
-                if let Ok(mut map) = m.lock() {
-                    map.retain(|_, &mut v| v != id);
-                }
+            if let Some(m) = POINTER_SEAT.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.retain(|_, &mut v| v != id);
             }
         }
         _ => {}
@@ -663,12 +660,11 @@ extern "C" fn hook_connect(fd: c_int, addr: *const c_void, addrlen: u32) -> c_in
     let ret = HOOK_CONNECT.get().map_or(-1, |h| h.call(fd, addr, addrlen));
     if ret == 0 && is_wayland_socket(addr, addrlen) {
         IS_WAYLAND.set(true).ok();
-        if let Some(guard) = WAYLAND_FD.get() {
-            if let Ok(mut opt) = guard.lock() {
-                if opt.is_none() {
-                    *opt = Some(fd);
-                }
-            }
+        if let Some(guard) = WAYLAND_FD.get()
+            && let Ok(mut opt) = guard.lock()
+            && opt.is_none()
+        {
+            *opt = Some(fd);
         }
     }
     ret

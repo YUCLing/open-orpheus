@@ -1,0 +1,70 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint-node:
+    name: ESLint & Prettier
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: yarn
+          cache-dependency-path: |
+            yarn.lock
+            modules/database/yarn.lock
+            modules/ui/yarn.lock
+            modules/window/yarn.lock
+
+      - name: Install module dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for module in modules/database modules/ui modules/window; do
+            echo "Installing deps for ${module}"
+            pushd "${module}" > /dev/null
+            yarn --frozen-lockfile
+            popd > /dev/null
+          done
+
+      - name: Install root dependencies
+        run: yarn --frozen-lockfile
+
+      - name: Run ESLint
+        run: yarn lint
+
+      - name: Check Prettier formatting
+        run: yarn prettier --check .
+
+  lint-rust:
+    name: Clippy & Rustfmt
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Check Rustfmt formatting
+        run: cargo fmt --all -- --check

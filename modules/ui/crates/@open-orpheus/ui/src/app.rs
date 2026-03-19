@@ -314,10 +314,10 @@ impl ApplicationHandler<Request> for AppInner {
             return;
         };
         let window = &window_state.window;
-        if let Some(handler) = window_state.message_handler.as_mut() {
-            if handler.0(window_id, &event, window) {
-                return;
-            }
+        if let Some(handler) = window_state.message_handler.as_mut()
+            && handler.0(window_id, &event, window)
+        {
+            return;
         }
         let state = &mut window_state.egui_state;
         let res = state.on_window_event(window, &event);
@@ -399,10 +399,10 @@ impl ApplicationHandler<Request> for AppInner {
                     if let Some(painter) = &mut self.painter {
                         smol::block_on(painter.set_window(ws.viewport_id, None)).ok();
                     }
-                    if self.windows.is_empty() {
-                        if let Some(mut painter) = self.painter.take() {
-                            painter.destroy();
-                        }
+                    if self.windows.is_empty()
+                        && let Some(mut painter) = self.painter.take()
+                    {
+                        painter.destroy();
                     }
                 }
             }
@@ -516,10 +516,10 @@ impl ApplicationHandler<Request> for AppInner {
                     .map(|ws| {
                         ws.window
                             .available_monitors()
-                            .filter_map(|m| {
+                            .map(|m| {
                                 let pos = m.position();
                                 let size = m.size();
-                                Some((pos, size))
+                                (pos, size)
                             })
                             .collect()
                     })

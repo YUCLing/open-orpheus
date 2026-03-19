@@ -20,14 +20,14 @@ pub async fn load_templates(
     let mut stack: Vec<&[MenuItem]> = vec![items];
     while let Some(level) = stack.pop() {
         for item in level {
-            if let Some(style) = &item.style {
-                if !map.contains_key(style.as_str()) {
-                    let xml = app
-                        .resource_handler()
-                        .read_skin_pack(&format!("/{}", style))
-                        .await;
-                    map.insert(style.clone(), parse_element_template(&xml));
-                }
+            if let Some(style) = &item.style
+                && !map.contains_key(style.as_str())
+            {
+                let xml = app
+                    .resource_handler()
+                    .read_skin_pack(&format!("/{}", style))
+                    .await;
+                map.insert(style.clone(), parse_element_template(&xml));
             }
             if let Some(children) = &item.children {
                 stack.push(children);
@@ -133,25 +133,24 @@ pub fn draw_menu_items(
             .style
             .as_ref()
             .and_then(|s| templates.get(s.as_str()))
+            && let Some(btns) = &effective_item.btns
         {
-            if let Some(btns) = &effective_item.btns {
-                let mut frame = egui::Frame::new().begin(ui);
-                frame
-                    .content_ui
-                    .set_width(ui.available_width() - left_pad - right_pad);
-                frame.content_ui.set_min_height(tpl.height);
-                let mut btn_idx = 0usize;
-                render_layout_node(
-                    &mut frame.content_ui,
-                    &tpl.layout,
-                    btns,
-                    &mut btn_idx,
-                    text_color,
-                    &mut |id| on_click(id, false),
-                );
-                frame.end(ui);
-                continue;
-            }
+            let mut frame = egui::Frame::new().begin(ui);
+            frame
+                .content_ui
+                .set_width(ui.available_width() - left_pad - right_pad);
+            frame.content_ui.set_min_height(tpl.height);
+            let mut btn_idx = 0usize;
+            render_layout_node(
+                &mut frame.content_ui,
+                &tpl.layout,
+                btns,
+                &mut btn_idx,
+                text_color,
+                &mut |id| on_click(id, false),
+            );
+            frame.end(ui);
+            continue;
         }
 
         // Normal text item.
@@ -192,10 +191,12 @@ pub fn draw_menu_items(
         if let Some(fill) = on_item(idx, effective_item, &response) {
             frame.frame.fill = fill;
         }
-        if response.clicked() && effective_item.enable && effective_item.children.is_none() {
-            if let Some(id) = &effective_item.menu_id {
-                on_click(id.clone(), true);
-            }
+        if response.clicked()
+            && effective_item.enable
+            && effective_item.children.is_none()
+            && let Some(id) = &effective_item.menu_id
+        {
+            on_click(id.clone(), true);
         }
         frame.paint(ui);
     }
@@ -270,33 +271,33 @@ pub fn render_layout_node(
             }
         }
         LayoutNode::Button { width, height } => {
-            if let Some(btn) = btns.get(*btn_idx) {
-                if let Some(images) = parse_btn_url(&btn.url) {
-                    let btn_size = Vec2::new(*width, *height);
-                    let (_id, btn_rect) = ui.allocate_space(btn_size);
-                    let hover_pos = ui.input(|i| i.pointer.hover_pos());
-                    let hovered = hover_pos.is_some_and(|p| btn_rect.contains(p));
-                    let pressed = hovered && ui.input(|i| i.pointer.any_down());
-                    let hot_or_normal = images.hot.as_ref().unwrap_or(&images.normal);
-                    let state = if !btn.enable {
-                        images.disabled.as_ref().unwrap_or(&images.normal)
-                    } else if pressed {
-                        images.pushed.as_ref().unwrap_or(hot_or_normal)
-                    } else if hovered {
-                        hot_or_normal
-                    } else {
-                        &images.normal
-                    };
-                    let btn_response = ui.put(
-                        btn_rect,
-                        egui::Image::new(state.uri.as_str())
-                            .fit_to_exact_size(btn_size)
-                            .tint(state.color.unwrap_or(text_color))
-                            .sense(egui::Sense::click()),
-                    );
-                    if btn_response.clicked() && btn.enable {
-                        on_btn_click(btn.id.clone());
-                    }
+            if let Some(btn) = btns.get(*btn_idx)
+                && let Some(images) = parse_btn_url(&btn.url)
+            {
+                let btn_size = Vec2::new(*width, *height);
+                let (_id, btn_rect) = ui.allocate_space(btn_size);
+                let hover_pos = ui.input(|i| i.pointer.hover_pos());
+                let hovered = hover_pos.is_some_and(|p| btn_rect.contains(p));
+                let pressed = hovered && ui.input(|i| i.pointer.any_down());
+                let hot_or_normal = images.hot.as_ref().unwrap_or(&images.normal);
+                let state = if !btn.enable {
+                    images.disabled.as_ref().unwrap_or(&images.normal)
+                } else if pressed {
+                    images.pushed.as_ref().unwrap_or(hot_or_normal)
+                } else if hovered {
+                    hot_or_normal
+                } else {
+                    &images.normal
+                };
+                let btn_response = ui.put(
+                    btn_rect,
+                    egui::Image::new(state.uri.as_str())
+                        .fit_to_exact_size(btn_size)
+                        .tint(state.color.unwrap_or(text_color))
+                        .sense(egui::Sense::click()),
+                );
+                if btn_response.clicked() && btn.enable {
+                    on_btn_click(btn.id.clone());
                 }
             }
             *btn_idx += 1;

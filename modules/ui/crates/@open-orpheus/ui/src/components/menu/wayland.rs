@@ -14,6 +14,8 @@ use super::{
     types::{MenuItem, MenuItemPatch},
 };
 
+type MenuLevelStack = Arc<Mutex<Vec<(Arc<Vec<MenuItem>>, egui::Pos2, f32)>>>;
+
 /// Wayland-only: renders the entire menu tree (root + submenus) as `egui::Area`s
 /// inside a single transparent fullscreen overlay window so we don't fight
 /// the compositor over window positions.
@@ -37,8 +39,7 @@ pub async fn show_wayland_overlay(
     // Stack of open levels: (items, top-left position in egui space, measured width).
     // Level 0 is the root menu; each subsequent entry is a submenu.
     let root_size = measure_items(&items, &skin, templates.clone());
-    let levels: Arc<Mutex<Vec<(Arc<Vec<MenuItem>>, egui::Pos2, f32)>>> =
-        Arc::new(Mutex::new(vec![(items, egui::Pos2::ZERO, root_size.x)]));
+    let levels: MenuLevelStack = Arc::new(Mutex::new(vec![(items, egui::Pos2::ZERO, root_size.x)]));
 
     // On the show() path (no anchor): set by the CursorMoved message handler
     // (physical → logical via scale_factor). We wait up to a short deadline for
@@ -76,7 +77,6 @@ pub async fn show_wayland_overlay(
             let render_ready = render_ready.clone();
             let submenu_idle_since = submenu_idle_since.clone();
             let skin = skin.clone();
-            let templates = templates;
             let pending_click_for_closure = pending_click.clone();
             move |ctx| {
                 if !render_ready.load(Ordering::Relaxed) || dismiss.load(Ordering::Relaxed) {
