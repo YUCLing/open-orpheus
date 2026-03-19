@@ -3,19 +3,19 @@ import { AppMenu } from "./menu";
 
 type WindowProperties = {
   maximumSize?: { x: number; y: number };
-  menus: AppMenu[];
+  menus: Map<number, AppMenu>;
   customProps: Record<string, unknown>;
 };
 
-const windowProperties = new Map<BrowserWindow, WindowProperties>();
+const windowProperties = new Map<number, WindowProperties>();
 
 app.on("browser-window-created", (event, wnd) => {
-  windowProperties.set(wnd, {
-    menus: [],
+  windowProperties.set(wnd.id, {
+    menus: new Map(),
     customProps: {},
   });
   wnd.on("closed", () => {
-    windowProperties.delete(wnd);
+    windowProperties.delete(wnd.id);
   });
 
   wnd.on("maximize", () => {
@@ -23,7 +23,7 @@ app.on("browser-window-created", (event, wnd) => {
   });
 
   wnd.on("unmaximize", () => {
-    const props = windowProperties.get(wnd);
+    const props = windowProperties.get(wnd.id);
     if (props?.maximumSize) {
       wnd.setMaximumSize(props.maximumSize.x, props.maximumSize.y);
     }
@@ -41,23 +41,23 @@ export function setMaximumSize(wnd: BrowserWindow, x: number, y: number) {
   if (wnd.isMaximized()) {
     wnd.setMaximumSize(x, y);
   }
-  const props = windowProperties.get(wnd);
+  const props = windowProperties.get(wnd.id);
   if (props) {
     props.maximumSize = { x, y };
   }
 }
 
-export function getMenus(wnd: BrowserWindow): AppMenu[] {
-  const props = windowProperties.get(wnd);
-  return props ? props.menus : [];
+export function getMenus(wnd: BrowserWindow): Map<number, AppMenu> {
+  const props = windowProperties.get(wnd.id);
+  return props ? props.menus : new Map();
 }
 
 export function setWindowProp<T>(wnd: BrowserWindow, prop: string, value: T) {
-  const customProps = windowProperties.get(wnd).customProps;
+  const customProps = windowProperties.get(wnd.id).customProps;
   customProps[prop] = value;
 }
 
 export function getWindowProp<T>(wnd: BrowserWindow, prop: string): T {
-  const customProps = windowProperties.get(wnd).customProps;
+  const customProps = windowProperties.get(wnd.id).customProps;
   return customProps[prop] as T;
 }

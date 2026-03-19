@@ -38,6 +38,7 @@ enum Request {
     ShowWindow(WindowId),
     RepaintWindow(WindowId),
     RepaintViewport(ViewportId),
+    RepaintAllViewports,
     CloseWindow(WindowId),
     GetWindowOuterRect(
         WindowId,
@@ -215,6 +216,12 @@ impl App {
     pub async fn repaint_window(&self, window: WindowId) {
         self.event_loop_proxy
             .send_event(Request::RepaintWindow(window))
+            .unwrap();
+    }
+
+    pub async fn repaint_all(&self) {
+        self.event_loop_proxy
+            .send_event(Request::RepaintAllViewports)
             .unwrap();
     }
 
@@ -473,6 +480,11 @@ impl ApplicationHandler<Request> for AppInner {
             Request::RepaintWindow(window_id) => {
                 if let Some(window_state) = self.windows.get(&window_id) {
                     window_state.window.request_redraw();
+                }
+            }
+            Request::RepaintAllViewports => {
+                for ws in self.windows.values() {
+                    ws.window.request_redraw();
                 }
             }
             Request::CloseWindow(window_id) => {

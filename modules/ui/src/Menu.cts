@@ -4,6 +4,7 @@ import {
   destroyMenu,
   showMenu,
   setMenuOnClick,
+  updateMenuItem,
 } from "./module.cjs";
 
 const finalizer = new FinalizationRegistry((ptr: number) => {
@@ -13,7 +14,7 @@ const finalizer = new FinalizationRegistry((ptr: number) => {
 export default class Menu {
   private _ptr: number;
 
-  constructor(app: App, menuData: any) {
+  constructor(app: App, menuData: unknown) {
     this._ptr = createMenu((app as unknown as { _ptr: number })._ptr, menuData);
     finalizer.register(this, this._ptr);
   }
@@ -24,5 +25,9 @@ export default class Menu {
 
   onClick(callback: (id: string) => void): void {
     setMenuOnClick(this._ptr, callback);
+  }
+
+  updateItem(item: unknown): void {
+    updateMenuItem(this._ptr, item);
   }
 }

@@ -3,10 +3,11 @@ mod types;
 #[cfg(target_os = "linux")]
 mod wayland;
 
-pub use types::{MenuData, MenuItem, MenuPosition};
+pub use types::{MenuData, MenuItem, MenuItemPatch, MenuPosition};
 
+use std::collections::HashMap;
 use std::sync::{
-    Arc, Mutex, OnceLock,
+    Arc, Mutex, OnceLock, RwLock,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::Duration;
@@ -26,6 +27,7 @@ pub struct Menu {
     app: App,
     menu_data: Arc<MenuData>,
     click_handler: Option<Arc<dyn Fn(String) + Send + Sync + 'static>>,
+    item_overrides: Arc<RwLock<HashMap<String, MenuItemPatch>>>,
 }
 
 impl Menu {
@@ -34,6 +36,7 @@ impl Menu {
             app: app.clone(),
             menu_data: Arc::new(menu_data),
             click_handler: None,
+            item_overrides: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -51,6 +54,18 @@ impl Menu {
         self.click_handler = Some(Arc::new(handler));
     }
 
+    /// Update an existing item in a live menu using a partial patch.
+    /// Only fields set to `Some(v)` in `patch` are changed; the rest are
+    /// inherited from the original item on the next rendered frame.
+    /// The target item is identified by `patch.menu_id`; has no effect if
+    /// `menu_id` is absent from the patch or the menu is not currently open.
+    pub fn update_item(&self, patch: MenuItemPatch) {
+        if let Some(Some(menu_id)) = patch.menu_id.clone() {
+            self.item_overrides.write().unwrap().insert(menu_id, patch);
+        }
+        smol::block_on(self.app.repaint_all());
+    }
+
     fn show_menu_with_items(
         app: App,
         items: Arc<Vec<MenuItem>>,
@@ -64,9 +79,13 @@ impl Menu {
         open_submenu_count: Arc<AtomicUsize>,
         click_handler: Option<Arc<dyn Fn(String) + Send + Sync + 'static>>,
         close_all: Arc<AtomicBool>,
+        item_overrides: Arc<RwLock<HashMap<String, MenuItemPatch>>>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
         Box::pin(async move {
-            let skin = app.menu_skin.clone().expect("load_skin must be called before creating menus");
+            let skin = app
+                .menu_skin
+                .clone()
+                .expect("load_skin must be called before creating menus");
             let templates: Arc<std::collections::HashMap<String, ElementTemplate>> = {
                 let mut map = std::collections::HashMap::new();
                 for item in items.iter() {
@@ -149,6 +168,7 @@ impl Menu {
                     let click_handler_for_closure = click_handler.clone();
                     let close_all_for_closure = close_all.clone();
                     let pending_click_for_closure = pending_click.clone();
+                    let item_overrides_for_closure = item_overrides.clone();
                     move |ctx| {
                         ctx.set_visuals(egui::Visuals::light());
                         let hover_fill = Color32::from_rgb(225, 235, 252);
@@ -163,11 +183,14 @@ impl Menu {
                                         *pending_click_for_closure.lock().unwrap() =
                                             Some((id, close));
                                     };
+                                    let overrides_guard =
+                                        item_overrides_for_closure.read().unwrap();
                                     draw_menu_items(
                                         ui,
                                         &items,
                                         &skin,
                                         &templates,
+                                        &overrides_guard,
                                         |idx, response| {
                                             let item = &items[idx];
                                             let parent_hover = &parent_item_hovered[idx];
@@ -205,6 +228,8 @@ impl Menu {
                                                                     click_handler_for_closure
                                                                         .clone(),
                                                                     close_all_for_closure.clone(),
+                                                                    item_overrides_for_closure
+                                                                        .clone(),
                                                                 ),
                                                             )
                                                             .detach();
@@ -366,6 +391,7 @@ impl Menu {
                 app,
                 menu_data.content.clone(),
                 self.click_handler.clone(),
+                self.item_overrides.clone(),
             ))
             .detach();
             return;
@@ -381,6 +407,7 @@ impl Menu {
             Arc::new(AtomicUsize::new(0)),
             self.click_handler.clone(),
             close_all,
+            self.item_overrides.clone(),
         ))
         .detach();
     }

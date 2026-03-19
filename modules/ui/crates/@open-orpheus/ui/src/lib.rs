@@ -1,7 +1,10 @@
 use std::{ffi::c_void, sync::Arc};
 
 use egui::{ViewportBuilder, ViewportId};
-use libuv_sys2::{uv_close, uv_handle, uv_handle_get_data, uv_handle_set_data, uv_handle_t, uv_timer_init, uv_timer_start, uv_timer_stop, uv_timer_t};
+use libuv_sys2::{
+    uv_close, uv_handle, uv_handle_get_data, uv_handle_set_data, uv_handle_t, uv_timer_init,
+    uv_timer_start, uv_timer_stop, uv_timer_t,
+};
 use neon::{
     event::Channel,
     handle::{Handle, Root},
@@ -15,7 +18,7 @@ use neon::{
 
 use crate::{
     app::App,
-    components::menu::{Menu, MenuData},
+    components::menu::{Menu, MenuData, MenuItemPatch},
     resource::ResourceHandler,
 };
 
@@ -187,7 +190,7 @@ fn load_menu_skin<'cx>(cx: &mut Cx<'cx>, app_ptr: f64, path: String) -> Handle<'
                 Ok(_) => {
                     let val = cx.undefined();
                     deferred.resolve(&mut cx, val);
-                },
+                }
                 Err(e) => {
                     let val = cx.string(e);
                     deferred.reject(&mut cx, val);
@@ -195,7 +198,8 @@ fn load_menu_skin<'cx>(cx: &mut Cx<'cx>, app_ptr: f64, path: String) -> Handle<'
             }
             Ok(())
         });
-    }).detach();
+    })
+    .detach();
     promise
 }
 
@@ -239,6 +243,15 @@ fn set_menu_on_click<'cx>(cx: &mut Cx<'cx>, menu_ptr: f64, callback: Handle<'cx,
             Ok(())
         });
     });
+}
+
+/// Updates a menu item in a live menu using a partial patch.
+/// Only fields set to `Some(v)` in the patch are changed; the target item is
+/// identified by `patch.menu_id` (no-op if absent).
+#[neon::export]
+fn update_menu_item(menu_ptr: f64, item: Json<MenuItemPatch>) {
+    let menu = unsafe { &*(menu_ptr as usize as *const Menu) };
+    menu.update_item(item.0);
 }
 
 // Use #[neon::main] to add additional behavior at module loading time.

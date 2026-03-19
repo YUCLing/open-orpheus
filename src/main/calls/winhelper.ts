@@ -9,7 +9,7 @@ import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
 import { getMenus, setMaximumSize } from "../window";
-import { AppMenuItem, appMenuItemToMenuItem } from "../menu";
+import { AppMenu, AppMenuItem, appMenuItemToMenuItem } from "../menu";
 import { getApp } from "../ui";
 
 function shouldApplyScaleFactor() {
@@ -238,13 +238,19 @@ registerCallHandler<MenuRequest, void>(
   async (event, data, id) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
+    id = 0; // TODO: id doesn't seem to be id, what it is?
     const menus = getMenus(wnd);
-    const menu = menus[id];
+    const menu = menus.get(id);
     if (!menu) {
       return;
     }
     const menuItems = JSON.parse(data.content) as AppMenuItem[];
     for (const item of menuItems) {
+      if (os.platform() === "linux" && isWayland()) {
+        // TODO: why `mine.svg` for `openVinylPage` update?
+        (menu as unknown as NativeMenu).updateItem(item);
+        continue;
+      }
       for (const oldItem of menu) {
         if (item.menu_id === oldItem.menu_id) {
           Object.assign(oldItem, item);
@@ -268,17 +274,18 @@ registerCallHandler<MenuRequest, void>(
   async (event, data, id) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
+    id = 0; // TODO: id doesn't seem to be id, what it is?
     const menus = getMenus(wnd);
     if (os.platform() === "linux" && isWayland()) {
       const menu = new NativeMenu(getApp(), parseMenuData(data));
-      menus[id] = menu as unknown as AppMenuItem[]; // Only Wayland is using NativeMenu, so this cast is safe
+      menus.set(id, menu as unknown as AppMenu); // Only Wayland is using NativeMenu, so this cast is safe
       menu.onClick((itemId) => {
         event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
       });
       menu.show();
     } else {
       const items = JSON.parse(data.content);
-      menus[id] = items;
+      menus.set(id, items);
       const nativeMenu = new Menu();
       for (const item of items) {
         nativeMenu.append(await appMenuItemToMenuItem(event.sender, item, id));

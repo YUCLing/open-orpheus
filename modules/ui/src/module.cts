@@ -14,12 +14,13 @@ declare module "./load.cjs" {
   function createWindow(appPtr: number): number;
   // TODO: Types
   function destroyMenu(menuPtr: number): void;
-  function createMenu(appPtr: number, menuData: any): number;
+  function createMenu(appPtr: number, menuData: unknown): number;
   function showMenu(menuPtr: number): void;
   function setMenuOnClick(
     menuPtr: number,
     callback: (id: string) => void
   ): void;
+  function updateMenuItem(menuPtr: number, item: unknown): void;
 }
 
 export = addon;

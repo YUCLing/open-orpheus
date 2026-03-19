@@ -1,4 +1,9 @@
-import { createApp, createWindow, destroyApp, loadMenuSkin } from "./module.cjs";
+import {
+  createApp,
+  createWindow,
+  destroyApp,
+  loadMenuSkin,
+} from "./module.cjs";
 
 const finalizer = new FinalizationRegistry((ptrs: [number, number]) => {
   destroyApp(...ptrs);

@@ -1,6 +1,7 @@
 use std::{
+    collections::HashMap,
     sync::atomic::{AtomicBool, Ordering},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
@@ -14,7 +15,7 @@ use crate::{
 
 use super::{
     draw::{draw_menu_items, measure_items},
-    types::MenuItem,
+    types::{MenuItem, MenuItemPatch},
 };
 
 /// Wayland-only: renders the entire menu tree (root + submenus) as `egui::Area`s
@@ -24,8 +25,12 @@ pub async fn show_wayland_overlay(
     app: App,
     items: Arc<Vec<MenuItem>>,
     click_handler: Option<Arc<dyn Fn(String) + Send + Sync + 'static>>,
+    item_overrides: Arc<RwLock<HashMap<String, MenuItemPatch>>>,
 ) {
-    let skin = app.menu_skin.clone().expect("load_skin must be called before creating menus");
+    let skin = app
+        .menu_skin
+        .clone()
+        .expect("load_skin must be called before creating menus");
 
     // Load element templates recursively across the full item tree.
     let templates: Arc<std::collections::HashMap<String, ElementTemplate>> = {
@@ -151,16 +156,30 @@ pub async fn show_wayland_overlay(
                                         *pending_click_for_closure.lock().unwrap() =
                                             Some((id, close));
                                     };
+                                    let overrides_guard = item_overrides.read().unwrap();
                                     draw_menu_items(
                                         ui,
                                         &level_items,
                                         &skin,
                                         &templates,
+                                        &overrides_guard,
                                         |idx, response| {
                                             let item = &level_items[idx];
+                                            let effective_item_owned;
+                                            let effective_item = match item
+                                                .menu_id
+                                                .as_ref()
+                                                .and_then(|id| overrides_guard.get(id.as_str()))
+                                            {
+                                                Some(patch) => {
+                                                    effective_item_owned = patch.apply_to(item);
+                                                    &effective_item_owned
+                                                }
+                                                None => item,
+                                            };
                                             if response.hovered() {
                                                 hovered_at_depth = Some(depth);
-                                                if let Some(children) = &item.children {
+                                                if let Some(children) = &effective_item.children {
                                                     let sub_pos = egui::Pos2::new(
                                                         response.rect.right(),
                                                         response.rect.top(),

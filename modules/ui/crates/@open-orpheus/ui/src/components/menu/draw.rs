@@ -8,7 +8,7 @@ use crate::{
     skin::{ElementTemplate, LayoutNode, MenuSkin, parse_btn_url},
 };
 
-use super::types::{MenuItem, MenuItemBtn};
+use super::types::{MenuItem, MenuItemBtn, MenuItemPatch};
 
 /// Compute the final logical position for a popup window of `size`, trying to
 /// stay inside the monitor that contains `desired_pos`.
@@ -59,6 +59,7 @@ pub fn draw_menu_items(
     items: &[MenuItem],
     skin: &MenuSkin,
     templates: &std::collections::HashMap<String, ElementTemplate>,
+    overrides: &std::collections::HashMap<String, MenuItemPatch>,
     mut on_item: impl FnMut(usize, &egui::Response) -> Option<Color32>,
     on_click: &mut dyn FnMut(String, bool),
 ) {
@@ -87,9 +88,26 @@ pub fn draw_menu_items(
             continue;
         }
 
+        let effective_item_owned;
+        let effective_item: &MenuItem = match item
+            .menu_id
+            .as_ref()
+            .and_then(|id| overrides.get(id.as_str()))
+        {
+            Some(patch) => {
+                effective_item_owned = patch.apply_to(item);
+                &effective_item_owned
+            }
+            None => item,
+        };
+
         // Style template row (e.g. playback controls with icon buttons).
-        if let Some(tpl) = item.style.as_ref().and_then(|s| templates.get(s.as_str())) {
-            if let Some(btns) = &item.btns {
+        if let Some(tpl) = effective_item
+            .style
+            .as_ref()
+            .and_then(|s| templates.get(s.as_str()))
+        {
+            if let Some(btns) = &effective_item.btns {
                 let mut frame = egui::Frame::new().begin(ui);
                 frame
                     .content_ui
@@ -114,24 +132,25 @@ pub fn draw_menu_items(
         frame
             .content_ui
             .set_width(ui.available_width() - left_pad - right_pad);
-        let color = if item.enable {
+        let color = if effective_item.enable {
             text_color
         } else {
             disabled_color
         };
         frame.content_ui.horizontal(|ui| {
-            if let Some(image) = &item.image_path {
+            if let Some(image) = &effective_item.image_path {
                 ui.add(egui::Image::new(image).tint(color));
             }
             ui.add(egui::Label::new(
-                egui::RichText::new(&item.text).color(color),
+                egui::RichText::new(&effective_item.text).color(color),
             ));
-            let right_icon = item
+            let right_icon = effective_item
                 .check_image_path
                 .as_deref()
                 .map(|s| s.to_owned())
                 .or_else(|| {
-                    item.children
+                    effective_item
+                        .children
                         .is_some()
                         .then(|| "native://skin/menu/sub_icon.svg".to_owned())
                 });
@@ -146,8 +165,8 @@ pub fn draw_menu_items(
         if let Some(fill) = on_item(idx, &response) {
             frame.frame.fill = fill;
         }
-        if response.clicked() && item.enable && item.children.is_none() {
-            if let Some(id) = &item.menu_id {
+        if response.clicked() && effective_item.enable && effective_item.children.is_none() {
+            if let Some(id) = &effective_item.menu_id {
                 on_click(id.clone(), true);
             }
         }
@@ -277,6 +296,7 @@ pub fn measure_items(
             items_ref,
             &skin,
             &templates,
+            &std::collections::HashMap::new(),
             |_, _| None,
             &mut |_, _| {},
         );
