@@ -482,12 +482,6 @@ impl ApplicationHandler<Request> for AppInner {
                     if let Some(painter) = &mut self.painter {
                         smol::block_on(painter.set_window(ws.viewport_id, None)).ok();
                     }
-                    // If this was the last window, destroy the shared Painter now.
-                    if self.windows.is_empty() {
-                        if let Some(mut painter) = self.painter.take() {
-                            painter.destroy();
-                        }
-                    }
                 }
             }
             Request::SetWindowMessageHandler(window_id, handler) => {
