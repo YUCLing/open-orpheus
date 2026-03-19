@@ -1,5 +1,3 @@
-// TODO: Cleanup ntpk code
-
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pack as base } from "./folders";
@@ -38,5 +36,3 @@ export function getSkinPack() {
   }
   return skinPack;
 }
-
-export const readFile = webPack.readFile.bind(webPack);
