@@ -8,7 +8,7 @@ const config = {
     }),
   },
   vitePlugin: {
-    dynamicCompileOptions: ({ filename }) =>
+    dynamicCompileOptions: ({ filename }: { filename: string }) =>
       filename.includes("node_modules") ? undefined : { runes: true },
   },
 };

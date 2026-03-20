@@ -10,6 +10,7 @@ export default [
       ".vite/**",
       "out/**",
       "**/node_modules/**",
+      "**/.svelte-kit/**",
       "modules/**/lib/**",
       "data/**",
     ],
