@@ -81,3 +81,12 @@ registerCallHandler<[], [string, string[]]>("os.querySystemFonts", async () => {
 registerCallHandler<[string], void>("os.navigateExternal", (event, url) => {
   shell.openExternal(url);
 });
+
+registerCallHandler<[{
+  enable: boolean;
+  preventSystemSleep: boolean;
+  preventDisplaySleep: boolean
+}], void>("os.setPowerRequests", () => {
+  // TODO: Implement this properly
+  /* empty */
+});

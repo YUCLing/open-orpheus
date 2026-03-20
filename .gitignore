@@ -94,8 +94,5 @@ out/
 # Rust
 target
 
-# Netease Cloud Music package files
-/package/
-
 # User Data
 /data/

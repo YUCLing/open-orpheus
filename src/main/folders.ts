@@ -1,11 +1,7 @@
 import { app } from "electron";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 
-export const pack = resolve(
-  app.isPackaged ? dirname(app.getPath("exe")) : ".",
-  "package"
-);
-
-export const data = resolve("data");
+export const data = resolve(app.isPackaged ? app.getPath("userData") : "data");
+export const pack = resolve(data, "package");
 export const userdata = resolve(data, "userdata");
-export const tempFile = resolve(data, "lyrics");
+export const lyricCache = resolve(data, "lyrics");

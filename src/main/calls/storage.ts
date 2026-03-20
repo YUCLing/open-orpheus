@@ -1,18 +1,18 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import { data as dataDir, tempFile } from "../folders";
+import { data as dataDir, lyricCache } from "../folders";
 import { registerCallHandler } from "../calls";
 import { sanitizeRelativePath } from "../util";
 import { getWebDb } from "../database";
 import { existsSync, mkdirSync } from "node:fs";
+import { app } from "electron";
 
 registerCallHandler<[string, string, string], [string, string]>(
   "storage.init",
   (event, downloadDir, someNumStr, cacheDir) => {
     if (!downloadDir) {
-      // TODO: find proper download dir
-      downloadDir = resolve(join(dataDir, "downloads"));
+      downloadDir = resolve(app.getPath("downloads"), "CloudMusic");
     }
     if (!cacheDir) {
       cacheDir = resolve(join(dataDir, "cache"));
@@ -173,7 +173,7 @@ registerCallHandler<[string], void>(
   "storage.getTempFile",
   async (event, songId) => {
     // Gets cached lyric response for the song.
-    const tempFilePath = join(tempFile, `${songId}`);
+    const tempFilePath = join(lyricCache, `${songId}`);
     let content = "";
     if (existsSync(tempFilePath)) {
       try {
@@ -207,11 +207,11 @@ registerCallHandler<[string, string, string], void>(
       return;
     }
 
-    mkdir(tempFile, { recursive: true }).catch((error) => {
+    mkdir(lyricCache, { recursive: true }).catch((error) => {
       console.error(`Error creating temp directory: ${error.message}`);
     });
 
-    writeFile(join(tempFile, `${songId}`), content, { flag: "w" }).catch(
+    writeFile(join(lyricCache, `${songId}`), content, { flag: "w" }).catch(
       (error) => {
         console.error(
           `Error writing temp file for songId ${songId}: ${error.message}`
