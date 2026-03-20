@@ -69,7 +69,7 @@ fn resolve_napi_get_uv_event_loop() -> Result<NapiGetUvEventLoop, String> {
             ));
         }
 
-        let symbol = GetProcAddress(module, c"napi_get_uv_event_loop".as_ptr());
+        let symbol = GetProcAddress(module, c"napi_get_uv_event_loop".as_ptr() as *const u8);
         if symbol.is_null() {
             return Err(format!(
                 "failed to resolve napi_get_uv_event_loop: {}",
