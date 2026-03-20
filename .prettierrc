@@ -1,5 +1,15 @@
 {
   "trailingComma": "es5",
   "semi": true,
-  "singleQuote": false
+  "singleQuote": false,
+  "plugins": ["prettier-plugin-svelte", "prettier-plugin-tailwindcss"],
+  "overrides": [
+    {
+      "files": "*.svelte",
+      "options": {
+        "parser": "svelte"
+      }
+    }
+  ],
+  "tailwindStylesheet": "./gui/src/routes/layout.css"
 }

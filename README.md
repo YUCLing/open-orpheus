@@ -4,6 +4,8 @@
 
 一个对网易云音乐 Orpheus 浏览器宿主的开源实现。
 
+项目当前的开发计划请追踪：https://github.com/users/YUCLing/projects/2
+
 ## 功能
 
 - 跨平台支持
@@ -21,56 +23,45 @@
 
 根项目这边的工作流和普通的 Electron Forge 项目差不多，不过 Open Orpheus 自己有一些原生模块，所以还得多做几步配置。
 
-下面的步骤默认使用 `yarn` 作为 Node 的包管理器。
+下面的步骤默认使用 `pnpm` 作为 Node 的包管理器。
 
 ### 环境准备
+
+#### 安装依赖
+
+在根目录执行一次即可，pnpm workspace 会自动为所有包（包括原生模块）安装依赖：
+
+```sh
+pnpm install
+```
 
 #### 构建模块
 
 `modules` 文件夹里有几个 Open Orpheus 运行所需的原生模块。
 
-要构建它们，请进入每个子模块目录，然后执行下面的命令：
+进入每个子模块目录，执行构建：
 
 ```sh
-yarn # 安装依赖
-yarn build # 构建模块（会同时构建 Rust 和 Node 代码）
-```
-
-##### （可选）链接模块
-
-如果你打算开发这些原生模块，建议使用 link，这样每次重新构建之后就不用反复重新安装原生模块了。
-
-```sh
-# 在模块目录里
-yarn link
-
-# 在根项目目录里
-yarn link <MODULE_PACKAGE_NAME_HERE>
-```
-
-#### 安装依赖
-
-在根项目目录下直接执行：
-
-```sh
-yarn
+pnpm build # 构建模块（会同时构建 Rust 和 Node 代码）
 ```
 
 ### 资源文件
 
-这个项目不会打包某些必需资源，因为它们归网易所有。想让这个项目正常运行，你需要把对应资源复制到下面这些位置：
+这个项目不会打包某些必需资源，因为它们归网易所有。
 
-- 工作目录（未打包运行时）
-- 可执行文件所在目录（打包后运行时）
+Open Orpheus 在首次启动时如果检测到资源缺失，会自动从网易的 CDN **自动下载**，通常无需手动配置。
 
-#### `package` 文件夹
+资源存放在数据目录的 `package` 子文件夹中：
 
-这是最重要的资源。
+- 开发模式：`data/package/`（相对于工作目录）
+- 打包后：`{userData}/package/`
 
-它可以在你安装的官方网易云音乐目录中找到，例如：`C:\path\to\your\installation\CloudMusic\package`。
+#### `orpheus.ntpk`
 
-#### `web.pack` 文件
+主要的 Web 资源包，包含在下载的安装包中。
 
-这是官方网易云音乐生成的最新 Web 资源，一般会放在 `C:\Users\<YOUR_USERNAME>\AppData\Local\NetEase\CloudMusic\web.pack`。如果你想用最新的 Web 资源，那它是必需的。如果程序能找到它，Open Orpheus 会优先使用它，而不是 `orpheus.ntpk`。
+如果自动下载失败，可以从官方网易云音乐的安装目录手动复制 `package` 文件夹，例如 `C:\path\to\your\installation\CloudMusic\package`，并将其放入上述数据目录中。
 
-这个文件需要和 `orpheus.ntpk` 放在一起；而 `orpheus.ntpk` 位于 `package` 文件夹中。
+#### `web.pack` 文件（可选）
+
+官方网易云音乐客户端生成的最新 Web 资源包，一般位于 `C:\Users\<YOUR_USERNAME>\AppData\Local\NetEase\CloudMusic\web.pack`。将它复制到 `package` 文件夹中（与 `orpheus.ntpk` 放在一起）。如果存在，Open Orpheus 会优先使用它而不是 `orpheus.ntpk`。

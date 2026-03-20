@@ -1,5 +1,4 @@
 import { BrowserWindow, screen } from "electron";
-// eslint-disable-next-line import/no-unresolved
 import { parseICO } from "icojs";
 import { resolve, join, normalize } from "node:path";
 import os from "node:os";

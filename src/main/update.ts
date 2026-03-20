@@ -20,11 +20,15 @@ interface UpgradeInfo {
     incrementalDownloadUrl?: string;
     incrementalMd5?: string;
     grayPolicyId: number;
-  },
+  };
   abGroupInfo: string;
 }
 
-export async function fetchUpgradeInfo(): Promise<{ code: number; data: UpgradeInfo; message: string; }> {
+export async function fetchUpgradeInfo(): Promise<{
+  code: number;
+  data: UpgradeInfo;
+  message: string;
+}> {
   const response = await fetch(ENDPOINT, {
     method: "POST",
     headers: {
@@ -48,7 +52,7 @@ export async function fetchUpgradeInfo(): Promise<{ code: number; data: UpgradeI
         deviceId: getDeviceId(),
         requestId: 0,
         osver: OSVER,
-      })
+      }),
     })}`,
   });
   const buf = await response.arrayBuffer();

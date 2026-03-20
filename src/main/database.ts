@@ -1,9 +1,10 @@
 import { join } from "node:path";
 
 import { Database } from "@open-orpheus/database";
+import { data } from "./folders";
 
-const pathToWebDb = join("data", "webdb.dat");
-const pathToMusicLibrary = join("data", "library.dat");
+const pathToWebDb = join(data, "webdb.dat");
+const pathToMusicLibrary = join(data, "library.dat");
 
 let webDb: Database;
 let musicLibraryDb: Database;

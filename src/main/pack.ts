@@ -58,7 +58,8 @@ export async function downloadPackage() {
   // TODO: NetEase doesn't seem to willing to return download url, hardcode it for now
   // https://d8.music.126.net/dmusic2/NeteaseCloudMusic_Music_official_3.1.29.205117_64.exe
   // https://d8.music.126.net/dmusic2/NeteaseCloudMusic_Music_BS_84539_3.1.28.205001_3.1.29.205117_netease_64.exe
-  const downloadUrl = "https://d8.music.126.net/dmusic2/NeteaseCloudMusic_Music_official_3.1.29.205117_64.exe";
+  const downloadUrl =
+    "https://d8.music.126.net/dmusic2/NeteaseCloudMusic_Music_official_3.1.29.205117_64.exe";
   const response = await fetch(downloadUrl);
   if (!response.ok) {
     throw new Error(`Failed to download web pack: ${response.statusText}`);
@@ -72,7 +73,11 @@ export async function downloadPackage() {
   sevenZip.FS.write(stream, buf, 0, buf.length);
   sevenZip.FS.close(stream);
 
-  sevenZip.callMain(["x", "installer.exe", ...files.map((f) => `package/${f}`)]);
+  sevenZip.callMain([
+    "x",
+    "installer.exe",
+    ...files.map((f) => `package/${f}`),
+  ]);
 
   await mkdir(base, { recursive: true }); // Ensure the base directory exists
 

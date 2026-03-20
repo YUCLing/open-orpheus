@@ -2,6 +2,8 @@
 
 An open-source implementation of Netease Cloud Music's Orpheus browser host.
 
+Track the project's current dev plans at https://github.com/users/YUCLing/projects/2
+
 ## Features
 
 - Cross-platform support
@@ -19,56 +21,45 @@ You will need Node and Rust to work with this project.
 
 For root project, everything works just like any other Electron Forge project, but Open Orpheus has some its own native modules, it requires a few more steps to setup.
 
-In the following steps, `yarn` will be used as Node's package manager.
+In the following steps, `pnpm` will be used as Node's package manager.
 
 ### Setup
+
+#### Install dependencies
+
+Run this once at the root — pnpm workspaces will install dependencies for all packages including native modules:
+
+```sh
+pnpm install
+```
 
 #### Build modules
 
 Inside `modules` folder, there are a few native modules that Open Orpheus require to run.
 
-To build them, enter each of submodules' folder. Execute the following commands:
+Enter each submodule's folder and build:
 
 ```sh
-yarn # Install dependencies
-yarn build # Build the module (will build both Rust and Node code)
-```
-
-##### (Optional) Linking the modules
-
-If you would like to work with native modules, linking is recommended, so you won't need to reinstall native modules each time you build it.
-
-```sh
-# In module's folder
-yarn link
-
-# In root project folder
-yarn link <MODULE_PACKAGE_NAME_HERE>
-```
-
-#### Install dependencies
-
-Simply do this in root project:
-
-```sh
-yarn
+pnpm build # Build the module (will build both Rust and Node code)
 ```
 
 ### Resources
 
-This project does not bundle some required resources because they are owned by NetEase. To run this project successfully, you will need to copy the corresponding resources to:
+This project does not bundle some required resources because they are owned by NetEase.
 
-- Working directory (Not packaged)
-- Executable's directory (Packaged)
+Open Orpheus will **automatically download** the package from NetEase's CDN on first launch if it is missing, so manual setup is usually not required.
 
-#### `package` folder
+Resources are stored in the `package` subfolder of the data directory:
 
-This is the most important resource.
+- Development: `data/package/` (relative to working directory)
+- Packaged: `{userData}/package/`
 
-It can be found within your installation of official NetEase Cloud Music, e.g. `C:\path\to\your\installation\CloudMusic\package`.
+#### `orpheus.ntpk`
 
-#### `web.pack` file
+The main web resource pack, included in the downloaded package.
 
-This is the updated web resources produced by official NetEase Cloud Music, it will be placed in `C:\Users\<YOUR_USERNAME>\AppData\Local\NetEase\CloudMusic\web.pack`. It's necessary if you want the most updated web resources. If it can be found, Open Orpheus will prefer it instead of `orpheus.ntpk`.
+If the automatic download fails, you can manually copy the `package` folder from your official NetEase Cloud Music installation (e.g. `C:\path\to\your\installation\CloudMusic\package`) into the data directory above.
 
-This will need to placed along with `orpheus.ntpk`, which is inside `package` folder.
+#### `web.pack` file (optional)
+
+An updated web resource pack produced by the official NetEase Cloud Music client, found at `C:\Users\<YOUR_USERNAME>\AppData\Local\NetEase\CloudMusic\web.pack`. Copy it into the `package` folder alongside `orpheus.ntpk`. If present, Open Orpheus will prefer it over `orpheus.ntpk`.

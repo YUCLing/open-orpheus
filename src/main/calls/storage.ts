@@ -39,7 +39,7 @@ registerCallHandler<[string, string, boolean, string], void>(
         0,
         fileContent.toString("utf-8")
       );
-    } catch (error) {
+    } catch {
       // -2: Not Found
       event.sender.send(
         "channel.call",

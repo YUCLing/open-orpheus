@@ -14,6 +14,7 @@ registerCallHandler<[string, string[]], [boolean]>(
         ...result,
       });
     } catch (error) {
+      console.error(`Error executing music library SQL: ${error}`);
       event.sender.send("channel.call", "musiclibrary.onexecsql", {
         error: 1,
         id: taskId,

@@ -147,7 +147,7 @@ app.on("ready", async () => {
     dialog.showErrorBox(
       "Initialization Failed",
       "An error occurred during application initialization. Open Orpheus will now exit.\n\nDetails:\n" +
-        (error.stack || error.message)
+        (error.stack || error.message || error)
     );
     app.exit(1);
   }

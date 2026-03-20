@@ -10,7 +10,7 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx .",
+    "lint": "eslint .",
     "format": "prettier --write ."
   },
   "keywords": [],
@@ -30,29 +30,34 @@
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron/fuses": "^1.8.0",
-    "@open-orpheus/database": "file:./modules/database",
-    "@open-orpheus/ui": "file:./modules/ui",
-    "@open-orpheus/window": "file:./modules/window",
-    "@types/better-sqlite3": "^7.6.13",
+    "@eslint/js": "^9.39.4",
+    "@open-orpheus/database": "workspace:*",
+    "@open-orpheus/ui": "workspace:*",
+    "@open-orpheus/window": "workspace:*",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/unzipper": "^0.10.11",
-    "@typescript-eslint/eslint-plugin": "^5.62.0",
-    "@typescript-eslint/parser": "^5.62.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
     "cookie": "^1.1.1",
     "electron": "40.8.0",
-    "eslint": "^8.57.1",
+    "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-svelte": "^3.15.2",
     "font-list": "^2.0.2",
+    "globals": "^17.4.0",
     "icojs": "^0.20.1",
     "mime": "^4.1.0",
     "prettier": "^3.8.1",
-    "typescript": "~4.5.4",
+    "prettier-plugin-svelte": "^3.5.1",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "typescript": "~5.9.3",
     "unzipper": "^0.12.3",
-    "vite": "^5.4.21"
+    "vite": "^7.3.1"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1"
-  }
+  },
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
 }

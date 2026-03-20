@@ -34,7 +34,7 @@ async function loadFromFilePath(
     const contentType =
       mime.getType(extname(path)) || "application/octet-stream";
     return { content: Buffer.from(fileContent), contentType };
-  } catch (error) {
+  } catch {
     throw new LoadError("Not Found", 404);
   }
 }
@@ -69,6 +69,7 @@ export async function loadFromOrpheusUrl(
         const content = Buffer.from(await response.arrayBuffer());
         return { content, contentType };
       } catch (error) {
+        if (error instanceof LoadError) throw error;
         throw new LoadError("Failed to fetch resource", 502);
       }
     }
