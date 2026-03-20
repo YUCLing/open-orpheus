@@ -2,6 +2,13 @@
 # yarn lockfile v1
 
 
+"7z-wasm@^1.2.0":
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/7z-wasm/-/7z-wasm-1.2.0.tgz#f2ddb8b87880bee37bfca70f001b639a12448ef5"
+  integrity sha512-AZjtWXFleAe5nQ27JYISs70cICjO0zZr4LU45I9pXKcrhG0qiEWgq3Vjwr9JHHihFLuqgc7uSHYVn/z3vXCjdw==
+  dependencies:
+    readline-sync "^1.4.10"
+
 "@borewit/text-codec@^0.2.1":
   version "0.2.1"
   resolved "https://registry.yarnpkg.com/@borewit/text-codec/-/text-codec-0.2.1.tgz#5d171538907a8cb395fdc2eb5e8f7947d96c7f2f"
@@ -4505,6 +4512,11 @@ readable-stream@^3.4.0:
     inherits "^2.0.3"
     string_decoder "^1.1.1"
     util-deprecate "^1.0.1"
+
+readline-sync@^1.4.10:
+  version "1.4.10"
+  resolved "https://registry.yarnpkg.com/readline-sync/-/readline-sync-1.4.10.tgz#41df7fbb4b6312d673011594145705bf56d8873b"
+  integrity sha512-gNva8/6UAe8QYepIQH/jQ2qn91Qj0B9sYjMBBs3QOB8F2CXcKgLxQaJRP76sWVRQt+QU+8fAkCbCvjjMFu7Ycw==
 
 rechoir@^0.8.0:
   version "0.8.0"

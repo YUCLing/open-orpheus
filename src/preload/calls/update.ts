@@ -1,4 +1,10 @@
-import { BUILD, CORE_VERSION, NATIVE_VERSION, VERSION } from "../../constants";
+import {
+  BUILD,
+  CORE_VERSION,
+  MD5,
+  NATIVE_VERSION,
+  VERSION,
+} from "../../constants";
 import { registerCallHandler } from "../calls";
 
 registerCallHandler<[string], [string, string]>(
@@ -30,7 +36,7 @@ registerCallHandler<[], [typeof visualVersion]>(
 const cachedInstallPackageVersion = {
   buildVer: BUILD,
   mainVer: VERSION,
-  md5: "B3025C21309C614E088032A206DFFF01",
+  md5: MD5,
   path: "C:\\Users\\steamuser\\AppData\\Local\\NetEase\\CloudMusic\\update\\orpheus_install.exe",
   version: CORE_VERSION,
 };

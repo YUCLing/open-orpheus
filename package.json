@@ -20,6 +20,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "7z-wasm": "^1.2.0",
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-deb": "^7.11.1",
     "@electron-forge/maker-rpm": "^7.11.1",

@@ -22,7 +22,7 @@ import { prepareDeviceId } from "./main/device";
 import { CORE_VERSION } from "./constants";
 import { mkdir } from "node:fs/promises";
 import { initializeDatabases } from "./main/database";
-import { webPack } from "./main/pack";
+import { downloadPackage, loadWebPack, webPack } from "./main/pack";
 import { createApp } from "./main/ui";
 
 let quitting = false;
@@ -126,6 +126,17 @@ app.on("ready", async () => {
 
     await prepareDeviceId();
     await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
+
+    try {
+      throw new Error();
+      await loadWebPack();
+    } catch (e) {
+      console.warn("Failed to load web pack:", e);
+      console.log("Downloading package...");
+      await downloadPackage();
+      await loadWebPack(); // Simply try loading again after download, it will throw if the package is still invalid
+    }
+
     await webPack.readPack();
 
     if (os.platform() === "linux" && isWayland()) {

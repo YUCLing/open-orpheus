@@ -1,9 +1,10 @@
+import { OSVER } from "../../constants";
 import { registerCallHandler } from "../calls";
 import { fireNativeCall } from "../channel";
 
 registerCallHandler<[], [string]>("os.queryOsVer", () => {
   // TODO: Implement this properly
-  return ["Microsoft-Windows-11--build-22631-64bit"];
+  return [OSVER];
 });
 
 registerCallHandler<[], [{ enabled: boolean }]>(
