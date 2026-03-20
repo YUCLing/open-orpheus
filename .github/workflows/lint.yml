@@ -14,36 +14,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: yarn
-          cache-dependency-path: |
-            yarn.lock
-            modules/database/yarn.lock
-            modules/ui/yarn.lock
-            modules/window/yarn.lock
+          cache: pnpm
 
-      - name: Install module dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          for module in modules/database modules/ui modules/window; do
-            echo "Installing deps for ${module}"
-            pushd "${module}" > /dev/null
-            yarn --frozen-lockfile
-            popd > /dev/null
-          done
-
-      - name: Install root dependencies
-        run: yarn --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Run ESLint
-        run: yarn lint
+        run: pnpm lint
 
       - name: Check Prettier formatting
-        run: yarn prettier --check .
+        run: pnpm prettier --check .
 
   lint-rust:
     name: Clippy & Rustfmt

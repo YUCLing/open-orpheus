@@ -17,16 +17,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: yarn
-          cache-dependency-path: |
-            yarn.lock
-            modules/database/yarn.lock
-            modules/ui/yarn.lock
-            modules/window/yarn.lock
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build native modules
         shell: bash
@@ -35,16 +36,12 @@ jobs:
           for module in modules/database modules/ui modules/window; do
             echo "Building ${module}"
             pushd "${module}" > /dev/null
-            yarn --frozen-lockfile
-            yarn build
+            pnpm build
             popd > /dev/null
           done
 
-      - name: Install root dependencies
-        run: yarn --frozen-lockfile
-
       - name: Build application bundles
-        run: yarn make
+        run: pnpm make
 
       - name: Upload bundles
         uses: actions/upload-artifact@v7
