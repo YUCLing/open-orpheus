@@ -128,7 +128,6 @@ app.on("ready", async () => {
     await loadCookiesFromFile(path.join(dataDir, "cookies.dat"));
 
     try {
-      throw new Error();
       await loadWebPack();
     } catch (e) {
       console.warn("Failed to load web pack:", e);
