@@ -6,4 +6,10 @@ bun.lock
 bun.lockb
 
 # Miscellaneous
-/static/
+gui/static/
+
+# Svelte Kit Generated
+.svelte-kit/
+
+# Module dist
+/modules/**/lib/**

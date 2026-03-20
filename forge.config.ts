@@ -42,7 +42,7 @@ const config: ForgeConfig = {
         {
           name: "gui",
           config: "vite.renderer.config.ts",
-        }
+        },
       ],
     }),
     // Fuses are used to enable/disable various Electron functionality
@@ -78,7 +78,8 @@ const config: ForgeConfig = {
             // Skip .bin directories inside node_modules — those hold dev-tool
             // symlinks (e.g. .bin/tsc) pointing to hoisted packages that are
             // not present locally, causing ENOENT when dereference follows them.
-            filter: (src) => !/\/node_modules\/\.bin(\/|$)/.test(src.slice(sourcePath.length)),
+            filter: (src) =>
+              !/\/node_modules\/\.bin(\/|$)/.test(src.slice(sourcePath.length)),
           });
         })
       );
