@@ -9,9 +9,9 @@
     "cross-build": "tsc &&cross build --message-format=json-render-diagnostics > cross.log",
     "postcargo-build": "neon dist < cargo.log",
     "postcross-build": "neon dist -m /target < cross.log",
-    "debug": "pnpm run cargo-build --",
-    "build": "pnpm run cargo-build -- --release",
-    "cross": "pnpm run cross-build -- --release",
+    "debug": "pnpm run cargo-build",
+    "build": "pnpm run cargo-build --release",
+    "cross": "pnpm run cross-build --release",
     "prepack": "tsc &&neon update",
     "version": "neon bump --binaries platforms && git add ."
   },
