@@ -4,7 +4,6 @@ import {
   MenuItemConstructorOptions,
   nativeImage,
   NativeImage,
-  WebContents,
 } from "electron";
 import { pngFromIco } from "./util";
 import { loadFromOrpheusUrl } from "./orpheus";
@@ -14,7 +13,7 @@ export type AppMenuItem = {
   menu: boolean;
   enable: boolean;
   separator: boolean;
-  children: AppMenuItem[] | null; // TODO: Confirm if this is always null
+  children: AppMenuItem[] | null;
   hotkey?: string;
   image_color: string;
   image_path?: string;
@@ -22,11 +21,15 @@ export type AppMenuItem = {
 };
 
 export type AppMenu = AppMenuItem[];
+export type AppMenuItemClickHandler = (
+  itemMenuId: string | null,
+  menuId: number
+) => void;
 
 async function appMenuItemToMenuItemOptions(
-  webContent: WebContents,
   item: AppMenuItem,
-  menuId: number
+  menuId: number,
+  onClick?: AppMenuItemClickHandler
 ): Promise<MenuItemConstructorOptions> {
   let icon: NativeImage | undefined = undefined;
   if (item.image_path) {
@@ -45,30 +48,23 @@ async function appMenuItemToMenuItemOptions(
     type: item.separator ? "separator" : "normal",
     accelerator: item.hotkey,
     icon,
-    click: () => {
-      webContent.send(
-        "channel.call",
-        "winhelper.onmenuclick",
-        item.menu_id,
-        menuId
-      );
-    },
+    click: onClick ? () => onClick(item.menu_id, menuId) : undefined,
   };
   return options;
 }
 
 export async function appMenuItemToMenuItem(
-  webContent: WebContents,
   item: AppMenuItem,
-  menuId: number
+  menuId: number,
+  onClick?: AppMenuItemClickHandler
 ): Promise<MenuItem> {
-  const options = await appMenuItemToMenuItemOptions(webContent, item, menuId);
+  const options = await appMenuItemToMenuItemOptions(item, menuId, onClick);
   if (item.children) {
     options.type = "submenu";
     options.submenu = [];
     for (const child of item.children) {
       options.submenu.push(
-        await appMenuItemToMenuItemOptions(webContent, child, menuId)
+        await appMenuItemToMenuItemOptions(child, menuId, onClick)
       );
     }
   }
@@ -76,13 +72,13 @@ export async function appMenuItemToMenuItem(
 }
 
 export async function buildMenu(
-  webContent: WebContents,
   items: AppMenuItem[],
-  menuId: number
+  menuId: number,
+  onClick?: AppMenuItemClickHandler
 ): Promise<Menu> {
   const menu = new Menu();
   for (const item of items) {
-    const menuItem = await appMenuItemToMenuItem(webContent, item, menuId);
+    const menuItem = await appMenuItemToMenuItem(item, menuId, onClick);
     menu.append(menuItem);
   }
   return menu;

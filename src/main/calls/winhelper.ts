@@ -265,7 +265,7 @@ registerCallHandler<MenuRequest, void>(
 function parseMenuData(menuData: MenuRequest[0]) {
   return {
     ...menuData,
-    content: JSON.parse(menuData.content),
+    content: JSON.parse(menuData.content) as AppMenuItem[],
     hotkey: JSON.parse(menuData.hotkey),
   };
 }
@@ -276,19 +276,56 @@ registerCallHandler<MenuRequest, void>(
     if (!wnd) return;
     id = 0; // TODO: id doesn't seem to be id, what it is?
     const menus = getMenus(wnd);
+    const parsedMenuData = parseMenuData(data);
+    for (let i = 0; i < parsedMenuData.content.length; i++) {
+      const item = parsedMenuData.content[i];
+      if (item.menu_id === "exitApp") {
+        parsedMenuData.content.splice(i, 0, {
+          menu: true,
+          separator: false,
+          enable: true,
+          children: null,
+          image_color: "#00000000",
+          menu_id: "manageOpenOrpheus",
+          text: "管理 Open Orpheus",
+        });
+        break;
+      }
+    }
+    const onClick = (itemId: string | null) => {
+      if (itemId === "manageOpenOrpheus") {
+        const newWnd = new BrowserWindow({
+          title: "管理 Open Orpheus",
+          width: 1000,
+          height: 600,
+          show: true,
+          webPreferences: {
+            partition: "open-orpheus",
+          },
+        });
+        newWnd.setMenuBarVisibility(false);
+        if (GUI_VITE_DEV_SERVER_URL) {
+          newWnd.loadURL(GUI_VITE_DEV_SERVER_URL);
+        } else {
+          newWnd.loadFile(path.join(__dirname, "gui/index.html"));
+        }
+        return;
+      }
+      event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
+    };
     if (os.platform() === "linux" && isWayland()) {
-      const menu = new NativeMenu(getApp(), parseMenuData(data));
+      const menu = new NativeMenu(getApp(), parsedMenuData);
       menus.set(id, menu as unknown as AppMenu); // Only Wayland is using NativeMenu, so this cast is safe
-      menu.onClick((itemId) => {
-        event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
-      });
+      menu.onClick(onClick);
       menu.show();
     } else {
-      const items = JSON.parse(data.content);
+      const items = parsedMenuData.content;
       menus.set(id, items);
       const nativeMenu = new Menu();
       for (const item of items) {
-        nativeMenu.append(await appMenuItemToMenuItem(event.sender, item, id));
+        nativeMenu.append(
+          await appMenuItemToMenuItem(item, id, onClick)
+        );
       }
       nativeMenu.popup({ window: wnd });
     }
