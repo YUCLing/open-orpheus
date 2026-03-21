@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import os from "node:os";
 
-import { BrowserWindow, screen, shell } from "electron";
+import { BrowserWindow, powerSaveBlocker, screen, shell } from "electron";
 import { getFonts } from "font-list";
 
 import { sanitizeRelativePath } from "../util";
@@ -82,6 +82,8 @@ registerCallHandler<[string], void>("os.navigateExternal", (event, url) => {
   shell.openExternal(url);
 });
 
+let preventSystemSleepBlocker: null | number = null,
+  preventDisplaySleepBlocker: null | number = null;
 registerCallHandler<
   [
     {
@@ -91,7 +93,43 @@ registerCallHandler<
     },
   ],
   void
->("os.setPowerRequests", () => {
-  // TODO: Implement this properly
-  /* empty */
-});
+>(
+  "os.setPowerRequests",
+  (event, { enable, preventSystemSleep, preventDisplaySleep }) => {
+    if (enable) {
+      if (preventSystemSleep) {
+        if (!preventSystemSleepBlocker) {
+          preventSystemSleepBlocker = powerSaveBlocker.start(
+            "prevent-app-suspension"
+          );
+        }
+      } else {
+        if (preventSystemSleepBlocker) {
+          powerSaveBlocker.stop(preventSystemSleepBlocker);
+          preventSystemSleepBlocker = null;
+        }
+      }
+      if (preventDisplaySleep) {
+        if (!preventDisplaySleepBlocker) {
+          preventDisplaySleepBlocker = powerSaveBlocker.start(
+            "prevent-display-sleep"
+          );
+        }
+      } else {
+        if (preventDisplaySleepBlocker) {
+          powerSaveBlocker.stop(preventDisplaySleepBlocker);
+          preventDisplaySleepBlocker = null;
+        }
+      }
+    } else {
+      if (preventSystemSleepBlocker) {
+        powerSaveBlocker.stop(preventSystemSleepBlocker);
+        preventSystemSleepBlocker = null;
+      }
+      if (preventDisplaySleepBlocker) {
+        powerSaveBlocker.stop(preventDisplaySleepBlocker);
+        preventDisplaySleepBlocker = null;
+      }
+    }
+  }
+);
