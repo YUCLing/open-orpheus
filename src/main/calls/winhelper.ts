@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, nativeImage } from "electron";
+import { BrowserWindow, clipboard, Menu, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
@@ -323,11 +323,16 @@ registerCallHandler<MenuRequest, void>(
       menus.set(id, items);
       const nativeMenu = new Menu();
       for (const item of items) {
-        nativeMenu.append(
-          await appMenuItemToMenuItem(item, id, onClick)
-        );
+        nativeMenu.append(await appMenuItemToMenuItem(item, id, onClick));
       }
       nativeMenu.popup({ window: wnd });
     }
+  }
+);
+
+registerCallHandler<[string], void>(
+  "winhelper.setClipBoardData",
+  (event, data) => {
+    clipboard.writeText(data);
   }
 );
