@@ -6,7 +6,7 @@ import started from "electron-squirrel-startup";
 import { isWayland } from "@open-orpheus/window";
 
 // Handle errors as early as possible
-import "./error";
+import "./main/error";
 
 // Orpheus scheme
 import registerOrpheusScheme from "./main/orpheus";
