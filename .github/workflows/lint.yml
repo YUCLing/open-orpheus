@@ -33,7 +33,7 @@ jobs:
           for module in modules/database modules/ui modules/window; do
             echo "Building ${module}"
             pushd "${module}" > /dev/null
-            pnpm build
+            pnpm prepack
             popd > /dev/null
           done
 
