@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, session, shell } from "electron";
 import { AppMenu } from "./menu";
 
 type WindowProperties = {
@@ -10,6 +10,10 @@ type WindowProperties = {
 const windowProperties = new Map<number, WindowProperties>();
 
 app.on("browser-window-created", (event, wnd) => {
+  if (wnd.webContents.session == session.fromPartition("open-orpheus")) {
+    return; // Manage internal windows separately.
+  }
+
   windowProperties.set(wnd.id, {
     menus: new Map(),
     customProps: {},

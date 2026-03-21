@@ -22,9 +22,12 @@ import { prepareDeviceId } from "./main/device";
 import { CORE_VERSION } from "./constants";
 import { mkdir } from "node:fs/promises";
 import { initializeDatabases } from "./main/database";
-import { downloadPackage, loadWebPack, webPack } from "./main/pack";
+import { loadWebPack, webPack } from "./main/pack";
 import { createApp } from "./main/ui";
+import { openPackageDownloadWindow } from "./main/gui";
 
+// This is flags is required because package window is shown before main window, and we don't want to quit the app when package window is closed for any reason.
+let appStarted = false;
 let quitting = false;
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -131,8 +134,7 @@ app.on("ready", async () => {
       await loadWebPack();
     } catch (e) {
       console.warn("Failed to load web pack:", e);
-      console.log("Downloading package...");
-      await downloadPackage();
+      await openPackageDownloadWindow(); // If user cancelled, this will throw and skip the rest of initialization
       await loadWebPack(); // Simply try loading again after download, it will throw if the package is still invalid
     }
 
@@ -143,6 +145,8 @@ app.on("ready", async () => {
     }
 
     createWindow();
+
+    appStarted = true;
   } catch (error) {
     dialog.showErrorBox(
       "Initialization Failed",
@@ -157,7 +161,7 @@ app.on("ready", async () => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" && appStarted) {
     app.quit();
   }
 });

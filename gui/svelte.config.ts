@@ -1,7 +1,7 @@
 import adapter from "@sveltejs/adapter-static";
+import type { Config } from "@sveltejs/kit";
 
-/** @type {import('@sveltejs/kit').Config} */
-const config = {
+const config: Config = {
   kit: {
     adapter: adapter({
       pages: "../.vite/build/gui",
