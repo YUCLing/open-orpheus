@@ -1,6 +1,5 @@
 use std::{ffi::c_void, sync::Arc};
 
-use egui::{ViewportBuilder, ViewportId};
 use libuv_sys2::{
     uv_close, uv_handle, uv_handle_get_data, uv_handle_set_data, uv_handle_t, uv_timer_init,
     uv_timer_start, uv_timer_stop, uv_timer_t,
@@ -95,6 +94,13 @@ unsafe extern "C" fn on_timer(handle: *mut uv_timer_t) {
 }
 
 unsafe extern "C" fn on_close(handle: *mut uv_handle_t) {
+    // Release AppEventLoop stored in handle data.
+    let data = unsafe { uv_handle_get_data(handle) } as *mut AppEventLoop;
+    if !data.is_null() {
+        drop(unsafe { Box::from_raw(data) });
+        unsafe { uv_handle_set_data(handle, std::ptr::null_mut()) };
+    }
+
     // The uv_timer_t is a uv_handle_t; free the handle allocation.
     let timer = handle as *mut uv_timer_t;
     drop(unsafe { Box::from_raw(timer) });
@@ -132,6 +138,7 @@ fn create_app<'cx>(cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<'cx,
     if rc != 0 {
         unsafe {
             drop(Box::from_raw(ptr));
+            drop(Box::from_raw(event_loop_ptr));
             drop(Box::from_raw(timer));
         }
         return cx.throw_error(format!("uv_timer_init failed: {rc}"));
@@ -140,6 +147,7 @@ fn create_app<'cx>(cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<'cx,
     if rc != 0 {
         unsafe {
             drop(Box::from_raw(ptr));
+            drop(Box::from_raw(event_loop_ptr));
             drop(Box::from_raw(timer));
         }
         return cx.throw_error(format!("uv_timer_start failed: {rc}"));
@@ -161,27 +169,6 @@ fn destroy_app(app_ptr: f64, timer_ptr: f64) {
         uv_close(timer_ptr as *mut uv_handle_t, Some(on_close));
     }
     let _app = unsafe { Box::from_raw(app_ptr) };
-}
-
-/// For testing purposes.
-#[neon::export]
-fn create_window(app_ptr: f64) {
-    let app = unsafe { &mut *(app_ptr as usize as *mut App) };
-    let viewport_id = ViewportId::from_hash_of("test");
-    let viewport_builder = ViewportBuilder::default()
-        .with_always_on_top()
-        .with_visible(true)
-        .with_title("EGUI Test");
-    smol::block_on(async {
-        let (_ctx, id) = app
-            .create_egui_window(viewport_id, viewport_builder, |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.label("Hello, World!");
-                });
-            })
-            .await;
-        app.show_window(id).await;
-    });
 }
 
 #[neon::export]
