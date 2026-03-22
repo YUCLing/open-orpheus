@@ -307,22 +307,29 @@ impl Menu {
                 // submenu is gone and can act on future focus-loss events.
                 open_submenu_count.fetch_sub(1, Ordering::Relaxed);
             } else if is_root {
-                // Root menu: close when the window loses focus AND no submenu is open.
-                // We track focus state here and check it in the poll loop below so
-                // that the two conditions are always evaluated together.  Checking
-                // only inside the Focused(false) handler can cause a premature close
-                // when the OS delivers a stale/reordered Focused(false) event just as
-                // a submenu finishes closing (count just became 0), even though the
-                // cursor is still inside the parent menu window.
+                // Root menu: close when focus is lost, no submenus are open,
+                // AND the cursor is outside the root window.  We must track all
+                // three because opening a submenu steals focus from the root,
+                // and when that submenu later closes `is_focused` stays false
+                // until the OS re-delivers a focus event.  Without the cursor
+                // check the root would close any time a submenu closed normally.
                 let is_focused = Arc::new(AtomicBool::new(true));
+                let cursor_inside = Arc::new(AtomicBool::new(false));
                 let close_requested = Arc::new(AtomicBool::new(false));
                 app.set_window_message_handler(window_id, {
                     let is_focused = is_focused.clone();
+                    let cursor_inside = cursor_inside.clone();
                     let close_requested = close_requested.clone();
                     move |_window_id, event, _window| {
                         match event {
                             WindowEvent::Focused(focused) => {
                                 is_focused.store(*focused, Ordering::Relaxed);
+                            }
+                            WindowEvent::CursorEntered { .. } => {
+                                cursor_inside.store(true, Ordering::Relaxed);
+                            }
+                            WindowEvent::CursorLeft { .. } => {
+                                cursor_inside.store(false, Ordering::Relaxed);
                             }
                             WindowEvent::CloseRequested => {
                                 close_requested.store(true, Ordering::Relaxed);
@@ -334,6 +341,7 @@ impl Menu {
                 })
                 .await;
 
+                let mut unfocused_ticks: u32 = 0;
                 loop {
                     if close_requested.load(Ordering::Relaxed) || close_all.load(Ordering::Relaxed)
                     {
@@ -351,16 +359,30 @@ impl Menu {
                             break;
                         }
                     }
-                    // Close only when this window has truly lost focus *and* no
-                    // submenu is currently open.  Doing this check in the poll loop
-                    // (rather than directly in the Focused event handler) ensures
-                    // that both the focus state and submenu count are observed at
-                    // the same point in time, preventing the race described above.
-                    if !is_focused.load(Ordering::Relaxed)
+                    // Close only when all three conditions hold simultaneously:
+                    // 1. Root has lost focus (e.g. user clicked elsewhere)
+                    // 2. No submenus are open
+                    // 3. The cursor is NOT inside this root window
+                    //
+                    // Condition 3 is critical: when a submenu closes the root's
+                    // `is_focused` is still false (the submenu had focus), but the
+                    // cursor may be hovering over the root.  Without this check
+                    // the root would close any time a submenu closes normally.
+                    //
+                    // We also debounce for 2 ticks to cover the brief gap when
+                    // switching between two submenu triggers (old submenu
+                    // decremented count but new submenu hasn't incremented yet).
+                    let should_close = !is_focused.load(Ordering::Relaxed)
                         && open_submenu_count.load(Ordering::Relaxed) == 0
-                    {
-                        app.close_window(window_id).await;
-                        break;
+                        && !cursor_inside.load(Ordering::Relaxed);
+                    if should_close {
+                        unfocused_ticks += 1;
+                        if unfocused_ticks >= 2 {
+                            app.close_window(window_id).await;
+                            break;
+                        }
+                    } else {
+                        unfocused_ticks = 0;
                     }
                     smol::Timer::after(Duration::from_millis(50)).await;
                 }
