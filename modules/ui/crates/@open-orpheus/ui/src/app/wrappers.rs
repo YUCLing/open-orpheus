@@ -1,9 +1,8 @@
-use std::thread::ThreadId;
-
 use egui::Context;
 use winit::{
     event::WindowEvent,
     event_loop::EventLoop,
+    platform::pump_events::EventLoopExtPumpEvents,
     window::{Window, WindowId},
 };
 
@@ -27,28 +26,15 @@ impl std::fmt::Debug for WindowMessageHandler {
     }
 }
 
-#[derive(Clone)]
-pub struct EventLoopWrapper(usize, ThreadId);
+pub struct AppEventLoop(EventLoop<Request>, AppInner);
 
-impl EventLoopWrapper {
+impl AppEventLoop {
     pub fn new(event_loop: EventLoop<Request>, app_inner: AppInner) -> Self {
-        Self(
-            Box::into_raw(Box::new((event_loop, app_inner))) as usize,
-            std::thread::current().id(),
-        )
+        Self(event_loop, app_inner)
     }
 
-    #[allow(clippy::mut_from_ref)]
-    pub fn get(&self) -> &mut (EventLoop<Request>, AppInner) {
-        if self.1 != std::thread::current().id() {
-            panic!("Trying to access event loop from other thread!");
-        }
-        unsafe { &mut *(self.0 as *mut (EventLoop<Request>, AppInner)) }
-    }
-}
-
-impl Drop for EventLoopWrapper {
-    fn drop(&mut self) {
-        unsafe { drop(Box::from_raw(self.0 as *mut (EventLoop<Request>, AppInner))) }
+    pub fn pump_events(&mut self) {
+        let Self(event_loop, app_inner) = self;
+        event_loop.pump_app_events(Some(std::time::Duration::ZERO), app_inner);
     }
 }

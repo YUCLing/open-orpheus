@@ -17,7 +17,7 @@ use neon::{
 };
 
 use crate::{
-    app::App,
+    app::{App, AppEventLoop},
     components::menu::{Menu, MenuData, MenuItemPatch},
     resource::ResourceHandler,
 };
@@ -85,13 +85,13 @@ fn js_pack_handler(
 }
 
 unsafe extern "C" fn on_timer(handle: *mut uv_timer_t) {
-    let state_ptr = unsafe { uv_handle_get_data(uv_handle!(handle)) } as *mut App;
-    if state_ptr.is_null() {
+    let event_loop_ptr = unsafe { uv_handle_get_data(uv_handle!(handle)) } as *mut AppEventLoop;
+    if event_loop_ptr.is_null() {
         return;
     }
-    let state = unsafe { &mut *state_ptr };
+    let event_loop = unsafe { &mut *event_loop_ptr };
 
-    state.pump_events();
+    event_loop.pump_events();
 }
 
 unsafe extern "C" fn on_close(handle: *mut uv_handle_t) {
@@ -118,15 +118,16 @@ fn create_app<'cx>(cx: &mut Cx<'cx>, options: Handle<JsObject>) -> JsResult<'cx,
         js_pack_handler(Arc::new(read_skin_pack), channel),
     );
 
-    let app = App::new(
+    let (app, event_loop) = App::new(
         #[cfg(target_os = "linux")]
         prefer_wayland,
         resource_handler,
     );
     let loop_ptr = napi::get_uv_loop_from_neon(cx).or_else(|x| cx.throw_error(x))?;
     let ptr = Box::into_raw(Box::new(app));
+    let event_loop_ptr = Box::into_raw(Box::new(event_loop));
     let timer = Box::into_raw(Box::new(unsafe { std::mem::zeroed::<uv_timer_t>() }));
-    unsafe { uv_handle_set_data(uv_handle!(timer), ptr as *mut c_void) };
+    unsafe { uv_handle_set_data(uv_handle!(timer), event_loop_ptr as *mut c_void) };
     let rc = unsafe { uv_timer_init(loop_ptr, timer) };
     if rc != 0 {
         unsafe {
