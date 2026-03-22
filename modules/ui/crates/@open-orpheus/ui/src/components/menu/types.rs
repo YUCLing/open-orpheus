@@ -102,16 +102,3 @@ pub struct MenuData {
     pub left_border_size: f64,
     pub menu_type: String,
 }
-
-/// Desired origin for a menu window (logical pixels).
-pub enum MenuPosition {
-    /// Place to the right of a parent menu window, aligned with a specific
-    /// vertical offset inside that parent (the top of the hovered row).
-    RightOf {
-        parent_window_id: winit::window::WindowId,
-        row_y_offset: f32,
-    },
-    /// No preference — use the current cursor position on platforms that
-    /// expose it, otherwise fall back to (0, 0).
-    AtCursor,
-}

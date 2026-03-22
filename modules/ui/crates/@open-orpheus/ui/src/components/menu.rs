@@ -1,23 +1,16 @@
 mod draw;
+mod popup;
+mod shared;
 mod types;
 #[cfg(target_os = "linux")]
 mod wayland;
 
-pub use types::{MenuData, MenuItem, MenuItemPatch, MenuPosition};
+pub use types::{MenuData, MenuItemPatch};
 
 use std::collections::HashMap;
-use std::sync::{
-    Arc, Mutex, OnceLock, RwLock,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-};
-use std::time::Duration;
+use std::sync::{Arc, RwLock};
 
-use egui::{Color32, ViewportBuilder, ViewportId};
-use winit::{dpi::LogicalPosition, event::WindowEvent};
-
-use crate::{app::App, util::random_string};
-
-use draw::{clamp_to_screen, draw_menu_items, load_templates, measure_items};
+use crate::app::App;
 
 pub struct Menu {
     app: App,
@@ -62,363 +55,29 @@ impl Menu {
         smol::block_on(self.app.repaint_all());
     }
 
-    fn show_menu_with_items(
-        app: App,
-        items: Arc<Vec<MenuItem>>,
-        position: MenuPosition,
-        keep_open: Option<Arc<AtomicBool>>,
-        opened_flag: Option<Arc<AtomicBool>>,
-        is_root: bool,
-        // Counts currently-open submenus at any depth; shared across the whole
-        // menu tree so the root can distinguish "lost focus to submenu" from
-        // "genuinely lost focus to something else".
-        open_submenu_count: Arc<AtomicUsize>,
-        click_handler: Option<Arc<dyn Fn(String) + Send + Sync + 'static>>,
-        close_all: Arc<AtomicBool>,
-        item_overrides: Arc<RwLock<HashMap<String, MenuItemPatch>>>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>> {
-        Box::pin(async move {
-            let skin = app
-                .menu_skin
-                .clone()
-                .expect("load_skin must be called before creating menus");
-            let templates = load_templates(&app, &items).await;
-
-            let parent_item_hovered: Vec<Arc<AtomicBool>> = items
-                .iter()
-                .map(|_| Arc::new(AtomicBool::new(false)))
-                .collect();
-            let submenu_open: Vec<Arc<AtomicBool>> = items
-                .iter()
-                .map(|_| Arc::new(AtomicBool::new(false)))
-                .collect();
-            let app_for_closure = app.clone();
-
-            // Non-root menus: we have already been counted by our parent at
-            // spawn time; decrement when this task exits (see end of fn).
-
-            let initial_size = measure_items(&items, &skin, templates.clone());
-
-            // Slot for the pending click ID: written by the egui render closure,
-            // read and drained by the polling loop.
-            let pending_click: Arc<Mutex<Option<(String, bool)>>> = Arc::new(Mutex::new(None));
-            // Shared slot written just after create_egui_window so the render
-            // closure (which shares it) can learn its own window_id lazily.
-            let self_window_id: Arc<OnceLock<winit::window::WindowId>> = Arc::new(OnceLock::new());
-
-            // For AtCursor we skip with_position and let the compositor decide;
-            // for RightOf we compute and clamp to the monitor.
-            let logical_pos: Option<LogicalPosition<f64>> = match &position {
-                MenuPosition::AtCursor => None,
-                MenuPosition::RightOf {
-                    parent_window_id,
-                    row_y_offset,
-                } => {
-                    let scale = app.get_window_scale_factor(*parent_window_id).await;
-                    let desired = if let Some((parent_pos, parent_size)) =
-                        app.get_window_outer_rect(*parent_window_id).await
-                    {
-                        // parent_pos and parent_size are in physical pixels; divide by
-                        // scale_factor to get logical pixels, which is what
-                        // ViewportBuilder::with_position expects.
-                        egui::Pos2::new(
-                            (parent_pos.x as f64 + parent_size.width as f64) as f32 / scale as f32,
-                            parent_pos.y as f32 / scale as f32 + row_y_offset,
-                        )
-                    } else {
-                        egui::Pos2::ZERO
-                    };
-                    let monitors = app.get_monitor_rects(*parent_window_id).await;
-                    // clamp_to_screen works in logical pixels; convert monitor rects too.
-                    let logical_monitors: Vec<_> = monitors
-                        .iter()
-                        .map(|(pos, sz)| {
-                            (
-                                winit::dpi::PhysicalPosition::new(
-                                    (pos.x as f64 / scale) as i32,
-                                    (pos.y as f64 / scale) as i32,
-                                ),
-                                winit::dpi::PhysicalSize::new(
-                                    (sz.width as f64 / scale) as u32,
-                                    (sz.height as f64 / scale) as u32,
-                                ),
-                            )
-                        })
-                        .collect();
-                    let clamped = clamp_to_screen(desired, initial_size, &logical_monitors);
-                    Some(LogicalPosition::new(clamped.x as f64, clamped.y as f64))
-                }
-            };
-
-            let mut builder = ViewportBuilder::default()
-                .with_always_on_top()
-                .with_window_level(egui::WindowLevel::AlwaysOnTop)
-                .with_decorations(false)
-                .with_taskbar(false)
-                .with_resizable(false)
-                .with_inner_size(initial_size);
-
-            if let Some(pos) = logical_pos {
-                builder = builder.with_position(egui::Pos2::new(pos.x as f32, pos.y as f32));
-            }
-
-            let (_ctx, window_id) = app
-                .create_egui_window(ViewportId::from_hash_of(random_string(10)), builder, {
-                    let self_window_id = self_window_id.clone();
-                    let open_submenu_count = open_submenu_count.clone();
-                    let click_handler_for_closure = click_handler.clone();
-                    let close_all_for_closure = close_all.clone();
-                    let pending_click_for_closure = pending_click.clone();
-                    let item_overrides_for_closure = item_overrides.clone();
-                    move |ctx| {
-                        ctx.set_visuals(egui::Visuals::light());
-                        let hover_fill = Color32::from_rgb(225, 235, 252);
-                        let press_fill = Color32::from_rgb(198, 216, 249);
-                        egui::CentralPanel::default()
-                            .frame(egui::Frame::new().fill(Color32::WHITE))
-                            .show(ctx, |ui| {
-                                ui.style_mut().interaction.selectable_labels = false;
-                                ui.vertical(|ui| {
-                                    ui.style_mut().spacing.item_spacing.y = 0.0;
-                                    let mut handle_click = |id: String, close: bool| {
-                                        *pending_click_for_closure.lock().unwrap() =
-                                            Some((id, close));
-                                    };
-                                    let overrides_guard =
-                                        item_overrides_for_closure.read().unwrap();
-                                    draw_menu_items(
-                                        ui,
-                                        &items,
-                                        &skin,
-                                        &templates,
-                                        &overrides_guard,
-                                        |idx, effective_item, response| {
-                                            let parent_hover = &parent_item_hovered[idx];
-                                            let is_submenu_open = &submenu_open[idx];
-                                            let is_hovered = response.hovered();
-                                            parent_hover.store(is_hovered, Ordering::Relaxed);
-                                            if is_hovered {
-                                                if let Some(children) = &effective_item.children
-                                                    && !is_submenu_open
-                                                        .swap(true, Ordering::Relaxed)
-                                                    && let Some(&parent_wid) = self_window_id.get()
-                                                {
-                                                    // Increment *before* spawn so the root's
-                                                    // focus-loss guard already sees count > 0
-                                                    // when the OS moves focus to the new window.
-                                                    open_submenu_count
-                                                        .fetch_add(1, Ordering::Relaxed);
-                                                    smol::spawn(Self::show_menu_with_items(
-                                                        app_for_closure.clone(),
-                                                        children.clone(),
-                                                        MenuPosition::RightOf {
-                                                            parent_window_id: parent_wid,
-                                                            row_y_offset: response.rect.top(),
-                                                        },
-                                                        Some(parent_hover.clone()),
-                                                        Some(is_submenu_open.clone()),
-                                                        false,
-                                                        open_submenu_count.clone(),
-                                                        click_handler_for_closure.clone(),
-                                                        close_all_for_closure.clone(),
-                                                        item_overrides_for_closure.clone(),
-                                                    ))
-                                                    .detach();
-                                                }
-                                                return Some(hover_fill);
-                                            }
-                                            if response.is_pointer_button_down_on() {
-                                                return Some(press_fill);
-                                            }
-                                            None
-                                        },
-                                        &mut handle_click,
-                                    );
-                                });
-                            });
-                    }
-                })
-                .await;
-
-            // Write window_id into the shared slot so the render closure can use it.
-            let _ = self_window_id.set(window_id);
-
-            if let Some(parent_hovered) = keep_open {
-                // Submenu: stay alive while parent entry or self is hovered.
-                let self_hovered = Arc::new(AtomicBool::new(false));
-                let close_requested = Arc::new(AtomicBool::new(false));
-                app.set_window_message_handler(window_id, {
-                    let self_hovered = self_hovered.clone();
-                    let close_requested = close_requested.clone();
-                    move |_window_id, event, _window| {
-                        match event {
-                            WindowEvent::CursorEntered { .. } => {
-                                self_hovered.store(true, Ordering::Relaxed);
-                            }
-                            WindowEvent::CursorLeft { .. } => {
-                                self_hovered.store(false, Ordering::Relaxed);
-                            }
-                            WindowEvent::CloseRequested => {
-                                close_requested.store(true, Ordering::Relaxed);
-                            }
-                            _ => {}
-                        }
-                        false
-                    }
-                })
-                .await;
-
-                let mut missing_hover_ticks = 0;
-                loop {
-                    if close_requested.load(Ordering::Relaxed) {
-                        break;
-                    }
-                    if close_all.load(Ordering::Relaxed) {
-                        app.close_window(window_id).await;
-                        break;
-                    }
-                    let pending_id = pending_click.lock().unwrap().take();
-                    if let Some((id, should_close)) = pending_id {
-                        if let Some(handler) = &click_handler {
-                            handler(id);
-                        }
-                        if should_close {
-                            close_all.store(true, Ordering::Relaxed);
-                            app.close_window(window_id).await;
-                            break;
-                        }
-                    }
-                    let hovered = parent_hovered.load(Ordering::Relaxed)
-                        || self_hovered.load(Ordering::Relaxed);
-                    if hovered {
-                        missing_hover_ticks = 0;
-                    } else {
-                        missing_hover_ticks += 1;
-                        if missing_hover_ticks >= 3 {
-                            app.close_window(window_id).await;
-                            break;
-                        }
-                    }
-                    smol::Timer::after(Duration::from_millis(50)).await;
-                }
-
-                // Decrement the shared counter so the root menu knows this
-                // submenu is gone and can act on future focus-loss events.
-                open_submenu_count.fetch_sub(1, Ordering::Relaxed);
-            } else if is_root {
-                // Root menu: close when focus is lost, no submenus are open,
-                // AND the cursor is outside the root window.  We must track all
-                // three because opening a submenu steals focus from the root,
-                // and when that submenu later closes `is_focused` stays false
-                // until the OS re-delivers a focus event.  Without the cursor
-                // check the root would close any time a submenu closed normally.
-                let is_focused = Arc::new(AtomicBool::new(true));
-                let cursor_inside = Arc::new(AtomicBool::new(false));
-                let close_requested = Arc::new(AtomicBool::new(false));
-                app.set_window_message_handler(window_id, {
-                    let is_focused = is_focused.clone();
-                    let cursor_inside = cursor_inside.clone();
-                    let close_requested = close_requested.clone();
-                    move |_window_id, event, _window| {
-                        match event {
-                            WindowEvent::Focused(focused) => {
-                                is_focused.store(*focused, Ordering::Relaxed);
-                            }
-                            WindowEvent::CursorEntered { .. } => {
-                                cursor_inside.store(true, Ordering::Relaxed);
-                            }
-                            WindowEvent::CursorLeft { .. } => {
-                                cursor_inside.store(false, Ordering::Relaxed);
-                            }
-                            WindowEvent::CloseRequested => {
-                                close_requested.store(true, Ordering::Relaxed);
-                            }
-                            _ => {}
-                        }
-                        false
-                    }
-                })
-                .await;
-
-                let mut unfocused_ticks: u32 = 0;
-                loop {
-                    if close_requested.load(Ordering::Relaxed) || close_all.load(Ordering::Relaxed)
-                    {
-                        app.close_window(window_id).await;
-                        break;
-                    }
-                    let pending_id = pending_click.lock().unwrap().take();
-                    if let Some((id, should_close)) = pending_id {
-                        if let Some(handler) = &click_handler {
-                            handler(id);
-                        }
-                        if should_close {
-                            close_all.store(true, Ordering::Relaxed);
-                            app.close_window(window_id).await;
-                            break;
-                        }
-                    }
-                    // Close only when all three conditions hold simultaneously:
-                    // 1. Root has lost focus (e.g. user clicked elsewhere)
-                    // 2. No submenus are open
-                    // 3. The cursor is NOT inside this root window
-                    //
-                    // Condition 3 is critical: when a submenu closes the root's
-                    // `is_focused` is still false (the submenu had focus), but the
-                    // cursor may be hovering over the root.  Without this check
-                    // the root would close any time a submenu closes normally.
-                    //
-                    // We also debounce for 2 ticks to cover the brief gap when
-                    // switching between two submenu triggers (old submenu
-                    // decremented count but new submenu hasn't incremented yet).
-                    let should_close = !is_focused.load(Ordering::Relaxed)
-                        && open_submenu_count.load(Ordering::Relaxed) == 0
-                        && !cursor_inside.load(Ordering::Relaxed);
-                    if should_close {
-                        unfocused_ticks += 1;
-                        if unfocused_ticks >= 2 {
-                            app.close_window(window_id).await;
-                            break;
-                        }
-                    } else {
-                        unfocused_ticks = 0;
-                    }
-                    smol::Timer::after(Duration::from_millis(50)).await;
-                }
-            }
-
-            if let Some(opened_flag) = opened_flag {
-                opened_flag.store(false, Ordering::Relaxed);
-            }
-        })
-    }
-
     pub fn show(&self) {
         let menu_data = self.menu_data.clone();
         let app = self.app.clone();
+        let click_handler = self.click_handler.clone();
+        let item_overrides = self.item_overrides.clone();
+
         #[cfg(target_os = "linux")]
         if app.is_wayland() {
             smol::spawn(wayland::show_wayland_overlay(
                 app,
                 menu_data.content.clone(),
-                self.click_handler.clone(),
-                self.item_overrides.clone(),
+                click_handler,
+                item_overrides,
             ))
             .detach();
             return;
         }
-        let close_all = Arc::new(AtomicBool::new(false));
-        smol::spawn(Self::show_menu_with_items(
+
+        smol::spawn(popup::show_popup_menu(
             app,
             menu_data.content.clone(),
-            MenuPosition::AtCursor,
-            None,
-            None,
-            true,
-            Arc::new(AtomicUsize::new(0)),
-            self.click_handler.clone(),
-            close_all,
-            self.item_overrides.clone(),
+            click_handler,
+            item_overrides,
         ))
         .detach();
     }

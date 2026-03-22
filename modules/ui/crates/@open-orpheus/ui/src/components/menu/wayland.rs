@@ -5,12 +5,13 @@ use std::{
     time::Duration,
 };
 
-use egui::{Color32, Margin, ViewportBuilder, ViewportId};
+use egui::{Color32, Margin, ViewportId};
 
 use crate::{app::App, util::random_string};
 
 use super::{
     draw::{draw_menu_items, load_templates, measure_items},
+    shared::{HOVER_FILL, POLL_INTERVAL_MS, PRESS_FILL, SUBMENU_IDLE_MS, menu_viewport_builder},
     types::{MenuItem, MenuItemPatch},
 };
 
@@ -60,13 +61,7 @@ pub async fn show_wayland_overlay(
     // the deepest submenu after a short idle period.
     let submenu_idle_since: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
 
-    let builder = ViewportBuilder::default()
-        .with_always_on_top()
-        .with_window_level(egui::WindowLevel::AlwaysOnTop)
-        .with_decorations(false)
-        .with_taskbar(false)
-        .with_resizable(false)
-        .with_transparent(true)
+    let builder = menu_viewport_builder()
         .with_inner_size(egui::Vec2::new(OVERLAY_W, OVERLAY_H))
         .with_position(egui::Pos2::ZERO);
 
@@ -126,7 +121,6 @@ pub async fn show_wayland_overlay(
                                     ui.style_mut().interaction.selectable_labels = false;
                                     ui.style_mut().spacing.item_spacing.y = 0.0;
 
-                                    let hover_fill = Color32::from_rgb(225, 235, 252);
                                     let mut handle_click = |id: String, close: bool| {
                                         *pending_click_for_closure.lock().unwrap() =
                                             Some((id, close));
@@ -150,10 +144,10 @@ pub async fn show_wayland_overlay(
                                                     pending_submenu =
                                                         Some((depth, sub_pos, children.clone()));
                                                 }
-                                                return Some(hover_fill);
+                                                return Some(HOVER_FILL);
                                             }
                                             if response.is_pointer_button_down_on() {
-                                                return Some(Color32::from_rgb(198, 216, 249));
+                                                return Some(PRESS_FILL);
                                             }
                                             None
                                         },
@@ -187,7 +181,6 @@ pub async fn show_wayland_overlay(
                 // Auto-close the deepest submenu when the cursor has been outside
                 // both the submenu panel itself and its trigger item for a short period.
                 // Hovering the parent menu's empty space does NOT keep the submenu open.
-                const SUBMENU_IDLE_MS: u128 = 400;
                 let submenu_idle_should_tick = levels_guard.len() > 1 && {
                     let cursor_in_deepest = area_rects
                         .get(levels_guard.len() - 1)
@@ -306,7 +299,7 @@ pub async fn show_wayland_overlay(
                 break;
             }
         }
-        smol::Timer::after(Duration::from_millis(16)).await;
+        smol::Timer::after(Duration::from_millis(POLL_INTERVAL_MS)).await;
     }
 
     let _ = ctx;
