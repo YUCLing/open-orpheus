@@ -122,8 +122,7 @@ impl Menu {
                         // scale_factor to get logical pixels, which is what
                         // ViewportBuilder::with_position expects.
                         egui::Pos2::new(
-                            (parent_pos.x as f64 + parent_size.width as f64) as f32
-                                / scale as f32,
+                            (parent_pos.x as f64 + parent_size.width as f64) as f32 / scale as f32,
                             parent_pos.y as f32 / scale as f32 + row_y_offset,
                         )
                     } else {

@@ -121,7 +121,7 @@ impl App {
         let app_inner = AppInner {
             windows: HashMap::default(),
             ctx: ctx.clone(),
-            painter: Some(painter),
+            painter,
             last_resized_window: None,
         };
 

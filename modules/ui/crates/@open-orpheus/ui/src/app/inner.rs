@@ -27,7 +27,7 @@ pub struct WindowState {
 pub struct AppInner {
     pub windows: HashMap<WindowId, WindowState>,
     pub ctx: Context,
-    pub painter: Option<Painter>,
+    pub painter: Painter,
     /// Tracks the last window that received a `Resized` event so the painter can
     /// be notified when the resize phase ends (macOS CoreAnimation sync).
     pub last_resized_window: Option<WindowId>,
@@ -43,8 +43,9 @@ impl ApplicationHandler<Request> for AppInner {
         // macOS CoreAnimation resize sync: on any event following a resize, notify
         // the painter that the resize phase has ended so it can flush pending frames.
         if self.last_resized_window == Some(window_id) {
-            if let (Some(ws), Some(painter)) = (self.windows.get(&window_id), &mut self.painter) {
-                painter.on_window_resize_state_change(ws.viewport_id, false);
+            if let Some(ws) = self.windows.get(&window_id) {
+                self.painter
+                    .on_window_resize_state_change(ws.viewport_id, false);
             }
             self.last_resized_window = None;
         }
@@ -65,9 +66,7 @@ impl ApplicationHandler<Request> for AppInner {
         }
         match event {
             WindowEvent::RedrawRequested => {
-                let Some(painter) = &mut self.painter else {
-                    return;
-                };
+                let painter = &mut self.painter;
                 let viewport_id = window_state.viewport_id;
 
                 // Update viewport info (focus, size, DPI, etc.) before taking egui input
@@ -135,14 +134,7 @@ impl ApplicationHandler<Request> for AppInner {
             WindowEvent::CloseRequested => {
                 if let Some(ws) = self.windows.remove(&window_id) {
                     // Release the wgpu surface for this viewport only.
-                    if let Some(painter) = &mut self.painter {
-                        smol::block_on(painter.set_window(ws.viewport_id, None)).ok();
-                    }
-                    if self.windows.is_empty()
-                        && let Some(mut painter) = self.painter.take()
-                    {
-                        painter.destroy();
-                    }
+                    smol::block_on(self.painter.set_window(ws.viewport_id, None)).ok();
                 }
             }
             WindowEvent::Resized(size) => {
@@ -156,12 +148,11 @@ impl ApplicationHandler<Request> for AppInner {
                     return;
                 };
                 let viewport_id = window_state.viewport_id;
-                if let Some(painter) = &mut self.painter {
-                    painter.on_window_resized(viewport_id, w, h);
-                    // Mark this viewport as being in a resize phase; the painter uses
-                    // this on macOS to synchronise with CoreAnimation transactions.
-                    painter.on_window_resize_state_change(viewport_id, true);
-                }
+                let painter = &mut self.painter;
+                painter.on_window_resized(viewport_id, w, h);
+                // Mark this viewport as being in a resize phase; the painter uses
+                // this on macOS to synchronise with CoreAnimation transactions.
+                painter.on_window_resize_state_change(viewport_id, true);
                 // NLL: window_state borrow ends here; self fields are accessible again.
                 self.last_resized_window = Some(window_id);
             }
@@ -174,25 +165,29 @@ impl ApplicationHandler<Request> for AppInner {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Request) {
         match event {
             Request::CreateWindow(viewport_id, viewport_builder, run_ui, sender) => {
-                let ctx = self.ctx.clone();
+                let ctx = &self.ctx;
                 let window_attributes =
-                    egui_winit::create_winit_window_attributes(&ctx, viewport_builder);
+                    egui_winit::create_winit_window_attributes(ctx, viewport_builder);
                 let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
                 let id = window.id();
 
-                smol::block_on(
-                    self.painter
-                        .as_mut()
-                        .unwrap()
-                        .set_window(viewport_id, Some(window.clone())),
-                )
-                .unwrap();
+                let painter = &mut self.painter;
+
+                smol::block_on(painter.set_window(viewport_id, Some(window.clone()))).unwrap();
 
                 // Setup viewport info.
                 let mut viewport_info = ViewportInfo::default();
-                egui_winit::update_viewport_info(&mut viewport_info, &ctx, &window, true);
+                let egui_state = State::new(
+                    ctx.clone(),
+                    viewport_id,
+                    &window,
+                    Some(window.scale_factor() as f32),
+                    event_loop.system_theme(),
+                    painter.max_texture_side(),
+                );
+                egui_winit::update_viewport_info(&mut viewport_info, ctx, &window, true);
                 let window_state = WindowState {
-                    egui_state: State::new(ctx, viewport_id, &window, None, None, None),
+                    egui_state,
                     window,
                     viewport_id,
                     run_ui,
@@ -230,9 +225,7 @@ impl ApplicationHandler<Request> for AppInner {
                 if let Some(ws) = self.windows.remove(&window_id) {
                     // Release the wgpu surface for this viewport only.
                     // The shared Painter itself stays alive for other windows.
-                    if let Some(painter) = &mut self.painter {
-                        smol::block_on(painter.set_window(ws.viewport_id, None)).ok();
-                    }
+                    smol::block_on(self.painter.set_window(ws.viewport_id, None)).ok();
                 }
             }
             Request::SetWindowMessageHandler(window_id, handler) => {
