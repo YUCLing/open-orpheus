@@ -27,5 +27,6 @@ pub enum Request {
         WindowId,
         oneshot::Sender<Vec<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,
     ),
+    GetWindowScaleFactor(WindowId, oneshot::Sender<Option<f64>>),
     SetWindowMessageHandler(WindowId, WindowMessageHandler),
 }

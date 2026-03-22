@@ -230,6 +230,16 @@ impl App {
         rx.await.ok().flatten()
     }
 
+    /// Returns the device-pixel ratio (physical pixels per logical pixel) for
+    /// the given window, or `1.0` if the window no longer exists.
+    pub async fn get_window_scale_factor(&self, window: WindowId) -> f64 {
+        let (tx, rx) = oneshot::channel();
+        self.event_loop_proxy
+            .send_event(Request::GetWindowScaleFactor(window, tx))
+            .unwrap();
+        rx.await.ok().flatten().unwrap_or(1.0)
+    }
+
     /// Returns monitor geometry for all monitors as (position, size) in physical pixels,
     /// queried via the window thread using any existing window as context.
     pub async fn get_monitor_rects(

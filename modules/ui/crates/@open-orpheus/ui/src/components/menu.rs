@@ -114,18 +114,39 @@ impl Menu {
                     parent_window_id,
                     row_y_offset,
                 } => {
+                    let scale = app.get_window_scale_factor(*parent_window_id).await;
                     let desired = if let Some((parent_pos, parent_size)) =
                         app.get_window_outer_rect(*parent_window_id).await
                     {
+                        // parent_pos and parent_size are in physical pixels; divide by
+                        // scale_factor to get logical pixels, which is what
+                        // ViewportBuilder::with_position expects.
                         egui::Pos2::new(
-                            (parent_pos.x + parent_size.width as i32) as f32,
-                            parent_pos.y as f32 + row_y_offset,
+                            (parent_pos.x as f64 + parent_size.width as f64) as f32
+                                / scale as f32,
+                            parent_pos.y as f32 / scale as f32 + row_y_offset,
                         )
                     } else {
                         egui::Pos2::ZERO
                     };
                     let monitors = app.get_monitor_rects(*parent_window_id).await;
-                    let clamped = clamp_to_screen(desired, initial_size, &monitors);
+                    // clamp_to_screen works in logical pixels; convert monitor rects too.
+                    let logical_monitors: Vec<_> = monitors
+                        .iter()
+                        .map(|(pos, sz)| {
+                            (
+                                winit::dpi::PhysicalPosition::new(
+                                    (pos.x as f64 / scale) as i32,
+                                    (pos.y as f64 / scale) as i32,
+                                ),
+                                winit::dpi::PhysicalSize::new(
+                                    (sz.width as f64 / scale) as u32,
+                                    (sz.height as f64 / scale) as u32,
+                                ),
+                            )
+                        })
+                        .collect();
+                    let clamped = clamp_to_screen(desired, initial_size, &logical_monitors);
                     Some(LogicalPosition::new(clamped.x as f64, clamped.y as f64))
                 }
             };

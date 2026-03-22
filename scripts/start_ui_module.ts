@@ -1,4 +1,9 @@
+/* eslint-disable */
+
 // Script for early-state development of the UI module.
+
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 
 import { App, Menu } from "@open-orpheus/ui";
 
@@ -9,8 +14,8 @@ setInterval(() => {
   // keep alive
 }, 1000);
 
-const webPack = new WebPack("../package/web.pack");
-const skinPack = new SkinPack("../package/common.skin");
+const webPack = new WebPack(resolve(homedir(), ".config/open-orpheus/package/orpheus.ntpk"));
+const skinPack = new SkinPack(resolve(homedir(), ".config/open-orpheus/package/common.skin"));
 
 function parseMenuData(menuData: any) {
   return {

@@ -248,6 +248,13 @@ impl ApplicationHandler<Request> for AppInner {
                 });
                 let _ = sender.send(result);
             }
+            Request::GetWindowScaleFactor(window_id, sender) => {
+                let factor = self
+                    .windows
+                    .get(&window_id)
+                    .map(|ws| ws.window.scale_factor());
+                let _ = sender.send(factor);
+            }
             Request::GetMonitorRects(window_id, sender) => {
                 let rects = self
                     .windows
