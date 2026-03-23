@@ -206,11 +206,6 @@ impl ApplicationHandler<Request> for AppInner {
                     ws.window.request_redraw();
                 }
             }
-            Request::ShowWindow(window_id) => {
-                if let Some(window_state) = self.windows.get(&window_id) {
-                    window_state.window.set_visible(true);
-                }
-            }
             Request::RepaintWindow(window_id) => {
                 if let Some(window_state) = self.windows.get(&window_id) {
                     window_state.window.request_redraw();
@@ -232,14 +227,6 @@ impl ApplicationHandler<Request> for AppInner {
                 if let Some(window_state) = self.windows.get_mut(&window_id) {
                     window_state.message_handler = Some(handler);
                 }
-            }
-            Request::GetWindowOuterRect(window_id, sender) => {
-                let result = self.windows.get(&window_id).and_then(|ws| {
-                    let pos = ws.window.outer_position().ok()?;
-                    let size = ws.window.outer_size();
-                    Some((pos, size))
-                });
-                let _ = sender.send(result);
             }
             Request::GetWindowScaleFactor(window_id, sender) => {
                 let factor = self

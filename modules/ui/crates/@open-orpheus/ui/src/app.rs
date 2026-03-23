@@ -178,13 +178,6 @@ impl App {
         (self.ctx.clone(), receiver.await.unwrap())
     }
 
-    pub async fn show_window(&self, window: WindowId) {
-        // TODO: wait for window show
-        self.event_loop_proxy
-            .send_event(Request::ShowWindow(window))
-            .unwrap();
-    }
-
     pub async fn repaint_window(&self, window: WindowId) {
         self.event_loop_proxy
             .send_event(Request::RepaintWindow(window))
@@ -214,20 +207,6 @@ impl App {
                 WindowMessageHandler(Box::new(handler)),
             ))
             .unwrap();
-    }
-
-    /// Returns the window's outer position and size in physical pixels, or
-    /// `None` if the window no longer exists or the platform doesn't support it
-    /// (e.g. Wayland top-level windows).
-    pub async fn get_window_outer_rect(
-        &self,
-        window: WindowId,
-    ) -> Option<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
-        let (tx, rx) = oneshot::channel();
-        self.event_loop_proxy
-            .send_event(Request::GetWindowOuterRect(window, tx))
-            .unwrap();
-        rx.await.ok().flatten()
     }
 
     /// Returns the device-pixel ratio (physical pixels per logical pixel) for

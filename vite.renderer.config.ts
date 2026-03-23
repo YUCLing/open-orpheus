@@ -34,7 +34,9 @@ function runPackageManagerSync(args: string[]) {
 
   if (result.error) throw result.error;
   if (typeof result.status === "number" && result.status !== 0) {
-    throw new Error(`Package manager command failed with exit code ${result.status}`);
+    throw new Error(
+      `Package manager command failed with exit code ${result.status}`
+    );
   }
 }
 

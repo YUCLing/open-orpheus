@@ -14,13 +14,17 @@ setInterval(() => {
   // keep alive
 }, 1000);
 
-const userData = resolve(homedir(), platform() === "win32" ? "AppData/Roaming" : ".config", "open-orpheus");
+const userData = resolve(
+  homedir(),
+  platform() === "win32" ? "AppData/Roaming" : ".config",
+  "open-orpheus"
+);
 const webPack = new WebPack(resolve(userData, "package/orpheus.ntpk"));
 const skinPack = new SkinPack(resolve(userData, "package/common.skin"));
 
 // no GC
 let app: App | null = null;
-let menu : Menu | null = null;
+let menu: Menu | null = null;
 
 function parseMenuData(menuData: any) {
   return {

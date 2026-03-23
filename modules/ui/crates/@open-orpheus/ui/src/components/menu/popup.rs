@@ -63,6 +63,14 @@ enum LoopAction {
     },
 }
 
+struct LevelWindowCtx<'a> {
+    app: &'a App,
+    stack: &'a Arc<Mutex<MenuStack>>,
+    skin: &'a Arc<crate::skin::MenuSkin>,
+    templates: &'a Arc<std::collections::HashMap<String, crate::skin::ElementTemplate>>,
+    item_overrides: &'a Arc<RwLock<HashMap<String, MenuItemPatch>>>,
+}
+
 /// Per-level popup windows implementation for X11 / macOS / Windows.
 pub async fn show_popup_menu(
     app: App,
@@ -92,19 +100,16 @@ pub async fn show_popup_menu(
         focus_lost_at: None,
     }));
 
-    let root_window_id = create_level_window(
-        &app,
-        &stack,
-        &skin,
-        &templates,
-        &item_overrides,
-        0,
-        None,
-        items.clone(),
-        root_pos,
-        root_size,
-    )
-    .await;
+    let cx = LevelWindowCtx {
+        app: &app,
+        stack: &stack,
+        skin: &skin,
+        templates: &templates,
+        item_overrides: &item_overrides,
+    };
+
+    let root_window_id =
+        create_level_window(&cx, 0, None, items.clone(), root_pos, root_size).await;
 
     // Coordinator poll loop.
     loop {
@@ -231,11 +236,7 @@ pub async fn show_popup_menu(
                 }
 
                 create_level_window(
-                    &app,
-                    &stack,
-                    &skin,
-                    &templates,
-                    &item_overrides,
+                    &cx,
                     close_from,
                     Some(parent_item_idx),
                     children,
@@ -467,11 +468,7 @@ async fn query_cursor_info(
 }
 
 async fn create_level_window(
-    app: &App,
-    stack: &Arc<Mutex<MenuStack>>,
-    skin: &Arc<crate::skin::MenuSkin>,
-    templates: &Arc<std::collections::HashMap<String, crate::skin::ElementTemplate>>,
-    item_overrides: &Arc<RwLock<HashMap<String, MenuItemPatch>>>,
+    cx: &LevelWindowCtx<'_>,
     depth: usize,
     opened_from_item: Option<usize>,
     items: Arc<Vec<MenuItem>>,
@@ -482,13 +479,14 @@ async fn create_level_window(
         .with_inner_size(size)
         .with_position(screen_pos);
 
-    let (_ctx, window_id) = app
+    let (_ctx, window_id) = cx
+        .app
         .create_egui_window(ViewportId::from_hash_of(random_string(10)), builder, {
-            let stack = stack.clone();
+            let stack = cx.stack.clone();
             let items = items.clone();
-            let skin = skin.clone();
-            let templates = templates.clone();
-            let item_overrides = item_overrides.clone();
+            let skin = cx.skin.clone();
+            let templates = cx.templates.clone();
+            let item_overrides = cx.item_overrides.clone();
             move |ctx| {
                 ctx.set_visuals(egui::Visuals {
                     panel_fill: Color32::WHITE,
@@ -561,25 +559,26 @@ async fn create_level_window(
 
     let focused_flag = Arc::new(AtomicBool::new(true));
 
-    app.set_window_message_handler(window_id, {
-        let stack = stack.clone();
-        let focused_flag = focused_flag.clone();
-        move |_wid, event, _win| {
-            match event {
-                winit::event::WindowEvent::Focused(focused) => {
-                    focused_flag.store(*focused, Ordering::SeqCst);
+    cx.app
+        .set_window_message_handler(window_id, {
+            let stack = cx.stack.clone();
+            let focused_flag = focused_flag.clone();
+            move |_wid, event, _win| {
+                match event {
+                    winit::event::WindowEvent::Focused(focused) => {
+                        focused_flag.store(*focused, Ordering::SeqCst);
+                    }
+                    winit::event::WindowEvent::CloseRequested => {
+                        stack.lock().unwrap().dismiss = true;
+                    }
+                    _ => {}
                 }
-                winit::event::WindowEvent::CloseRequested => {
-                    stack.lock().unwrap().dismiss = true;
-                }
-                _ => {}
+                false
             }
-            false
-        }
-    })
-    .await;
+        })
+        .await;
 
-    stack.lock().unwrap().levels.push(LevelInfo {
+    cx.stack.lock().unwrap().levels.push(LevelInfo {
         window_id,
         screen_pos,
         focused: focused_flag,

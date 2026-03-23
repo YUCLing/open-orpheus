@@ -6,8 +6,6 @@ import {
   WebContents,
 } from "electron";
 
-import { isWayland } from "@open-orpheus/window";
-
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { pngFromIco } from "../util";

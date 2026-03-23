@@ -29,6 +29,7 @@ impl Menu {
         }
     }
 
+    #[allow(dead_code)]
     /// Set a handler that is called when a menu item (or icon button) is
     /// clicked. Receives the item's `menu_id` for text rows, or the button's
     /// `id` for icon-button rows. Builder-style, takes `self`.

@@ -95,6 +95,7 @@ impl MenuItemPatch {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct MenuData {
     pub content: Arc<Vec<MenuItem>>,

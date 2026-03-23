@@ -14,15 +14,10 @@ pub enum Request {
         RunUI,
         oneshot::Sender<WindowId>,
     ),
-    ShowWindow(WindowId),
     RepaintWindow(WindowId),
     RepaintViewport(ViewportId),
     RepaintAllViewports,
     CloseWindow(WindowId),
-    GetWindowOuterRect(
-        WindowId,
-        oneshot::Sender<Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,
-    ),
     GetMonitorRects(
         WindowId,
         oneshot::Sender<Vec<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,

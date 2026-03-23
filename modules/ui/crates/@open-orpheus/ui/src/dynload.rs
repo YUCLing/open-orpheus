@@ -88,7 +88,7 @@ fn resolve_ptr(name: &CStr) -> Result<*mut c_void, String> {
 /// matches the actual exported C symbol.
 pub unsafe fn resolve_symbol<F: Copy>(name: &CStr) -> Result<F, String> {
     let ptr = resolve_ptr(name)?;
-    Ok(std::mem::transmute_copy::<*mut c_void, F>(&ptr))
+    Ok(unsafe { std::mem::transmute_copy::<*mut c_void, F>(&ptr) })
 }
 
 /// Declare a lazily-resolved, cached dynamic C-symbol accessor.
