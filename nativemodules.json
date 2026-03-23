@@ -1,6 +1,7 @@
 [
   "font-list",
   "7z-wasm",
+  "@neon-rs/load",
   "@open-orpheus/database",
   "@open-orpheus/window",
   "@open-orpheus/ui"
