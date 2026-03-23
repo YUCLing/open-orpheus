@@ -1,15 +1,15 @@
-import { BrowserWindow, clipboard, Menu, nativeImage } from "electron";
+import { BrowserWindow, clipboard, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
 import { dragWindow, isWayland } from "@open-orpheus/window";
-import { Menu as NativeMenu } from "@open-orpheus/ui";
+import { Menu } from "@open-orpheus/ui";
 
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
 import { getMenus, setMaximumSize } from "../window";
-import { AppMenu, AppMenuItem, appMenuItemToMenuItem } from "../menu";
+import { AppMenuItem } from "../menu";
 import { getApp } from "../ui";
 
 function shouldApplyScaleFactor() {
@@ -246,19 +246,9 @@ registerCallHandler<MenuRequest, void>(
     }
     const menuItems = JSON.parse(data.content) as AppMenuItem[];
     for (const item of menuItems) {
-      if (os.platform() === "linux" && isWayland()) {
-        // TODO: why `mine.svg` for `openVinylPage` update?
-        (menu as unknown as NativeMenu).updateItem(item);
-        continue;
-      }
-      for (const oldItem of menu) {
-        if (item.menu_id === oldItem.menu_id) {
-          Object.assign(oldItem, item);
-          break;
-        }
-      }
+      // TODO: why `mine.svg` for `openVinylPage` update?
+      menu.updateItem(item);
     }
-    // TODO: Update the menu on the fly
   }
 );
 
@@ -313,20 +303,10 @@ registerCallHandler<MenuRequest, void>(
       }
       event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
     };
-    if (os.platform() === "linux" && isWayland()) {
-      const menu = new NativeMenu(getApp(), parsedMenuData);
-      menus.set(id, menu as unknown as AppMenu); // Only Wayland is using NativeMenu, so this cast is safe
-      menu.onClick(onClick);
-      menu.show();
-    } else {
-      const items = parsedMenuData.content;
-      menus.set(id, items);
-      const nativeMenu = new Menu();
-      for (const item of items) {
-        nativeMenu.append(await appMenuItemToMenuItem(item, id, onClick));
-      }
-      nativeMenu.popup({ window: wnd });
-    }
+    const menu = new Menu(getApp(), parsedMenuData);
+    menus.set(id, menu);
+    menu.onClick(onClick);
+    menu.show();
   }
 );
 

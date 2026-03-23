@@ -72,7 +72,11 @@ pub async fn show_popup_menu(
 
     let templates = load_templates(&app, &items).await;
     let root_size = measure_items(&items, &skin, templates.clone());
-    let cursor_pos = query_cursor_position(&app).await;
+    let (cursor_pos, scale, monitors) = query_cursor_info(&app).await;
+
+    // Clamp the root position *before* creating the window so the OS places the
+    // window at the correct position from the start.
+    let root_pos = clamp_to_screen(cursor_pos, root_size, &monitors, scale);
 
     let stack: Arc<Mutex<MenuStack>> = Arc::new(Mutex::new(MenuStack {
         levels: Vec::new(),
@@ -85,16 +89,9 @@ pub async fn show_popup_menu(
 
     let root_window_id = create_level_window(
         &app, &stack, &skin, &templates, &item_overrides,
-        0, None, items.clone(), cursor_pos, root_size,
+        0, None, items.clone(), root_pos, root_size,
     )
     .await;
-
-    // Clamp root position using monitor info.
-    let monitors = app.get_monitor_rects(root_window_id).await;
-    let clamped_root = clamp_to_screen(cursor_pos, root_size, &monitors);
-    if clamped_root != cursor_pos {
-        stack.lock().unwrap().levels[0].screen_pos = clamped_root;
-    }
 
     // Coordinator poll loop.
     loop {
@@ -112,13 +109,9 @@ pub async fn show_popup_menu(
             }
 
             if g.dismiss {
-                eprintln!("[MENU-DBG] Coordinator: dismiss=true => Dismiss");
                 LoopAction::Dismiss
             } else if g.focus_lost_at.is_some_and(|t| t.elapsed().as_millis() >= 150)
             {
-                eprintln!("[MENU-DBG] Coordinator: focus_lost dismiss! any_focused={any_focused} lost_elapsed={:?}ms levels={}",
-                    g.focus_lost_at.map(|t| t.elapsed().as_millis()),
-                    g.levels.len());
                 g.dismiss = true;
                 LoopAction::Dismiss
             } else if let Some((id, close_all)) = g.pending_click.take() {
@@ -141,7 +134,6 @@ pub async fn show_popup_menu(
                 }
             } else if let Some(close_to) = g.pending_close_to.take() {
                 if close_to < g.levels.len() {
-                    eprintln!("[MENU-DBG] Coordinator: TrimTo close_to={close_to} levels={}", g.levels.len());
                     let to_close: Vec<WindowId> =
                         g.levels.drain(close_to..).map(|l| l.window_id).collect();
                     LoopAction::TrimTo { to_close }
@@ -196,15 +188,13 @@ pub async fn show_popup_menu(
                     }
                 };
 
-                let clamped = clamp_to_screen(sub_pos, sub_size, &monitors);
+                let clamped = clamp_to_screen(sub_pos, sub_size, &monitors, scale);
                 if clamped.x < sub_pos.x && sub_pos.x > parent_x {
                     sub_pos.x = parent_x - sub_size.x;
-                    sub_pos = clamp_to_screen(sub_pos, sub_size, &monitors);
+                    sub_pos = clamp_to_screen(sub_pos, sub_size, &monitors, scale);
                 } else {
                     sub_pos = clamped;
                 }
-
-                eprintln!("[MENU-DBG] Coordinator: OpenSubmenu close_from={close_from}");
 
                 create_level_window(
                     &app, &stack, &skin, &templates, &item_overrides,
@@ -222,8 +212,123 @@ pub async fn show_popup_menu(
     }
 }
 
-async fn query_cursor_position(app: &App) -> egui::Pos2 {
-    let cursor: Arc<Mutex<Option<egui::Pos2>>> = Arc::new(Mutex::new(None));
+/// Query the cursor position directly via platform-native APIs, returning
+/// logical screen pixels with Y=0 at the top-left of the primary monitor.
+/// Returns `None` on failure.
+fn direct_cursor_pos() -> Option<egui::Pos2> {
+    // Windows ----------------------------------------------------------------
+    #[cfg(target_os = "windows")]
+    {
+        #[repr(C)]
+        struct POINT { x: i32, y: i32 }
+
+        #[link(name = "User32")]
+        unsafe extern "system" {
+            fn GetCursorPos(lp_point: *mut POINT) -> i32;
+            // Available since Windows 10 (build 14393); returns 96 on older systems.
+            fn GetDpiForSystem() -> u32;
+        }
+
+        let mut pt = POINT { x: 0, y: 0 };
+        if unsafe { GetCursorPos(&mut pt) } != 0 {
+            // Convert physical → logical pixels using the system DPI scale.
+            let scale = unsafe { GetDpiForSystem() } as f32 / 96.0;
+            return Some(egui::Pos2::new(pt.x as f32 / scale, pt.y as f32 / scale));
+        }
+        return None;
+    }
+
+    // macOS ------------------------------------------------------------------
+    #[cfg(target_os = "macos")]
+    {
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct CGPoint { x: f64, y: f64 }
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct CGSize { width: f64, height: f64 }
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct CGRect { origin: CGPoint, size: CGSize }
+
+        #[link(name = "CoreGraphics", kind = "framework")]
+        #[link(name = "CoreFoundation", kind = "framework")]
+        unsafe extern "C" {
+            fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
+            fn CGEventGetLocation(event: *const std::ffi::c_void) -> CGPoint;
+            fn CFRelease(cf: *const std::ffi::c_void);
+            fn CGMainDisplayID() -> u32;
+            fn CGDisplayBounds(display: u32) -> CGRect;
+        }
+
+        let ev = unsafe { CGEventCreate(std::ptr::null()) };
+        if ev.is_null() { return None; }
+        let pt = unsafe { CGEventGetLocation(ev) };
+        unsafe { CFRelease(ev) };
+        let bounds = unsafe { CGDisplayBounds(CGMainDisplayID()) };
+        // CoreGraphics Y=0 is at the *bottom* of the primary monitor;
+        // winit/egui expect Y=0 at the *top*, so flip.
+        return Some(egui::Pos2::new(
+            pt.x as f32,
+            (bounds.size.height - pt.y) as f32,
+        ));
+    }
+
+    // Linux X11 --------------------------------------------------------------
+    // (Wayland is handled by the separate wayland module and never reaches here.)
+    #[cfg(target_os = "linux")]
+    {
+        use std::ffi::{c_int, c_void};
+
+        #[link(name = "X11")]
+        unsafe extern "C" {
+            fn XOpenDisplay(name: *const std::ffi::c_char) -> *mut c_void;
+            fn XCloseDisplay(dpy: *mut c_void) -> c_int;
+            fn XDefaultRootWindow(dpy: *mut c_void) -> u64;
+            fn XQueryPointer(
+                dpy: *mut c_void,
+                w: u64,
+                root_return: *mut u64,
+                child_return: *mut u64,
+                root_x_return: *mut c_int,
+                root_y_return: *mut c_int,
+                win_x_return: *mut c_int,
+                win_y_return: *mut c_int,
+                mask_return: *mut u32,
+            ) -> c_int;
+        }
+
+        let dpy = unsafe { XOpenDisplay(std::ptr::null()) };
+        if dpy.is_null() { return None; }
+        let root = unsafe { XDefaultRootWindow(dpy) };
+        let (mut rr, mut cr) = (0u64, 0u64);
+        let (mut rx, mut ry, mut wx, mut wy, mut mask) = (0, 0, 0, 0, 0u32);
+        let ok = unsafe {
+            XQueryPointer(dpy, root, &mut rr, &mut cr, &mut rx, &mut ry, &mut wx, &mut wy, &mut mask)
+        };
+        unsafe { XCloseDisplay(dpy) };
+        if ok != 0 {
+            // X11 root-window coordinates are in physical pixels; on X11 setups
+            // fractional scaling is rare and the effective scale is typically 1.0.
+            return Some(egui::Pos2::new(rx as f32, ry as f32));
+        }
+        return None;
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+async fn query_cursor_info(
+    app: &App,
+) -> (
+    egui::Pos2,
+    f32,
+    Vec<(winit::dpi::PhysicalPosition<i32>, winit::dpi::PhysicalSize<u32>)>,
+) {
+    // Always create a probe window so we can retrieve the scale factor and
+    // monitor list even when the direct OS cursor query succeeds fast.
+    let cursor_fallback: Arc<Mutex<Option<egui::Pos2>>> = Arc::new(Mutex::new(None));
 
     let builder = menu_viewport_builder()
         .with_inner_size(egui::Vec2::new(1.0, 1.0))
@@ -237,11 +342,12 @@ async fn query_cursor_position(app: &App) -> egui::Pos2 {
         )
         .await;
 
+    // Install CursorMoved fallback in case direct query fails.
     app.set_window_message_handler(probe_wid, {
-        let cursor = cursor.clone();
+        let cursor_fallback = cursor_fallback.clone();
         move |_wid, event, win| {
             if let winit::event::WindowEvent::CursorMoved { position, .. } = event {
-                let mut c = cursor.lock().unwrap();
+                let mut c = cursor_fallback.lock().unwrap();
                 if c.is_none() {
                     let scale = win.scale_factor() as f32;
                     *c = Some(egui::Pos2::new(
@@ -255,20 +361,33 @@ async fn query_cursor_position(app: &App) -> egui::Pos2 {
     })
     .await;
 
-    let deadline = Instant::now() + Duration::from_millis(50);
-    loop {
-        if cursor.lock().unwrap().is_some() {
-            break;
+    // Fast path: direct OS cursor query.
+    let direct = direct_cursor_pos();
+
+    // If direct query failed, wait briefly for the CursorMoved fallback.
+    if direct.is_none() {
+        let deadline = Instant::now() + Duration::from_millis(50);
+        loop {
+            if cursor_fallback.lock().unwrap().is_some() {
+                break;
+            }
+            if Instant::now() >= deadline {
+                break;
+            }
+            smol::Timer::after(Duration::from_millis(4)).await;
         }
-        if Instant::now() >= deadline {
-            break;
-        }
-        smol::Timer::after(Duration::from_millis(4)).await;
     }
 
-    let pos = cursor.lock().unwrap().unwrap_or(egui::Pos2::ZERO);
+    // Collect scale + monitor info from the probe window.
+    let scale = app.get_window_scale_factor(probe_wid).await as f32;
+    let monitors = app.get_monitor_rects(probe_wid).await;
     app.close_window(probe_wid).await;
-    pos
+
+    let pos = direct
+        .or_else(|| *cursor_fallback.lock().unwrap())
+        .unwrap_or(egui::Pos2::ZERO);
+
+    (pos, scale.max(1.0), monitors)
 }
 
 async fn create_level_window(
@@ -360,7 +479,6 @@ async fn create_level_window(
                             }
 
                             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                                eprintln!("[MENU-DBG] Escape pressed depth={depth}");
                                 guard.dismiss = true;
                             }
                         });
@@ -378,10 +496,8 @@ async fn create_level_window(
             match event {
                 winit::event::WindowEvent::Focused(focused) => {
                     focused_flag.store(*focused, Ordering::SeqCst);
-                    eprintln!("[MENU-DBG] Focused({focused}) depth={depth}");
                 }
                 winit::event::WindowEvent::CloseRequested => {
-                    eprintln!("[MENU-DBG] CloseRequested depth={depth}");
                     stack.lock().unwrap().dismiss = true;
                 }
                 _ => {}

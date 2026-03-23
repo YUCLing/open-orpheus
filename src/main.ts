@@ -140,9 +140,7 @@ app.on("ready", async () => {
 
     await webPack.readPack();
 
-    if (os.platform() === "linux" && isWayland()) {
-      await createApp(true);
-    }
+    await createApp(os.platform() === "linux" ? isWayland() : false);
 
     createWindow();
 

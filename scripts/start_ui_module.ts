@@ -2,7 +2,7 @@
 
 // Script for early-state development of the UI module.
 
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import { resolve } from "node:path";
 
 import { App, Menu } from "@open-orpheus/ui";
@@ -14,8 +14,13 @@ setInterval(() => {
   // keep alive
 }, 1000);
 
-const webPack = new WebPack(resolve(homedir(), ".config/open-orpheus/package/orpheus.ntpk"));
-const skinPack = new SkinPack(resolve(homedir(), ".config/open-orpheus/package/common.skin"));
+const userData = resolve(homedir(), platform() === "win32" ? "AppData/Roaming" : ".config", "open-orpheus");
+const webPack = new WebPack(resolve(userData, "package/orpheus.ntpk"));
+const skinPack = new SkinPack(resolve(userData, "package/common.skin"));
+
+// no GC
+let app: App | null = null;
+let menu : Menu | null = null;
 
 function parseMenuData(menuData: any) {
   return {
@@ -29,7 +34,7 @@ async function main() {
   await webPack.readPack();
   await skinPack.readPack();
 
-  const app = await App.create({
+  app = await App.create({
     preferWayland: false,
     readWebPack: webPack.readFile.bind(webPack),
     readSkinPack: skinPack.readFile.bind(skinPack),
@@ -38,8 +43,8 @@ async function main() {
   await app.loadMenuSkin("/menu/skin.xml");
 
   //const menu = new Menu(app, parseMenuData(MENU_DATA));
-  const menu2 = new Menu(app, parseMenuData(MENU_DATA_2));
-  menu2.show();
+  menu = new Menu(app, parseMenuData(MENU_DATA_2));
+  menu.show();
 }
 
 main();

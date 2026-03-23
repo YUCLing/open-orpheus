@@ -129,9 +129,7 @@ registerCallHandler<[string, string], [boolean]>(
   async (event, name) => {
     try {
       await loadSkinPack(name);
-      if (os.platform() === "linux" && isWayland()) {
-        await getApp().loadMenuSkin("/menu/skin.xml");
-      }
+      await getApp().loadMenuSkin("/menu/skin.xml");
       return [true];
     } catch (e) {
       console.error("Failed to load skin pack", e);

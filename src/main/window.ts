@@ -1,9 +1,9 @@
 import { app, BrowserWindow, session, shell } from "electron";
-import { AppMenu } from "./menu";
+import { Menu } from "@open-orpheus/ui";
 
 type WindowProperties = {
   maximumSize?: { x: number; y: number };
-  menus: Map<number, AppMenu>;
+  menus: Map<number, Menu>;
   customProps: Record<string, unknown>;
 };
 
@@ -51,7 +51,7 @@ export function setMaximumSize(wnd: BrowserWindow, x: number, y: number) {
   }
 }
 
-export function getMenus(wnd: BrowserWindow): Map<number, AppMenu> {
+export function getMenus(wnd: BrowserWindow): Map<number, Menu> {
   const props = windowProperties.get(wnd.id);
   return props ? props.menus : new Map();
 }

@@ -42,19 +42,26 @@ pub async fn load_templates(
 ///
 /// `monitors` is a list of `(physical_pos, physical_size)` tuples. If empty the
 /// function just returns `desired_pos` unchanged.
+/// `scale` is the device-pixel ratio (physical pixels per logical pixel) used
+/// to convert the physical monitor coordinates into logical pixels so they can
+/// be compared with `desired` and `size`, which are both in logical pixels.
 pub fn clamp_to_screen(
     desired: Pos2,
     size: Vec2,
     monitors: &[(PhysicalPosition<i32>, PhysicalSize<u32>)],
+    scale: f32,
 ) -> Pos2 {
-    // Find the monitor whose rect contains `desired`, or fall back to the first.
+    let scale = scale.max(0.001); // avoid division by zero
+
+    // Find the monitor whose rect (in logical px) contains `desired`,
+    // or fall back to the first.
     let monitor = monitors
         .iter()
         .find(|(pos, sz)| {
-            desired.x >= pos.x as f32
-                && desired.y >= pos.y as f32
-                && desired.x < (pos.x as f32 + sz.width as f32)
-                && desired.y < (pos.y as f32 + sz.height as f32)
+            desired.x >= pos.x as f32 / scale
+                && desired.y >= pos.y as f32 / scale
+                && desired.x < (pos.x as f32 + sz.width as f32) / scale
+                && desired.y < (pos.y as f32 + sz.height as f32) / scale
         })
         .or_else(|| monitors.first());
 
@@ -62,10 +69,10 @@ pub fn clamp_to_screen(
         return desired;
     };
 
-    let mon_x = mon_pos.x as f32;
-    let mon_y = mon_pos.y as f32;
-    let mon_w = mon_size.width as f32;
-    let mon_h = mon_size.height as f32;
+    let mon_x = mon_pos.x as f32 / scale;
+    let mon_y = mon_pos.y as f32 / scale;
+    let mon_w = mon_size.width as f32 / scale;
+    let mon_h = mon_size.height as f32 / scale;
 
     let x = desired.x.min(mon_x + mon_w - size.x).max(mon_x);
     let y = desired.y.min(mon_y + mon_h - size.y).max(mon_y);

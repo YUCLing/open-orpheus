@@ -10,7 +10,7 @@ export function getApp(): App {
   return appInstance;
 }
 
-export async function createApp(isWayland: boolean) {
+export async function createApp(isWayland = true) {
   if (appInstance) {
     throw new Error("App instance already created");
   }
