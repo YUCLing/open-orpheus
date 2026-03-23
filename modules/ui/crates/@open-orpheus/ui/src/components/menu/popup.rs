@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -47,7 +47,10 @@ struct MenuStack {
 enum LoopAction {
     Idle,
     Dismiss,
-    Click { id: String, close_all: bool },
+    Click {
+        id: String,
+        close_all: bool,
+    },
     OpenSubmenu {
         close_from: usize,
         parent_item_idx: usize,
@@ -55,7 +58,9 @@ enum LoopAction {
         children: Arc<Vec<MenuItem>>,
         desired_pos: egui::Pos2,
     },
-    TrimTo { to_close: Vec<WindowId> },
+    TrimTo {
+        to_close: Vec<WindowId>,
+    },
 }
 
 /// Per-level popup windows implementation for X11 / macOS / Windows.
@@ -88,8 +93,16 @@ pub async fn show_popup_menu(
     }));
 
     let root_window_id = create_level_window(
-        &app, &stack, &skin, &templates, &item_overrides,
-        0, None, items.clone(), root_pos, root_size,
+        &app,
+        &stack,
+        &skin,
+        &templates,
+        &item_overrides,
+        0,
+        None,
+        items.clone(),
+        root_pos,
+        root_size,
     )
     .await;
 
@@ -110,7 +123,9 @@ pub async fn show_popup_menu(
 
             if g.dismiss {
                 LoopAction::Dismiss
-            } else if g.focus_lost_at.is_some_and(|t| t.elapsed().as_millis() >= 150)
+            } else if g
+                .focus_lost_at
+                .is_some_and(|t| t.elapsed().as_millis() >= 150)
             {
                 g.dismiss = true;
                 LoopAction::Dismiss
@@ -128,8 +143,11 @@ pub async fn show_popup_menu(
                     let to_close: Vec<WindowId> =
                         g.levels.drain(close_from..).map(|l| l.window_id).collect();
                     LoopAction::OpenSubmenu {
-                        close_from, parent_item_idx: req.parent_item_idx,
-                        to_close, children: req.children, desired_pos: req.screen_pos,
+                        close_from,
+                        parent_item_idx: req.parent_item_idx,
+                        to_close,
+                        children: req.children,
+                        desired_pos: req.screen_pos,
                     }
                 }
             } else if let Some(close_to) = g.pending_close_to.take() {
@@ -149,8 +167,13 @@ pub async fn show_popup_menu(
             LoopAction::Idle => {}
 
             LoopAction::Dismiss => {
-                let wids: Vec<WindowId> =
-                    stack.lock().unwrap().levels.iter().map(|l| l.window_id).collect();
+                let wids: Vec<WindowId> = stack
+                    .lock()
+                    .unwrap()
+                    .levels
+                    .iter()
+                    .map(|l| l.window_id)
+                    .collect();
                 for wid in wids {
                     app.close_window(wid).await;
                 }
@@ -162,8 +185,13 @@ pub async fn show_popup_menu(
                     handler(id);
                 }
                 if close_all {
-                    let wids: Vec<WindowId> =
-                        stack.lock().unwrap().levels.iter().map(|l| l.window_id).collect();
+                    let wids: Vec<WindowId> = stack
+                        .lock()
+                        .unwrap()
+                        .levels
+                        .iter()
+                        .map(|l| l.window_id)
+                        .collect();
                     for wid in wids {
                         app.close_window(wid).await;
                     }
@@ -171,7 +199,13 @@ pub async fn show_popup_menu(
                 }
             }
 
-            LoopAction::OpenSubmenu { close_from, parent_item_idx, to_close, children, desired_pos } => {
+            LoopAction::OpenSubmenu {
+                close_from,
+                parent_item_idx,
+                to_close,
+                children,
+                desired_pos,
+            } => {
                 for wid in to_close {
                     app.close_window(wid).await;
                 }
@@ -197,8 +231,16 @@ pub async fn show_popup_menu(
                 }
 
                 create_level_window(
-                    &app, &stack, &skin, &templates, &item_overrides,
-                    close_from, Some(parent_item_idx), children, sub_pos, sub_size,
+                    &app,
+                    &stack,
+                    &skin,
+                    &templates,
+                    &item_overrides,
+                    close_from,
+                    Some(parent_item_idx),
+                    children,
+                    sub_pos,
+                    sub_size,
                 )
                 .await;
             }
@@ -220,7 +262,10 @@ fn direct_cursor_pos() -> Option<egui::Pos2> {
     #[cfg(target_os = "windows")]
     {
         #[repr(C)]
-        struct POINT { x: i32, y: i32 }
+        struct POINT {
+            x: i32,
+            y: i32,
+        }
 
         #[link(name = "User32")]
         unsafe extern "system" {
@@ -243,13 +288,22 @@ fn direct_cursor_pos() -> Option<egui::Pos2> {
     {
         #[repr(C)]
         #[derive(Copy, Clone)]
-        struct CGPoint { x: f64, y: f64 }
+        struct CGPoint {
+            x: f64,
+            y: f64,
+        }
         #[repr(C)]
         #[derive(Copy, Clone)]
-        struct CGSize { width: f64, height: f64 }
+        struct CGSize {
+            width: f64,
+            height: f64,
+        }
         #[repr(C)]
         #[derive(Copy, Clone)]
-        struct CGRect { origin: CGPoint, size: CGSize }
+        struct CGRect {
+            origin: CGPoint,
+            size: CGSize,
+        }
 
         #[link(name = "CoreGraphics", kind = "framework")]
         #[link(name = "CoreFoundation", kind = "framework")]
@@ -262,7 +316,9 @@ fn direct_cursor_pos() -> Option<egui::Pos2> {
         }
 
         let ev = unsafe { CGEventCreate(std::ptr::null()) };
-        if ev.is_null() { return None; }
+        if ev.is_null() {
+            return None;
+        }
         let pt = unsafe { CGEventGetLocation(ev) };
         unsafe { CFRelease(ev) };
         let bounds = unsafe { CGDisplayBounds(CGMainDisplayID()) };
@@ -282,33 +338,46 @@ fn direct_cursor_pos() -> Option<egui::Pos2> {
 
         use crate::dynamic_fn;
 
-        type XOpenDisplayFn       = unsafe extern "C" fn(*const std::ffi::c_char) -> *mut c_void;
-        type XCloseDisplayFn      = unsafe extern "C" fn(*mut c_void) -> c_int;
+        type XOpenDisplayFn = unsafe extern "C" fn(*const std::ffi::c_char) -> *mut c_void;
+        type XCloseDisplayFn = unsafe extern "C" fn(*mut c_void) -> c_int;
         type XDefaultRootWindowFn = unsafe extern "C" fn(*mut c_void) -> u64;
-        type XQueryPointerFn      = unsafe extern "C" fn(
-            *mut c_void, u64,
-            *mut u64, *mut u64,
-            *mut c_int, *mut c_int, *mut c_int, *mut c_int,
+        type XQueryPointerFn = unsafe extern "C" fn(
+            *mut c_void,
+            u64,
+            *mut u64,
+            *mut u64,
+            *mut c_int,
+            *mut c_int,
+            *mut c_int,
+            *mut c_int,
             *mut u32,
         ) -> c_int;
 
-        dynamic_fn!(x_open_display,        XOpenDisplayFn,       "XOpenDisplay");
-        dynamic_fn!(x_close_display,       XCloseDisplayFn,      "XCloseDisplay");
-        dynamic_fn!(x_default_root_window, XDefaultRootWindowFn, "XDefaultRootWindow");
-        dynamic_fn!(x_query_pointer,       XQueryPointerFn,      "XQueryPointer");
+        dynamic_fn!(x_open_display, XOpenDisplayFn, "XOpenDisplay");
+        dynamic_fn!(x_close_display, XCloseDisplayFn, "XCloseDisplay");
+        dynamic_fn!(
+            x_default_root_window,
+            XDefaultRootWindowFn,
+            "XDefaultRootWindow"
+        );
+        dynamic_fn!(x_query_pointer, XQueryPointerFn, "XQueryPointer");
 
-        let x_open  = x_open_display().ok()?;
+        let x_open = x_open_display().ok()?;
         let x_close = x_close_display().ok()?;
-        let x_root  = x_default_root_window().ok()?;
+        let x_root = x_default_root_window().ok()?;
         let x_query = x_query_pointer().ok()?;
 
         let dpy = unsafe { x_open(std::ptr::null()) };
-        if dpy.is_null() { return None; }
+        if dpy.is_null() {
+            return None;
+        }
         let root = unsafe { x_root(dpy) };
         let (mut rr, mut cr) = (0u64, 0u64);
         let (mut rx, mut ry, mut wx, mut wy, mut mask) = (0, 0, 0, 0, 0u32);
         let ok = unsafe {
-            x_query(dpy, root, &mut rr, &mut cr, &mut rx, &mut ry, &mut wx, &mut wy, &mut mask)
+            x_query(
+                dpy, root, &mut rr, &mut cr, &mut rx, &mut ry, &mut wx, &mut wy, &mut mask,
+            )
         };
         unsafe { x_close(dpy) };
         if ok != 0 {
@@ -328,7 +397,10 @@ async fn query_cursor_info(
 ) -> (
     egui::Pos2,
     f32,
-    Vec<(winit::dpi::PhysicalPosition<i32>, winit::dpi::PhysicalSize<u32>)>,
+    Vec<(
+        winit::dpi::PhysicalPosition<i32>,
+        winit::dpi::PhysicalSize<u32>,
+    )>,
 ) {
     // Always create a probe window so we can retrieve the scale factor and
     // monitor list even when the direct OS cursor query succeeds fast.
@@ -411,84 +483,80 @@ async fn create_level_window(
         .with_position(screen_pos);
 
     let (_ctx, window_id) = app
-        .create_egui_window(
-            ViewportId::from_hash_of(random_string(10)),
-            builder,
-            {
-                let stack = stack.clone();
-                let items = items.clone();
-                let skin = skin.clone();
-                let templates = templates.clone();
-                let item_overrides = item_overrides.clone();
-                move |ctx| {
-                    ctx.set_visuals(egui::Visuals {
-                        panel_fill: Color32::WHITE,
-                        window_shadow: egui::Shadow::NONE,
-                        ..egui::Visuals::light()
+        .create_egui_window(ViewportId::from_hash_of(random_string(10)), builder, {
+            let stack = stack.clone();
+            let items = items.clone();
+            let skin = skin.clone();
+            let templates = templates.clone();
+            let item_overrides = item_overrides.clone();
+            move |ctx| {
+                ctx.set_visuals(egui::Visuals {
+                    panel_fill: Color32::WHITE,
+                    window_shadow: egui::Shadow::NONE,
+                    ..egui::Visuals::light()
+                });
+
+                egui::CentralPanel::default()
+                    .frame(
+                        egui::Frame::popup(&ctx.style())
+                            .inner_margin(Margin::ZERO)
+                            .fill(Color32::WHITE),
+                    )
+                    .show(ctx, |ui| {
+                        ui.style_mut().interaction.selectable_labels = false;
+                        ui.style_mut().spacing.item_spacing.y = 0.0;
+
+                        let mut guard = stack.lock().unwrap();
+                        let overrides_guard = item_overrides.read().unwrap();
+
+                        let mut pending_click_local: Option<(String, bool)> = None;
+
+                        draw_menu_items(
+                            ui,
+                            &items,
+                            &skin,
+                            &templates,
+                            &overrides_guard,
+                            |_idx, effective_item, response| {
+                                if response.hovered() {
+                                    if let Some(children) = &effective_item.children {
+                                        let sub_screen = egui::Pos2::new(
+                                            screen_pos.x + response.rect.right(),
+                                            screen_pos.y + response.rect.top(),
+                                        );
+                                        guard.pending_close_to = None; // mutually exclusive
+                                        guard.pending_open = Some(OpenRequest {
+                                            parent_depth: depth,
+                                            parent_item_idx: _idx,
+                                            screen_pos: sub_screen,
+                                            children: children.clone(),
+                                        });
+                                    } else {
+                                        guard.pending_open = None; // mutually exclusive
+                                        guard.pending_close_to = Some(depth + 1);
+                                    }
+                                    return Some(HOVER_FILL);
+                                }
+                                if response.is_pointer_button_down_on() {
+                                    return Some(PRESS_FILL);
+                                }
+                                None
+                            },
+                            &mut |id: String, close: bool| {
+                                pending_click_local = Some((id, close));
+                            },
+                        );
+
+                        if let Some(click) = pending_click_local {
+                            guard.pending_click = Some(click);
+                        }
+
+                        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            guard.dismiss = true;
+                        }
                     });
-
-                    egui::CentralPanel::default()
-                        .frame(
-                            egui::Frame::popup(&ctx.style())
-                                .inner_margin(Margin::ZERO)
-                                .fill(Color32::WHITE),
-                        )
-                        .show(ctx, |ui| {
-                            ui.style_mut().interaction.selectable_labels = false;
-                            ui.style_mut().spacing.item_spacing.y = 0.0;
-
-                            let mut guard = stack.lock().unwrap();
-                            let overrides_guard = item_overrides.read().unwrap();
-
-                            let mut pending_click_local: Option<(String, bool)> = None;
-
-                            draw_menu_items(
-                                ui,
-                                &items,
-                                &skin,
-                                &templates,
-                                &overrides_guard,
-                                |_idx, effective_item, response| {
-                                    if response.hovered() {
-                                        if let Some(children) = &effective_item.children {
-                                            let sub_screen = egui::Pos2::new(
-                                                screen_pos.x + response.rect.right(),
-                                                screen_pos.y + response.rect.top(),
-                                            );
-                                            guard.pending_close_to = None; // mutually exclusive
-                                            guard.pending_open = Some(OpenRequest {
-                                                parent_depth: depth,
-                                                parent_item_idx: _idx,
-                                                screen_pos: sub_screen,
-                                                children: children.clone(),
-                                            });
-                                        } else {
-                                            guard.pending_open = None; // mutually exclusive
-                                            guard.pending_close_to = Some(depth + 1);
-                                        }
-                                        return Some(HOVER_FILL);
-                                    }
-                                    if response.is_pointer_button_down_on() {
-                                        return Some(PRESS_FILL);
-                                    }
-                                    None
-                                },
-                                &mut |id: String, close: bool| {
-                                    pending_click_local = Some((id, close));
-                                },
-                            );
-
-                            if let Some(click) = pending_click_local {
-                                guard.pending_click = Some(click);
-                            }
-
-                            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                                guard.dismiss = true;
-                            }
-                        });
-                }
-            },
-        )
+            }
+        })
         .await;
 
     let focused_flag = Arc::new(AtomicBool::new(true));

@@ -26,5 +26,3 @@ pub fn menu_viewport_builder() -> egui::ViewportBuilder {
         .with_resizable(false)
         .with_transparent(true)
 }
-
-

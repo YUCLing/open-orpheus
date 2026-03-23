@@ -21,9 +21,9 @@ use crate::{
     resource::ResourceHandler,
 };
 
-pub mod dynload;
 mod app;
 mod components;
+pub mod dynload;
 mod napi;
 mod resource;
 mod skin;
