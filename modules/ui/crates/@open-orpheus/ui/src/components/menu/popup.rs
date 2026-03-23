@@ -280,33 +280,37 @@ fn direct_cursor_pos() -> Option<egui::Pos2> {
     {
         use std::ffi::{c_int, c_void};
 
-        #[link(name = "X11")]
-        unsafe extern "C" {
-            fn XOpenDisplay(name: *const std::ffi::c_char) -> *mut c_void;
-            fn XCloseDisplay(dpy: *mut c_void) -> c_int;
-            fn XDefaultRootWindow(dpy: *mut c_void) -> u64;
-            fn XQueryPointer(
-                dpy: *mut c_void,
-                w: u64,
-                root_return: *mut u64,
-                child_return: *mut u64,
-                root_x_return: *mut c_int,
-                root_y_return: *mut c_int,
-                win_x_return: *mut c_int,
-                win_y_return: *mut c_int,
-                mask_return: *mut u32,
-            ) -> c_int;
-        }
+        use crate::dynamic_fn;
 
-        let dpy = unsafe { XOpenDisplay(std::ptr::null()) };
+        type XOpenDisplayFn       = unsafe extern "C" fn(*const std::ffi::c_char) -> *mut c_void;
+        type XCloseDisplayFn      = unsafe extern "C" fn(*mut c_void) -> c_int;
+        type XDefaultRootWindowFn = unsafe extern "C" fn(*mut c_void) -> u64;
+        type XQueryPointerFn      = unsafe extern "C" fn(
+            *mut c_void, u64,
+            *mut u64, *mut u64,
+            *mut c_int, *mut c_int, *mut c_int, *mut c_int,
+            *mut u32,
+        ) -> c_int;
+
+        dynamic_fn!(x_open_display,        XOpenDisplayFn,       "XOpenDisplay");
+        dynamic_fn!(x_close_display,       XCloseDisplayFn,      "XCloseDisplay");
+        dynamic_fn!(x_default_root_window, XDefaultRootWindowFn, "XDefaultRootWindow");
+        dynamic_fn!(x_query_pointer,       XQueryPointerFn,      "XQueryPointer");
+
+        let x_open  = x_open_display().ok()?;
+        let x_close = x_close_display().ok()?;
+        let x_root  = x_default_root_window().ok()?;
+        let x_query = x_query_pointer().ok()?;
+
+        let dpy = unsafe { x_open(std::ptr::null()) };
         if dpy.is_null() { return None; }
-        let root = unsafe { XDefaultRootWindow(dpy) };
+        let root = unsafe { x_root(dpy) };
         let (mut rr, mut cr) = (0u64, 0u64);
         let (mut rx, mut ry, mut wx, mut wy, mut mask) = (0, 0, 0, 0, 0u32);
         let ok = unsafe {
-            XQueryPointer(dpy, root, &mut rr, &mut cr, &mut rx, &mut ry, &mut wx, &mut wy, &mut mask)
+            x_query(dpy, root, &mut rr, &mut cr, &mut rx, &mut ry, &mut wx, &mut wy, &mut mask)
         };
-        unsafe { XCloseDisplay(dpy) };
+        unsafe { x_close(dpy) };
         if ok != 0 {
             // X11 root-window coordinates are in physical pixels; on X11 setups
             // fractional scaling is rare and the effective scale is typically 1.0.
