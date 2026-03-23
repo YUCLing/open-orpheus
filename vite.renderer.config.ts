@@ -1,10 +1,42 @@
 import { defineConfig, type Plugin, type UserConfig } from "vite";
-import { execSync, spawn } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { resolve } from "node:path";
 
 const GUI_DIR = resolve(__dirname, "gui");
 // Port for the SvelteKit dev server spawned alongside the dummy Vite dev server.
 const SVELTEKIT_DEV_PORT = 5174;
+
+function getPackageManagerCommand() {
+  const npmExecPath = process.env.npm_execpath;
+  if (npmExecPath) {
+    return { command: process.execPath, baseArgs: [npmExecPath] };
+  }
+
+  return { command: "pnpm", baseArgs: [] };
+}
+
+function runPackageManager(args: string[]) {
+  const { command, baseArgs } = getPackageManagerCommand();
+  return spawn(command, [...baseArgs, ...args], {
+    cwd: GUI_DIR,
+    stdio: ["ignore", "inherit", "inherit"],
+    shell: false,
+  });
+}
+
+function runPackageManagerSync(args: string[]) {
+  const { command, baseArgs } = getPackageManagerCommand();
+  const result = spawnSync(command, [...baseArgs, ...args], {
+    cwd: GUI_DIR,
+    stdio: ["ignore", "inherit", "inherit"],
+    shell: false,
+  });
+
+  if (result.error) throw result.error;
+  if (typeof result.status === "number" && result.status !== 0) {
+    throw new Error(`Package manager command failed with exit code ${result.status}`);
+  }
+}
 
 /**
  * Bridges Electron Forge's VitePlugin renderer lifecycle to the SvelteKit
@@ -40,20 +72,19 @@ function svelteKitPlugin(): Plugin {
     },
 
     configureServer(server) {
-      devProcess = spawn(
-        "pnpm",
-        ["run", "dev", "--", "--port", String(SVELTEKIT_DEV_PORT)],
-        { cwd: GUI_DIR, stdio: ["ignore", "inherit", "inherit"], shell: false }
-      );
+      devProcess = runPackageManager([
+        "run",
+        "dev",
+        "--",
+        "--port",
+        String(SVELTEKIT_DEV_PORT),
+      ]);
       server.httpServer?.on("close", () => devProcess?.kill());
     },
 
     buildStart() {
       if (!this.meta.watchMode) {
-        execSync("pnpm run build", {
-          cwd: GUI_DIR,
-          stdio: ["ignore", "inherit", "inherit"],
-        });
+        runPackageManagerSync(["run", "build"]);
       }
     },
 
