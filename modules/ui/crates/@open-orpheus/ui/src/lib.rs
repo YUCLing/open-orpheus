@@ -3,6 +3,7 @@ mod components;
 pub mod dynload;
 mod export;
 mod napi;
+pub mod osr;
 mod resource;
 mod skin;
 mod util;

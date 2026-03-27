@@ -196,6 +196,31 @@ impl App {
             .unwrap();
     }
 
+    /// Resize a window to the given logical dimensions.
+    pub async fn set_window_inner_size(
+        &self,
+        window: WindowId,
+        size: winit::dpi::LogicalSize<f64>,
+    ) {
+        self.event_loop_proxy
+            .send_event(Request::SetWindowInnerSize(window, size))
+            .unwrap();
+    }
+
+    /// Set the cursor icon for a window.
+    pub fn set_cursor(&self, window: WindowId, icon: winit::window::CursorIcon) {
+        let _ = self
+            .event_loop_proxy
+            .send_event(Request::SetCursor(window, icon));
+    }
+
+    /// Begin an interactive window drag (equivalent to pressing the title bar).
+    pub fn drag_window(&self, window: WindowId) {
+        let _ = self
+            .event_loop_proxy
+            .send_event(Request::DragWindow(window));
+    }
+
     pub async fn set_window_message_handler(
         &self,
         window: WindowId,

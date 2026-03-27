@@ -1,4 +1,4 @@
-<script module>
+<script lang="ts" module>
   type DownloadPackageProgress = {
     step: "downloading" | "extracting" | "saving" | "completed";
     downloadedBytes?: number;

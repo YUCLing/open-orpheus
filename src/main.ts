@@ -143,7 +143,7 @@ app.on("ready", async () => {
 
     await createApp(os.platform() === "linux" ? isWayland() : false);
 
-    createDesktopLyricsWindow();
+    await createDesktopLyricsWindow();
     createWindow();
 
     appStarted = true;

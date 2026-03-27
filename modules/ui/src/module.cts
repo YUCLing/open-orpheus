@@ -24,6 +24,39 @@ declare module "./load.cjs" {
   function updateMenuItem(menuPtr: number, item: unknown): void;
 
   function getSystemFonts(): string[];
+
+  // ── OSR window ───────────────────────────────────────────────────────────
+  function createOsrWindow(
+    appPtr: number,
+    options: {
+      width: number;
+      height: number;
+      transparent?: boolean;
+      resizable?: boolean;
+      alwaysOnTop?: boolean;
+      skipTaskbar?: boolean;
+      title?: string;
+    }
+  ): Promise<number>;
+  function osrWindowUpdateFrame(
+    windowPtr: number,
+    buffer: Buffer,
+    width: number,
+    height: number
+  ): void;
+  function osrWindowSetInputHandler(
+    windowPtr: number,
+    callback: (eventJson: string) => void
+  ): void;
+  function osrWindowResize(
+    windowPtr: number,
+    width: number,
+    height: number
+  ): void;
+  function osrWindowSetCursor(windowPtr: number, cursorName: string): void;
+  function osrWindowDrag(windowPtr: number): void;
+  function osrWindowClose(windowPtr: number): void;
+  function destroyOsrWindow(windowPtr: number): void;
 }
 
 export = addon;

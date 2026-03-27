@@ -1,7 +1,7 @@
 use egui::{ViewportBuilder, ViewportId};
 use winit::{
-    dpi::{PhysicalPosition, PhysicalSize},
-    window::WindowId,
+    dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
+    window::{CursorIcon, WindowId},
 };
 
 use crate::app::wrappers::{RunUI, WindowMessageHandler};
@@ -18,6 +18,9 @@ pub enum Request {
     RepaintViewport(ViewportId),
     RepaintAllViewports,
     CloseWindow(WindowId),
+    SetWindowInnerSize(WindowId, LogicalSize<f64>),
+    SetCursor(WindowId, CursorIcon),
+    DragWindow(WindowId),
     GetMonitorRects(
         WindowId,
         oneshot::Sender<Vec<(PhysicalPosition<i32>, PhysicalSize<u32>)>>,

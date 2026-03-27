@@ -223,6 +223,21 @@ impl ApplicationHandler<Request> for AppInner {
                     smol::block_on(self.painter.set_window(ws.viewport_id, None)).ok();
                 }
             }
+            Request::SetWindowInnerSize(window_id, size) => {
+                if let Some(ws) = self.windows.get(&window_id) {
+                    let _ = ws.window.request_inner_size(size);
+                }
+            }
+            Request::SetCursor(window_id, icon) => {
+                if let Some(ws) = self.windows.get(&window_id) {
+                    ws.window.set_cursor(winit::window::Cursor::Icon(icon));
+                }
+            }
+            Request::DragWindow(window_id) => {
+                if let Some(ws) = self.windows.get(&window_id) {
+                    let _ = ws.window.drag_window();
+                }
+            }
             Request::SetWindowMessageHandler(window_id, handler) => {
                 if let Some(window_state) = self.windows.get_mut(&window_id) {
                     window_state.message_handler = Some(handler);
