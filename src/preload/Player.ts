@@ -111,8 +111,19 @@ export default class Player extends EventTarget {
   private _playInfo: AudioPlayInfo | null = null;
 
   songInfo: SongInfo | null = null;
-  lyricContent: LyricContent | null = null;
-  lyricStyle: LyricStyle = {
+  private _lyricContent: LyricContent | null = null;
+
+  get lyricContent(): LyricContent | null {
+    return this._lyricContent;
+  }
+
+  set lyricContent(value: LyricContent | null) {
+    this._lyricContent = value;
+    this.dispatchEvent(
+      new CustomEvent("lyriccontentupdate", { detail: value })
+    );
+  }
+  lyricStyle: LyricStyle = this._createStyleProxy({
     lrcColorNotPlayedTop: "",
     lrcColorNotPlayedBottom: "",
     lrcColorPlayedTop: "",
@@ -133,8 +144,25 @@ export default class Player extends EventTarget {
     slogan: "",
     desktopTopMost: false,
     locked: false,
-  };
+  });
   playlist: Playlist = { items: [], currentPlay: "" };
+
+  private _createStyleProxy(style: LyricStyle): LyricStyle {
+    return new Proxy(style, {
+      set: (target, prop, value) => {
+        const oldValue = target[prop as keyof LyricStyle];
+        (target as Record<string | symbol, unknown>)[prop] = value;
+        if (oldValue !== value) {
+          this.dispatchEvent(
+            new CustomEvent("lyricstyleupdate", {
+              detail: { key: prop, value },
+            })
+          );
+        }
+        return true;
+      },
+    });
+  }
 
   get audio() {
     return this._audio;

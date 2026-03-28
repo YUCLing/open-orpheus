@@ -25,7 +25,10 @@ declare module "./load.cjs" {
 
   function getSystemFonts(): string[];
 
-  function createLyricsWindow(appPtr: number): Promise<number>;
+  function createLyricsWindow(
+    appPtr: number,
+    show: boolean
+  ): Promise<[number, number]>;
   function destroyLyricsWindow(ptr: number): void;
   function setLyricsData(
     ptr: number,
@@ -43,6 +46,48 @@ declare module "./load.cjs" {
     } | null
   ): void;
   function setLyricsTime(ptr: number, timeMs: number): void;
+  function setLyricsStyle(
+    ptr: number,
+    style: {
+      not_played_top?: [number, number, number];
+      not_played_bottom?: [number, number, number];
+      played_top?: [number, number, number];
+      played_bottom?: [number, number, number];
+      outline_color_not_played?: [number, number, number];
+      outline_color_played?: [number, number, number];
+      outline_width?: number;
+      shadow_enabled?: boolean;
+      shadow_blur_radius?: number;
+      shadow_offset?: [number, number];
+      shadow_color?: [number, number, number, number];
+      font_family?: string;
+      font_size?: number;
+      bold?: boolean;
+      text_align?: [string, string];
+      line_mode?: string;
+      show_horizontal?: boolean;
+      offset_ms?: number;
+      secondary_font_scale?: number;
+    }
+  ): void;
+
+  function focusWindow(appPtr: number, windowId: number): void;
+  function showWindow(appPtr: number, windowId: number): void;
+  function hideWindow(appPtr: number, windowId: number): void;
+  function setAlwaysOnTop(
+    appPtr: number,
+    windowId: number,
+    onTop: boolean
+  ): void;
+  function setWindowBounds(
+    appPtr: number,
+    windowId: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void;
+  function dragWindow(appPtr: number, windowId: number): void;
 }
 
 export = addon;

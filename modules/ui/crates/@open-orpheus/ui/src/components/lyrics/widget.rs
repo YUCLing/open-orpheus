@@ -18,11 +18,11 @@ use super::{
 /// ui.add(LyricsWidget::new(&state));
 /// ```
 pub struct LyricsWidget<'a> {
-    state: &'a LyricsState,
+    state: &'a mut LyricsState,
 }
 
 impl<'a> LyricsWidget<'a> {
-    pub fn new(state: &'a LyricsState) -> Self {
+    pub fn new(state: &'a mut LyricsState) -> Self {
         Self { state }
     }
 }
@@ -36,13 +36,16 @@ impl Widget for LyricsWidget<'_> {
             return response;
         }
 
+        // Mutable operations first (before borrowing state fields).
+        self.state.style.ensure_font_loaded(ui.ctx());
+        let effective_time = self.state.effective_time();
+
         let data = match &self.state.data {
             Some(data) if !data.lines.is_empty() => data,
             _ => return response,
         };
 
         let style = &self.state.style;
-        let effective_time = self.state.effective_time();
 
         // Perform layout.
         let layout = if style.show_horizontal {

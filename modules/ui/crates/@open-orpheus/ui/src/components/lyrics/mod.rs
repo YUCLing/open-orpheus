@@ -5,5 +5,5 @@ pub mod types;
 pub mod widget;
 
 pub use state::LyricsState;
-pub use types::{LineMode, LyricLine, LyricWord, LyricsData, LyricsStyle};
+pub use types::{LineMode, LyricLine, LyricWord, LyricsData, LyricsStyle, LyricsStyleDto};
 pub use widget::LyricsWidget;

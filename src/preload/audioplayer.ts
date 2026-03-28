@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 import { fireNativeCall } from "./channel";
-import Player, { AudioPlayerState } from "./Player";
+import Player, { AudioPlayerState, type LyricContent } from "./Player";
 
 export const player = new Player();
 
@@ -110,6 +110,22 @@ const onPlayProgress = () => {
 };
 player.audio.addEventListener("timeupdate", onPlayProgress);
 player.audio.addEventListener("progress", onPlayProgress);
+
+// Forward playback time to main process for the desktop lyrics window
+player.audio.addEventListener("timeupdate", () => {
+  ipcRenderer.send("desktopLyrics.timeUpdate", player.audio.currentTime * 1000);
+});
+
+// Forward lyric style updates to main process for the desktop lyrics window
+player.addEventListener("lyricstyleupdate", () => {
+  ipcRenderer.send("desktopLyrics.styleUpdate", { ...player.lyricStyle });
+});
+
+// Forward lyric content updates to main process for the desktop lyrics window
+player.addEventListener("lyriccontentupdate", (event) => {
+  const content = (event as CustomEvent<LyricContent | null>).detail;
+  ipcRenderer.send("desktopLyrics.lyricsUpdate", content);
+});
 
 player.audio.addEventListener("volumechange", () => {
   fireNativeCall(

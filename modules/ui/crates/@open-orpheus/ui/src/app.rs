@@ -21,7 +21,7 @@ use crate::app::{
 use crate::resource::ResourceHandler;
 use crate::skin::{MenuSkin, parse_menu_skin};
 
-mod fonts;
+pub(crate) mod fonts;
 mod inner;
 mod pack_loader;
 mod request;

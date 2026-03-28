@@ -24,6 +24,7 @@ import { mkdir } from "node:fs/promises";
 import { initializeDatabases } from "./main/database";
 import { loadWebPack, webPack } from "./main/pack";
 import { createApp } from "./main/ui";
+import { createDesktopLyricsWindow } from "./main/desktopLyrics";
 import { openPackageDownloadWindow } from "./main/gui";
 
 // This is flags is required because package window is shown before main window, and we don't want to quit the app when package window is closed for any reason.
@@ -141,6 +142,8 @@ app.on("ready", async () => {
     await webPack.readPack();
 
     await createApp(os.platform() === "linux" ? isWayland() : false);
+
+    await createDesktopLyricsWindow();
 
     createWindow();
 
