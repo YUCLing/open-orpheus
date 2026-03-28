@@ -2,68 +2,133 @@
 
 // Script for early-state development of the UI module.
 
-import { homedir, platform } from "node:os";
-import { resolve } from "node:path";
+import { App, LyricsWindow } from "@open-orpheus/ui";
 
-import { App, Menu } from "@open-orpheus/ui";
-
-import WebPack from "../src/main/packs/WebPack.ts";
-import SkinPack from "../src/main/packs/SkinPack.ts";
+import { createApp, getApp } from "../src/main/ui";
+import { loadSkinPack, loadWebPack, skinPack, webPack } from "../src/main/pack";
+import { parseLrc } from "../src/main/lyrics";
 
 setInterval(() => {
   // keep alive
 }, 1000);
 
-const userData = resolve(
-  homedir(),
-  platform() === "win32" ? "AppData/Roaming" : ".config",
-  "open-orpheus"
-);
-const webPack = new WebPack(resolve(userData, "package/orpheus.ntpk"));
-const skinPack = new SkinPack(resolve(userData, "package/common.skin"));
-
 // no GC
-let app: App | null = null;
-let menu: Menu | null = null;
-
-function parseMenuData(menuData: any) {
-  return {
-    ...menuData,
-    content: JSON.parse(menuData.content),
-    hotkey: JSON.parse(menuData.hotkey),
-  };
-}
+let lw: LyricsWindow | null = null;
 
 async function main() {
+  await loadWebPack();
   await webPack.readPack();
+
+  await loadSkinPack("common");
   await skinPack.readPack();
 
-  app = await App.create({
-    preferWayland: false,
-    readWebPack: webPack.readFile.bind(webPack),
-    readSkinPack: skinPack.readFile.bind(skinPack),
-  });
+  await createApp();
+  await getApp().loadMenuSkin("/menu/skin.xml");
 
-  await app.loadMenuSkin("/menu/skin.xml");
-
-  //const menu = new Menu(app, parseMenuData(MENU_DATA));
-  menu = new Menu(app, parseMenuData(MENU_DATA_2));
-  menu.show();
+  lw = await LyricsWindow.create(getApp());
+  console.log(lw);
+  const lrc = parseLrc(
+    `[00:04.316]ぬばたまの夜更けし
+[00:08.678]明くるを待ち 七の想灯
+[00:23.215]夢の中に囁く声
+[00:25.906]君は誰と 探し求め
+[00:28.494]現の闇紛れて
+[00:31.097]憂世の道 照らしてくれ
+[00:33.862]心の虚を埋めて
+[00:36.291]無為に言葉 拾い集め
+[00:38.964]寂しげな記憶を
+[00:41.614]黄泉国へ 全て捨てさせて
+[00:46.065]一つ問えば 二つ合わせ
+[00:51.091]三つの更の 四方に籠目
+[00:56.444]五つぎぬに 六道はずれ 七つのかげ
+[01:04.029]咲き狂え彼岸花
+[01:09.326]染まる色に嗤え
+[01:14.768]渡り舟 棹させば
+[01:19.870]あらざらむ世を見ばや
+[01:29.275]口からは尋ねる声
+[01:31.862]私は誰 迷い求め
+[01:34.480]常世の闇纏いて
+[01:36.994]修羅の道に 導いてくれ
+[01:39.995]人の情を断ち切れ
+[01:42.215]葬り火に 怪し殺め
+[01:44.965]愛し恋し空蝉
+[01:47.509]賽河原 石を積み上げて
+[01:51.792]一人ゆけば 二つに散れ
+[01:56.879]三途の定め 四苦を違え
+[02:02.263]五蘊に満て 六根けがれ 七つかけら
+[02:10.109]枯れ果てた此岸花
+[02:15.301]燃ゆる色に泣いて
+[02:20.549]渡瀬に 足つけば
+[02:25.741]恨みざらむ世を見ばや
+[02:31.278]玉の緒の絶えなば絶えね命よ
+[02:36.930]偲ぶることすら儘ならぬ
+[02:42.327]さりとて漂え なれば流され
+[02:47.575]剰え罪重ぬるなら
+[02:52.039]黄泉還れ あやかしに
+[02:57.422]百鬼の夜に全て喰らえ
+[03:02.705]紅の跡を辿って
+[03:07.935]此世の涯まで
+[03:14.202]よこしまの夜更けし
+[03:18.608]飽くるを断ち 七の
+[03:30.000]后期：贼恩
+[03:30.500]图素：阴阳师手游面灵气绘卷
+[03:31.000]曲绘：KRR
+[03:31.500]
+[03:32.000]监制：红衣、小穆
+[03:31.500]PV：N-N
+[03:32.000]
+`,
+    `[by:药名为恨]
+[00:04.316]【阑珊夜中不见】
+[00:08.678]【七之思绪 静待天明】
+[00:23.215]【有谁在梦中轻语】
+[00:25.906]【寻寻觅觅 探寻我名】
+[00:28.494]【有谁在梦醒暗中】
+[00:31.097]【却求它能 照亮尘世】
+[00:33.862]【为排解心中空虚】
+[00:36.291]【盲目捡拾 碎语闲言】
+[00:38.964]【且把那悲哀寂寥】
+[00:41.614]【尽数丢在 黄泉路上】
+[00:46.065]【一问而二合】
+[00:51.091]【三更徒四壁】
+[00:56.444]【五衣见者 六道超脱 乃为七之泡影】【※五衣：平安时代女性服饰十二单的下面五件衣服】
+[01:04.029]【让那彼岸花怒放】
+[01:09.326]【于渐染色中嘲笑】
+[01:14.768]【划着河上那扁舟】
+[01:19.870]【去见那非人之世】
+[01:29.275]【口中呼唤的声音】
+[01:31.862]【我又是谁 懵懵懂懂】
+[01:34.480]【周身环绕的黑暗】
+[01:36.994]【却求它能 引路修罗】
+[01:39.995]【斩断那七情六欲】
+[01:42.215]【于葬火中 怪异害人】
+[01:44.965]【至于那儿女情长】
+[01:47.509]【赛之河原 垒石以念】
+[01:51.792]【一去而二化】
+[01:56.879]【三途违四苦】
+[02:02.263]【五蕴满盈 六根污秽 乃为七之元神】
+[02:10.109]【看那此岸花枯萎】
+[02:15.301]【于燃尽色中哭泣】
+[02:20.549]【把脚探进河水中】
+[02:25.741]【去见那无恨之世】
+[02:31.278]【此身欲绝 怎堪无术】
+[02:36.930]【纵是坚忍 亦求不得】
+[02:42.327]【飘摇无定 随波逐流】
+[02:47.575]【欲加之罪 何患无辞】
+[02:52.039]【就化为魑魅魍魉】
+[02:57.422]【百鬼之夜 噬尽一切】
+[03:02.705]【循着那血红痕迹】
+[03:07.935]【直至此世之涯】
+[03:14.202]【邪魅夜中不见】
+[03:18.608]【七之面火 煞性无终】`
+  );
+  lw.setData(lrc);
+  const startTime = Date.now();
+  setInterval(() => {
+    const currentTime = Date.now() - startTime;
+    console.log(currentTime);
+    lw.setTime(currentTime);
+  }, 10);
 }
 
 main();
-
-const MENU_DATA = {
-  content:
-    '[{"text":"播放","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","hotkey":"Enter","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/play.svg","menu_id":"play"},{"text":"下一首播放","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/next.svg","menu_id":"nextPlay"},{"text":"查看评论(3379)","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/comment.svg","menu_id":"{\\"actionId\\":\\"link\\",\\"menuPayload\\":{\\"actionData\\":{\\"to\\":{\\"scene\\":\\"comment\\",\\"state\\":{\\"resourceType\\":\\"track\\",\\"resource\\":{\\"id\\":\\"573548637\\",\\"alias\\":[],\\"commentThreadId\\":\\"R_SO_4_573548637\\",\\"copyrightId\\":\\"0\\",\\"duration\\":214726,\\"mvid\\":\\"\\",\\"name\\":\\"七劫謡（七劫谣）\\",\\"cd\\":\\"01\\",\\"position\\":1,\\"ringtone\\":null,\\"rtUrl\\":null,\\"status\\":0,\\"pstatus\\":0,\\"fee\\":0,\\"version\\":53,\\"songType\\":0,\\"mst\\":9,\\"popularity\\":85,\\"ftype\\":0,\\"rtUrls\\":[],\\"transNames\\":[\\"七劫谣\\"],\\"noCopyrightRcmd\\":null,\\"originCoverType\\":0,\\"mark\\":262208,\\"artists\\":[{\\"accountId\\":\\"\\",\\"id\\":\\"9026\\",\\"albumSize\\":0,\\"alia\\":[],\\"alias\\":[],\\"fansGroup\\":null,\\"img1v1Url\\":\\"\\",\\"name\\":\\"冥月\\",\\"picId\\":\\"\\",\\"trans\\":\\"\\",\\"transName\\":\\"\\",\\"fansSize\\":0,\\"musicSize\\":0,\\"algorithm\\":\\"\\",\\"override\\":{\\"title\\":\\"\\",\\"subTitle\\":\\"\\",\\"imageUrl\\":\\"\\"}}],\\"algorithm\\":\\"\\",\\"songTag\\":{},\\"album\\":{\\"id\\":\\"39689382\\",\\"name\\":\\"七劫謡\\",\\"description\\":\\"\\",\\"trackCount\\":0,\\"subscribedCount\\":0,\\"commentCount\\":0,\\"commentThreadId\\":\\"R_AL_3_39689382\\",\\"algorithm\\":\\"\\",\\"size\\":0,\\"override\\":{\\"title\\":\\"\\",\\"subTitle\\":\\"\\",\\"imageUrl\\":\\"\\"},\\"albumName\\":\\"七劫謡\\",\\"picId\\":\\"109951163354772750\\",\\"picUrl\\":\\"http://p3.music.126.net/A1wjX4yKNeyQy5fRjTBsNg==/109951163354772750.jpg\\",\\"cover\\":\\"http://p3.music.126.net/A1wjX4yKNeyQy5fRjTBsNg==/109951163354772750.jpg\\",\\"alias\\":[],\\"transNames\\":[],\\"explicit\\":false},\\"explicit\\":false,\\"privilege\\":{\\"id\\":\\"573548637\\",\\"fee\\":0,\\"payed\\":0,\\"maxPlayBr\\":320000,\\"maxDownBr\\":320000,\\"maxPlayBd\\":null,\\"commentPriv\\":1,\\"cloudSong\\":0,\\"toast\\":false,\\"flag\\":3440898,\\"now\\":1773289729000,\\"maxSongBr\\":320,\\"maxFreeBr\\":320,\\"sharePriv\\":7,\\"status\\":0,\\"subPriv\\":1,\\"maxSongLevel\\":6999,\\"maxDownLevel\\":320000,\\"maxFreeLevel\\":320,\\"maxPlayLevel\\":320000,\\"freeTrialPrivilege\\":{\\"resConsumable\\":false,\\"userConsumable\\":false,\\"listenType\\":null,\\"cannotListenReason\\":null,\\"playReason\\":null,\\"freeLimitTagType\\":null}}}}}}}}"},{"text":"菜单项","menu":true,"enable":true,"separator":true,"children":null,"image_color":"#ff7e6f68","menu_id":null},{"text":"收藏","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","hotkey":"Ctrl S","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/collect.svg","menu_id":"favorite"},{"text":"下载","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/download.svg","menu_id":"download"},{"text":"分享","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/share.svg","menu_id":"share"},{"text":"复制链接","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/copy.svg","menu_id":"copy"},{"text":"菜单项","menu":true,"enable":true,"separator":true,"children":null,"image_color":"#ff7e6f68","menu_id":null},{"text":"从歌单中删除","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/delete.svg","hotkey":"Delete","menu_id":"remove"}]',
-  hotkey: '{"play":"Enter","favorite":"Ctrl S","remove":"Delete"}',
-  left_border_size: 0,
-  menu_type: "normal",
-};
-const MENU_DATA_2 = {
-  content:
-    '[{"text":"HENTAI - Selphius","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/mine.svg","menu_id":"openVinylPage"},{"text":"菜单项","menu":true,"enable":true,"separator":true,"children":null,"image_color":"#ff7e6f68","menu_id":null},{"text":"菜单项","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","style":"menu/element_btns.xml","btns":[{"id":"playPrev","url":"normalimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pre.svg\' svg_color=\'#b3483228\'\\" hotimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pre.svg\' svg_color=\'#ff483228\'\\" pushedimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pre.svg\' svg_color=\'#ff483228\'\\" disabledimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pre.svg\' svg_color=\'#4d483228\'\\"","enable":true},{"id":"trayPlaySwitch","url":"normalimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pause.svg\' svg_color=\'#b3483228\'\\" hotimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pause.svg\' svg_color=\'#ff483228\'\\" pushedimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pause.svg\' svg_color=\'#ff483228\'\\" disabledimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/pause.svg\' svg_color=\'#4d483228\'\\"","enable":true},{"id":"playNext","url":"normalimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/next_song.svg\' svg_color=\'#b3483228\'\\" hotimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/next_song.svg\' svg_color=\'#ff483228\'\\" pushedimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/next_song.svg\' svg_color=\'#ff483228\'\\" disabledimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/next_song.svg\' svg_color=\'#4d483228\'\\"","enable":true},{"id":"trayLike","url":"normalimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/like.svg\' svg_color=\'#b3483228\'\\" hotimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/like.svg\' svg_color=\'#ff483228\'\\" pushedimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/like.svg\' svg_color=\'#ff483228\'\\" disabledimage=\\"file=\'orpheus://orpheus/pub/public/assets/svg/menu/like.svg\' svg_color=\'#4d483228\'\\"","enable":true}],"image_path":"orpheus://orpheus/pub/public/assets/svg/menu/play.svg","menu_id":"play"},{"text":"菜单项","menu":true,"enable":true,"separator":true,"children":null,"image_color":"#ff7e6f68","menu_id":null},{"text":"随机播放","menu":true,"enable":true,"separator":false,"children":[{"text":"列表循环","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/loop.svg","menu_id":"{\\"actionId\\":\\"switchPlayingMode\\",\\"menuPayload\\":{\\"actionData\\":{\\"from\\":{\\"mode\\":\\"playCycle\\",\\"scene\\":\\"sysTray\\"}}}}"},{"text":"单曲循环","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/singleloop.svg","menu_id":"{\\"actionId\\":\\"switchPlayingMode\\",\\"menuPayload\\":{\\"actionData\\":{\\"from\\":{\\"mode\\":\\"playOneCycle\\",\\"scene\\":\\"sysTray\\"}}}}"},{"text":"随机播放","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/shuffle.svg","check_image_path":"orpheus://orpheus/pub/public/assets/svg/menu/icn_checked.svg","menu_id":"{\\"actionId\\":\\"switchPlayingMode\\",\\"menuPayload\\":{\\"actionData\\":{\\"from\\":{\\"mode\\":\\"playRandom\\",\\"scene\\":\\"sysTray\\"}}}}"},{"text":"顺序播放","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/order.svg","menu_id":"{\\"actionId\\":\\"switchPlayingMode\\",\\"menuPayload\\":{\\"actionData\\":{\\"from\\":{\\"mode\\":\\"playOrder\\",\\"scene\\":\\"sysTray\\"}}}}"}],"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/shuffle.svg","menu_id":"dummy"},{"text":"完整模式","menu":true,"enable":true,"separator":false,"children":[{"text":"完整模式","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/fullMode.svg","check_image_path":"orpheus://orpheus/pub/public/assets/svg/menu/icn_checked.svg","menu_id":"switchToFullMode"},{"text":"mini模式","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/mini.svg","menu_id":"switchToMiniMode"},{"text":"最小化","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/minimize.svg","menu_id":"minimizeWindow"}],"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/fullMode.svg","menu_id":"dummy"},{"text":"菜单项","menu":true,"enable":true,"separator":true,"children":null,"image_color":"#ff7e6f68","menu_id":null},{"text":"打开桌面歌词","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/openDesktopLyrics.svg","menu_id":"switchDesktopLyricShowOrHide"},{"text":"菜单项","menu":true,"enable":true,"separator":true,"children":null,"image_color":"#ff7e6f68","menu_id":null},{"text":"设置","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/setting.svg","menu_id":"{\\"actionId\\":\\"link\\",\\"menuPayload\\":{\\"actionData\\":{\\"to\\":{\\"linkPath\\":\\"/setting/account\\"}}}}"},{"text":"菜单项","menu":true,"enable":true,"separator":true,"children":null,"image_color":"#ff7e6f68","menu_id":null},{"text":"退出","menu":true,"enable":true,"separator":false,"children":null,"image_color":"#ff7e6f68","image_path":"orpheus://orpheus/pub/public/assets/svg/menu/sign_out.svg","menu_id":"exitApp"}]',
-  hotkey: "{}",
-  left_border_size: 0,
-  menu_type: "normal",
-};

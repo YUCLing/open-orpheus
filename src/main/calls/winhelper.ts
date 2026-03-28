@@ -164,8 +164,9 @@ registerCallHandler<
   void
 >("winhelper.setNativeWindowShow", (event, id, show, rect) => {
   if (!id) return;
+  void show;
+  void rect;
   if (id === "desktop_lyrics") {
-
     return;
   }
   return;

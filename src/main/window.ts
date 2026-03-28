@@ -23,7 +23,10 @@ app.on("browser-window-created", (event, wnd) => {
   });
 
   wnd.on("maximize", () => {
-    wnd.setMaximumSize(0, 0);
+    const props = windowProperties.get(wnd.id);
+    if (props?.maximumSize) {
+      wnd.setMaximumSize(0, 0);
+    }
   });
 
   wnd.on("unmaximize", () => {

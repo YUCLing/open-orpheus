@@ -24,6 +24,25 @@ declare module "./load.cjs" {
   function updateMenuItem(menuPtr: number, item: unknown): void;
 
   function getSystemFonts(): string[];
+
+  function createLyricsWindow(appPtr: number): Promise<number>;
+  function destroyLyricsWindow(ptr: number): void;
+  function setLyricsData(
+    ptr: number,
+    data: {
+      lines: {
+        start_time: number;
+        end_time: number;
+        words: { text: string; start_time: number; duration: number }[];
+      }[];
+      secondary_lines?: {
+        start_time: number;
+        end_time: number;
+        words: { text: string; start_time: number; duration: number }[];
+      }[];
+    } | null
+  ): void;
+  function setLyricsTime(ptr: number, timeMs: number): void;
 }
 
 export = addon;

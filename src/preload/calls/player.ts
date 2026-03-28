@@ -72,13 +72,10 @@ registerCallHandler<[string], [boolean]>("player.setCover", (cover) => {
   return [true];
 });
 
-registerCallHandler<[number], [boolean]>(
-  "player.setLikeMark",
-  (mark) => {
-    if (player.songInfo) player.songInfo.liked = mark === 1;
-    return [true];
-  }
-);
+registerCallHandler<[number], [boolean]>("player.setLikeMark", (mark) => {
+  if (player.songInfo) player.songInfo.liked = mark === 1;
+  return [true];
+});
 
 registerCallHandler<[number], [boolean]>("player.setTotalTime", (time) => {
   if (player.songInfo) player.songInfo.totalTime = time;
@@ -118,11 +115,14 @@ registerCallHandler<[boolean], [boolean]>(
   }
 );
 
-registerCallHandler<[string], [boolean]>("player.showTranslateLyric", (mode) => {
-  // "translate" ...?
-  player.lyricStyle.showTranslate = mode;
-  return [true];
-});
+registerCallHandler<[string], [boolean]>(
+  "player.showTranslateLyric",
+  (mode) => {
+    // "translate" ...?
+    player.lyricStyle.showTranslate = mode;
+    return [true];
+  }
+);
 
 registerCallHandler<[string, string, string, string], [boolean]>(
   "player.setLRCColor",
@@ -156,10 +156,13 @@ registerCallHandler<[boolean, boolean, boolean, boolean], [boolean]>(
   }
 );
 
-registerCallHandler<[boolean], [boolean]>("player.showHorizontalLyric", (show) => {
-  player.lyricStyle.showHorizontal = show;
-  return [true];
-});
+registerCallHandler<[boolean], [boolean]>(
+  "player.showHorizontalLyric",
+  (show) => {
+    player.lyricStyle.showHorizontal = show;
+    return [true];
+  }
+);
 
 registerCallHandler<[string, string, string], [boolean]>(
   "player.setLRCFont",
@@ -210,12 +213,15 @@ registerCallHandler<[number], [boolean]>("player.setOffset", (offset) => {
   return [true];
 });
 
-registerCallHandler<[string, number], [boolean]>("player.setFont", (fontName, fontSize) => {
-  // What font is this?
-  player.lyricStyle.fontName = fontName;
-  player.lyricStyle.fontSize = fontSize;
-  return [true];
-});
+registerCallHandler<[string, number], [boolean]>(
+  "player.setFont",
+  (fontName, fontSize) => {
+    // What font is this?
+    player.lyricStyle.fontName = fontName;
+    player.lyricStyle.fontSize = fontSize;
+    return [true];
+  }
+);
 
 player.addEventListener("load", () => {
   if (!currentMetadata) return;
