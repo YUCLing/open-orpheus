@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+# Use a writable HOME for toolchain installers in build chroots.
+export HOME="$(mktemp -d)"
+
+# Install Rust toolchain for native modules.
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+. "$HOME/.cargo/env"
+
+# Install nvm and Node.js.
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+. "$HOME/.nvm/nvm.sh"
+nvm install 24
+corepack enable pnpm
+corepack install
+
+# Build project artifacts.
+pnpm install --frozen-lockfile
+pnpm run build:modules
+pnpm run package

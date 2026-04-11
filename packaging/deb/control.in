@@ -1,0 +1,14 @@
+Source: {{NAME}}
+Section: sound
+Priority: optional
+Maintainer: {{MAINTAINER}}
+Build-Depends: {{BUILD_DEPENDS}}
+Standards-Version: 4.6.2
+Homepage: {{HOMEPAGE}}
+Rules-Requires-Root: no
+
+Package: {{NAME}}
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, {{BINARY_DEPENDS}}
+Description: {{PRODUCT_NAME}}
+ {{DESCRIPTION}}

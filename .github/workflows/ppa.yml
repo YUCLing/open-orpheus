@@ -1,0 +1,58 @@
+name: PPA Publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  ppa:
+    name: Build and upload source packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y devscripts dpkg-dev dput gnupg
+
+      - name: Import GPG private key
+        run: |
+          printf '%s' "${{ secrets.PPA_GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Build DSC packages
+        run: node scripts/build-dsc.mts
+
+      - name: Sign source uploads
+        run: |
+          set -euo pipefail
+          for changes in out/make/ppa/*_source.changes; do
+            [ -e "$changes" ] || continue
+            debsign -k "${{ secrets.PPA_GPG_KEY_ID }}" "$changes"
+          done
+
+      - name: Upload to Launchpad PPA
+        run: |
+          set -euo pipefail
+          for changes in out/make/ppa/*_source.changes; do
+            [ -e "$changes" ] || continue
+            dput "ppa:luorain/open-orpheus" "$changes"
+          done

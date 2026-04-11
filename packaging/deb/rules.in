@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	bash debian/build.sh
+
+override_dh_auto_install:
+	mkdir -p debian/{{NAME}}
+	tar xf debian/{{SCAFFOLD_TARBALL}} -C debian/{{NAME}}
+	mkdir -p debian/{{NAME}}/usr/lib/{{NAME}}
+	cp -r out/{{NAME}}-linux-*/. debian/{{NAME}}/usr/lib/{{NAME}}/
+
+override_dh_shlibdeps:
+	true
