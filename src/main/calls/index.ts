@@ -8,3 +8,4 @@ import "./os";
 import "./trayicon";
 import "./network";
 import "./download";
+import "./rtc";

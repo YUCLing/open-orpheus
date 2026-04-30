@@ -4,7 +4,10 @@ import { RequestError } from "got";
 import type { Method } from "got";
 
 import { registerCallHandler } from "../calls";
-import { deserialData } from "../crypto";
+import { deserialData, tryDeserialData } from "../crypto";
+import { broadcastListenTogetherPlayCommand } from "../nim";
+import { extractListenTogetherCommandInfo } from "../../shared/listenTogetherCommand";
+import { isRecord } from "../../shared/utils";
 import client from "../request";
 
 let globalFailCount = 0;
@@ -21,6 +24,35 @@ type NetworkFetchResponse = {
   status: number;
   blob: string;
 }>;
+
+function parseFormBody(body: string) {
+  const params = new URLSearchParams(body);
+  const result: Record<string, string> = {};
+  for (const [key, value] of params.entries()) {
+    result[key] = value;
+  }
+  return result;
+}
+
+function tryParseJsonObject(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractCommandInfoFromRequestBody(body: string) {
+  const direct = parseFormBody(body);
+  const eapiPlainText = direct.params ? tryDeserialData(direct.params) : null;
+  const form = eapiPlainText ? parseFormBody(eapiPlainText) : direct;
+  const commandInfo = tryParseJsonObject(form.commandInfo);
+  if (!commandInfo) return null;
+  return extractListenTogetherCommandInfo(commandInfo);
+}
+
 registerCallHandler<
   [
     {
@@ -35,6 +67,17 @@ registerCallHandler<
   [NetworkFetchResponse]
 >("network.fetch", async (_, request): Promise<[NetworkFetchResponse]> => {
   const retryCount = request.retryCount ?? 1;
+  const shouldBroadcastPlayCommand = request.url.includes(
+    "/api/listen/together/play/command/report"
+  );
+  const listenTogetherCommandInfo = shouldBroadcastPlayCommand
+    ? extractCommandInfoFromRequestBody(request.body || "")
+    : null;
+
+  if (shouldBroadcastPlayCommand) {
+    console.log("[LT:NET] intercepted listen-together API, commandInfo:", listenTogetherCommandInfo ? JSON.stringify(listenTogetherCommandInfo).slice(0, 200) : "null");
+  }
+
   try {
     const response = await client(request.url, {
       method: request.method as Method,
@@ -74,6 +117,25 @@ registerCallHandler<
           )
         )
       : responseBody.toString();
+
+    if (
+      shouldBroadcastPlayCommand &&
+      response.statusCode >= 200 &&
+      response.statusCode < 300 &&
+      listenTogetherCommandInfo
+    ) {
+      let apiSuccess = false;
+      try {
+        const parsed = JSON.parse(blob);
+        apiSuccess = isRecord(parsed) && parsed.code === 200;
+      } catch { /* non-JSON response */ }
+
+      if (apiSuccess) {
+        broadcastListenTogetherPlayCommand(listenTogetherCommandInfo);
+      } else {
+        console.warn("[LT:NET] API response not success, skipping broadcast");
+      }
+    }
 
     globalSucCount++;
 

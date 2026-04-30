@@ -171,6 +171,17 @@ export async function loadFromOrpheusUrl(url: string): Promise<{
         }
         throw new LoadError(`Bad Request: Unsupported wasm type: ${type}`, 400);
       }
+      if (parsedUrl.pathname === "/nim/sdk.js") {
+        const sdkPath = resolve(
+          __dirname,
+          "../../node_modules/@yxim/nim-web-sdk/dist/SDK/NIM_Web_SDK.js"
+        );
+        return {
+          content: await readFile(sdkPath),
+          contentType: "application/javascript",
+          cacheable: false,
+        };
+      }
       return await loadFromFilePath(parsedUrl.pathname);
     case "cache": {
       const urlCacheManager = (await import("./cache")).urlCacheManager;

@@ -5,3 +5,4 @@ import "./update";
 import "./audioplayer";
 import "./audioeffect";
 import "./player";
+import "./im";

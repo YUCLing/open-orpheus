@@ -168,3 +168,11 @@ export function deserialData(hexParams: string | ArrayBuffer): string {
 
   return plaintext;
 }
+
+export function tryDeserialData(hexParams: string | ArrayBuffer): string | null {
+  try {
+    return deserialData(hexParams);
+  } catch {
+    return null;
+  }
+}
