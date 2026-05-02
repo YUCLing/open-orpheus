@@ -43,7 +43,10 @@ export default class AudioStreamer extends EventTarget {
     let write = 0;
     for (let i = 0; i < intervals.length; i++) {
       if (write > 0 && intervals[i][0] <= intervals[write - 1][1] + 1) {
-        intervals[write - 1][1] = Math.max(intervals[write - 1][1], intervals[i][1]);
+        intervals[write - 1][1] = Math.max(
+          intervals[write - 1][1],
+          intervals[i][1]
+        );
       } else {
         intervals[write++] = intervals[i];
       }
@@ -52,7 +55,11 @@ export default class AudioStreamer extends EventTarget {
   }
 
   /** Return sub-ranges of [start, end] not yet covered by `have`. */
-  private static missingRanges(have: Interval[], start: number, end: number): Interval[] {
+  private static missingRanges(
+    have: Interval[],
+    start: number,
+    end: number
+  ): Interval[] {
     const missing: Interval[] = [];
     let cursor = start;
     for (const [s, e] of have) {
@@ -73,7 +80,9 @@ export default class AudioStreamer extends EventTarget {
   }
 
   private onProgress(progress: number): void {
-    this.dispatchEvent(new CustomEvent<number>("progress", { detail: progress }));
+    this.dispatchEvent(
+      new CustomEvent<number>("progress", { detail: progress })
+    );
   }
 
   private onComplete(): void {
@@ -85,7 +94,8 @@ export default class AudioStreamer extends EventTarget {
     totalSize: number;
     contentType: string;
   } {
-    const getHeader = (v: string | string[] | undefined) => Array.isArray(v) ? v[0] : v;
+    const getHeader = (v: string | string[] | undefined) =>
+      Array.isArray(v) ? v[0] : v;
 
     const contentType = getHeader(headers["content-type"]) ?? "audio/mpeg";
     const cr = getHeader(headers["content-range"]);
@@ -101,9 +111,14 @@ export default class AudioStreamer extends EventTarget {
     url: string,
     start: number,
     end?: number
-  ): Promise<{ stream: Readable; headers: IncomingHttpHeaders; actualStart: number }> {
-    const rangeValue = end !== undefined ? `bytes=${start}-${end}` : `bytes=${start}-`;
-    
+  ): Promise<{
+    stream: Readable;
+    headers: IncomingHttpHeaders;
+    actualStart: number;
+  }> {
+    const rangeValue =
+      end !== undefined ? `bytes=${start}-${end}` : `bytes=${start}-`;
+
     // Cast to native node stream to ensure we have .destroy() and AsyncIterable support
     const stream = client.stream(url, {
       headers: { Range: rangeValue },
@@ -134,7 +149,12 @@ export default class AudioStreamer extends EventTarget {
     return { stream, headers: response.headers, actualStart };
   }
 
-  private ensureSongBuffer(songId: string, url: string, totalSize: number, contentType: string): SongBuffer {
+  private ensureSongBuffer(
+    songId: string,
+    url: string,
+    totalSize: number,
+    contentType: string
+  ): SongBuffer {
     if (this.songBuffer?.songId === songId) return this.songBuffer;
 
     this.songBuffer = {
@@ -150,7 +170,7 @@ export default class AudioStreamer extends EventTarget {
   }
 
   /**
-   * Universal method that downloads chunks, saves them to the song buffer, and 
+   * Universal method that downloads chunks, saves them to the song buffer, and
    * optionally forwards precisely sliced bytes to the client stream controller.
    */
   private async downloadAndCache(
@@ -171,7 +191,9 @@ export default class AudioStreamer extends EventTarget {
         throw new Error("Song changed");
       }
 
-      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array | string);
+      const chunk = Buffer.isBuffer(value)
+        ? value
+        : Buffer.from(value as Uint8Array | string);
       if (offset >= sb.totalSize) break;
 
       const writableLength = Math.min(chunk.length, sb.totalSize - offset);
@@ -181,10 +203,17 @@ export default class AudioStreamer extends EventTarget {
       const chunkEnd = offset + writableLength - 1;
 
       // Extract and stream ONLY the strict boundaries the client browser requested
-      if (clientStream && chunkEnd >= clientStream.reqStart && chunkStart <= clientStream.reqEnd) {
+      if (
+        clientStream &&
+        chunkEnd >= clientStream.reqStart &&
+        chunkStart <= clientStream.reqEnd
+      ) {
         const sliceStart = Math.max(0, clientStream.reqStart - chunkStart);
-        const sliceEnd = Math.min(writableLength, clientStream.reqEnd - chunkStart + 1);
-        
+        const sliceEnd = Math.min(
+          writableLength,
+          clientStream.reqEnd - chunkStart + 1
+        );
+
         const toEnqueue = chunk.subarray(sliceStart, sliceEnd);
         if (toEnqueue.length > 0) {
           clientStream.controller.enqueue(new Uint8Array(toEnqueue));
@@ -194,9 +223,11 @@ export default class AudioStreamer extends EventTarget {
       if (writableLength > 0) {
         AudioStreamer.mergeInterval(sb.intervals, [chunkStart, chunkEnd]);
       }
-      
+
       offset += writableLength;
-      this.onProgress(AudioStreamer.downloadedBytes(sb.intervals) / sb.totalSize);
+      this.onProgress(
+        AudioStreamer.downloadedBytes(sb.intervals) / sb.totalSize
+      );
     }
 
     if (AudioStreamer.downloadedBytes(sb.intervals) >= sb.totalSize) {
@@ -218,7 +249,11 @@ export default class AudioStreamer extends EventTarget {
       if (s > end) break;
       if (e < cursor) continue;
       if (s > cursor) {
-        segments.push({ have: false, start: cursor, end: Math.min(s - 1, end) });
+        segments.push({
+          have: false,
+          start: cursor,
+          end: Math.min(s - 1, end),
+        });
       }
       const covStart = Math.max(s, cursor);
       const covEnd = Math.min(e, end);
@@ -238,8 +273,16 @@ export default class AudioStreamer extends EventTarget {
         sb.buffer.copy(Buffer.from(copy.buffer), 0, seg.start, seg.end + 1);
         controller.enqueue(copy);
       } else {
-        const { stream, actualStart } = await this.openRangeStream(sb.url, seg.start, seg.end);
-        await this.downloadAndCache(sb, stream, actualStart, { controller, reqStart: seg.start, reqEnd: seg.end });
+        const { stream, actualStart } = await this.openRangeStream(
+          sb.url,
+          seg.start,
+          seg.end
+        );
+        await this.downloadAndCache(sb, stream, actualStart, {
+          controller,
+          reqStart: seg.start,
+          reqEnd: seg.end,
+        });
       }
     }
   }
@@ -251,10 +294,18 @@ export default class AudioStreamer extends EventTarget {
     void (async () => {
       try {
         while (this.songBuffer === sb) {
-          const gaps = AudioStreamer.missingRanges(sb.intervals, 0, sb.totalSize - 1);
+          const gaps = AudioStreamer.missingRanges(
+            sb.intervals,
+            0,
+            sb.totalSize - 1
+          );
           if (gaps.length === 0) break;
-          
-          const { stream, actualStart } = await this.openRangeStream(sb.url, gaps[0][0], gaps[0][1]);
+
+          const { stream, actualStart } = await this.openRangeStream(
+            sb.url,
+            gaps[0][0],
+            gaps[0][1]
+          );
           await this.downloadAndCache(sb, stream, actualStart);
         }
       } catch {
@@ -266,8 +317,13 @@ export default class AudioStreamer extends EventTarget {
   }
 
   async handleRequest(songId: string, request: Request): Promise<Response> {
-    if (!this.currentAudioPlayInfo || this.currentAudioPlayInfo.songId !== songId) {
-      return new Response("No audio play info available for this song", { status: 404 });
+    if (
+      !this.currentAudioPlayInfo ||
+      this.currentAudioPlayInfo.songId !== songId
+    ) {
+      return new Response("No audio play info available for this song", {
+        status: 404,
+      });
     }
 
     if (this.currentAudioPlayInfo.type !== 4) {
@@ -278,7 +334,9 @@ export default class AudioStreamer extends EventTarget {
       return new Response(buf, {
         status: 200,
         headers: {
-          "Content-Type": mime.getType(this.currentAudioPlayInfo.path) || "application/octet-stream",
+          "Content-Type":
+            mime.getType(this.currentAudioPlayInfo.path) ||
+            "application/octet-stream",
           "Content-Length": String(buf.length),
         },
       });
@@ -298,20 +356,33 @@ export default class AudioStreamer extends EventTarget {
     }
 
     let sb = this.songBuffer;
-    let initialStreamData: { stream: Readable; actualStart: number } | null = null;
+    let initialStreamData: { stream: Readable; actualStart: number } | null =
+      null;
 
     // Lazily fetch meta & construct SongBuffer on first connection
     if (!sb || sb.songId !== songId) {
       try {
-        const { stream, headers, actualStart } = await this.openRangeStream(url, start, end);
+        const { stream, headers, actualStart } = await this.openRangeStream(
+          url,
+          start,
+          end
+        );
         const info = this.parseSizeFromHeaders(headers);
-        
-        if (!info.totalSize) return new Response("Could not determine file size", { status: 502 });
-        
-        sb = this.ensureSongBuffer(songId, url, info.totalSize, info.contentType);
+
+        if (!info.totalSize)
+          return new Response("Could not determine file size", { status: 502 });
+
+        sb = this.ensureSongBuffer(
+          songId,
+          url,
+          info.totalSize,
+          info.contentType
+        );
         initialStreamData = { stream, actualStart }; // Kept so we don't throw away this response
       } catch {
-        return new Response("Upstream stream initialization error", { status: 502 });
+        return new Response("Upstream stream initialization error", {
+          status: 502,
+        });
       }
     }
 
@@ -329,21 +400,31 @@ export default class AudioStreamer extends EventTarget {
         try {
           if (initialStreamData) {
             // First ever request optimization: use the already open connection
-            await this.downloadAndCache(sb, initialStreamData.stream, initialStreamData.actualStart, {
-              controller,
-              reqStart: start,
-              reqEnd: resolvedEnd,
-            });
+            await this.downloadAndCache(
+              sb,
+              initialStreamData.stream,
+              initialStreamData.actualStart,
+              {
+                controller,
+                reqStart: start,
+                reqEnd: resolvedEnd,
+              }
+            );
           } else {
             // Standard bridging for pre-existing cache
             await this.streamRange(sb, start, resolvedEnd, controller);
           }
           controller.close();
         } catch (e) {
-          try { controller.error(e); } catch { /* Browser might have closed early */ }
+          try {
+            controller.error(e);
+          } catch {
+            /* Browser might have closed early */
+          }
         } finally {
           // Fire up background preloading
-          if (rangeHeader && this.songBuffer === sb) this.backgroundFetchFull(sb);
+          if (rangeHeader && this.songBuffer === sb)
+            this.backgroundFetchFull(sb);
         }
       },
     });
@@ -353,7 +434,9 @@ export default class AudioStreamer extends EventTarget {
       headers: {
         "Content-Type": sb.contentType,
         "Content-Length": String(resolvedEnd - start + 1),
-        ...(rangeHeader && { "Content-Range": `bytes ${start}-${resolvedEnd}/${sb.totalSize}` }),
+        ...(rangeHeader && {
+          "Content-Range": `bytes ${start}-${resolvedEnd}/${sb.totalSize}`,
+        }),
         "Accept-Ranges": "bytes",
         "Cache-Control": "no-store",
       },
