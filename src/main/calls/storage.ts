@@ -245,6 +245,53 @@ registerCallHandler<
   }
 );
 
+registerCallHandler<[string, "abs" | "rel", "", string, boolean], void>(
+  "storage.deletefile",
+  async (event, taskId, type, emptyStr, path /* , deleteEmptyDir */) => {
+    let filePath: string;
+    if (type === "rel") {
+      const p = sanitizeRelativePath(dataDir, path);
+      if (p === false) {
+        throw new Error(`Forbidden file path access attempt: ${path}`);
+      }
+      filePath = p;
+    } else {
+      filePath = normalizePath(path);
+    }
+
+    if (!existsSync(filePath)) {
+      event.sender.send(
+        "channel.call",
+        "storage.ondeletefilesdone",
+        taskId,
+        1,
+        undefined
+      );
+      return;
+    }
+
+    try {
+      await rm(filePath);
+      event.sender.send(
+        "channel.call",
+        "storage.ondeletefilesdone",
+        taskId,
+        0,
+        [filePath]
+      );
+    } catch (err) {
+      console.error("Failed to delete file", err);
+      event.sender.send(
+        "channel.call",
+        "storage.ondeletefilesdone",
+        taskId,
+        2,
+        undefined
+      );
+    }
+  }
+);
+
 registerCallHandler<[string, { id: string; path: string }[], string], void>(
   "storage.checkFilesExist",
   async (event, taskId, files, basePath) => {

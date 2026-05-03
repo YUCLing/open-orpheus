@@ -1,4 +1,4 @@
-import { extname, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -10,7 +10,7 @@ import unzipper from "unzipper";
 import packManager from "./pack";
 import WebPack from "./packs/WebPack";
 import { sanitizeRelativePath } from "./util";
-import { storage as storageDir, wasm } from "./folders";
+import { data as dataDir, storage as storageDir, wasm } from "./folders";
 import client from "./request";
 
 class NetworkError extends Error {
@@ -170,6 +170,76 @@ export async function loadFromOrpheusUrl(url: string): Promise<{
           };
         }
         throw new LoadError(`Bad Request: Unsupported wasm type: ${type}`, 400);
+      }
+      if (parsedUrl.pathname === "/customskin") {
+        const path = "wasm/skin/customskin";
+        const rawSearchIndex = url.indexOf("?");
+        const rawSearch =
+          rawSearchIndex >= 0 ? url.slice(rawSearchIndex + 1) : "";
+        const skinParams = rawSearch.includes("&&")
+          ? new URLSearchParams(
+              rawSearch
+                .replace(/&&/g, "__ORPHEUS_PARAM_SEP__")
+                .replace(/&/g, "%26")
+                .replace(/__ORPHEUS_PARAM_SEP__/g, "&")
+            )
+          : parsedUrl.searchParams;
+        const picUrl = skinParams.get("url");
+        const name = skinParams.get("name");
+        const fetchFromServer = skinParams.get("fetchFromServer") !== "false";
+
+        // 1. Validate required parameters
+        if (!name) {
+          throw new LoadError(
+            "Bad Request: Missing name parameter for custom skin",
+            400
+          );
+        }
+
+        const cachedPath = resolve(dataDir, path, name);
+        let buf!: Buffer<ArrayBuffer>;
+
+        // 2. Handle fetching or reading locally
+        if (fetchFromServer) {
+          if (!picUrl) {
+            throw new LoadError(
+              "Bad Request: Missing url parameter to fetch custom skin",
+              400
+            );
+          }
+
+          // Fetch from server
+          const res = await client(picUrl, { throwHttpErrors: false });
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            throw new LoadError(
+              `Failed to fetch custom skin from url: ${res.statusMessage}`,
+              res.statusCode
+            );
+          }
+
+          buf = Buffer.from(res.rawBody) as Buffer<ArrayBuffer>;
+
+          // Save it to path + name
+          await mkdir(dirname(cachedPath), { recursive: true });
+          await writeFile(cachedPath, buf);
+        } else {
+          // Read from path + name
+          if (!existsSync(cachedPath)) {
+            throw new LoadError(
+              `Not Found: Custom skin does not exist locally: ${name}`,
+              404
+            );
+          }
+
+          buf = (await readFile(cachedPath)) as Buffer<ArrayBuffer>;
+        }
+
+        // 3. Respond with the fetched/read data
+        return {
+          content: buf,
+          contentType:
+            mime.getType(extname(name)) || "application/octet-stream",
+        };
       }
       return await loadFromFilePath(parsedUrl.pathname);
     case "cache": {
