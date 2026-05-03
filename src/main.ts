@@ -182,11 +182,23 @@ app.on("ready", async () => {
       m.default(openOrpheusSession.protocol);
     });
 
+    const shouldRedownload = process.argv.includes("--redownload-package");
     try {
+      // Trigger an error to redownload the package if requested
+      if (shouldRedownload) throw new Error("REDOWNLOAD_REQ");
       await packManager.loadWebPack();
     } catch (e) {
-      console.warn("Failed to load web pack:", e);
+      if (!(e instanceof Error) || e.message !== "REDOWNLOAD_REQ")
+        console.warn("Failed to load web pack:", e);
       await showPackgeDownloadWindow(); // If user cancelled, this will throw and skip the rest of initialization
+      if (shouldRedownload) {
+        // Redownload is successfully here, drop the argument then restart again
+        app.relaunch({
+          args: process.argv.filter((v) => v !== "--redownload-package"),
+        });
+        app.quit();
+        return;
+      }
       await packManager.loadWebPack(); // Simply try loading again after download, it will throw if the package is still invalid
     }
 

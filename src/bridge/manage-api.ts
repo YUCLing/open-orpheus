@@ -19,6 +19,7 @@ export interface ManageContract {
 
   pack: {
     getWebPackCommitHash(): Promise<string>;
+    redownloadPackage(): Promise<void>;
   };
   cache: {
     getStats(): Promise<AllCacheStats>;

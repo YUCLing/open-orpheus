@@ -1,7 +1,7 @@
 import path, { resolve } from "node:path";
 import { readdir, stat, rm } from "node:fs/promises";
 
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import packManager from "../pack";
 import WebPack from "../packs/WebPack";
 import { wasm as wasmDir } from "../folders";
@@ -45,6 +45,12 @@ export default function showManageWindow() {
     pack: {
       getWebPackCommitHash: async () => {
         return packManager.getPack<WebPack>("web").getCommitHash();
+      },
+      redownloadPackage: async () => {
+        app.relaunch({
+          args: process.argv.slice(1).concat(["--redownload-package"]),
+        });
+        app.quit();
       },
     },
 
