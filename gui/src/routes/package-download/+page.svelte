@@ -19,6 +19,8 @@
   import FileQuestionMark from "@lucide/svelte/icons/file-question-mark";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
 
+  import versions from "../../../../versions.json";
+
   type Phase = "idle" | "downloading" | "extracting" | "saving";
 
   let phase = $state<Phase>("idle");
@@ -46,9 +48,18 @@
       <h1 class="self-end text-2xl font-bold">缺少包文件</h1>
       <p class="text-gray-600">所需的包文件缺失或无效。是否尝试自动下载？</p>
     </div>
-    <Button onclick={startDownload} size="lg" class="cursor-pointer px-6"
-      >下载</Button
-    >
+    <div class="text-center">
+      <Button onclick={startDownload} size="lg" class="cursor-pointer px-8"
+        >下载</Button
+      >
+      <p class="mt-2 w-64 text-sm opacity-75">
+        将会自动下载网易云音乐 {versions.version} ({versions.build}) 的资源包（{versions.commit}）
+      </p>
+      <p class="my-4">或者</p>
+      <Button variant="link" href={versions.downloadUrl} target="_blank"
+        >手动下载安装包</Button
+      >
+    </div>
   {:else}
     <div class="flex w-full max-w-sm flex-col gap-4">
       <div class="flex items-center gap-3">
