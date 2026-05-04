@@ -59,12 +59,12 @@
   </screenshots>
 
   <releases>
-    <release version="0.10.3" date="2026-05-04">
-      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.10.3</url>
+    <release version="0.10.4" date="2026-05-04">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.10.4</url>
       <description>
         <ul>
-          <li>Fixed cookie expiration time.</li>
-          <li xml:lang="zh-CN">修复 Cookie 过期时间。</li>
+          <li>Fixed podcast download failure.</li>
+          <li xml:lang="zh-CN">修复播客下载失败问题。</li>
         </ul>
       </description>
     </release>
