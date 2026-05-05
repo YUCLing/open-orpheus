@@ -248,10 +248,14 @@ fn feed(
     storage: &OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>>,
     is_event: bool,
 ) -> Vec<u8> {
-    let Some(storage) = storage.get() else { return chunk.to_vec() };
+    let Some(storage) = storage.get() else {
+        return chunk.to_vec();
+    };
 
     let (msgs, sync_lost) = {
-        let Ok(mut map) = storage.lock() else { return chunk.to_vec() };
+        let Ok(mut map) = storage.lock() else {
+            return chunk.to_vec();
+        };
         let buf = map.entry(fd).or_default();
         buf.extend_from_slice(chunk);
         let mut msgs = Vec::new();
@@ -302,25 +306,33 @@ fn feed(
 }
 
 fn should_suppress_inbound(fd: RawFd, oid: u32, op: u16, msg: &[u8]) -> bool {
-    if oid == 1 && op == EVT_DELETE_ID
-        && let Some(dead) = ru32(msg, 8) {
-            let Some(conns) = CONNS.get() else { return false };
-            let Ok(mut guard) = conns.lock() else { return false };
-            let Some(conn) = guard.get_mut(&fd) else { return false };
-            
-            // If it's one of our injected IDs, we're done with it. 
-            // Push it back into the stolen pool so we can reuse it later!
-            if conn.injected_ids.remove(&dead) {
-                conn.stolen_ids.push(dead);
-                return true; // suppress from client
-            }
-            
-            // Otherwise, steal up to 32 deleted IDs from the client for our own use.
-            if conn.stolen_ids.len() < 32 {
-                conn.stolen_ids.push(dead);
-                return true; // suppress from client
-            }
+    if oid == 1
+        && op == EVT_DELETE_ID
+        && let Some(dead) = ru32(msg, 8)
+    {
+        let Some(conns) = CONNS.get() else {
+            return false;
+        };
+        let Ok(mut guard) = conns.lock() else {
+            return false;
+        };
+        let Some(conn) = guard.get_mut(&fd) else {
+            return false;
+        };
+
+        // If it's one of our injected IDs, we're done with it.
+        // Push it back into the stolen pool so we can reuse it later!
+        if conn.injected_ids.remove(&dead) {
+            conn.stolen_ids.push(dead);
+            return true; // suppress from client
         }
+
+        // Otherwise, steal up to 32 deleted IDs from the client for our own use.
+        if conn.stolen_ids.len() < 32 {
+            conn.stolen_ids.push(dead);
+            return true; // suppress from client
+        }
+    }
     false
 }
 
@@ -797,11 +809,13 @@ pub(super) fn create_region_for_window(window_id: &str) -> Option<WlRegion> {
 pub(super) fn create_region(fd: RawFd) -> Option<WlRegion> {
     let (compositor_id, region_id) = {
         let conns = CONNS.get()?;
-        let Ok(mut guard) = conns.lock() else { return None };
+        let Ok(mut guard) = conns.lock() else {
+            return None;
+        };
         let conn = guard.get_mut(&fd)?;
         let compositor_id = conn.compositor_id?;
         // Use `?` here to gracefully abort if no stolen IDs are available yet
-        let region_id = conn.alloc_injected_id()?; 
+        let region_id = conn.alloc_injected_id()?;
         (compositor_id, region_id)
     };
 
@@ -813,7 +827,9 @@ pub(super) fn create_region(fd: RawFd) -> Option<WlRegion> {
 
     if !super::hook::send_raw_msg(fd, &buf) {
         let conns = CONNS.get()?;
-        let Ok(mut guard) = conns.lock() else { return None };
+        let Ok(mut guard) = conns.lock() else {
+            return None;
+        };
         if let Some(conn) = guard.get_mut(&fd) {
             conn.injected_ids.remove(&region_id);
             // Return it to the pool if we failed to send
