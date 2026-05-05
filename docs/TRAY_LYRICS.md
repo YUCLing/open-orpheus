@@ -43,7 +43,18 @@ Open Orpheus 监听这个控制文件，并同步关闭 `trayLyrics.enabled` 设
 
 ## 安装扩展
 
-在仓库根目录执行：
+推荐在 Open Orpheus 中执行：
+
+```text
+管理 Open Orpheus -> 托盘菜单 -> 状态栏歌词 -> 安装并开启
+```
+
+Open Orpheus 会自动打包并安装 GNOME Shell 扩展，然后通过 GNOME Shell D-Bus 接口立即启用。大多数情况下不需要重新登录。
+
+如果当前 GNOME Shell 会话尚未识别刚安装的扩展，Open Orpheus 会提示重新登录一次。重新登录后再次点击“安装并开启”即可。
+
+也可以手动在仓库根目录执行：
+
 
 ```bash
 gnome-extensions pack -f \

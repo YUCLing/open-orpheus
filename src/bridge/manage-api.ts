@@ -12,6 +12,14 @@ export interface AllCacheStats {
   wasm: CacheGroupStats;
 }
 
+export type TrayLyricsExtensionInstallResult = {
+  ok: boolean;
+  enabled: boolean;
+  installed: boolean;
+  needsRelogin: boolean;
+  message: string;
+};
+
 export interface ManageContract {
   platform: NodeJS.Platform;
 
@@ -27,5 +35,8 @@ export interface ManageContract {
   };
   gpu: {
     openInfo(): Promise<void>;
+  };
+  trayLyrics: {
+    installExtension(): Promise<TrayLyricsExtensionInstallResult>;
   };
 }

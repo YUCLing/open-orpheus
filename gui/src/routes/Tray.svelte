@@ -14,11 +14,21 @@
 
   let clickBehaviorPromise = $state(kv.get("tray.clickBehavior"));
   let trayLyricsEnabledPromise = $state(kv.get("trayLyrics.enabled"));
+  let extensionInstallPromise = $state<
+    ReturnType<ManageContract["trayLyrics"]["installExtension"]> | null
+  >(null);
 
   function setTrayLyricsEnabled(enabled: boolean) {
     const value = enabled ? "true" : "false";
     kv.set("trayLyrics.enabled", value);
     trayLyricsEnabledPromise = Promise.resolve(value);
+  }
+
+  function installTrayLyricsExtension() {
+    extensionInstallPromise = api.trayLyrics.installExtension().then((result) => {
+      if (result.enabled) setTrayLyricsEnabled(true);
+      return result;
+    });
   }
 </script>
 
@@ -35,13 +45,33 @@
           在 GNOME 顶部状态栏中单独显示当前歌词。需要安装并启用 Open Orpheus
           GNOME Shell 扩展。
         </Field.Description>
+        {#if extensionInstallPromise}
+          {#await extensionInstallPromise}
+            <Field.Description>正在安装并启用 GNOME Shell 扩展…</Field.Description>
+          {:then result}
+            <Field.Description>
+              {result.message}
+            </Field.Description>
+          {:catch error}
+            <Field.Description>
+              安装 GNOME Shell 扩展失败：{error instanceof Error
+                ? error.message
+                : String(error)}
+            </Field.Description>
+          {/await}
+        {/if}
       </Field.Content>
-      <Button
-        variant={enabled ? "destructive" : "default"}
-        onclick={() => setTrayLyricsEnabled(!enabled)}
-      >
-        {enabled ? "关闭" : "开启"}
-      </Button>
+      <div class="flex gap-2">
+        <Button variant="outline" onclick={installTrayLyricsExtension}>
+          安装并开启
+        </Button>
+        <Button
+          variant={enabled ? "destructive" : "default"}
+          onclick={() => setTrayLyricsEnabled(!enabled)}
+        >
+          {enabled ? "关闭" : "开启"}
+        </Button>
+      </div>
     </Field.Field>
   {/await}
 

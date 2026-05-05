@@ -9,6 +9,7 @@ import { lyricCacheManager, playCacheManager, urlCacheManager } from "../cache";
 import { checkUpdate } from "../update";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { ManageContract } from "../../bridge/manage-api";
+import { installTrayLyricsExtension } from "../gnome-tray-lyrics-extension";
 
 let manageWndInstance: BrowserWindow | null = null;
 
@@ -115,6 +116,12 @@ export default function showManageWindow() {
             partition: "open-orpheus",
           },
         }).loadURL("chrome://gpu");
+      },
+    },
+
+    trayLyrics: {
+      installExtension: async () => {
+        return await installTrayLyricsExtension();
       },
     },
   });

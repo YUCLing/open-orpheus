@@ -18,6 +18,7 @@ const config: ForgeConfig = {
     asar: {
       unpack: "**/*.{so*,dylib,dll}",
     },
+    extraResource: ["packaging/gnome-shell-extension"],
     derefSymlinks: true, // TODO: Remove in Electron Forge 8
 
     // In offline environments (e.g. flatpak sandbox), SHASUMS256.txt cannot be
