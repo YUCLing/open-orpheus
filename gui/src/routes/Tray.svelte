@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as RadioGroup from "$lib/components/ui/radio-group";
   import * as Field from "$lib/components/ui/field";
+  import { Button } from "$lib/components/ui/button";
   import { getBridge } from "$lib/bridge";
   import type { ManageContract } from "$bridge/manage-api";
 
@@ -12,12 +13,38 @@
     | "with-native-menu";
 
   let clickBehaviorPromise = $state(kv.get("tray.clickBehavior"));
+  let trayLyricsEnabledPromise = $state(kv.get("trayLyrics.enabled"));
+
+  function setTrayLyricsEnabled(enabled: boolean) {
+    const value = enabled ? "true" : "false";
+    kv.set("trayLyrics.enabled", value);
+    trayLyricsEnabledPromise = Promise.resolve(value);
+  }
 </script>
 
 <h1 class="text-2xl font-bold">托盘菜单</h1>
 <p class="mt-2 text-gray-700">选择托盘菜单如何响应你的操作。</p>
 
 {#if api.platform === "linux"}
+  {#await trayLyricsEnabledPromise then trayLyricsEnabled}
+    {@const enabled = trayLyricsEnabled === "true"}
+    <Field.Field orientation="horizontal" class="mt-6">
+      <Field.Content>
+        <Field.Title>状态栏歌词</Field.Title>
+        <Field.Description>
+          在 GNOME 顶部状态栏中单独显示当前歌词。需要安装并启用 Open Orpheus
+          GNOME Shell 扩展。
+        </Field.Description>
+      </Field.Content>
+      <Button
+        variant={enabled ? "destructive" : "default"}
+        onclick={() => setTrayLyricsEnabled(!enabled)}
+      >
+        {enabled ? "关闭" : "开启"}
+      </Button>
+    </Field.Field>
+  {/await}
+
   {#await clickBehaviorPromise then value}
     <RadioGroup.Root
       class="mt-2"

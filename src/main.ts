@@ -91,6 +91,7 @@ const createWindow = () => {
     show: false,
     frame: false,
     webPreferences: {
+      backgroundThrottling: false,
       preload: path.join(__dirname, "preload.js"),
     },
   });
@@ -223,6 +224,7 @@ app.on("ready", async () => {
       import("./main/request").then((m) => m.setupRequestInterceptors()),
       // Make sure we handle KV storage IPC calls
       import("./main/kv"),
+      import("./main/tray-lyrics"),
       prepareDeviceId(),
       packManager.getPack<WebPack>("web").readPack(),
       import("./main/windows/desktop-lyrics").then((m) => {

@@ -5,6 +5,7 @@ import { contextBridge } from "electron";
 
 import "./preload/channel";
 import "./preload/desktopLyrics";
+import "./preload/trayLyrics";
 
 contextBridge.executeInMainWorld({
   func: () => {
