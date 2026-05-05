@@ -39,7 +39,7 @@ const TrayLyricsIndicator = GObject.registerClass(
       this.add_child(this._label);
 
       this.menu.addAction("关闭状态栏歌词", () => {
-        this._writeControl({ action: "disable", updatedAt: Date.now() });
+        this._writeControl({ action: "disable" });
         this._setVisibleText("");
       });
 

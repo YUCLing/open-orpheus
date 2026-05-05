@@ -29,7 +29,7 @@ export async function isTrayLyricsExtensionInstalled(): Promise<boolean> {
 
 export async function installTrayLyricsExtension(): Promise<TrayLyricsExtensionInstallResult> {
   if (os.platform() !== "linux") {
-    return result(false, false, false, false, "状态栏歌词扩展仅支持 Linux GNOME。");
+    return result(false, false, "状态栏歌词扩展仅支持 Linux GNOME。");
   }
 
   const sourceDir = getExtensionSourceDir();
@@ -45,20 +45,16 @@ export async function installTrayLyricsExtension(): Promise<TrayLyricsExtensionI
     await run("gnome-extensions", ["install", "--force", bundlePath]);
 
     await restartExtension();
-    const enableResult = await enableExtension();
+    const enabled = await enableExtension();
     return {
-      ok: enableResult.enabled,
-      enabled: enableResult.enabled,
+      enabled,
       installed: true,
-      needsRelogin: enableResult.needsRelogin,
-      message: enableResult.enabled
+      message: enabled
         ? "GNOME Shell 扩展已安装并启用。"
         : "扩展已安装，但当前 GNOME Shell 会话尚未识别它。请重新登录一次后再启用。",
     };
   } catch (error) {
     return result(
-      false,
-      false,
       false,
       false,
       `安装 GNOME Shell 扩展失败：${formatError(error)}`
@@ -81,23 +77,20 @@ async function restartExtension(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 300));
 }
 
-async function enableExtension(): Promise<{
-  enabled: boolean;
-  needsRelogin: boolean;
-}> {
+async function enableExtension(): Promise<boolean> {
   try {
     const { stdout } = await callShellExtensionMethod("EnableExtension");
 
-    if (stdout.includes("true")) return { enabled: true, needsRelogin: false };
+    if (stdout.includes("true")) return true;
   } catch {
     // Fall back to the CLI below.
   }
 
   try {
     await run("gnome-extensions", ["enable", EXTENSION_UUID]);
-    return { enabled: true, needsRelogin: false };
+    return true;
   } catch {
-    return { enabled: false, needsRelogin: true };
+    return false;
   }
 }
 
@@ -123,13 +116,11 @@ async function run(command: string, args: string[]) {
 }
 
 function result(
-  ok: boolean,
   enabled: boolean,
   installed: boolean,
-  needsRelogin: boolean,
   message: string
 ): TrayLyricsExtensionInstallResult {
-  return { ok, enabled, installed, needsRelogin, message };
+  return { enabled, installed, message };
 }
 
 function formatError(error: unknown): string {

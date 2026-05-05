@@ -13,10 +13,8 @@ export interface AllCacheStats {
 }
 
 export type TrayLyricsExtensionInstallResult = {
-  ok: boolean;
   enabled: boolean;
   installed: boolean;
-  needsRelogin: boolean;
   message: string;
 };
 

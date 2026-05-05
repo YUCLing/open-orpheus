@@ -106,7 +106,7 @@ cat "$XDG_RUNTIME_DIR/open-orpheus/tray-lyrics.json"
 也可以临时写入测试文本来验证 GNOME 扩展显示链路：
 
 ```bash
-printf '%s\n' '{"visible":true,"text":"Open Orpheus 状态栏歌词测试","updatedAt":0}' \
+printf '%s\n' '{"visible":true,"text":"Open Orpheus 状态栏歌词测试"}' \
   > "$XDG_RUNTIME_DIR/open-orpheus/tray-lyrics.json"
 ```
 

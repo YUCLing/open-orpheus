@@ -13,7 +13,7 @@ import {
 } from "./kv";
 import { mainWindow } from "./window";
 
-export const TRAY_LYRICS_ENABLED_KEY = "trayLyrics.enabled";
+const TRAY_LYRICS_ENABLED_KEY = "trayLyrics.enabled";
 
 const RUNTIME_DIR_NAME = "open-orpheus";
 const STATE_FILE_NAME = "tray-lyrics.json";
@@ -22,12 +22,10 @@ const CONTROL_FILE_NAME = "tray-lyrics-control.json";
 type TrayLyricsState = {
   visible: boolean;
   text: string;
-  updatedAt: number;
 };
 
 type TrayLyricsControl = {
   action: "disable";
-  updatedAt?: number;
 };
 
 let currentText: string | null = null;
@@ -58,11 +56,10 @@ app.on("before-quit", () => {
   void writeTrayLyricsState({
     visible: false,
     text: "",
-    updatedAt: Date.now(),
   });
 });
 
-export function isTrayLyricsSupported(): boolean {
+function isTrayLyricsSupported(): boolean {
   if (os.platform() !== "linux") return false;
 
   const desktop = [
@@ -77,21 +74,17 @@ export function isTrayLyricsSupported(): boolean {
   return desktop.includes("gnome");
 }
 
-export function isTrayLyricsEnabled(): boolean {
-  return enabled;
-}
-
-export function closeTrayLyrics(): void {
+function closeTrayLyrics(): void {
   enabled = false;
   void displayCurrentText();
 }
 
-export function enableTrayLyrics(): void {
+function enableTrayLyrics(): void {
   enabled = true;
   void displayCurrentText();
 }
 
-export function setTrayLyricsEnabled(nextEnabled: boolean): void {
+function setTrayLyricsEnabled(nextEnabled: boolean): void {
   kvSet(TRAY_LYRICS_ENABLED_KEY, nextEnabled ? "true" : "false");
 }
 
@@ -108,7 +101,6 @@ async function displayCurrentText(): Promise<void> {
       currentText !== null &&
       currentText !== "",
     text: currentText ?? "",
-    updatedAt: Date.now(),
   };
 
   await writeTrayLyricsState(state);
