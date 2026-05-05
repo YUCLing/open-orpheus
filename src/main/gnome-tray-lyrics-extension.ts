@@ -44,6 +44,7 @@ export async function installTrayLyricsExtension(): Promise<TrayLyricsExtensionI
     );
     await run("gnome-extensions", ["install", "--force", bundlePath]);
 
+    await restartExtension();
     const enableResult = await enableExtension();
     return {
       ok: enableResult.enabled,
@@ -75,22 +76,17 @@ function getExtensionSourceDir(): string {
   return path.join(process.resourcesPath, EXTENSION_SOURCE_DIR);
 }
 
+async function restartExtension(): Promise<void> {
+  await callShellExtensionMethod("DisableExtension").catch(() => undefined);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+}
+
 async function enableExtension(): Promise<{
   enabled: boolean;
   needsRelogin: boolean;
 }> {
   try {
-    const { stdout } = await run("gdbus", [
-      "call",
-      "--session",
-      "--dest",
-      "org.gnome.Shell",
-      "--object-path",
-      "/org/gnome/Shell",
-      "--method",
-      "org.gnome.Shell.Extensions.EnableExtension",
-      EXTENSION_UUID,
-    ]);
+    const { stdout } = await callShellExtensionMethod("EnableExtension");
 
     if (stdout.includes("true")) return { enabled: true, needsRelogin: false };
   } catch {
@@ -103,6 +99,20 @@ async function enableExtension(): Promise<{
   } catch {
     return { enabled: false, needsRelogin: true };
   }
+}
+
+async function callShellExtensionMethod(method: string) {
+  return await run("gdbus", [
+    "call",
+    "--session",
+    "--dest",
+    "org.gnome.Shell",
+    "--object-path",
+    "/org/gnome/Shell",
+    "--method",
+    `org.gnome.Shell.Extensions.${method}`,
+    EXTENSION_UUID,
+  ]);
 }
 
 async function run(command: string, args: string[]) {
