@@ -14,9 +14,15 @@
 
   let clickBehaviorPromise = $state(kv.get("tray.clickBehavior"));
   let trayLyricsEnabledPromise = $state(kv.get("trayLyrics.enabled"));
+  let extensionInstalledPromise = $state(
+    api.platform === "linux"
+      ? api.trayLyrics.isExtensionInstalled()
+      : Promise.resolve(false)
+  );
   let extensionInstallPromise = $state<
     ReturnType<ManageContract["trayLyrics"]["installExtension"]> | null
   >(null);
+  let extensionInstalling = $state(false);
 
   function setTrayLyricsEnabled(enabled: boolean) {
     const value = enabled ? "true" : "false";
@@ -25,10 +31,17 @@
   }
 
   function installTrayLyricsExtension() {
-    extensionInstallPromise = api.trayLyrics.installExtension().then((result) => {
-      if (result.enabled) setTrayLyricsEnabled(true);
-      return result;
-    });
+    extensionInstalling = true;
+    extensionInstallPromise = api.trayLyrics
+      .installExtension()
+      .then((result) => {
+        extensionInstalledPromise = Promise.resolve(result.installed);
+        if (result.enabled) setTrayLyricsEnabled(true);
+        return result;
+      })
+      .finally(() => {
+        extensionInstalling = false;
+      });
   }
 </script>
 
@@ -62,9 +75,21 @@
         {/if}
       </Field.Content>
       <div class="flex gap-2">
-        <Button variant="outline" onclick={installTrayLyricsExtension}>
-          安装并开启
-        </Button>
+        {#await extensionInstalledPromise}
+          <Button variant="outline" disabled>检测中</Button>
+        {:then extensionInstalled}
+          <Button
+            variant="outline"
+            disabled={extensionInstalled || extensionInstalling}
+            onclick={installTrayLyricsExtension}
+          >
+            {extensionInstalled ? "已安装" : "安装并开启"}
+          </Button>
+        {:catch}
+          <Button variant="outline" onclick={installTrayLyricsExtension}>
+            安装并开启
+          </Button>
+        {/await}
         <Button
           variant={enabled ? "destructive" : "default"}
           onclick={() => setTrayLyricsEnabled(!enabled)}

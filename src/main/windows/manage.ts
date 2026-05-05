@@ -9,7 +9,10 @@ import { lyricCacheManager, playCacheManager, urlCacheManager } from "../cache";
 import { checkUpdate } from "../update";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { ManageContract } from "../../bridge/manage-api";
-import { installTrayLyricsExtension } from "../gnome-tray-lyrics-extension";
+import {
+  installTrayLyricsExtension,
+  isTrayLyricsExtensionInstalled,
+} from "../gnome-tray-lyrics-extension";
 
 let manageWndInstance: BrowserWindow | null = null;
 
@@ -120,6 +123,9 @@ export default function showManageWindow() {
     },
 
     trayLyrics: {
+      isExtensionInstalled: async () => {
+        return await isTrayLyricsExtensionInstalled();
+      },
       installExtension: async () => {
         return await installTrayLyricsExtension();
       },

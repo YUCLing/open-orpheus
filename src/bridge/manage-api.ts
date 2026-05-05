@@ -37,6 +37,7 @@ export interface ManageContract {
     openInfo(): Promise<void>;
   };
   trayLyrics: {
+    isExtensionInstalled(): Promise<boolean>;
     installExtension(): Promise<TrayLyricsExtensionInstallResult>;
   };
 }

@@ -16,6 +16,17 @@ const EXTENSION_SOURCE_DIR = path.join(
   EXTENSION_UUID
 );
 
+export async function isTrayLyricsExtensionInstalled(): Promise<boolean> {
+  if (os.platform() !== "linux") return false;
+
+  try {
+    await run("gnome-extensions", ["info", EXTENSION_UUID]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function installTrayLyricsExtension(): Promise<TrayLyricsExtensionInstallResult> {
   if (os.platform() !== "linux") {
     return result(false, false, false, false, "状态栏歌词扩展仅支持 Linux GNOME。");
