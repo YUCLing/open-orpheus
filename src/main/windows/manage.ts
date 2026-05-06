@@ -2,6 +2,7 @@ import path, { resolve } from "node:path";
 import { readdir, stat, rm } from "node:fs/promises";
 
 import { app, BrowserWindow } from "electron";
+import { getSystemFonts } from "@open-orpheus/ui";
 import packManager from "../pack";
 import WebPack from "../packs/WebPack";
 import { wasm as wasmDir } from "../folders";
@@ -10,9 +11,11 @@ import { checkUpdate } from "../update";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { ManageContract } from "../../bridge/manage-api";
 import {
+  getTrayLyricsExtensionInfo,
   installTrayLyricsExtension,
   isTrayLyricsExtensionInstalled,
 } from "../gnome-tray-lyrics-extension";
+import { getTrayLyricsStyle, setTrayLyricsStyle } from "../tray-lyrics";
 
 let manageWndInstance: BrowserWindow | null = null;
 
@@ -126,8 +129,20 @@ export default function showManageWindow() {
       isExtensionInstalled: async () => {
         return await isTrayLyricsExtensionInstalled();
       },
+      getExtensionInfo: async () => {
+        return await getTrayLyricsExtensionInfo();
+      },
       installExtension: async () => {
         return await installTrayLyricsExtension();
+      },
+      getSystemFonts: async () => {
+        return getSystemFonts();
+      },
+      getStyle: async () => {
+        return getTrayLyricsStyle();
+      },
+      setStyle: async (_event, style) => {
+        return setTrayLyricsStyle(style);
       },
     },
   });

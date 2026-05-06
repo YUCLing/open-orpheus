@@ -4,3 +4,59 @@
   padding-right: 6px;
   font-weight: 500;
 }
+
+.open-orpheus-tray-lyrics-menu-row {
+  spacing: 12px;
+}
+
+.open-orpheus-tray-lyrics-section-item {
+  padding-top: 6px;
+  padding-bottom: 2px;
+}
+
+.open-orpheus-tray-lyrics-section-label {
+  font-weight: 700;
+}
+
+.open-orpheus-tray-lyrics-menu-entry {
+  min-width: 180px;
+}
+
+.open-orpheus-tray-lyrics-color-item {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.open-orpheus-tray-lyrics-color-box {
+  spacing: 8px;
+}
+
+.open-orpheus-tray-lyrics-color-preview {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.open-orpheus-tray-lyrics-color-presets {
+  spacing: 8px;
+}
+
+.open-orpheus-tray-lyrics-color-actions {
+  spacing: 8px;
+}
+
+.open-orpheus-tray-lyrics-color-swatch {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.open-orpheus-tray-lyrics-text-button {
+  padding: 4px 8px;
+  border-radius: 6px;
+}

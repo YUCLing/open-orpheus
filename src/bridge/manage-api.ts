@@ -18,6 +18,20 @@ export type TrayLyricsExtensionInstallResult = {
   message: string;
 };
 
+export type TrayLyricsExtensionInfo = {
+  installed: boolean;
+  recognized: boolean;
+  enabled: boolean;
+  version: number | null;
+  upToDate: boolean;
+  needsSessionRestart: boolean;
+};
+
+export type TrayLyricsStyle = {
+  fontFamily: string;
+  color: string;
+};
+
 export interface ManageContract {
   platform: NodeJS.Platform;
 
@@ -36,6 +50,10 @@ export interface ManageContract {
   };
   trayLyrics: {
     isExtensionInstalled(): Promise<boolean>;
+    getExtensionInfo(): Promise<TrayLyricsExtensionInfo>;
     installExtension(): Promise<TrayLyricsExtensionInstallResult>;
+    getSystemFonts(): Promise<string[]>;
+    getStyle(): Promise<TrayLyricsStyle>;
+    setStyle(style: TrayLyricsStyle): Promise<TrayLyricsStyle>;
   };
 }

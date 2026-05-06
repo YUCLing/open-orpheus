@@ -2,8 +2,13 @@
   import * as RadioGroup from "$lib/components/ui/radio-group";
   import * as Field from "$lib/components/ui/field";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { getBridge } from "$lib/bridge";
-  import type { ManageContract } from "$bridge/manage-api";
+  import type {
+    ManageContract,
+    TrayLyricsExtensionInfo,
+    TrayLyricsStyle,
+  } from "$bridge/manage-api";
 
   const api = getBridge<ManageContract>("manage");
 
@@ -14,15 +19,72 @@
 
   let clickBehaviorPromise = $state(kv.get("tray.clickBehavior"));
   let trayLyricsEnabledPromise = $state(kv.get("trayLyrics.enabled"));
-  let extensionInstalledPromise = $state(
+  let extensionInfoPromise = $state(
     api.platform === "linux"
-      ? api.trayLyrics.isExtensionInstalled()
-      : Promise.resolve(false)
+      ? api.trayLyrics.getExtensionInfo()
+      : Promise.resolve({
+          installed: false,
+          recognized: false,
+          enabled: false,
+          version: null,
+          upToDate: false,
+          needsSessionRestart: false,
+        })
   );
   let extensionInstallPromise = $state<
     ReturnType<ManageContract["trayLyrics"]["installExtension"]> | null
   >(null);
   let extensionInstalling = $state(false);
+  let trayLyricsStyleDraft = $state<TrayLyricsStyle>({
+    fontFamily: "",
+    color: "",
+  });
+  let trayLyricsStylePromise = $state(loadTrayLyricsStyle());
+  let systemFontsPromise = $state(api.trayLyrics.getSystemFonts());
+  let trayLyricsStyleSaving = $state(false);
+
+  function normalizeColor(value: string) {
+    const color = value.trim();
+    if (color === "") return "";
+
+    const hexColor = color.startsWith("#") ? color : `#${color}`;
+    const shortHex = hexColor.match(/^#([0-9a-fA-F]{3})$/);
+    if (shortHex) {
+      return `#${shortHex[1]
+        .split("")
+        .map((part) => part + part)
+        .join("")
+        .toLowerCase()}`;
+    }
+
+    return /^#[0-9a-fA-F]{6}$/.test(hexColor) ? hexColor.toLowerCase() : "";
+  }
+
+  function getColorPickerValue(color: string) {
+    return normalizeColor(color) || "#ffffff";
+  }
+
+  function getExtensionButtonText(info: TrayLyricsExtensionInfo) {
+    if (!info.installed) return "安装并开启";
+    if (!info.upToDate) return "更新并启用";
+    if (!info.recognized || info.enabled) return "已安装";
+
+    return "启用扩展";
+  }
+
+  function canInstallOrEnableExtension(info: TrayLyricsExtensionInfo) {
+    if (!info.installed || !info.upToDate) return true;
+    if (!info.recognized) return false;
+
+    return !info.enabled;
+  }
+
+  function loadTrayLyricsStyle() {
+    return api.trayLyrics.getStyle().then((style) => {
+      trayLyricsStyleDraft = { ...style };
+      return style;
+    });
+  }
 
   function setTrayLyricsEnabled(enabled: boolean) {
     const value = enabled ? "true" : "false";
@@ -35,12 +97,28 @@
     extensionInstallPromise = api.trayLyrics
       .installExtension()
       .then((result) => {
-        extensionInstalledPromise = Promise.resolve(result.installed);
+        extensionInfoPromise = api.trayLyrics.getExtensionInfo();
         if (result.enabled) setTrayLyricsEnabled(true);
         return result;
       })
       .finally(() => {
         extensionInstalling = false;
+      });
+  }
+
+  function setTrayLyricsStyle(style: TrayLyricsStyle) {
+    trayLyricsStyleSaving = true;
+    trayLyricsStylePromise = api.trayLyrics
+      .setStyle({
+        fontFamily: style.fontFamily,
+        color: normalizeColor(style.color),
+      })
+      .then((savedStyle) => {
+        trayLyricsStyleDraft = { ...savedStyle };
+        return savedStyle;
+      })
+      .finally(() => {
+        trayLyricsStyleSaving = false;
       });
   }
 </script>
@@ -75,16 +153,33 @@
         {/if}
       </Field.Content>
       <div class="flex gap-2">
-        {#await extensionInstalledPromise}
+        {#await extensionInfoPromise}
           <Button variant="outline" disabled>检测中</Button>
-        {:then extensionInstalled}
+        {:then extensionInfo}
+          {@const needsSessionRestart =
+            extensionInfo.installed && extensionInfo.needsSessionRestart}
+          {@const needsEnable =
+            extensionInfo.installed &&
+            extensionInfo.upToDate &&
+            extensionInfo.recognized &&
+            !extensionInfo.enabled}
           <Button
             variant="outline"
-            disabled={extensionInstalled || extensionInstalling}
+            disabled={!canInstallOrEnableExtension(extensionInfo) ||
+              extensionInstalling}
             onclick={installTrayLyricsExtension}
           >
-            {extensionInstalled ? "已安装" : "安装并开启"}
+            {getExtensionButtonText(extensionInfo)}
           </Button>
+          {#if needsSessionRestart}
+            <Field.Description class="self-center">
+              已安装新版扩展，重新登录后会加载右键菜单和样式修改。
+            </Field.Description>
+          {:else if needsEnable}
+            <Field.Description class="self-center">
+              扩展已安装但未启用，点击“启用扩展”后显示状态栏歌词。
+            </Field.Description>
+          {/if}
         {:catch}
           <Button variant="outline" onclick={installTrayLyricsExtension}>
             安装并开启
@@ -96,6 +191,84 @@
         >
           {enabled ? "关闭" : "开启"}
         </Button>
+      </div>
+    </Field.Field>
+  {/await}
+
+  {#await trayLyricsStylePromise then trayLyricsStyle}
+    <Field.Field orientation="horizontal" class="mt-2">
+      <Field.Content>
+        <Field.Title>状态栏歌词样式</Field.Title>
+        <Field.Description>
+          字体留空使用 GNOME Shell 默认字体；显示颜色支持 #RGB、#RRGGBB、RGB
+          或 RRGGBB，留空使用当前 Shell 主题颜色。
+        </Field.Description>
+      </Field.Content>
+      <div class="grid w-72 gap-2">
+        {#await systemFontsPromise}
+          <select
+            aria-label="状态栏歌词字体"
+            class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            disabled
+          >
+            <option>正在读取字体</option>
+          </select>
+        {:then systemFonts}
+          <select
+            aria-label="状态栏歌词字体"
+            class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"
+            bind:value={trayLyricsStyleDraft.fontFamily}
+          >
+            <option value="">默认字体</option>
+            {#if trayLyricsStyleDraft.fontFamily &&
+              !systemFonts.includes(trayLyricsStyleDraft.fontFamily)}
+              <option value={trayLyricsStyleDraft.fontFamily}>
+                {trayLyricsStyleDraft.fontFamily}
+              </option>
+            {/if}
+            {#each systemFonts as font (font)}
+              <option value={font}>{font}</option>
+            {/each}
+          </select>
+        {:catch}
+          <Input
+            aria-label="状态栏歌词字体"
+            placeholder="默认字体"
+            bind:value={trayLyricsStyleDraft.fontFamily}
+          />
+        {/await}
+        <div class="flex gap-2">
+          <Input
+            aria-label="状态栏歌词显示颜色"
+            placeholder="#ffffff"
+            bind:value={trayLyricsStyleDraft.color}
+          />
+          <Input
+            aria-label="选择状态栏歌词显示颜色"
+            type="color"
+            class="w-12 px-1"
+            value={getColorPickerValue(trayLyricsStyleDraft.color)}
+            oninput={(event) => {
+              trayLyricsStyleDraft.color = event.currentTarget.value;
+            }}
+          />
+          <Button
+            disabled={trayLyricsStyleSaving ||
+              (trayLyricsStyleDraft.fontFamily === trayLyricsStyle.fontFamily &&
+                normalizeColor(trayLyricsStyleDraft.color) ===
+                  trayLyricsStyle.color)}
+            onclick={() => setTrayLyricsStyle({ ...trayLyricsStyleDraft })}
+          >
+            保存
+          </Button>
+          <Button
+            variant="outline"
+            disabled={trayLyricsStyleSaving}
+            onclick={() => setTrayLyricsStyle({ fontFamily: "", color: "" })}
+          >
+            重置
+          </Button>
+        </div>
       </div>
     </Field.Field>
   {/await}
