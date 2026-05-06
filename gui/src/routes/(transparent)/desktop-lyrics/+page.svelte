@@ -16,17 +16,22 @@
   let unlockButton: HTMLButtonElement | null = $state(null);
   let rootEl: HTMLDivElement | null = $state(null);
 
+  function updateUnlockInputRegion() {
+    if (!unlockButton) {
+      api.setInputRegion(0, 0, 0, 0);
+      return;
+    }
+    const r = unlockButton.getBoundingClientRect();
+    api.setInputRegion(r.x, r.y, r.width, r.height);
+  }
+
   $effect(() => {
     const btn = unlockButton;
     const root = rootEl;
     if (locked && btn && root) {
-      const update = () => {
-        const r = btn.getBoundingClientRect();
-        api.setInputRegion(r.x, r.y, r.width, r.height);
-      };
-      update();
+      updateUnlockInputRegion();
 
-      const observer = new ResizeObserver(() => update());
+      const observer = new ResizeObserver(() => updateUnlockInputRegion());
       observer.observe(root);
       observer.observe(btn);
       return () => {
@@ -173,6 +178,11 @@
         bind:this={unlockButton}
         class="size-12 cursor-pointer"
         onclick={() => api.performAction("unlock")}
+        // On Windows/macOS, we use Electron's `setIgnoreMouseEvent`, so we need to take input back
+        onmouseenter={() =>
+          api.platform !== "linux" && api.setInputRegion(0, 0, 0, 0)}
+        onmouseleave={() =>
+          api.platform !== "linux" && updateUnlockInputRegion()}
         title="解锁桌面歌词"
         ><img
           src="gui://skin/lrc/desk_icn_unlock.png"

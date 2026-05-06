@@ -1,3 +1,4 @@
+import os from "node:os";
 import { dirname, join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
@@ -86,13 +87,25 @@ export default function createDesktopLyricsWindow() {
         height: number
       ) => {
         if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-        setWindowInputRegion(
-          desktopLyricsWindow,
-          Math.round(x),
-          Math.round(y),
-          Math.max(0, Math.round(width)),
-          Math.max(0, Math.round(height))
-        );
+        if (os.platform() === "linux") {
+          setWindowInputRegion(
+            desktopLyricsWindow,
+            Math.round(x),
+            Math.round(y),
+            Math.max(0, Math.round(width)),
+            Math.max(0, Math.round(height))
+          );
+        } else {
+          // In Windows/macOS, we don't need to be so specific
+          const enable = width > 0 && height > 0;
+          if (enable) {
+            desktopLyricsWindow.setIgnoreMouseEvents(true, {
+              forward: true,
+            });
+          } else {
+            desktopLyricsWindow.setIgnoreMouseEvents(false);
+          }
+        }
       },
       dragWindow: async () => {
         if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;

@@ -1,6 +1,7 @@
 import type { LyricsData, LyricStyleConfig } from "../../gui/src/lib/types";
 
 export interface DesktopLyricsContract {
+  platform: NodeJS.Platform;
   events: {
     lyricsUpdate(callback: (data: LyricsData | null) => void): void;
     timeUpdate(
