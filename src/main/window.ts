@@ -165,6 +165,23 @@ export function getWindowProp<T>(
   return customProps[prop] as T;
 }
 
+export function removeWindowProp(wnd: BrowserWindow, prop: string) {
+  const customProps = windowProperties.get(wnd.id)?.customProps;
+  if (!customProps) return;
+  delete customProps[prop];
+}
+
+/**
+ * Sets window's input region
+ *
+ * Only available on Linux, for Windows and macOS, use Electron's `BrowserWindow.setIgnoreMouseEvent`.
+ * @param wnd
+ * @param x
+ * @param y
+ * @param width
+ * @param height
+ * @returns
+ */
 export function setWindowInputRegion(
   wnd: BrowserWindow,
   x: number,
@@ -172,18 +189,19 @@ export function setWindowInputRegion(
   width: number,
   height: number
 ) {
-  if (os.platform() === "linux") {
-    const region =
-      width <= 0 || height <= 0
-        ? null
-        : [
-            {
-              x,
-              y,
-              w: width,
-              h: height,
-            },
-          ];
+  if (os.platform() !== "linux") return;
+  const region =
+    width <= 0 || height <= 0
+      ? null
+      : [
+          {
+            x,
+            y,
+            w: width,
+            h: height,
+          },
+        ];
+  const doSetRegion = () => {
     if (isWayland()) {
       const props = windowProperties.get(wnd.id);
       if (!props || !props.waylandId) return;
@@ -192,7 +210,23 @@ export function setWindowInputRegion(
     } else {
       setInputRegion(wnd.getNativeWindowHandle(), region);
     }
+  };
+  doSetRegion();
+
+  if (region) {
+    const previousListener = getWindowProp<() => void>(
+      wnd,
+      "inputRegionShowListener"
+    );
+    if (previousListener) {
+      wnd.removeListener("show", previousListener);
+    }
+    setWindowProp(wnd, "inputRegionShowListener", doSetRegion);
+    wnd.addListener("show", doSetRegion);
   } else {
-    // TODO: implement input region for non-wayland / non-linux platforms
+    const listener = getWindowProp<() => void>(wnd, "inputRegionShowListener");
+    if (!listener) return;
+    wnd.removeListener("show", listener);
+    removeWindowProp(wnd, "inputRegionShowListener");
   }
 }
