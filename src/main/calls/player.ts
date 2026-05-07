@@ -5,6 +5,7 @@ import {
   updateLikeMark,
   updatePlayState,
   updateListData,
+  showVolume,
 } from "../windows/mini-player";
 
 let listItems: ListElement[] = [];
@@ -98,3 +99,11 @@ registerCallHandler<
   updatePlayState(state.playstate !== 1);
   return [true];
 });
+
+registerCallHandler<[number, boolean], [boolean]>(
+  "player.showVolume",
+  (event, volume, muted) => {
+    showVolume(volume, muted);
+    return [true];
+  }
+);

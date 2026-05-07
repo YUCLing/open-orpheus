@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { BrowserWindow } from "electron";
 
-import { setWindowId, setWindowInputRegion } from "../window";
+import { mainWindow, setWindowId, setWindowInputRegion } from "../window";
 import { registerIpcHandlers } from "../../bridge/register";
 import {
   MiniPlayerContract,
@@ -59,6 +59,10 @@ export function updateListData(
   sendToMiniPlayer("listUpdate", { items, currentPlay });
 }
 
+export function showVolume(volume: number, muted: boolean) {
+  sendToMiniPlayer("showVolume", [volume, muted]);
+}
+
 export function getFullState(): MiniPlayerFullState {
   return { playInfo, coverUrl, likeMark, currentPlay, playState, listItems };
 }
@@ -66,7 +70,7 @@ export function getFullState(): MiniPlayerFullState {
 export default function createMiniPlayerWindow() {
   miniPlayerWindow = new BrowserWindow({
     width: 310,
-    height: 48 + 50 + 340, // Total size: Volume bar preserved + Main + List
+    height: 50 + 340, // Total size: Main + List
     transparent: true,
     hasShadow: false,
     frame: false,
@@ -109,6 +113,10 @@ export default function createMiniPlayerWindow() {
             miniPlayerWindow.setIgnoreMouseEvents(false);
           }
         }
+      },
+      fireCall: async (event, cmd, ...args) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send("channel.call", cmd, ...args);
       },
     }
   );

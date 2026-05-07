@@ -46,6 +46,8 @@ export interface MiniPlayerFullState {
   listItems: MiniPlayerListElement[];
 }
 
+export type MiniPlayerShowVolumeRequest = [number, boolean];
+
 export interface MiniPlayerContract {
   platform: NodeJS.Platform;
 
@@ -56,9 +58,11 @@ export interface MiniPlayerContract {
     likeUpdate(callback: (liked: boolean) => void): void;
     playStateUpdate(callback: (state: MiniPlayerPlayState) => void): void;
     listUpdate(callback: (data: MiniPlayerListData) => void): void;
+    showVolume(callback: (data: MiniPlayerShowVolumeRequest) => void): void;
   };
 
   requestFullUpdate(): Promise<MiniPlayerFullState>;
   dragWindow(): Promise<void>;
   setInputRegions(regions: InputRegion[]): Promise<void>;
+  fireCall(cmd: string, ...args: unknown[]): Promise<void>;
 }

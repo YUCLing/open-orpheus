@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { HTMLButtonAttributes } from "svelte/elements";
 
-  const {
+  let {
+    element = $bindable(),
     normal,
     hover,
     active,
@@ -14,6 +15,7 @@
     imgClass,
     ...rest
   }: Omit<HTMLButtonAttributes, "disabled"> & {
+    element?: HTMLElement | undefined;
     normal: string;
     hover?: string;
     active?: string;
@@ -38,7 +40,12 @@
   {/if}
 {/snippet}
 
-<button class="group/icon-btn {className}" disabled={!!disabled} {...rest}>
+<button
+  bind:this={element}
+  class="group/icon-btn {className}"
+  disabled={!!disabled}
+  {...rest}
+>
   {#if disabled}
     {@render icon(disabled, disabledColor, "")}
   {:else}
