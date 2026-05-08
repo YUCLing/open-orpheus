@@ -76,6 +76,7 @@ export default function createMiniPlayerWindow() {
     frame: false,
     resizable: false,
     show: false,
+    roundedCorners: false,
     title: "Open Orpheus Mini Player",
     webPreferences: {
       partition: "open-orpheus",
