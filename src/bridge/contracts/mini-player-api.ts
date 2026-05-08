@@ -1,10 +1,3 @@
-export interface InputRegion {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface MiniPlayerPlayInfo {
   albumId: string;
   albumName: string;
@@ -49,8 +42,6 @@ export interface MiniPlayerFullState {
 export type MiniPlayerShowVolumeRequest = [number, boolean];
 
 export interface MiniPlayerContract {
-  platform: NodeJS.Platform;
-
   events: {
     fullStateUpdate(callback: (state: MiniPlayerFullState) => void): void;
     playInfoUpdate(callback: (info: MiniPlayerPlayInfo | null) => void): void;
@@ -63,6 +54,5 @@ export interface MiniPlayerContract {
 
   requestFullUpdate(): Promise<MiniPlayerFullState>;
   dragWindow(): Promise<void>;
-  setInputRegions(regions: InputRegion[]): Promise<void>;
   fireCall(cmd: string, ...args: unknown[]): Promise<void>;
 }

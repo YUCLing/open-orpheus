@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { MenuItem, MenuItemBtn, LayoutNode } from "./types";
-  import { parseBtnUrl, getCachedTemplate } from "./template";
+  import { getCachedTemplate } from "./template";
   import IconButton from "$lib/components/IconButton.svelte";
 
   let {
@@ -64,28 +64,25 @@
     {/if}
   {:else if node.type === "button"}
     {@const btn = btns[node.index]}
-    {#if btn}
-      {@const images = parseBtnUrl(btn.url)}
-      {#if images}
-        <IconButton
-          normal={images.normal.uri}
-          hover={images.hot?.uri ?? images.normal.uri}
-          active={images.pushed?.uri ?? images.normal.uri}
-          disabled={!btn.enable
-            ? (images.disabled?.uri ?? images.normal.uri)
-            : undefined}
-          normalColor={images.normal.color}
-          hoverColor={images.hot?.color}
-          activeColor={images.pushed?.color}
-          disabledColor={images.disabled?.color}
-          class="flex shrink-0 items-center justify-center {btn.enable
-            ? 'cursor-pointer'
-            : 'cursor-default'}"
-          imgClass="size-full"
-          style="width:{node.width}px;height:{node.height}px"
-          onclick={() => onbtnclick?.(btn)}
-        />
-      {/if}
+    {#if btn?.images}
+      <IconButton
+        normal={btn.images.normal.uri}
+        hover={btn.images.hot?.uri ?? btn.images.normal.uri}
+        active={btn.images.pushed?.uri ?? btn.images.normal.uri}
+        disabled={!btn.enable
+          ? (btn.images.disabled?.uri ?? btn.images.normal.uri)
+          : undefined}
+        normalColor={btn.images.normal.color}
+        hoverColor={btn.images.hot?.color}
+        activeColor={btn.images.pushed?.color}
+        disabledColor={btn.images.disabled?.color}
+        class="flex shrink-0 items-center justify-center {btn.enable
+          ? 'cursor-pointer'
+          : 'cursor-default'}"
+        imgClass="size-full"
+        style="width:{node.width}px;height:{node.height}px"
+        onclick={() => onbtnclick?.(btn)}
+      />
     {/if}
   {/if}
 {/snippet}

@@ -92,6 +92,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.59.0
         version: 8.59.0(eslint@9.39.4(jiti@2.6.1))(typescript@6.0.3)
+      '@xmldom/xmldom':
+        specifier: ^0.9.10
+        version: 0.9.10
       '@yxim/nim-web-sdk':
         specifier: ^9.21.12
         version: 9.21.12

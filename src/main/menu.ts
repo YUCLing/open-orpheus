@@ -21,10 +21,24 @@ import packManager from "./pack";
 import SkinPack from "./packs/SkinPack";
 import { registerIpcHandlers } from "../bridge/register";
 import type { MenuContract } from "../bridge/contracts/menu-api";
+import { parseBtnUrl, parseElementTemplate } from "./skin/dui";
+import type { ElementTemplate } from "./skin/dui";
 
 registerMenuSkinUpdater();
 
 const WAYLAND_CURSOR_CAPTURE_DEADLINE_MS = 200;
+
+/** Recursively parse btn.url → btn.images for every menu item. */
+function parseButtonUrls(items: AppMenuItem[]) {
+  for (const item of items) {
+    if (item.btns) {
+      for (const btn of item.btns) {
+        btn.images = parseBtnUrl(btn.url);
+      }
+    }
+    if (item.children) parseButtonUrls(item.children);
+  }
+}
 
 export type { AppMenuItem, AppMenuItemBtn, MenuSkin } from "./menu/types";
 
@@ -32,11 +46,12 @@ export default class AppMenu extends EventTarget {
   private onClick: MenuClickHandler | null = null;
   private closed = false;
   private submenuWindow: BrowserWindow | null = null;
-  /** style path → raw XML string, preloaded from skin pack */
-  templates: Record<string, string> = {};
+  /** style path → parsed template, preloaded from skin pack */
+  templates: Record<string, ElementTemplate> = {};
 
   constructor(public items: AppMenuItem[]) {
     super();
+    parseButtonUrls(this.items);
   }
 
   setClickHandler(handler: MenuClickHandler) {
@@ -70,7 +85,10 @@ export default class AppMenu extends EventTarget {
 
     this.templates = {};
     for (const entry of entries) {
-      if (entry) this.templates[entry[0]] = entry[1];
+      if (entry) {
+        const tpl = parseElementTemplate(entry[1]);
+        if (tpl) this.templates[entry[0]] = tpl;
+      }
     }
   }
 
@@ -102,6 +120,7 @@ export default class AppMenu extends EventTarget {
   }
 
   update(patchItems: AppMenuItem[]) {
+    parseButtonUrls(patchItems);
     for (const patch of patchItems) {
       if (patch.menu_id == null) continue;
       patchById(this.items, patch);
@@ -214,7 +233,7 @@ export default class AppMenu extends EventTarget {
 
     const openSubmenuWindow = (
       items: unknown[],
-      templates: Record<string, string>,
+      templates: Record<string, ElementTemplate>,
       relX: number,
       relY: number
     ) => {

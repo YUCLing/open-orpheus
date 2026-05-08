@@ -1,9 +1,8 @@
-import os from "node:os";
 import { join } from "node:path";
 
 import { BrowserWindow } from "electron";
 
-import { mainWindow, setWindowId, setWindowInputRegion } from "../window";
+import { mainWindow, setWindowId } from "../window";
 import { registerIpcHandlers } from "../../bridge/register";
 import {
   MiniPlayerContract,
@@ -13,6 +12,7 @@ import {
   MiniPlayerFullState,
 } from "../../bridge/contracts/mini-player-api";
 import { dragWindow } from "@open-orpheus/window";
+import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 
 let miniPlayerWindow: BrowserWindow | null = null;
 
@@ -100,25 +100,11 @@ export default function createMiniPlayerWindow() {
         const hwnd = miniPlayerWindow.getNativeWindowHandle();
         dragWindow(hwnd);
       },
-      setInputRegions: async (event, regions) => {
-        if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
-        if (os.platform() === "linux") {
-          setWindowInputRegion(miniPlayerWindow, regions);
-        } else {
-          // In Windows/macOS, we don't need to be so specific
-          if (regions.length > 0) {
-            miniPlayerWindow.setIgnoreMouseEvents(true, {
-              forward: true,
-            });
-          } else {
-            miniPlayerWindow.setIgnoreMouseEvents(false);
-          }
-        }
-      },
       fireCall: async (event, cmd, ...args) => {
         if (!mainWindow || mainWindow.isDestroyed()) return;
         mainWindow.webContents.send("channel.call", cmd, ...args);
       },
     }
   );
+  registerInputRegionHandlers(miniPlayerWindow);
 }

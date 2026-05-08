@@ -1,7 +1,6 @@
 import type { LyricsData, LyricStyleConfig } from "../../../gui/src/lib/types";
 
 export interface DesktopLyricsContract {
-  platform: NodeJS.Platform;
   events: {
     lyricsUpdate(callback: (data: LyricsData | null) => void): void;
     timeUpdate(
@@ -14,12 +13,6 @@ export interface DesktopLyricsContract {
   requestFullUpdate(): Promise<void>;
   dragWindow(): Promise<void>;
   changeOrientation(): Promise<void>;
-  setInputRegion(
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): Promise<void>;
   performAction(action: string): Promise<void>;
 }
 

@@ -1,6 +1,9 @@
+import type { BtnImages } from "../skin/dui";
+
 export type AppMenuItemBtn = {
   id: string;
   url: string;
+  images?: BtnImages | null;
   enable: boolean;
 };
 

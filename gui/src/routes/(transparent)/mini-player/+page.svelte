@@ -1,9 +1,10 @@
 <script lang="ts">
-  import type { Attachment } from "svelte/attachments";
   import { onMount } from "svelte";
 
   import * as Popover from "$lib/components/ui/popover";
   import { Slider } from "$lib/components/ui/slider";
+
+  import { inputRegionAttachment } from "$lib/inputRegion";
 
   import { getBridge } from "$lib/bridge";
 
@@ -61,53 +62,6 @@
     }
   });
 
-  let inputRegionElements: Element[] = [];
-
-  function refreshInputRegion() {
-    if (api.platform === "linux") {
-      api.setInputRegions(
-        inputRegionElements.map((v) => {
-          const bounding = v.getBoundingClientRect();
-          return {
-            x: bounding.left,
-            y: bounding.top,
-            width: bounding.width,
-            height: bounding.height,
-          };
-        })
-      );
-    } else {
-      // On Windows/macOS, `setIgnoreMouseEvent` is used instead of actual setting input regions
-      for (const el of inputRegionElements) {
-        if (el.matches(":hover")) {
-          // Enable input
-          api.setInputRegions([]);
-          return;
-        }
-      }
-      // Dummy region to disable input
-      api.setInputRegions([{ x: 0, y: 0, width: 1, height: 1 }]);
-    }
-  }
-
-  function addInputRegion(el: Element) {
-    inputRegionElements.push(el);
-    if (el instanceof HTMLElement) {
-      el.addEventListener("mouseenter", refreshInputRegion);
-      el.addEventListener("mouseleave", refreshInputRegion);
-    }
-    refreshInputRegion();
-  }
-
-  function removeInputRegion(el: Element) {
-    inputRegionElements.splice(inputRegionElements.indexOf(el), 1);
-    if (el instanceof HTMLElement) {
-      el.removeEventListener("mouseenter", refreshInputRegion);
-      el.removeEventListener("mouseleave", refreshInputRegion);
-    }
-    refreshInputRegion();
-  }
-
   let showList = $state(false);
   let showVolumeBar = $state(false);
   let volume = $state(100);
@@ -118,13 +72,6 @@
     e.stopPropagation();
     e.preventDefault();
   }
-
-  const inputRegionAttachment: Attachment = (element) => {
-    addInputRegion(element);
-    return () => {
-      removeInputRegion(element);
-    };
-  };
 </script>
 
 <Popover.Root bind:open={showVolumeBar}>
@@ -217,7 +164,10 @@
     class="size-6 cursor-pointer"
     normal="gui://skin/btn/voice.svg"
     onmousedown={noPropagation}
-    onclick={() => showVolumeBar ? showVolumeBar = false : api.fireCall("player.onaction", "volume", "miniPlayer")}
+    onclick={() =>
+      showVolumeBar
+        ? (showVolumeBar = false)
+        : api.fireCall("player.onaction", "volume", "miniPlayer")}
   />
   <IconButton
     class="size-4 cursor-pointer"

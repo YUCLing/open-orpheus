@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import type { MenuSkin } from "$lib/types";
   import type { MenuItem, MenuItemBtn } from "./types";
+  import type { ElementTemplate } from "$bridge/contracts/menu-api";
   import { loadTemplates } from "./template";
   import MenuPanel from "./MenuPanel.svelte";
   import { getBridge } from "$lib/bridge";
@@ -18,7 +19,7 @@
   let hoveredIndex = $state(-1);
   let menuEl: HTMLDivElement | undefined = $state();
   let waylandMode = $state(api.wayland);
-  let rawTemplates: Record<string, string> = {};
+  let rawTemplates: Record<string, ElementTemplate> = {};
   let isSubmenuMode = api.submenu;
 
   // Submenu state

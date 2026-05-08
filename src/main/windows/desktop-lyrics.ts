@@ -1,11 +1,10 @@
-import os from "node:os";
 import { dirname, join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
 import { BrowserWindow, ipcMain } from "electron";
 import photon from "@silvia-odwyer/photon-node";
 
-import { mainWindow, setWindowId, setWindowInputRegion } from "../window";
+import { mainWindow, setWindowId } from "../window";
 import { dragWindow } from "@open-orpheus/window";
 import { parseLrc } from "../lyrics";
 import { sanitizeRelativePath } from "../util";
@@ -13,6 +12,7 @@ import { storage } from "../folders";
 import { quitting } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { DesktopLyricsContract } from "../../bridge/contracts/desktop-lyrics-api";
+import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 
 let desktopLyricsWindow: BrowserWindow | null = null;
 
@@ -79,35 +79,6 @@ export default function createDesktopLyricsWindow() {
         const sz = desktopLyricsWindow.getSize();
         desktopLyricsWindow.setSize(sz[1], sz[0]);
       },
-      setInputRegion: async (
-        _event,
-        x: number,
-        y: number,
-        width: number,
-        height: number
-      ) => {
-        if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-        if (os.platform() === "linux") {
-          setWindowInputRegion(desktopLyricsWindow, [
-            {
-              x,
-              y,
-              width,
-              height,
-            },
-          ]);
-        } else {
-          // In Windows/macOS, we don't need to be so specific
-          const enable = width > 0 && height > 0;
-          if (enable) {
-            desktopLyricsWindow.setIgnoreMouseEvents(true, {
-              forward: true,
-            });
-          } else {
-            desktopLyricsWindow.setIgnoreMouseEvents(false);
-          }
-        }
-      },
       dragWindow: async () => {
         if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
         const hwnd = desktopLyricsWindow.getNativeWindowHandle();
@@ -115,6 +86,7 @@ export default function createDesktopLyricsWindow() {
       },
     }
   );
+  registerInputRegionHandlers(desktopLyricsWindow);
 }
 
 // --- IPC handlers ---
