@@ -213,6 +213,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      discussions: write
       actions: write
 
     steps:
