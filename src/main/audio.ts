@@ -16,7 +16,8 @@ import { stringifyError } from "../util";
 const audioStreamer = new AudioStreamer();
 
 audioStreamer.addEventListener("progress", ((e: CustomEvent<number>) => {
-  mainWindow?.webContents.send("audio.onProgress", e.detail);
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("audio.onProgress", e.detail);
 }) as EventListener);
 
 audioStreamer.addEventListener("complete", () => {
