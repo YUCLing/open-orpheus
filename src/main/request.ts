@@ -144,25 +144,29 @@ export function setupRequestInterceptors() {
     details.responseHeaders = details.responseHeaders ?? {};
 
     // SSO login: add SameSite=None; Secure
-    const host = new URL(details.url).hostname;
-    if (
-      host.endsWith("music.163.com") ||
-      host.endsWith("qq.com") ||
-      host.endsWith("weibo.com")
-    ) {
-      const cookieKey = Object.keys(details.responseHeaders).find(
-        (k) => k.toLowerCase() === "set-cookie"
-      );
-      if (cookieKey && details.responseHeaders[cookieKey]) {
-        details.responseHeaders[cookieKey] = (
-          details.responseHeaders[cookieKey] as string[]
-        ).map((c) => {
-          let patched = c;
-          if (!patched.toLowerCase().includes("samesite"))
-            patched += "; SameSite=None";
-          if (!patched.toLowerCase().includes("secure")) patched += "; Secure";
-          return patched;
-        });
+    // only iframe
+    if (details.frame !== null && details.frame?.top !== details.frame) {
+      const host = new URL(details.url).hostname;
+      if (
+        host.endsWith("music.163.com") ||
+        host.endsWith("qq.com") ||
+        host.endsWith("weibo.com")
+      ) {
+        const cookieKey = Object.keys(details.responseHeaders).find(
+          (k) => k.toLowerCase() === "set-cookie"
+        );
+        if (cookieKey && details.responseHeaders[cookieKey]) {
+          details.responseHeaders[cookieKey] = (
+            details.responseHeaders[cookieKey] as string[]
+          ).map((c) => {
+            let patched = c;
+            if (!patched.toLowerCase().includes("samesite"))
+              patched += "; SameSite=None";
+            if (!patched.toLowerCase().includes("secure"))
+              patched += "; Secure";
+            return patched;
+          });
+        }
       }
     }
 
