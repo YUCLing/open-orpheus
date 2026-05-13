@@ -27,6 +27,15 @@ if (os.platform() === "linux") {
           })
         );
         setMenu(menu);
+        // 切换Gnome菜单，设置占位符菜单建立 D-Bus 通道，然后触发渲染进程加载完整菜单
+      } else if (value === "with-native-menu-gnome") {
+        const placeholder = Menu.buildFromTemplate([
+          { label: "加载中...", enabled: false },
+        ]);
+        setMenu(placeholder);
+        if (mainWindow) {
+          mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
+        }
       } else {
         setMenu(null);
       }

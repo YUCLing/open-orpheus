@@ -1,5 +1,14 @@
-import { BrowserWindow, screen, Menu, type MenuItemConstructorOptions } from "electron";
+import {
+  BrowserWindow,
+  screen,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  type MenuItemConstructorOptions,
+  type NativeImage,
+} from "electron";
 import { join, normalize } from "node:path";
+import { Resvg } from "@resvg/resvg-js";
 
 import {
   captureNextWindowFirstCursorEnter,
@@ -17,15 +26,16 @@ import {
   getMenuWindow,
   getOverlayWindow,
 } from "./menu/windows";
-import { setMenu as setTrayMenu, isGnomeDesktop } from "./tray";
+import { setMenu as setTrayMenu, useGnomeNativeMenu } from "./tray";
 import packManager from "./pack";
+
 import SkinPack from "./packs/SkinPack";
 import { registerIpcHandlers } from "../bridge/register";
 import type { MenuContract } from "../bridge/contracts/menu-api";
 import { parseBtnUrl, parseElementTemplate } from "./skin/dui";
 import type { ElementTemplate } from "./skin/dui";
 
-import type { AppMenuItem } from "$sharedTypes/menu";
+import type { AppMenuItem, AppMenuItemBtn } from "$sharedTypes/menu";
 
 registerMenuSkinUpdater();
 
@@ -49,6 +59,8 @@ export default class AppMenu extends EventTarget {
   private submenuWindow: BrowserWindow | null = null;
   /** style path → parsed template, preloaded from skin pack */
   templates: Record<string, ElementTemplate> = {};
+  /** icon key → NativeImage */
+  private loadedIcons: Record<string, NativeImage> = {};
 
   constructor(public items: AppMenuItem[]) {
     super();
@@ -59,21 +71,138 @@ export default class AppMenu extends EventTarget {
     this.onClick = handler;
   }
 
-  private buildNativeMenuTemplate(items: AppMenuItem[]): MenuItemConstructorOptions[] {
-    return items.map((item) => {
-      if (item.separator) {
-        return { type: "separator" };
+  private btnLabel(btn: AppMenuItemBtn): string {
+    const id = btn.id.toLowerCase();
+
+    if (id.includes("prev")) return "上一首";
+    if (id.includes("next")) return "下一首";
+    if (id.includes("play")) return "播放";
+    if (id.includes("pause")) return "暂停";
+    if (id.includes("stop")) return "停止";
+    if (id.includes("volume") || id.includes("vol")) return "音量";
+    if (id.includes("like") || id.includes("heart")) return "喜欢";
+    if (id.includes("favour") || id.includes("favorite")) return "收藏";
+    if (id.includes("list") || id.includes("playlist")) return "播放列表";
+    if (id.includes("shuffle")) return "随机播放";
+    if (id.includes("repeat")) return "循环播放";
+    if (id.includes("mode")) return "播放模式";
+    return btn.id;
+  }
+
+  private itemLabel(item: AppMenuItem): string {
+    return item.text || "";
+  }
+
+  private async getIcon(item: AppMenuItem | AppMenuItemBtn): Promise<NativeImage | undefined> {
+    const skinPack = packManager.packs.get("skin2")?.isLoaded
+      ? packManager.getPack<SkinPack>("skin2")
+      : await packManager.getOrWaitPack<SkinPack>("skin");
+
+    let iconPath: string | undefined;
+
+    if ("id" in item) {
+      // It's a button
+      const id = item.id.toLowerCase();
+      if (id.includes("prev")) iconPath = "/btn/previous.svg";
+      else if (id.includes("next")) iconPath = "/btn/next.svg";
+      else if (id.includes("play")) iconPath = "/btn/toplay.svg";
+      else if (id.includes("pause")) iconPath = "/btn/topause.svg";
+      else if (id.includes("like")) iconPath = "/btn/love.svg";
+      else if (id.includes("loved")) iconPath = "/btn/loved.svg";
+      else if (id.includes("list")) iconPath = "/btn/showlist.svg";
+    } else {
+      // It's a menu item
+      const text = item.text || "";
+      const path = item.image_path?.toLowerCase() || "";
+      if (path.includes("home") || text.includes("首页")) iconPath = "/lrc/home_normal.svg";
+      else if (path.includes("setting") || text.includes("设置")) iconPath = "/lrc/setting_normal.svg";
+      else if (path.includes("exit") || text.includes("退出") || text.includes("关闭")) iconPath = "/lrc/close_normal.svg";
+      else if (text.includes("歌词")) iconPath = "/mini/shunwang/icon24_lyric_n.png";
+      else if (item.style === "song" || text.includes("正在播放")) iconPath = "/mini/shunwang/logo.png";
+      else if (text.includes("列表")) iconPath = "/btn/showlist.svg";
+      else if (text.includes("模式") || text.includes("完整")) iconPath = "/btn/toweb.svg";
+    }
+
+    if (!iconPath) return undefined;
+    if (this.loadedIcons[iconPath]) return this.loadedIcons[iconPath];
+
+    try {
+      const buf = await skinPack.readFile(normalize(iconPath));
+      let img: NativeImage;
+      if (iconPath.endsWith(".svg")) {
+        // Color SVG according to system theme, then rasterize to PNG
+        let svgStr = buf.toString("utf-8");
+        const color = nativeTheme.shouldUseDarkColors ? "#ffffff" : "#1e1e1e";
+        if (!svgStr.includes("fill=")) {
+          svgStr = svgStr.replace(/<path/g, `<path fill="${color}"`);
+        } else {
+          svgStr = svgStr.replace(/fill="[^"]*"/g, `fill="${color}"`);
+        }
+        const resvg = new Resvg(svgStr, {
+          fitTo: { mode: "width", value: 36 },
+        });
+        const pngData = resvg.render();
+        img = nativeImage.createFromBuffer(pngData.asPng(), { width: 18, height: 18 });
+      } else {
+        img = nativeImage.createFromBuffer(buf).resize({ width: 18, height: 18 });
       }
-      return {
-        label: item.text,
+      this.loadedIcons[iconPath] = img;
+      return img;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async buildNativeMenuTemplate(
+    items: AppMenuItem[]
+  ): Promise<MenuItemConstructorOptions[]> {
+    const result: MenuItemConstructorOptions[] = [];
+
+    for (const item of items) {
+      if (item.separator) {
+        result.push({ type: "separator" });
+        continue;
+      }
+
+      const icon = await this.getIcon(item);
+
+      // Styled items with btns (e.g. playback controls)
+      if (item.style && item.btns?.length) {
+        const btnItems: MenuItemConstructorOptions[] = [];
+        for (const btn of item.btns) {
+          if (btn.enable !== false && btn.images) {
+            btnItems.push({
+              label: this.btnLabel(btn),
+              icon: await this.getIcon(btn),
+              click: () => {
+                this.onClick?.(btn.id);
+              },
+            });
+          }
+        }
+        if (btnItems.length > 0) {
+          result.push(...btnItems);
+        }
+        continue;
+      }
+
+      result.push({
+        label: this.itemLabel(item),
+        icon,
         enabled: item.enable !== false,
-        submenu: item.children ? this.buildNativeMenuTemplate(item.children) : undefined,
-        click: item.menu_id ? () => {
-          this.onClick?.(item.menu_id!);
-        } : undefined,
+        submenu: item.children
+          ? await this.buildNativeMenuTemplate(item.children)
+          : undefined,
+        click: item.menu_id
+          ? () => {
+            this.onClick?.(item.menu_id!);
+          }
+          : undefined,
         accelerator: item.hotkey,
-      };
-    });
+      });
+    }
+
+    return result;
   }
 
   /** Collect all distinct style paths from items and load their XML from the skin pack. */
@@ -112,11 +241,12 @@ export default class AppMenu extends EventTarget {
 
   async show() {
     this.closed = false;
+    this.loadedIcons = {}; // Clear icon cache to support skin updates
 
-    const isGnome = isGnomeDesktop();
+    const isGnome = useGnomeNativeMenu();
     console.log(`[menu.show] isGnome=${isGnome}, items=${this.items.length}`);
     if (isGnome) {
-      const template = this.buildNativeMenuTemplate(this.items);
+      const template = await this.buildNativeMenuTemplate(this.items);
       console.log(`[menu.show] built native template, ${template.length} entries`);
       const nativeMenu = Menu.buildFromTemplate(template);
 
@@ -146,7 +276,7 @@ export default class AppMenu extends EventTarget {
       this.submenuWindow = null;
     }
 
-    const isGnome = isGnomeDesktop();
+    const isGnome = useGnomeNativeMenu();
     if (isGnome) {
       this.dispatchEvent(new Event("close"));
       return;
@@ -167,12 +297,14 @@ export default class AppMenu extends EventTarget {
       patchById(this.items, patch);
     }
 
-    const isGnome = isGnomeDesktop();
+    const isGnome = useGnomeNativeMenu();
     if (isGnome) {
-
-      const template = this.buildNativeMenuTemplate(this.items);
-      const nativeMenu = Menu.buildFromTemplate(template);
-      setTrayMenu(nativeMenu);
+      this.loadedIcons = {}; // Clear cache for update
+      (async () => {
+        const template = await this.buildNativeMenuTemplate(this.items);
+        const nativeMenu = Menu.buildFromTemplate(template);
+        setTrayMenu(nativeMenu);
+      })();
       return;
     }
 

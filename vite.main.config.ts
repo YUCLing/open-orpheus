@@ -38,6 +38,7 @@ export default defineConfig({
         "@open-orpheus/database",
         "@open-orpheus/window",
         "@open-orpheus/ui",
+        "@resvg/resvg-js",
       ],
     },
   },

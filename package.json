@@ -77,6 +77,7 @@
     "@open-orpheus/database": "workspace:*",
     "@open-orpheus/ui": "workspace:*",
     "@open-orpheus/window": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
     "@silvia-odwyer/photon-node": "^0.3.4",
     "electron-squirrel-startup": "^1.0.1",
     "music-tag-native": "^0.2.4"

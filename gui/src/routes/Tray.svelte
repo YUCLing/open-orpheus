@@ -9,7 +9,8 @@
   type TrayClickBehavior =
     | "depends-on-main-window"
     | "always-show-menu"
-    | "with-native-menu";
+    | "with-native-menu"
+    | "with-native-menu-gnome";
 
   let clickBehaviorPromise = $state(kv.get("tray.clickBehavior"));
 </script>
@@ -48,7 +49,7 @@
           <Field.Content>
             <Field.Title>总是显示菜单</Field.Title>
             <Field.Description>
-              无论主窗口状态如何，点击托盘图标都会显示菜单。此外，在“退出”上添加“显示主窗口”选项。
+              无论主窗口状态如何，点击托盘图标都会显示菜单。此外，在"退出"上添加"显示主窗口"选项。
             </Field.Description>
           </Field.Content>
           <RadioGroup.Item id="always-show-menu" value="always-show-menu" />
@@ -59,10 +60,21 @@
           <Field.Content>
             <Field.Title>使用原生菜单</Field.Title>
             <Field.Description>
-              无论主窗口状态如何，点击托盘图标都会显示主窗口。右击托盘图标会显示一个原生菜单，仅包含“显示菜单”选项，用于呼出菜单。
+              无论主窗口状态如何，点击托盘图标都会显示主窗口。右击托盘图标会显示一个原生菜单，仅包含"显示菜单"选项，用于呼出菜单。
             </Field.Description>
           </Field.Content>
           <RadioGroup.Item id="with-native-menu" value="with-native-menu" />
+        </Field.Field>
+      </Field.Label>
+      <Field.Label for="with-native-menu-gnome">
+        <Field.Field orientation="horizontal">
+          <Field.Content>
+            <Field.Title>使用原生菜单 Gnome兼容</Field.Title>
+            <Field.Description>
+              适用于 GNOME 桌面环境。点击托盘图标会显示完整的原生菜单，包含播放控制、歌词、设置等选项。需要重启应用程序。
+            </Field.Description>
+          </Field.Content>
+          <RadioGroup.Item id="with-native-menu-gnome" value="with-native-menu-gnome" />
         </Field.Field>
       </Field.Label>
     </RadioGroup.Root>
