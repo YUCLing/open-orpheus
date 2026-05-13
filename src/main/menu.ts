@@ -1,4 +1,4 @@
-import { BrowserWindow, screen } from "electron";
+import { BrowserWindow, screen, Menu, type MenuItemConstructorOptions } from "electron";
 import { join, normalize } from "node:path";
 
 import {
@@ -17,6 +17,7 @@ import {
   getMenuWindow,
   getOverlayWindow,
 } from "./menu/windows";
+import { setMenu as setTrayMenu, isGnomeDesktop } from "./tray";
 import packManager from "./pack";
 import SkinPack from "./packs/SkinPack";
 import { registerIpcHandlers } from "../bridge/register";
@@ -58,6 +59,23 @@ export default class AppMenu extends EventTarget {
     this.onClick = handler;
   }
 
+  private buildNativeMenuTemplate(items: AppMenuItem[]): MenuItemConstructorOptions[] {
+    return items.map((item) => {
+      if (item.separator) {
+        return { type: "separator" };
+      }
+      return {
+        label: item.text,
+        enabled: item.enable !== false,
+        submenu: item.children ? this.buildNativeMenuTemplate(item.children) : undefined,
+        click: item.menu_id ? () => {
+          this.onClick?.(item.menu_id!);
+        } : undefined,
+        accelerator: item.hotkey,
+      };
+    });
+  }
+
   /** Collect all distinct style paths from items and load their XML from the skin pack. */
   async loadTemplates() {
     const styles = new Set<string>();
@@ -94,6 +112,23 @@ export default class AppMenu extends EventTarget {
 
   async show() {
     this.closed = false;
+
+    const isGnome = isGnomeDesktop();
+    console.log(`[menu.show] isGnome=${isGnome}, items=${this.items.length}`);
+    if (isGnome) {
+      const template = this.buildNativeMenuTemplate(this.items);
+      console.log(`[menu.show] built native template, ${template.length} entries`);
+      const nativeMenu = Menu.buildFromTemplate(template);
+
+      // Update the tray's context menu via the proper tray module function.
+      // A placeholder menu was already set at tray install time, which established
+      // the AppIndicator D-Bus menu channel. This update replaces the placeholder
+      // (or previous menu) so the next tray click shows the correct items.
+      setTrayMenu(nativeMenu);
+      console.log("[menu.show] setTrayMenu done");
+      return;
+    }
+
     await this.loadTemplates();
 
     if (process.platform === "linux" && isWayland()) {
@@ -111,6 +146,12 @@ export default class AppMenu extends EventTarget {
       this.submenuWindow = null;
     }
 
+    const isGnome = isGnomeDesktop();
+    if (isGnome) {
+      this.dispatchEvent(new Event("close"));
+      return;
+    }
+
     if (process.platform === "linux" && isWayland()) {
       destroyOverlayWindow();
     } else {
@@ -124,6 +165,15 @@ export default class AppMenu extends EventTarget {
     for (const patch of patchItems) {
       if (patch.menu_id == null) continue;
       patchById(this.items, patch);
+    }
+
+    const isGnome = isGnomeDesktop();
+    if (isGnome) {
+
+      const template = this.buildNativeMenuTemplate(this.items);
+      const nativeMenu = Menu.buildFromTemplate(template);
+      setTrayMenu(nativeMenu);
+      return;
     }
 
     if (process.platform === "linux" && isWayland()) {
@@ -212,9 +262,9 @@ export default class AppMenu extends EventTarget {
       close: async () => {
         dismiss();
       },
-      reportSize: async () => {},
-      openSubmenu: async () => {},
-      closeSubmenu: async () => {},
+      reportSize: async () => { },
+      openSubmenu: async () => { },
+      closeSubmenu: async () => { },
     });
   }
 
@@ -302,9 +352,9 @@ export default class AppMenu extends EventTarget {
           });
           sub.showInactive();
         },
-        close: async () => {},
-        openSubmenu: async () => {},
-        closeSubmenu: async () => {},
+        close: async () => { },
+        openSubmenu: async () => { },
+        closeSubmenu: async () => { },
       });
 
       sub.on("blur", () => {
