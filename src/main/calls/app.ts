@@ -244,6 +244,23 @@ registerCallHandler<[string, string, "", string], void>(
   async (event, taskId, title, emptyStr, accept) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
+    let props: Electron.OpenDialogOptions["properties"] = [];
+    if (os.platform() !== "darwin") {
+      // On Windows/Linux, `openFile` and `openDirectory` cannot be used at the same time.
+      const res = await dialog.showMessageBox(wnd, {
+        title,
+        message: "你想选择文件夹还是文件？",
+        type: "question",
+        buttons: ["文件夹", "文件"],
+      });
+      if (res.response === 0) {
+        props = ["openDirectory"];
+      } else if (res.response === 1) {
+        props = ["openFile"];
+      }
+    } else {
+      props = ["openDirectory", "openFile"];
+    }
     const filters = accept
       .split("\0\0")
       .flatMap((item) => (!item ? [] : [item.split("\0")]))
@@ -255,12 +272,7 @@ registerCallHandler<[string, string, "", string], void>(
       }));
     const result = await dialog.showOpenDialog(wnd, {
       title,
-      properties: [
-        "openFile",
-        "openDirectory",
-        "multiSelections",
-        "dontAddToRecent",
-      ],
+      properties: [...props, "multiSelections", "dontAddToRecent"],
       filters,
     });
     if (result.canceled) {

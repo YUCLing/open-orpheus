@@ -1,6 +1,6 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
-import path from "node:path";
+import path, { basename } from "node:path";
 import { createHash } from "node:crypto";
 
 import { app } from "electron";
@@ -8,7 +8,7 @@ import { MusicTagger } from "music-tag-native";
 
 import { getMusicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
-import { isMusicFile } from "../util";
+import { isMusicFile, normalizePath } from "../util";
 
 type MusicLibraries =
   | "<mymusic>"
@@ -199,5 +199,62 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
     }
 
     return [true];
+  }
+);
+
+registerCallHandler<[string, string, boolean], void>(
+  "musiclibrary.readMusicInfo",
+  (event, taskId, path) => {
+    (async () => {
+      const fullPath = normalizePath(path);
+      if (!existsSync(fullPath)) {
+        event.sender.send(
+          "channel.call",
+          "musiclibrary.onreadmusicinfo",
+          taskId,
+          path,
+          5,
+          {}
+        );
+        return;
+      }
+      const tagger = new MusicTagger();
+
+      try {
+        const stats = await stat(fullPath);
+
+        tagger.loadPath(fullPath);
+
+        event.sender.send(
+          "channel.call",
+          "musiclibrary.onreadmusicinfo",
+          taskId,
+          path,
+          0,
+          {
+            album: tagger.album,
+            artist: tagger.artist,
+            audiomd5: "",
+            bitrate: tagger.bitRate,
+            comment: tagger.comment,
+            duration: tagger.duration,
+            filesize: stats.size,
+            genre: tagger.genre,
+            title: tagger.title || basename(fullPath),
+          }
+        );
+      } catch {
+        event.sender.send(
+          "channel.call",
+          "musiclibrary.onreadmusicinfo",
+          taskId,
+          path,
+          6,
+          {}
+        );
+      }
+
+      if (!tagger.isDisposed()) tagger.dispose();
+    })();
   }
 );
