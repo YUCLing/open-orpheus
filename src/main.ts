@@ -7,6 +7,8 @@ import { app, dialog, Menu, protocol, session } from "electron";
 
 import started from "electron-squirrel-startup";
 
+import "./main/logger";
+
 // We want to hook Wayland connections as early as possible.
 import "@open-orpheus/window";
 

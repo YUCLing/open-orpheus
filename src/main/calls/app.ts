@@ -20,9 +20,15 @@ import { client, getProxyAgent } from "../request";
 import { disableHardwareAccelerationFlag } from "../folders";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../dawn";
+import logger from "../logger";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
-  console.log(...args);
+  logger.info(
+    {
+      name: "app",
+    },
+    args.map((v) => String(v)).join(" ")
+  );
 });
 
 registerCallHandler<["dawn", DawnEntry[]], void>(
