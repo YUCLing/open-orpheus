@@ -17,9 +17,15 @@ import { stat } from "node:fs/promises";
 import { kvGet, kvSet } from "../kv";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
 import client, { getProxyAgent } from "../request";
+import logger from "../logger";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
-  console.log(...args);
+  logger.info(
+    {
+      name: "app",
+    },
+    args.map((v) => String(v)).join(" ")
+  );
 });
 
 registerCallHandler<string[], void>("app.exit", (event, action, ...params) => {
