@@ -17,6 +17,7 @@ import { events as lifecycleEvents } from "./lifecycle";
 import { kv as settings } from "./settings";
 import { toError } from "../util";
 import { decodeNcae } from "./ncae";
+import logger from "./logger";
 
 enum AudioType {
   Local,
@@ -91,7 +92,11 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
             },
           });
         } catch (e) {
-          console.error("Failed to load worklet", e);
+          logger.debug(
+            { name: "scheme", scheme: "audio", path: workletPath },
+            "Failed to get worklet: %s",
+            e
+          );
           return new Response("Failed to load worklet", { status: 500 });
         }
       }
