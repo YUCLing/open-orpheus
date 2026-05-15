@@ -71,6 +71,11 @@ registerCallHandler<[], [boolean]>("app.initUrls", () => {
   return [true];
 });
 
+registerCallHandler<[string], [string]>("app.getP2PUrl", (url) => {
+  // We don't support P2P
+  return [url];
+});
+
 registerCallHandler<[string, string, object], void>(
   "app.getNativeData",
   (taskId, key) => {
