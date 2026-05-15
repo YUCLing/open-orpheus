@@ -56,7 +56,7 @@ function PinoPlugin(): Plugin {
         overrideCode += ":";
         overrideCode += `resolve(__dirname, ${JSON.stringify(this.getFileName(references[entry]))}),`;
       }
-      overrideCode += "};console.log(globalThis.__bundlerPathsOverrides)}";
+      overrideCode += "}}";
       const transportChunks = Object.keys(entries);
       for (const fileName in bundle) {
         const chunk = bundle[fileName];
