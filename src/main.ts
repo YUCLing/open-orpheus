@@ -11,7 +11,8 @@ import os from "node:os";
 import { mkdir } from "node:fs/promises";
 import started from "electron-squirrel-startup";
 
-import "./main/logger";
+// Setup logger as early as possible
+import logger from "./main/logger";
 
 // We want to hook Wayland connections as early as possible.
 import "@open-orpheus/window";
@@ -39,7 +40,6 @@ import { stringifyError } from "./util";
 
 import type WebPack from "./main/packs/WebPack";
 import type { ProxyConfiguration } from "./main/request";
-import logger from "./main/logger";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
