@@ -7,8 +7,10 @@ import { app } from "electron";
 import { MusicTagger } from "music-tag-native";
 
 import { getMusicLibraryDb } from "../database";
-import { registerCallHandler } from "../calls";
+import { getCallLogger, registerCallHandler } from "../calls";
 import { isMusicFile, normalizePath } from "../util";
+
+const logger = getCallLogger("musiclibrary");
 
 type MusicLibraries =
   | "<mymusic>"
@@ -121,7 +123,11 @@ registerCallHandler<[string, string[]], [boolean]>(
         ...result,
       });
     } catch (error) {
-      console.error(`Error executing music library SQL: ${error}`);
+      logger.error(
+        { call: "execSql", sql },
+        "Error executing music library SQL: %s",
+        error
+      );
       event.sender.send("channel.call", "musiclibrary.onexecsql", {
         error: 1,
         id: taskId,

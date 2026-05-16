@@ -11,6 +11,9 @@ import os from "node:os";
 import { mkdir } from "node:fs/promises";
 import started from "electron-squirrel-startup";
 
+// Setup logger as early as possible
+import logger from "./main/logger";
+
 // We want to hook Wayland connections as early as possible.
 import "@open-orpheus/window";
 
@@ -196,7 +199,7 @@ app.on("ready", async () => {
       await packManager.loadWebPack();
     } catch (e) {
       if (!(e instanceof Error) || e.message !== "REDOWNLOAD_REQ")
-        console.warn("Failed to load web pack:", e);
+        logger.error({ name: "loader" }, "%s", e);
       await showPackgeDownloadWindow(); // If user cancelled, this will throw and skip the rest of initialization
       if (shouldRedownload) {
         // Redownload is successfully here, drop the argument then restart again
@@ -288,7 +291,11 @@ app.on("ready", async () => {
           const agents = await m.getProxyAgent(cfg);
           m.setProxy(agents);
         } catch (err) {
-          console.warn("Failed to get proxy configuration", err);
+          logger.warn(
+            { name: "proxy" },
+            "Failed to load proxy configuration: %s",
+            err
+          );
         }
       }),
       // Make sure we handle KV storage IPC calls

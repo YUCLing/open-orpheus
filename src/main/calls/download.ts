@@ -1,4 +1,4 @@
-import { registerCallHandler } from "../calls";
+import { getCallLogger, registerCallHandler } from "../calls";
 import startDownload, {
   type DownloadTask,
   type ProgressEvent,
@@ -7,6 +7,8 @@ import startDownload, {
 } from "../download";
 import { downloadTemp } from "../folders";
 import { normalizePath } from "../util";
+
+const logger = getCallLogger("download");
 
 type DownloadStartRequest = {
   ext_header: string;
@@ -54,7 +56,11 @@ registerCallHandler<[DownloadStartRequest], void>(
       try {
         headers = JSON.parse(ext_header);
       } catch (error) {
-        console.error("Failed to parse ext_header JSON:", error);
+        logger.error(
+          { call: "start", json: ext_header },
+          "Failed to parse ext_header: %s",
+          error
+        );
       }
     }
 
@@ -93,7 +99,7 @@ registerCallHandler<[DownloadStartRequest], void>(
     }) as EventListener);
 
     task.addEventListener("error", ((e: ErrorEvent) => {
-      console.error(`Download error for id ${id}:`, e.detail.error);
+      logger.error({ call: "start", err: e.detail.error }, "Download errored");
       event.sender.send("channel.call", "download.onprocess", id, {
         down: 0,
         islast: true,

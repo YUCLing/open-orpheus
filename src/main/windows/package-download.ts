@@ -29,7 +29,6 @@ export default function showPackgeDownloadWindow(): Promise<void> {
         if (progress.step === "completed") {
           downloadSuccess = true;
           resolve();
-          console.log("resolved");
           wnd.close();
         }
       });

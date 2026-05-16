@@ -1,6 +1,7 @@
-import { stringifyError } from "../../util";
-import { registerCallHandler } from "../calls";
+import { getCallLogger, registerCallHandler } from "../calls";
 import { getCookies, getFullCookies, removeCookie, setCookie } from "../cookie";
+
+const logger = getCallLogger("browser");
 
 type SetCookie = {
   Domain: string;
@@ -89,7 +90,11 @@ registerCallHandler<[SetCookie], [boolean]>(
         sameSite: cookie.samesite,
       });
     } catch (error) {
-      console.error(`Error setting cookie: ${stringifyError(error)}`);
+      logger.error(
+        { call: "setCookie", cookie: cookie.Name },
+        "Failed to set cookie: %s",
+        error
+      );
       return [false];
     }
     return [true];

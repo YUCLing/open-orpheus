@@ -13,6 +13,7 @@ import { quitting } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { DesktopLyricsContract } from "../../bridge/contracts/desktop-lyrics-api";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
+import logger from "../logger";
 
 let desktopLyricsWindow: BrowserWindow | null = null;
 
@@ -152,9 +153,9 @@ ipcMain.handle(
   ) => {
     const filePath = sanitizeRelativePath(storage, path);
     if (filePath === false) {
-      console.warn(
-        "Attempted to save desktop lyrics preview to invalid path:",
-        path
+      logger.error(
+        { name: "desktop-lyrics-preview", path },
+        "Attempted to save dektop lyrics preview to invalid path"
       );
       return;
     }

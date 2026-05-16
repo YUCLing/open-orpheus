@@ -12,6 +12,7 @@ import { playCacheManager } from "./cache";
 import { normalizePath, sanitizeRelativePath } from "./util";
 import { pack as packageDir } from "./folders";
 import { stringifyError } from "../util";
+import logger from "./logger";
 
 const audioStreamer = new AudioStreamer();
 
@@ -34,7 +35,11 @@ audioStreamer.addEventListener("complete", () => {
       fileSize: sb.totalSize,
     })
     .catch((err) => {
-      console.error("[audioStreamer] failed to cache track:", err);
+      logger.error(
+        { name: "audio-streamer" },
+        "Failed to cache track: %s",
+        err
+      );
     });
 });
 
@@ -64,7 +69,11 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
             headers: { "Content-Type": "application/javascript" },
           });
         } catch (e) {
-          console.error("Failed to load worklet", e);
+          logger.debug(
+            { name: "scheme", scheme: "audio", path: workletPath },
+            "Failed to get worklet: %s",
+            e
+          );
           return new Response("Failed to load worklet", { status: 500 });
         }
       }

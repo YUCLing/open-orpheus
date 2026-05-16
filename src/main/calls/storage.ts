@@ -24,7 +24,7 @@ import {
   setCachePath,
   setDownloadPath,
 } from "../folders";
-import { registerCallHandler } from "../calls";
+import { getCallLogger, registerCallHandler } from "../calls";
 import { isMusicFile, normalizePath, sanitizeRelativePath } from "../util";
 import { getWebDb } from "../database";
 import {
@@ -38,6 +38,9 @@ import createCacheManager, {
 } from "../cache";
 import { stringifyError } from "../../util";
 import { deData, enData, ID3_AES_KEY } from "../crypto";
+import globalLogger from "../logger";
+
+const logger = getCallLogger("storage");
 
 const ID3_COMMENT_PREFIX = "163 key(Don't modify):";
 
@@ -72,8 +75,10 @@ async function readDownloadedMusicInfo(
     if (!decryptedComment) return;
     comment = decryptedComment ? decryptedComment.toString("utf-8") : "";
   } catch (error) {
-    console.error(
-      `Error reading ID3 tags from ${filePath}: ${stringifyError(error)}`
+    globalLogger.error(
+      { name: "music-info-reader", file: filePath },
+      "Error reading ID3 tags: %s",
+      error
     );
   }
   const statResult = await stat(filePath);
@@ -156,7 +161,7 @@ registerCallHandler<[string, string], void>(
         ...execResult
       );
     } catch (error) {
-      console.error(`Error executing SQL: ${stringifyError(error)}`);
+      logger.error({ call: "execsql", sql }, "Error executing SQL: %s", error);
       event.sender.send(
         "channel.call",
         "storage.onexecsqldone",
@@ -181,8 +186,10 @@ registerCallHandler<[string, string], void>(
         ...execResult
       );
     } catch (error) {
-      console.error(
-        `Error executing SQL transaction: ${stringifyError(error)}`
+      logger.error(
+        { call: "exectransaction", sql },
+        "Error executing SQL transaction: %s",
+        error
       );
       event.sender.send(
         "channel.call",
@@ -265,7 +272,11 @@ registerCallHandler<[string, "abs" | "rel", "", string, boolean], void>(
         [filePath]
       );
     } catch (err) {
-      console.error("Failed to delete file", err);
+      logger.error(
+        { call: "deletefile", file: filePath },
+        "Failed to delete file: %s",
+        err
+      );
       event.sender.send(
         "channel.call",
         "storage.ondeletefilesdone",
@@ -342,8 +353,10 @@ registerCallHandler<[string, boolean, string, number, string[]], void>(
 
         flush();
       } catch (err) {
-        console.error(
-          `DownloadScanner: scanner path ${path}: ${stringifyError(err)}`
+        logger.error(
+          { call: "downloadscanner", path },
+          "Error when scanning downloads: %s",
+          err
         );
       }
     })();
@@ -414,8 +427,10 @@ registerCallHandler<[string], void>(
     try {
       content = (await lyricCacheManager?.get(songId)) ?? "";
     } catch (error) {
-      console.error(
-        `Error reading temp file for songId ${songId}: ${stringifyError(error)}`
+      logger.error(
+        { call: "getTempFile", songId },
+        "Error reading temp file: %s",
+        error
       );
     }
     event.sender.send(
@@ -434,15 +449,17 @@ registerCallHandler<[string, string, string], void>(
     if (!lyricCacheManager) return;
 
     if (type !== "text/plain") {
-      console.error(`Unsupported temp file type: ${type}`);
+      logger.error({ call: "updatetemp", type }, "Unsupported temp file type");
       return;
     }
 
     try {
       await lyricCacheManager.set(songId, content);
     } catch (error) {
-      console.error(
-        `Error writing temp file for songId ${songId}: ${stringifyError(error)}`
+      logger.error(
+        { call: "updatetemp", songId },
+        "Error writing temp file: %s",
+        error
       );
     }
   }
@@ -491,7 +508,11 @@ registerCallHandler<[string, "abs" | "rel", "", string], void>(
         );
       })
       .catch((error) => {
-        console.error(`Error listing files in ${filePath}: ${error.message}`);
+        logger.error(
+          { call: "listFile", path: filePath },
+          "Error listing files: %s",
+          error
+        );
         // TODO: Some error code?
         event.sender.send("channel.call", "storage.onlistfile", taskId, 1, []);
       });
@@ -578,7 +599,10 @@ async function handleFileBatch(
   destPaths: string[]
 ) {
   if (srcPaths.length !== destPaths.length) {
-    console.error("src and dest paths length mismatch");
+    logger.error(
+      { op: "copy-move-files", srcPaths, destPaths },
+      "Mismatch srcPaths and destPaths"
+    );
     return;
   }
 
@@ -612,7 +636,11 @@ async function handleFileBatch(
       })
     );
   } catch (error) {
-    console.error(`Error when ${type} files: ${stringifyError(error)}`);
+    logger.error(
+      { op: "copy-move-files", type },
+      "Error when doing batch file ops: %s",
+      error
+    );
     event.sender.send("channel.call", `storage.on${type}process`, {
       code: 1,
       state: srcPaths.length - processedCount,
@@ -639,8 +667,9 @@ registerCallHandler<["copy", "abs", "", string[], "abs", "", string[]], void>(
     destPaths
   ) => {
     if (type !== "copy" || srcType !== "abs" || destType !== "abs") {
-      console.error(
-        `Unsupported file operation type: ${type} with srcType: ${srcType} and destType: ${destType}`
+      logger.error(
+        { call: "copyfiles", type, srcType, destType },
+        "Unsupported file operation type"
       );
       return;
     }
@@ -662,8 +691,9 @@ registerCallHandler<["move", "abs", "", string[], "abs", "", string[]], void>(
     destPaths
   ) => {
     if (type !== "move" || srcType !== "abs" || destType !== "abs") {
-      console.error(
-        `Unsupported file operation type: ${type} with srcType: ${srcType} and destType: ${destType}`
+      logger.error(
+        { call: "movefiles", type, srcType, destType },
+        "Unsupported file operation type"
       );
       return;
     }
