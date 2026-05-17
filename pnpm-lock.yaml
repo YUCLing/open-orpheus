@@ -37,7 +37,7 @@ importers:
     devDependencies:
       '@electron-forge/cli':
         specifier: ^7.11.1
-        version: 7.11.1(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.14)
+        version: 7.11.1(encoding@0.1.13)(lightningcss@1.32.0)
       '@electron-forge/maker-deb':
         specifier: ^7.11.1
         version: 7.11.1
@@ -329,23 +329,31 @@ importers:
         version: 6.0.3
 
   modules/window:
-    dependencies:
-      '@neon-rs/load':
-        specifier: ^0.1.82
-        version: 0.1.82
     devDependencies:
-      '@neon-rs/cli':
-        specifier: ^0.1.82
-        version: 0.1.82
-      '@tsconfig/node20':
-        specifier: ^20.1.4
-        version: 20.1.9
+      '@emnapi/core':
+        specifier: ^1.5.0
+        version: 1.10.0
+      '@emnapi/runtime':
+        specifier: ^1.5.0
+        version: 1.10.0
+      '@napi-rs/cli':
+        specifier: ^3.2.0
+        version: 3.6.2(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.8.0)
+      '@oxc-node/core':
+        specifier: ^0.1.0
+        version: 0.1.0
+      '@tybys/wasm-util':
+        specifier: ^0.10.0
+        version: 0.10.2
       '@types/node':
-        specifier: ^20.11.16
-        version: 20.19.37
+        specifier: ^25.8.0
+        version: 25.8.0
+      ava:
+        specifier: ^8.0.0
+        version: 8.0.0(encoding@0.1.13)(rollup@4.60.3)
       typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
+        specifier: ^6.0.0
+        version: 6.0.3
 
 packages:
 
@@ -374,56 +382,6 @@ packages:
   '@babel/types@8.0.0-rc.3':
     resolution: {integrity: sha512-mOm5ZrYmphGfqVWoH5YYMTITb3cDXsFgmvFlvkvWDMsR9X8RFnt7a0Wb6yNIdoFsiMO9WjYLq+U/FMtqIYAF8Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
-
-  '@cargo-messages/android-arm-eabi@0.1.81':
-    resolution: {integrity: sha512-cpRbgb56e9LmAj96Tixtz9/bTlaJAeplWNNv4obu+eqQyZd3ZjX04TJd9fM1bjHDGVyR9GTVlgBsbQEntIGkwg==}
-    cpu: [arm]
-    os: [android]
-
-  '@cargo-messages/darwin-arm64@0.1.81':
-    resolution: {integrity: sha512-OwGqsw+tbJx37a/vH4T8R9qkrrFYoTIOnckbA9+MhQodE2FSWyk3HvLh+z8jjl+QZa1RSOU9Ax6gt/46h0BiTg==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@cargo-messages/darwin-x64@0.1.81':
-    resolution: {integrity: sha512-Iu761bPk25Ce6yUdDCjjeVuT8/xbBmczyaNB7oYBmAZEE5rshvCJ42TqSShYYP+S7pKkN42nBhkFooaZrqaz9g==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@cargo-messages/linux-arm-gnueabihf@0.1.81':
-    resolution: {integrity: sha512-iIuy7KTJAEhbiqlIlcxQOdW6opI6M9LXlgd/jdsHbP2FjmTyhTLnd3JCJ6JeAeidwknCDs+CFlaVmPxTKSytsg==}
-    cpu: [arm]
-    os: [linux]
-
-  '@cargo-messages/linux-arm64-gnu@0.1.81':
-    resolution: {integrity: sha512-QPQRsHj9m/9ga8wRBlLh8t2AXyr40+/H55FIKVj7zIjV++waY/TbSTPofDZQhMycd5VSGLKztfhahiCO7c/RAQ==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@cargo-messages/linux-arm64-musl@0.1.81':
-    resolution: {integrity: sha512-9O0ATesIOjDTz2L01OtlGHYwP86I31/mzXMC+ryQkzbbIKj7KUiSqmEc29I14I517UYO8/sMeow6q6MVBpehlA==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@cargo-messages/linux-x64-gnu@0.1.81':
-    resolution: {integrity: sha512-wEFYxCdtHNiEvp5KEg17CfRCUdfRTtkL+1GASROyvYEUV6DQf6TXxfHuuWg2xlVxh5fqiTGFSRfiqFrCDL/xrw==}
-    cpu: [x64]
-    os: [linux]
-
-  '@cargo-messages/linux-x64-musl@0.1.81':
-    resolution: {integrity: sha512-zi5pKIh60oPwOCDQapAZ3Mya4y56MI2BoGvY8JtztYaXTorGmAoyf6jjb50Wt+HfoYYjM3OlPt03XMlCFZJnIQ==}
-    cpu: [x64]
-    os: [linux]
-
-  '@cargo-messages/win32-arm64-msvc@0.1.81':
-    resolution: {integrity: sha512-oyiT8AYLoguF7cFOMYDsPv3eirzBcFafOOfRsFyd3+wmaPTl/DdbCq446oThRmSAsEGJpzhzj7TafcnXMBkHbg==}
-    cpu: [arm64]
-    os: [win32]
-
-  '@cargo-messages/win32-x64-msvc@0.1.81':
-    resolution: {integrity: sha512-B5Ukf4AohtIv27uCP/AgM+7vYwQ4RacI6m8ZBr2XKeSrjZXcXguzlZd+wD7bD5+wa0capvXKUskZDnpG/DcYiA==}
-    cpu: [x64]
-    os: [win32]
 
   '@electron-forge/cli@7.11.1':
     resolution: {integrity: sha512-pk8AoLsr7t7LBAt0cFD06XFA6uxtPdvtLx06xeal7O9o7GHGCbj29WGwFoJ8Br/ENM0Ho868S3PrAn1PtBXt5g==}
@@ -1438,13 +1396,6 @@ packages:
     resolution: {integrity: sha512-enkZYyuCdo+9jneCPE/0fjIta4wWnvVN9hBo2HuiMpRF0q3lzv1J6b/cl7i0mxZUKhBrV3aCKDBQnCOhwKbPmQ==}
     engines: {node: '>= 10'}
 
-  '@neon-rs/cli@0.1.82':
-    resolution: {integrity: sha512-QrlGPQp9KOGuMvjjua79lEV2QTcE16m8JatG5ITdQpBAwRQpDw5xab57W9130y2iUEfMzYtp7v6pcN1fUB0Exg==}
-    hasBin: true
-
-  '@neon-rs/load@0.1.82':
-    resolution: {integrity: sha512-H4Gu2o5kPp+JOEhRrOQCnJnf7X6sv9FBLttM/wSbb4efsgFWeHzfU/ItZ01E5qqEk+U6QGdeVO7lxXIAtYHr5A==}
-
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
     engines: {node: '>= 8'}
@@ -2046,9 +1997,6 @@ packages:
     resolution: {integrity: sha512-HqmEUIGRJ5fSXchkVgR5F7qn48bDBzv0kWj/Kfu5e6uci4UlEeng4331LnBkWffb++Ei3FOVLxo8JJWMFBDMeQ==}
     engines: {node: '>= 10'}
 
-  '@tsconfig/node20@20.1.9':
-    resolution: {integrity: sha512-IjlTv1RsvnPtUcjTqtVsZExKVq+KQx4g5pCP5tI7rAs6Xesl2qFwSz/tPDBC4JajkL/MlezBu3gPUwqRHl+RIg==}
-
   '@tsconfig/node24@24.0.4':
     resolution: {integrity: sha512-2A933l5P5oCbv6qSxHs7ckKwobs8BDAe9SJ/Xr2Hy+nDlwmLE1GhFh/g/vXGRZWgxBg9nX/5piDtHR9Dkw/XuA==}
 
@@ -2099,9 +2047,6 @@ packages:
 
   '@types/mute-stream@0.0.4':
     resolution: {integrity: sha512-CPM9nzrCPPJHQNA9keH9CVkVI+WR5kMa+7XEs5jcGQ0VoAGnLv242w8lIVgwAEfmE4oufJRaTc9PNLQl0ioAow==}
-
-  '@types/node@20.19.37':
-    resolution: {integrity: sha512-8kzdPJ3FsNsVIurqBs7oodNnCEVbni9yUEkaHbgptDACOPW04jimGagZ51E6+lXUwJjgnBw+hyko/lkFWCldqw==}
 
   '@types/node@22.19.18':
     resolution: {integrity: sha512-9v00a+dn2yWVsYDEunWC4g/TcRKVq3r8N5FuZp7u0SGrPvdN9c2yXI9bBuf5Fl0hNCb+QTIePTn5pJs2pwBOQQ==}
@@ -5818,39 +5763,9 @@ snapshots:
       '@babel/helper-string-parser': 8.0.0-rc.3
       '@babel/helper-validator-identifier': 8.0.0-rc.3
 
-  '@cargo-messages/android-arm-eabi@0.1.81':
-    optional: true
-
-  '@cargo-messages/darwin-arm64@0.1.81':
-    optional: true
-
-  '@cargo-messages/darwin-x64@0.1.81':
-    optional: true
-
-  '@cargo-messages/linux-arm-gnueabihf@0.1.81':
-    optional: true
-
-  '@cargo-messages/linux-arm64-gnu@0.1.81':
-    optional: true
-
-  '@cargo-messages/linux-arm64-musl@0.1.81':
-    optional: true
-
-  '@cargo-messages/linux-x64-gnu@0.1.81':
-    optional: true
-
-  '@cargo-messages/linux-x64-musl@0.1.81':
-    optional: true
-
-  '@cargo-messages/win32-arm64-msvc@0.1.81':
-    optional: true
-
-  '@cargo-messages/win32-x64-msvc@0.1.81':
-    optional: true
-
-  '@electron-forge/cli@7.11.1(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.14)':
+  '@electron-forge/cli@7.11.1(encoding@0.1.13)(lightningcss@1.32.0)':
     dependencies:
-      '@electron-forge/core': 7.11.1(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.14)
+      '@electron-forge/core': 7.11.1(encoding@0.1.13)(lightningcss@1.32.0)
       '@electron-forge/core-utils': 7.11.1
       '@electron-forge/shared-types': 7.11.1
       '@electron/get': 3.1.0
@@ -5897,7 +5812,7 @@ snapshots:
       - bluebird
       - supports-color
 
-  '@electron-forge/core@7.11.1(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.14)':
+  '@electron-forge/core@7.11.1(encoding@0.1.13)(lightningcss@1.32.0)':
     dependencies:
       '@electron-forge/core-utils': 7.11.1
       '@electron-forge/maker-base': 7.11.1
@@ -5908,7 +5823,7 @@ snapshots:
       '@electron-forge/template-vite': 7.11.1
       '@electron-forge/template-vite-typescript': 7.11.1
       '@electron-forge/template-webpack': 7.11.1
-      '@electron-forge/template-webpack-typescript': 7.11.1(lightningcss@1.32.0)(postcss@8.5.14)
+      '@electron-forge/template-webpack-typescript': 7.11.1(lightningcss@1.32.0)
       '@electron-forge/tracer': 7.11.1
       '@electron/get': 3.1.0
       '@electron/packager': 18.4.4
@@ -6097,13 +6012,13 @@ snapshots:
       - bluebird
       - supports-color
 
-  '@electron-forge/template-webpack-typescript@7.11.1(lightningcss@1.32.0)(postcss@8.5.14)':
+  '@electron-forge/template-webpack-typescript@7.11.1(lightningcss@1.32.0)':
     dependencies:
       '@electron-forge/shared-types': 7.11.1
       '@electron-forge/template-base': 7.11.1
       fs-extra: 10.1.0
       typescript: 5.4.5
-      webpack: 5.106.2(lightningcss@1.32.0)(postcss@8.5.14)
+      webpack: 5.106.2(lightningcss@1.32.0)
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@swc/core'
@@ -7058,21 +6973,6 @@ snapshots:
       - '@emnapi/core'
       - '@emnapi/runtime'
 
-  '@neon-rs/cli@0.1.82':
-    optionalDependencies:
-      '@cargo-messages/android-arm-eabi': 0.1.81
-      '@cargo-messages/darwin-arm64': 0.1.81
-      '@cargo-messages/darwin-x64': 0.1.81
-      '@cargo-messages/linux-arm-gnueabihf': 0.1.81
-      '@cargo-messages/linux-arm64-gnu': 0.1.81
-      '@cargo-messages/linux-arm64-musl': 0.1.81
-      '@cargo-messages/linux-x64-gnu': 0.1.81
-      '@cargo-messages/linux-x64-musl': 0.1.81
-      '@cargo-messages/win32-arm64-msvc': 0.1.81
-      '@cargo-messages/win32-x64-msvc': 0.1.81
-
-  '@neon-rs/load@0.1.82': {}
-
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -7530,8 +7430,6 @@ snapshots:
 
   '@tootallnate/once@2.0.1': {}
 
-  '@tsconfig/node20@20.1.9': {}
-
   '@tsconfig/node24@24.0.4': {}
 
   '@tybys/wasm-util@0.10.2':
@@ -7585,10 +7483,6 @@ snapshots:
   '@types/mute-stream@0.0.4':
     dependencies:
       '@types/node': 24.12.3
-
-  '@types/node@20.19.37':
-    dependencies:
-      undici-types: 6.21.0
 
   '@types/node@22.19.18':
     dependencies:
@@ -11077,16 +10971,15 @@ snapshots:
       rimraf: 2.6.3
     optional: true
 
-  terser-webpack-plugin@5.6.0(lightningcss@1.32.0)(postcss@8.5.14)(webpack@5.106.2(lightningcss@1.32.0)(postcss@8.5.14)):
+  terser-webpack-plugin@5.6.0(lightningcss@1.32.0)(webpack@5.106.2(lightningcss@1.32.0)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.47.1
-      webpack: 5.106.2(lightningcss@1.32.0)(postcss@8.5.14)
+      webpack: 5.106.2(lightningcss@1.32.0)
     optionalDependencies:
       lightningcss: 1.32.0
-      postcss: 8.5.14
 
   terser@5.47.1:
     dependencies:
@@ -11401,7 +11294,7 @@ snapshots:
 
   webpack-sources@3.4.1: {}
 
-  webpack@5.106.2(lightningcss@1.32.0)(postcss@8.5.14):
+  webpack@5.106.2(lightningcss@1.32.0):
     dependencies:
       '@types/eslint-scope': 3.7.7
       '@types/estree': 1.0.9
@@ -11424,7 +11317,7 @@ snapshots:
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.3
-      terser-webpack-plugin: 5.6.0(lightningcss@1.32.0)(postcss@8.5.14)(webpack@5.106.2(lightningcss@1.32.0)(postcss@8.5.14))
+      terser-webpack-plugin: 5.6.0(lightningcss@1.32.0)(webpack@5.106.2(lightningcss@1.32.0))
       watchpack: 2.5.1
       webpack-sources: 3.4.1
     transitivePeerDependencies:
