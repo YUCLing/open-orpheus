@@ -1,8 +1,9 @@
-use std::sync::OnceLock;
+use std::{mem::ManuallyDrop, sync::OnceLock};
 
 use napi::{
     Env, Error, Result, Unknown, ValueType,
     bindgen_prelude::{Array, Buffer, FnArgs, FromNapiValue, Function, Object},
+    sys,
     threadsafe_function::{ThreadsafeCallContext, ThreadsafeFunctionCallMode},
 };
 use napi_derive::napi;
@@ -115,20 +116,33 @@ pub fn capture_next_window_first_cursor_enter(
         );
     }
 
-    let cb = callback.build_threadsafe_function().build_callback(
-        |ctx: ThreadsafeCallContext<(u32, u32)>| {
-            Ok(std::convert::Into::<FnArgs<(u32, u32)>>::into(ctx.value))
+    let mut cb = Some(callback.build_threadsafe_function().build_callback(
+        |ctx: ThreadsafeCallContext<((u32, u32), sys::napi_threadsafe_function)>| {
+            // Main thread processes the queue, release here
+            unsafe {
+                sys::napi_release_threadsafe_function(
+                    ctx.value.1,
+                    sys::ThreadsafeFunctionReleaseMode::abort,
+                )
+            };
+            Ok(std::convert::Into::<FnArgs<(u32, u32)>>::into(ctx.value.0))
         },
-    )?;
+    )?);
 
     if !wayland::on_next_new_window_first_cursor_enter(move |x, y| {
         if x < 0 || y < 0 {
             return;
         }
-        cb.call(
-            (x as u32, y as u32),
-            ThreadsafeFunctionCallMode::NonBlocking,
-        );
+        // We will drop this early so we don't trigger Node threadsafe function's bug
+        // see https://github.com/YUCLing/open-orpheus/issues/84#issuecomment-4485294689
+        if let Some(cb) = cb.take() {
+            cb.call(
+                ((x as u32, y as u32), cb.raw()),
+                ThreadsafeFunctionCallMode::NonBlocking,
+            );
+            // Preventing the default Drop handler
+            let _ = ManuallyDrop::new(cb);
+        }
     }) {
         return env.throw("captureNextWindowFirstCursorEnter is unavailable because Wayland hooks are not initialized");
     }
