@@ -22,4 +22,8 @@ export function registerInputRegionHandlers(wnd: Electron.BrowserWindow) {
       }
     },
   });
+
+  wnd.on("show", () => {
+    wnd.webContents.send("inputRegion.shown");
+  });
 }

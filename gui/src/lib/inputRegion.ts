@@ -7,7 +7,7 @@ import { getBridge } from "./bridge";
 const api = getBridge<InputRegionContract>("inputRegion");
 const inputRegionElements: Element[] = [];
 
-function refreshInputRegion() {
+export function refreshInputRegion() {
   if (api.platform === "linux") {
     api.setInputRegions(
       inputRegionElements.map((v) => {
@@ -58,3 +58,9 @@ export const inputRegionAttachment: Attachment = (element) => {
     removeInputRegion(element);
   };
 };
+
+api.events.shown(() => {
+  // Ensure it's set, even if it was populated before window surface is
+  // actually shown.
+  refreshInputRegion();
+});

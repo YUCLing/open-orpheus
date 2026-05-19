@@ -24,6 +24,7 @@ import { registerIpcHandlers } from "../bridge/register";
 import type { MenuContract } from "../bridge/contracts/menu-api";
 import { parseBtnUrl, parseElementTemplate } from "./skin/dui";
 import type { ElementTemplate } from "./skin/dui";
+import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
 
 import type { AppMenuItem } from "$sharedTypes/menu";
 
@@ -217,6 +218,7 @@ export default class AppMenu extends EventTarget {
       openSubmenu: async () => {},
       closeSubmenu: async () => {},
     });
+    registerInputRegionHandlers(wnd);
   }
 
   // --- Non-Wayland: transparent popup BrowserWindow ---

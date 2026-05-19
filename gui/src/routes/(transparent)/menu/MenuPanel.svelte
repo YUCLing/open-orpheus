@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { HTMLAttributes } from "svelte/elements";
+
   import type { MenuItem, MenuItemBtn, LayoutNode } from "./types";
   import { getCachedTemplate } from "./template";
   import IconButton from "$lib/components/IconButton.svelte";
@@ -13,6 +15,7 @@
     onitemhover,
     onitemleave,
     onbtnclick,
+    ...props
   }: {
     items: MenuItem[];
     hoveredIndex: number;
@@ -23,7 +26,7 @@
     onitemhover?: (index: number, item: MenuItem, event: MouseEvent) => void;
     onitemleave?: (index: number) => void;
     onbtnclick?: (btn: MenuItemBtn) => void;
-  } = $props();
+  } & HTMLAttributes<HTMLDivElement> = $props();
 </script>
 
 {#snippet layoutNode(node: LayoutNode, btns: MenuItemBtn[])}
@@ -95,6 +98,7 @@
   class="absolute max-w-80 min-w-58 overflow-hidden rounded-lg py-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)] select-none"
   style="background-color: var(--menu-bg); {style ?? ''}"
   bind:this={el}
+  {...props}
 >
   {#each items as item, i (i)}
     {#if item.separator}

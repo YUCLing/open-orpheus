@@ -7,6 +7,7 @@
   import MenuPanel from "./MenuPanel.svelte";
   import { getBridge } from "$lib/bridge";
   import type { MenuContract } from "$bridge/contracts/menu-api";
+  import { inputRegionAttachment } from "$lib/inputRegion";
 
   const api = getBridge<MenuContract>("menu");
 
@@ -235,6 +236,7 @@
         style="left: {cursorX}px; top: {menuTop}px; visibility: {menuReady
           ? 'visible'
           : 'hidden'};"
+        {@attach inputRegionAttachment}
       />
 
       {#if submenuItems}
@@ -252,6 +254,7 @@
           showSubmenuArrows={false}
           bind:el={submenuEl}
           style="left: {submenuX}px; top: {submenuY}px;"
+          {@attach inputRegionAttachment}
         />
       {/if}
     </div>

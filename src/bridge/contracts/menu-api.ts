@@ -16,15 +16,6 @@ export interface MenuContract {
   submenu: boolean;
 
   events: {
-    show(
-      callback: (
-        items: unknown[],
-        templates: Record<string, ElementTemplate>,
-        cursorX: number,
-        cursorY: number,
-        colors: MenuSkin
-      ) => void
-    ): void;
     update(callback: (items: unknown[]) => void): void;
   };
 
