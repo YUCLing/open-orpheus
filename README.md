@@ -4,6 +4,7 @@
 ![GitHub License](https://img.shields.io/github/license/YUCLing/open-orpheus)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/YUCLing/open-orpheus/total)
 ![GitHub Repo stars](https://img.shields.io/github/stars/YUCLing/open-orpheus)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FYUCLing%2Fopen-orpheus.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FYUCLing%2Fopen-orpheus?ref=badge_shield)
 
 [English Version](docs/README_en.md)
 
@@ -74,3 +75,7 @@ Open Orpheus 是一个以**互操作性**为目的的独立开源项目，与网
 - 本项目按"现状"提供，不对因使用本项目所产生的任何后果（包括但不限于账号封禁、服务中断或法律责任）承担责任。
 
 > "网易云音乐"、"Orpheus" 等名称及相关商标归网易公司所有。
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FYUCLing%2Fopen-orpheus.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FYUCLing%2Fopen-orpheus?ref=badge_large)
