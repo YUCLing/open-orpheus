@@ -63,4 +63,6 @@ api.events.shown(() => {
   // Ensure it's set, even if it was populated before window surface is
   // actually shown.
   refreshInputRegion();
+  // Add a delayed refreshing to make sure again
+  setTimeout(refreshInputRegion, 50);
 });
