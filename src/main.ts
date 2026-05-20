@@ -181,6 +181,18 @@ app.on("ready", async () => {
     session.defaultSession.setUserAgent(
       `${userAgent} NeteaseMusicDesktop/${CORE_VERSION}`
     );
+    session.defaultSession.setDisplayMediaRequestHandler(
+      async (request, callback) => {
+        if (!request.frame) {
+          callback({});
+          return;
+        }
+        callback({
+          video: request.frame,
+          audio: "loopback",
+        });
+      }
+    );
 
     const openOrpheusSession = session.fromPartition("open-orpheus");
 
@@ -248,6 +260,7 @@ app.on("ready", async () => {
     await Promise.all([
       // Initialize util module
       import("./main/util").then((m) => m.default()),
+      import("./main/afp"),
       import("./main/channel"),
       import("./main/request").then(async (m) => {
         m.setupRequestInterceptors();
