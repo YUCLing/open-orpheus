@@ -49,5 +49,12 @@ contextBridge.executeInMainWorld({
         ...args,
       ] as unknown as Parameters<typeof XMLHttpRequest.prototype.open>);
     } as unknown as typeof XMLHttpRequest.prototype.open;
+
+    const OriginalImage = window.Image;
+    window.Image = function (width?: number, height?: number) {
+      const img = new OriginalImage(width, height);
+      img.crossOrigin = "anonymous";
+      return img;
+    } as unknown as typeof Image;
   },
 });
