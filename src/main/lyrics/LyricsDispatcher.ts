@@ -13,7 +13,7 @@ export default class LyricsDispatcher extends EventTarget {
 
   set lyrics(value) {
     this._lyrics = value;
-    if (value) this._slogan = null;
+    if (value) this.slogan = null;
     this.dispatchEvent(
       new CustomEvent("lyricsupdate", {
         detail: value,
@@ -27,7 +27,7 @@ export default class LyricsDispatcher extends EventTarget {
 
   set slogan(value) {
     this._slogan = value;
-    if (value) this._lyrics = null;
+    if (value) this.lyrics = null;
     this.dispatchEvent(
       new CustomEvent("sloganupdate", {
         detail: value,
