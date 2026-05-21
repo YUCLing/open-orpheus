@@ -14,7 +14,7 @@ let slogan: string | null = null;
 let playState = false;
 let time = 0;
 
-let lastTimeUpdate = performance.now();
+let lastTimeUpdate: number | null = null;
 
 api.events.lyricsStoreUpdate((store) => {
   lyricStore = store;
@@ -28,6 +28,17 @@ api.events.sloganUpdate((newSlogan) => {
 });
 api.events.playStateUpdate((state) => {
   playState = state;
+  if (state) {
+    // Ensure interpolation can continue before first timeupdate arrives
+    if (!lastTimeUpdate) lastTimeUpdate = performance.now();
+  } else {
+    // Paused, stopped... or anything else, we simply make sure we are providing
+    // the latest time available if timeupdate was not updated when it stops.
+    const diff = lastTimeUpdate ? performance.now() - lastTimeUpdate : 0;
+    time += diff / 1000;
+    // Clears the lastTimeUpdate to ensure it won't get applied when it restarts
+    lastTimeUpdate = null;
+  }
   eventTarget.dispatchEvent(
     new CustomEvent("playstateupdate", { detail: state })
   );
@@ -66,6 +77,9 @@ export default class LyricsSynchronizer extends EventTarget {
   }
 
   get time() {
+    // When paused, stopped or we don't have last update data,
+    // we simple return the latest time available
+    if (!playState || !lastTimeUpdate) return time;
     const diff = performance.now() - lastTimeUpdate;
     return time + diff / 1000;
   }
