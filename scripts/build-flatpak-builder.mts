@@ -94,7 +94,6 @@ console.log(`Using pnpm ${pnpmVersion} with sha512 from packageManager field.`);
 const nodeSourcesFile = resolve(outDir, "generated-node-sources.json");
 console.log("Running flatpak-node-generator for pnpm...");
 await execFile("flatpak-node-generator", [
-  "--electron-node-headers",
   "--pnpm-store-version",
   "v11",
   "pnpm",
