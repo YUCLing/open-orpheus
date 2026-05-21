@@ -10,28 +10,14 @@ export interface LyricLine {
   words: LyricWord[];
 }
 
-export interface LyricsData {
-  lines: LyricLine[];
-  secondary_lines?: LyricLine[];
-}
+export type Lyrics = LyricLine[];
 
-export type TextAlignType = "left" | "center" | "right";
+export type LyricsType = "regular" | "per-word" | "translate" | "roma";
+export type LyricsStore = { regular: Lyrics } & Partial<
+  Record<LyricsType, Lyrics>
+>;
 
-export interface LyricStyleConfig {
-  fontFamily: string;
-  fontSize: number;
-  fontWeight: string;
-  textAlign: [TextAlignType, TextAlignType];
-  lineMode: boolean;
-  vertical: boolean;
-  colorNotPlayedTop: string;
-  colorNotPlayedBottom: string;
-  colorPlayedTop: string;
-  colorPlayedBottom: string;
-  outlineColorNotPlayed: string;
-  outlineColorPlayed: string;
-  dropShadow: string;
-  showProgress: boolean;
-  offset: number;
-  slogan: string;
-}
+export type LyricsUpdateEvent = CustomEvent<LyricsStore | null>;
+export type LyricsSloganUpdateEvent = CustomEvent<string | null>;
+export type LyricsPlayStateUpdateEvent = CustomEvent<boolean>;
+export type LyricsTimeUpdateEvent = CustomEvent<number>;

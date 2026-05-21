@@ -6,13 +6,13 @@ import photon from "@silvia-odwyer/photon-node";
 
 import { mainWindow, setWindowId } from "../window";
 import { dragWindow } from "@open-orpheus/window";
-import { parseLrc } from "../lyrics";
 import { sanitizeRelativePath } from "../util";
 import { storage } from "../folders";
 import { quitting } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { DesktopLyricsContract } from "../../bridge/contracts/desktop-lyrics-api";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
+import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 
 let desktopLyricsWindow: BrowserWindow | null = null;
 
@@ -87,24 +87,10 @@ export default function createDesktopLyricsWindow() {
     }
   );
   registerInputRegionHandlers(desktopLyricsWindow);
+  registerLyricsHandlers(desktopLyricsWindow);
 }
 
 // --- IPC handlers ---
-
-ipcMain.handle(
-  "desktopLyrics.updateLyrics",
-  (_event, lrc: string | null, tlrc: string | null) => {
-    const parsed = lrc ? parseLrc(lrc, tlrc || undefined) : null;
-    sendToLyricsWindow("desktopLyrics.lyricsUpdate", parsed);
-  }
-);
-
-ipcMain.handle(
-  "desktopLyrics.updateTime",
-  (_event, currentTime: number, playing: boolean) => {
-    sendToLyricsWindow("desktopLyrics.timeUpdate", { currentTime, playing });
-  }
-);
 
 ipcMain.handle(
   "desktopLyrics.updateStyle",
@@ -118,10 +104,6 @@ ipcMain.handle("desktopLyrics.setLocked", (_event, locked: boolean) => {
     desktopLyricsWindow.setResizable(!locked);
   }
   sendToLyricsWindow("desktopLyrics.setLocked", locked);
-});
-
-ipcMain.handle("desktopLyrics.updatePlayState", (_event, playing: boolean) => {
-  sendToLyricsWindow("desktopLyrics.playStateChange", playing);
 });
 
 ipcMain.handle("desktopLyrics.show", () => {

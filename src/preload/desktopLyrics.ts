@@ -31,25 +31,9 @@ export function transformLyricStyle(s: LyricStyle) {
     fontWeight: s.lrcFontBold ? "bold" : "normal",
     fontFamily: s.lrcFontName || s.fontName || "sans-serif",
     offset: s.offset,
-    slogan: s.slogan,
+    showTranslate: s.showTranslate,
   };
 }
-
-// Forward lyrics content updates
-player.addEventListener("lyriccontentupdate", (e) => {
-  const content = (e as CustomEvent).detail;
-  if (content) {
-    ipcRenderer.invoke(
-      "desktopLyrics.updateLyrics",
-      content.lrc,
-      player.lyricStyle.showTranslate === "translate"
-        ? content.tlrc
-        : content.romalrc
-    );
-  } else {
-    ipcRenderer.invoke("desktopLyrics.updateLyrics", null, null);
-  }
-});
 
 // Forward style updates
 const styleKeyMap: Partial<Record<keyof LyricStyle, (value: never) => void>> = {
@@ -99,12 +83,9 @@ const styleKeyMap: Partial<Record<keyof LyricStyle, (value: never) => void>> = {
     }),
   showHorizontal: (v: boolean) =>
     ipcRenderer.invoke("desktopLyrics.updateStyle", { vertical: !v }),
-  showTranslate: () => {
-    // eslint-disable-next-line no-self-assign
-    player.lyricContent = player.lyricContent; // Trigger re-send of lyrics with correct tlrc/romalrc based on showTranslate
-  },
+  showTranslate: (v) =>
+    ipcRenderer.invoke("desktopLyrics.updateStyle", { showTranslate: v }),
   offset: (v) => ipcRenderer.invoke("desktopLyrics.updateStyle", { offset: v }),
-  slogan: (v) => ipcRenderer.invoke("desktopLyrics.updateStyle", { slogan: v }),
   desktopTopMost: (v) => ipcRenderer.invoke("desktopLyrics.setTopMost", v),
   locked: (v) => ipcRenderer.invoke("desktopLyrics.setLocked", v),
 };
@@ -115,51 +96,8 @@ player.addEventListener("lyricstyleupdate", (e) => {
   if (handler) handler(value as never);
 });
 
-// Forward time updates to desktop lyrics window
-player.audio.addEventListener("timeupdate", () => {
-  ipcRenderer.invoke(
-    "desktopLyrics.updateTime",
-    player.audio.currentTime * 1000,
-    !player.audio.paused
-  );
-});
-
-player.audio.addEventListener("play", () => {
-  ipcRenderer.invoke("desktopLyrics.updatePlayState", true);
-});
-
-player.audio.addEventListener("pause", () => {
-  ipcRenderer.invoke("desktopLyrics.updatePlayState", false);
-});
-
-player.audio.addEventListener("seeked", () => {
-  ipcRenderer.invoke(
-    "desktopLyrics.updateTime",
-    player.audio.currentTime * 1000,
-    !player.audio.paused
-  );
-});
-
 // Handle full state request from desktop lyrics window
 ipcRenderer.on("desktopLyrics.sendFullState", () => {
-  // Re-send lyrics content (send null to clear if no content)
-  if (player.lyricContent) {
-    ipcRenderer.invoke(
-      "desktopLyrics.updateLyrics",
-      player.lyricContent.lrc,
-      player.lyricContent.tlrc
-    );
-  } else {
-    ipcRenderer.invoke("desktopLyrics.updateLyrics", null, null);
-  }
-
-  // Re-send current time and play state
-  ipcRenderer.invoke(
-    "desktopLyrics.updateTime",
-    player.audio.currentTime * 1000,
-    !player.audio.paused
-  );
-
   // Re-send style from player.lyricStyle
   ipcRenderer.invoke(
     "desktopLyrics.updateStyle",

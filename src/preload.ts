@@ -4,6 +4,7 @@
 import { contextBridge } from "electron";
 
 import "./preload/channel";
+import "./preload/lyrics";
 import "./preload/desktopLyrics";
 
 import "./preload/calls/index";

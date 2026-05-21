@@ -1,14 +1,9 @@
-import type { LyricsData, LyricStyleConfig } from "$sharedTypes/lyrics";
+import type { LyricStyleConfig } from "$sharedTypes/desktop-lyrics";
 
 export interface DesktopLyricsContract {
   platform: NodeJS.Platform;
   events: {
-    lyricsUpdate(callback: (data: LyricsData | null) => void): void;
-    timeUpdate(
-      callback: (data: { currentTime: number; playing: boolean }) => void
-    ): void;
     styleUpdate(callback: (data: Partial<LyricStyleConfig>) => void): void;
-    playStateChange(callback: (playing: boolean) => void): void;
     setLocked(callback: (locked: boolean) => void): void;
   };
   requestFullUpdate(): Promise<void>;

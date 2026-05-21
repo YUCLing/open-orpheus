@@ -6,3 +6,4 @@ exposeApi("desktopLyrics", {
 exposeApi("inputRegion", {
   platform: process.platform,
 });
+exposeApi("lyrics");

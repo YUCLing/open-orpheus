@@ -1,21 +1,34 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Lyrics from "$lib/components/Lyrics.svelte";
-  import type { LyricsData, LyricStyleConfig } from "$sharedTypes/lyrics";
+  import type { LyricStyleConfig } from "$sharedTypes/desktop-lyrics";
+  import type {
+    LyricLine,
+    LyricsSloganUpdateEvent,
+    LyricsStore,
+    LyricsUpdateEvent,
+  } from "$sharedTypes/lyrics";
   import IconButton from "$lib/components/IconButton.svelte";
   import { cn } from "$lib/utils";
   import { getBridge } from "$lib/bridge";
   import type { DesktopLyricsContract } from "$bridge/contracts/desktop-lyrics-api";
   import { inputRegionAttachment } from "$lib/inputRegion";
+  import LyricsSynchronizer, { type RAFEvent } from "$lib/lyrics";
 
   const api = getBridge<DesktopLyricsContract>("desktopLyrics");
 
-  let lyricsData: LyricsData | null = $state(null);
+  let lyrics: LyricLine[] | null = $state(null);
+  let translateLyrics: LyricLine[] | null = $state(null);
+  let romaLyrics: LyricLine[] | null = $state(null);
+  let slogan: string | null = $state(null);
   let currentTime = $state(0);
   let playing = $state(false);
   let locked = $state(false);
-  let unlockButton: HTMLButtonElement | null = $state(null);
-  let rootEl: HTMLDivElement | null = $state(null);
+  let secondaryLyrics = $derived.by(() => {
+    if (lyricStyle.showTranslate === "translate") return translateLyrics;
+    if (lyricStyle.showTranslate === "roman") return romaLyrics;
+    return null;
+  });
 
   const items: ([string, string, string] | [string, string, string, true])[] =
     $derived([
@@ -46,35 +59,10 @@
     dropShadow: "0 2px 4px rgba(0,0,0,0.5)",
     showProgress: true,
     offset: 0,
-    slogan: "",
+    showTranslate: "translate",
   };
 
   let lyricStyle: LyricStyleConfig = $state({ ...defaultStyle });
-
-  // rAF time interpolation
-  let lastKnownTime = 0;
-  let lastUpdateTimestamp = 0;
-  let rafId: number | null = null;
-
-  function rafLoop() {
-    if (!playing) return;
-    const elapsed = performance.now() - lastUpdateTimestamp;
-    currentTime = lastKnownTime + elapsed;
-    rafId = requestAnimationFrame(rafLoop);
-  }
-
-  function startRaf() {
-    if (rafId !== null) return;
-    lastUpdateTimestamp = performance.now();
-    rafId = requestAnimationFrame(rafLoop);
-  }
-
-  function stopRaf() {
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-  }
 
   // svelte-ignore state_referenced_locally
   let previousVertical = lyricStyle.vertical;
@@ -86,34 +74,8 @@
   });
 
   onMount(() => {
-    api.events.lyricsUpdate((data) => {
-      lyricsData = data;
-    });
-
-    api.events.timeUpdate((data) => {
-      lastKnownTime = data.currentTime;
-      lastUpdateTimestamp = performance.now();
-      currentTime = data.currentTime;
-
-      if (data.playing !== playing) {
-        playing = data.playing;
-        if (playing) startRaf();
-        else stopRaf();
-      }
-    });
-
     api.events.styleUpdate((data) => {
       lyricStyle = { ...lyricStyle, ...data };
-    });
-
-    api.events.playStateChange((isPlaying) => {
-      playing = isPlaying;
-      if (playing) {
-        lastUpdateTimestamp = performance.now();
-        startRaf();
-      } else {
-        stopRaf();
-      }
     });
 
     api.events.setLocked((isLocked) => {
@@ -122,7 +84,47 @@
 
     api.requestFullUpdate();
 
-    return () => stopRaf();
+    const synchronizer = new LyricsSynchronizer();
+
+    const updateLyrics = (store: LyricsStore | null) => {
+      if (!store) {
+        lyrics = translateLyrics = romaLyrics = null;
+        return;
+      }
+      lyrics = store.regular;
+      translateLyrics = store.translate ?? null;
+      romaLyrics = store.roma ?? null;
+    };
+
+    updateLyrics(synchronizer.lyrics);
+
+    slogan = synchronizer.slogan;
+    currentTime = synchronizer.time;
+    playing = synchronizer.playState;
+
+    // TODO: ESLint says it's undefined
+    type EventListener = () => void;
+
+    synchronizer.addEventListener("lyricsupdate", ((e: LyricsUpdateEvent) => {
+      updateLyrics(e.detail);
+    }) as EventListener);
+
+    synchronizer.addEventListener("sloganupdate", ((
+      e: LyricsSloganUpdateEvent
+    ) => {
+      slogan = e.detail;
+    }) as EventListener);
+
+    synchronizer.addEventListener("raf", ((e: RAFEvent) => {
+      currentTime = e.detail.time * 1000;
+      playing = e.detail.playState;
+    }) as EventListener);
+
+    synchronizer.setRAFEnabled(true);
+
+    return () => {
+      synchronizer.setRAFEnabled(false);
+    };
   });
 
   function onDrag() {
@@ -133,7 +135,6 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  bind:this={rootEl}
   class={cn(
     "group flex h-screen w-screen items-center justify-evenly overflow-hidden rounded-lg p-2 select-none",
     !locked && "hover:bg-black/40"
@@ -151,7 +152,6 @@
   >
     {#if locked}
       <button
-        bind:this={unlockButton}
         class="size-12 cursor-pointer"
         onclick={() => api.performAction("unlock")}
         title="解锁桌面歌词"
@@ -181,9 +181,11 @@
     {/if}
   </div>
   <Lyrics
-    {lyricsData}
+    {lyrics}
+    {secondaryLyrics}
     {currentTime}
     {lyricStyle}
+    {slogan}
     class={lyricStyle.vertical ? "h-full" : "w-full"}
   />
 </div>

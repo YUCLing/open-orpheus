@@ -1,22 +1,23 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
 
-  import type {
-    LyricsData,
-    LyricLine,
-    LyricStyleConfig,
-  } from "$sharedTypes/lyrics";
+  import type { LyricLine } from "$sharedTypes/lyrics";
+  import type { LyricStyleConfig } from "$sharedTypes/desktop-lyrics";
 
   let {
-    lyricsData,
+    lyrics,
+    secondaryLyrics = null,
+    slogan = null,
     currentTime = 0,
     lyricStyle: style,
     class: className,
     ...rest
   }: {
-    lyricsData: LyricsData | null;
+    lyrics: LyricLine[] | null;
+    secondaryLyrics?: LyricLine[] | null;
     currentTime: number;
     lyricStyle: LyricStyleConfig;
+    slogan?: string | null;
   } & HTMLAttributes<HTMLDivElement> = $props();
 
   // Binary search for the current line index
@@ -39,7 +40,7 @@
 
   // Find a secondary line that overlaps with a given time
   function findSecondaryLine(
-    secondaryLines: LyricLine[] | undefined,
+    secondaryLines: LyricLine[] | null | undefined,
     time: number
   ): LyricLine | null {
     if (!secondaryLines || secondaryLines.length === 0) return null;
@@ -92,15 +93,13 @@
 
   let adjustedTime = $derived(currentTime + style.offset);
   let currentIdx = $derived(
-    lyricsData ? findCurrentLineIndex(lyricsData.lines, adjustedTime) : -1
+    lyrics ? findCurrentLineIndex(lyrics, adjustedTime) : -1
   );
 
   // In double-line mode without secondary lyrics, pair lines:
   // even-indexed lines display on row 1, odd-indexed on row 2.
   // This keeps the "next line" in place when it becomes current.
-  let hasSecondary = $derived(
-    lyricsData?.secondary_lines && lyricsData.secondary_lines.length > 0
-  );
+  let hasSecondary = $derived(secondaryLyrics && secondaryLyrics.length > 0);
 
   let upperIdx = $derived.by(() => {
     if (currentIdx < 0) return -1;
@@ -109,7 +108,7 @@
     // If next line doesn't exist, upper is empty (placeholder will fill)
     if (currentIdx % 2 === 0) return currentIdx;
     const nextIdx = currentIdx + 1;
-    return lyricsData && nextIdx < lyricsData.lines.length ? nextIdx : -1;
+    return lyrics && nextIdx < lyrics.length ? nextIdx : -1;
   });
 
   let lowerIdx = $derived.by(() => {
@@ -121,27 +120,27 @@
 
   // Lines to display
   let sloganLine: LyricLine | null = $derived(
-    !lyricsData && style.slogan
+    !lyrics && slogan
       ? {
           start_time: 0,
           end_time: Infinity,
-          words: [{ text: style.slogan, start_time: 0, duration: 0 }],
+          words: [{ text: slogan, start_time: 0, duration: 0 }],
         }
       : null
   );
 
   let primaryLine = $derived(
-    lyricsData && upperIdx >= 0 ? lyricsData.lines[upperIdx] : sloganLine
+    lyrics && upperIdx >= 0 ? lyrics[upperIdx] : sloganLine
   );
 
   let secondaryLine = $derived.by(() => {
-    if (!lyricsData) return null;
+    if (!lyrics) return null;
     // Always try to find a matching secondary (translation) line
-    const secLine = findSecondaryLine(lyricsData.secondary_lines, adjustedTime);
+    const secLine = findSecondaryLine(secondaryLyrics, adjustedTime);
     if (secLine) return secLine;
     // In double-line mode with no secondary, show the paired line
-    if (!style.lineMode && lowerIdx >= 0 && lyricsData.lines[lowerIdx]) {
-      return lyricsData.lines[lowerIdx];
+    if (!style.lineMode && lowerIdx >= 0 && lyrics[lowerIdx]) {
+      return lyrics[lowerIdx];
     }
     return null;
   });
@@ -277,7 +276,7 @@
   );
 </script>
 
-{#if lyricsData || style.slogan}
+{#if lyrics || slogan}
   <div
     class="flex justify-center gap-1 overflow-hidden p-2 {style.vertical
       ? 'flex-row-reverse'

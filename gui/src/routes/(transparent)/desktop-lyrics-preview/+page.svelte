@@ -1,13 +1,17 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import Lyrics from "$lib/components/Lyrics.svelte";
-  import type { LyricsData, LyricStyleConfig } from "$sharedTypes/lyrics";
+  import type { LyricLine } from "$sharedTypes/lyrics";
+  import type { LyricStyleConfig } from "$sharedTypes/desktop-lyrics";
   import { getBridge } from "$lib/bridge";
   import type { DesktopLyricsPreviewContract } from "$bridge/contracts/desktop-lyrics-api";
 
   const api = getBridge<DesktopLyricsPreviewContract>("desktopLyricsPreview");
 
-  function buildLyricsData(text: string): LyricsData {
+  function buildLyricsData(text: string): {
+    lines: LyricLine[];
+    secondaryLines: LyricLine[] | null;
+  } {
     return {
       lines: [
         {
@@ -21,10 +25,11 @@
           words: [{ text, start_time: 0, duration: 10000 }],
         },
       ],
+      secondaryLines: null,
     };
   }
 
-  let lyricsData: LyricsData = $state(buildLyricsData("Preview"));
+  let lyricsData = $state(buildLyricsData("Preview"));
 
   const defaultStyle: LyricStyleConfig = {
     fontFamily: "sans-serif",
@@ -42,7 +47,7 @@
     dropShadow: "0 2px 4px rgba(0,0,0,0.5)",
     showProgress: true,
     offset: 0,
-    slogan: "",
+    showTranslate: "translate",
   };
 
   let lyricStyle: LyricStyleConfig = $state({ ...defaultStyle });
@@ -74,7 +79,6 @@
       ...style,
       offset: 0,
       showProgress: true,
-      slogan: "",
     };
     await tick();
     fitScale();
@@ -90,6 +94,11 @@
     bind:this={lyricsEl}
     style="transform: scale({scale}); transform-origin: center center;"
   >
-    <Lyrics {lyricsData} {currentTime} {lyricStyle} />
+    <Lyrics
+      lyrics={lyricsData.lines}
+      secondaryLyrics={lyricsData.secondaryLines}
+      {currentTime}
+      {lyricStyle}
+    />
   </div>
 </div>

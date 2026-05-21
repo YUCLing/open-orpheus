@@ -1,5 +1,7 @@
 import { ipcRenderer } from "electron";
 
+import type { ShowTranslate } from "$sharedTypes/desktop-lyrics";
+
 import { player } from "../audioplayer";
 import type { TextAlignType } from "../Player";
 import { registerCallHandler } from "../calls";
@@ -64,7 +66,7 @@ registerCallHandler<[boolean], [boolean]>(
   }
 );
 
-registerCallHandler<["translate" | "roman"], [boolean]>(
+registerCallHandler<[ShowTranslate], [boolean]>(
   "player.showTranslateLyric",
   (mode) => {
     player.lyricStyle.showTranslate = mode;
@@ -120,30 +122,6 @@ registerCallHandler<[string, string, string], [boolean]>(
 
 registerCallHandler<[boolean], [boolean]>("player.setLock", (locked) => {
   player.lyricStyle.locked = locked;
-  return [true];
-});
-
-registerCallHandler<[string], [boolean]>("player.setLRCSlogan", (slogan) => {
-  player.lyricStyle.slogan = slogan;
-  if (slogan) player.lyricContent = null;
-  return [true];
-});
-
-registerCallHandler<
-  [
-    {
-      krc: string;
-      lrc: string;
-      romalrc: string;
-      tlrc: string;
-      yrc: string;
-      // No lyric = empty string
-    },
-  ],
-  [boolean]
->("player.setLyrics", (lyricContent) => {
-  player.lyricContent = lyricContent;
-  if (lyricContent.lrc) player.lyricStyle.slogan = "";
   return [true];
 });
 

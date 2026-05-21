@@ -1,8 +1,11 @@
+import { LyricsStore } from "$sharedTypes/lyrics";
 import {
   MiniPlayerLikeMark,
   MiniPlayerTogetherStatus,
 } from "$sharedTypes/mini-player";
 import { registerCallHandler } from "../calls";
+import { lyricsDispatcher } from "../lyrics";
+import { parseLrc } from "../lyrics/parse";
 import {
   updatePlayInfo,
   updateCoverUrl,
@@ -124,6 +127,45 @@ registerCallHandler<[number, boolean], [boolean]>(
   "player.showVolume",
   (event, volume, muted) => {
     showVolume(volume, muted);
+    return [true];
+  }
+);
+
+registerCallHandler<
+  [
+    {
+      krc: string;
+      lrc: string;
+      romalrc: string;
+      tlrc: string;
+      yrc: string;
+      // No lyric = empty string
+    },
+  ],
+  [boolean]
+>("player.setLyrics", (event, lyricContent) => {
+  const { lrc, tlrc, romalrc } = lyricContent;
+  if (!lrc.trim()) {
+    lyricsDispatcher.lyrics = null;
+    return [true];
+  }
+  const lyrics: LyricsStore = {
+    regular: parseLrc(lrc),
+  };
+  if (tlrc.trim()) {
+    lyrics.translate = parseLrc(tlrc);
+  }
+  if (romalrc.trim()) {
+    lyrics.roma = parseLrc(romalrc);
+  }
+  lyricsDispatcher.lyrics = lyrics;
+  return [true];
+});
+
+registerCallHandler<[string], [boolean]>(
+  "player.setLRCSlogan",
+  (event, slogan) => {
+    lyricsDispatcher.slogan = slogan;
     return [true];
   }
 );
