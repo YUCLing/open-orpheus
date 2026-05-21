@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   dialog,
+  Menu,
   protocol,
   screen,
   session,
@@ -83,6 +84,10 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.setPath("userData", userdataDir);
+
+// Tell Electron we don't need a menu before Electron tries to create one,
+// this benefits the startup
+Menu.setApplicationMenu(null);
 
 const createWindow = () => {
   // Create the browser window.
