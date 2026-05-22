@@ -104,44 +104,104 @@ fn forward_msg(from: RawFd, to: RawFd, is_event: bool, app_fd: RawFd, proto: Pro
 
     let data = &mut buf[..n as usize];
 
-    let mut out_data = match proto {
+    let cmsg_ptr = msg.msg_control;
+    let cmsg_len = msg.msg_controllen;
+    let cmsg_has_data = cmsg_len > 0 && !cmsg_ptr.is_null();
+
+    let (out_data, ctrl_data, close_fds) = match proto {
         Protocol::Wayland => {
-            if is_event {
-                super::wayland::feed_inbound(app_fd, data)
+            let cmsg_slice = if cmsg_has_data {
+                let cmsg_bytes =
+                    unsafe { std::slice::from_raw_parts(cmsg_ptr as *const u8, cmsg_len as usize) };
+                let mut fds = Vec::new();
+                let msg_for_scan = libc::msghdr {
+                    msg_name: std::ptr::null_mut(),
+                    msg_namelen: 0,
+                    msg_iov: std::ptr::null_mut(),
+                    msg_iovlen: 0,
+                    msg_control: cmsg_ptr,
+                    msg_controllen: cmsg_len,
+                    msg_flags: 0,
+                };
+                unsafe {
+                    let mut cmsg = libc::CMSG_FIRSTHDR(&msg_for_scan);
+                    while !cmsg.is_null() {
+                        if (*cmsg).cmsg_level == libc::SOL_SOCKET
+                            && (*cmsg).cmsg_type == libc::SCM_RIGHTS
+                        {
+                            let fd_ptr = libc::CMSG_DATA(cmsg) as *const c_int;
+                            let header_len = (fd_ptr as usize) - (cmsg as usize);
+                            if (*cmsg).cmsg_len as usize > header_len {
+                                let data_len = (*cmsg).cmsg_len as usize - header_len;
+                                let fd_count = data_len / std::mem::size_of::<c_int>();
+                                for i in 0..fd_count {
+                                    fds.push(*fd_ptr.add(i));
+                                }
+                            }
+                        }
+                        cmsg = libc::CMSG_NXTHDR(&msg_for_scan, cmsg);
+                    }
+                }
+                Some((cmsg_bytes, fds))
             } else {
-                super::wayland::feed_outbound(app_fd, data)
+                None
+            };
+            if is_event {
+                super::wayland::feed_inbound(app_fd, data, cmsg_slice)
+            } else {
+                super::wayland::feed_outbound(app_fd, data, cmsg_slice)
             }
         }
         Protocol::X11 => {
-            if is_event {
+            // X11 doesn't use ancillary data in the same way - no control data to track
+            let out = if is_event {
                 super::x11::feed_inbound(app_fd, data)
             } else {
                 super::x11::feed_outbound(app_fd, data)
-            }
+            };
+            (out, Vec::new(), Vec::new())
         }
     };
 
-    let cmsg_ptr = msg.msg_control;
-    let cmsg_len = msg.msg_controllen;
+    if out_data.is_empty() {
+        for fd in close_fds {
+            if fd >= 0 {
+                call_close(fd);
+            }
+        }
+        return true;
+    }
 
-    if !out_data.is_empty() || cmsg_len > 0 {
-        msg.msg_iovlen = 1;
+    let mut total_sent = 0;
+    while total_sent < out_data.len() {
+        let remaining = &out_data[total_sent..];
         let mut iov_out = libc::iovec {
-            iov_base: out_data.as_mut_ptr() as *mut c_void,
-            iov_len: out_data.len(),
+            iov_base: remaining.as_ptr() as *mut c_void,
+            iov_len: remaining.len(),
         };
         msg.msg_iov = &mut iov_out;
+        msg.msg_iovlen = 1;
 
-        let mut total_sent = 0;
-        while total_sent < out_data.len() || (out_data.is_empty() && total_sent == 0) {
-            if total_sent > 0 {
-                msg.msg_control = std::ptr::null_mut();
-                msg.msg_controllen = 0;
+        if !ctrl_data.is_empty() && total_sent == 0 {
+            let mut ctrl_slice: libc::msghdr = msg;
+            ctrl_slice.msg_control = ctrl_data.as_ptr() as *mut c_void;
+            ctrl_slice.msg_controllen = ctrl_data.len();
+
+            let sent = loop {
+                let ret = unsafe { libc::sendmsg(to, &ctrl_slice, libc::MSG_NOSIGNAL) };
+                if ret < 0 && unsafe { *libc::__errno_location() } == libc::EINTR {
+                    continue;
+                }
+                break ret;
+            };
+
+            if sent <= 0 {
+                break;
             }
-
-            let remaining = &out_data[total_sent..];
-            iov_out.iov_base = remaining.as_ptr() as *mut c_void;
-            iov_out.iov_len = remaining.len();
+            total_sent += sent as usize;
+        } else {
+            msg.msg_control = std::ptr::null_mut();
+            msg.msg_controllen = 0;
 
             let sent = loop {
                 let ret = unsafe { libc::sendmsg(to, &msg, libc::MSG_NOSIGNAL) };
@@ -155,42 +215,12 @@ fn forward_msg(from: RawFd, to: RawFd, is_event: bool, app_fd: RawFd, proto: Pro
                 break;
             }
             total_sent += sent as usize;
-
-            if out_data.is_empty() {
-                break;
-            }
         }
     }
 
-    if cmsg_len > 0 && !cmsg_ptr.is_null() {
-        let msg_for_close = libc::msghdr {
-            msg_name: std::ptr::null_mut(),
-            msg_namelen: 0,
-            msg_iov: std::ptr::null_mut(),
-            msg_iovlen: 0,
-            msg_control: cmsg_ptr,
-            msg_controllen: cmsg_len,
-            msg_flags: 0,
-        };
-        unsafe {
-            let mut cmsg = libc::CMSG_FIRSTHDR(&msg_for_close);
-            while !cmsg.is_null() {
-                if (*cmsg).cmsg_level == libc::SOL_SOCKET && (*cmsg).cmsg_type == libc::SCM_RIGHTS {
-                    let fd_ptr = libc::CMSG_DATA(cmsg) as *mut c_int;
-                    let header_len = (fd_ptr as usize) - (cmsg as usize);
-                    if (*cmsg).cmsg_len as usize > header_len {
-                        let data_len = (*cmsg).cmsg_len as usize - header_len;
-                        let fd_count = data_len / std::mem::size_of::<c_int>();
-                        for i in 0..fd_count {
-                            let fd = *fd_ptr.add(i);
-                            if fd >= 0 {
-                                call_close(fd);
-                            }
-                        }
-                    }
-                }
-                cmsg = libc::CMSG_NXTHDR(&msg_for_close, cmsg);
-            }
+    for fd in close_fds {
+        if fd >= 0 {
+            call_close(fd);
         }
     }
 

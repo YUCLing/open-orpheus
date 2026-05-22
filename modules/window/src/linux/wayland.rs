@@ -114,6 +114,24 @@ static LAST_BUTTON: OnceLock<Mutex<Option<(RawFd, u32, u32, u32)>>> = OnceLock::
 static RX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
 static TX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
 
+#[derive(Default)]
+struct PendingControl {
+    bytes: Vec<u8>,
+    fds: Vec<RawFd>,
+}
+
+fn close_pending_control(pending: PendingControl) {
+    for fd in pending.fds {
+        super::hook::call_close(fd);
+    }
+}
+
+// Pending control data (SCM_RIGHTS) stored alongside incomplete messages.
+// Control data is semantically attached to a specific Wayland message on the same
+// recvmsg boundary, so it must not be forwarded without the complete message.
+static RX_PENDING_CTRL: OnceLock<Mutex<HashMap<RawFd, PendingControl>>> = OnceLock::new();
+static TX_PENDING_CTRL: OnceLock<Mutex<HashMap<RawFd, PendingControl>>> = OnceLock::new();
+
 // Custom window ID map tracking user-assigned IDs via setTitle("\u{200B}\u{200C}<id>")
 static CUSTOM_ID_MAP: OnceLock<Mutex<HashMap<String, (RawFd, u32)>>> = OnceLock::new();
 
@@ -221,27 +239,42 @@ fn parse_wl_str(buf: &[u8], offset: usize) -> Option<(&str, usize)> {
 
 // ── Stream reassembly ─────────────────────────────────────────────────────
 
-pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
-    feed(fd, chunk, &RX_BUFS, true)
+pub(crate) fn feed_inbound(
+    fd: RawFd,
+    chunk: &[u8],
+    cmsg: Option<(&[u8], Vec<RawFd>)>,
+) -> (Vec<u8>, Vec<u8>, Vec<RawFd>) {
+    feed(fd, chunk, &RX_BUFS, &RX_PENDING_CTRL, true, cmsg)
 }
 
-pub(crate) fn feed_outbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
-    feed(fd, chunk, &TX_BUFS, false)
+pub(crate) fn feed_outbound(
+    fd: RawFd,
+    chunk: &[u8],
+    cmsg: Option<(&[u8], Vec<RawFd>)>,
+) -> (Vec<u8>, Vec<u8>, Vec<RawFd>) {
+    feed(fd, chunk, &TX_BUFS, &TX_PENDING_CTRL, false, cmsg)
 }
 
 fn feed(
     fd: RawFd,
     chunk: &[u8],
     storage: &OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>>,
+    ctrl_storage: &OnceLock<Mutex<HashMap<RawFd, PendingControl>>>,
     is_event: bool,
-) -> Vec<u8> {
-    let Some(storage) = storage.get() else {
-        return chunk.to_vec();
+    cmsg: Option<(&[u8], Vec<RawFd>)>,
+) -> (Vec<u8>, Vec<u8>, Vec<RawFd>) {
+    let (new_ctrl_bytes, new_ctrl_fds) = match cmsg {
+        Some((bytes, fds)) => (bytes.to_vec(), fds),
+        None => (Vec::new(), Vec::new()),
     };
 
-    let (msgs, sync_lost) = {
+    let Some(storage) = storage.get() else {
+        return (chunk.to_vec(), new_ctrl_bytes, new_ctrl_fds);
+    };
+
+    let (msgs, sync_lost, mut pending_ctrl) = {
         let Ok(mut map) = storage.lock() else {
-            return chunk.to_vec();
+            return (chunk.to_vec(), new_ctrl_bytes, new_ctrl_fds);
         };
         let buf = map.entry(fd).or_default();
         buf.extend_from_slice(chunk);
@@ -262,9 +295,19 @@ fn feed(
         if sync_lost {
             buf.clear();
         }
-        (msgs, sync_lost)
+
+        let mut pending_ctrl = PendingControl::default();
+        if let Some(m) = ctrl_storage.get()
+            && let Ok(mut ctrl_map) = m.lock()
+            && let Some(stored) = ctrl_map.remove(&fd)
+        {
+            pending_ctrl = stored;
+        }
+
+        (msgs, sync_lost, pending_ctrl)
     };
 
+    let had_complete_msgs = !msgs.is_empty();
     let mut out = Vec::new();
     for (oid, op, msg) in msgs {
         if is_event {
@@ -282,6 +325,9 @@ fn feed(
         out.extend_from_slice(&msg);
     }
 
+    pending_ctrl.bytes.extend_from_slice(&new_ctrl_bytes);
+    pending_ctrl.fds.extend(new_ctrl_fds);
+
     if sync_lost {
         clear_first_cursor_enter_watchers_for_fd(fd);
         if let Some(m) = CONNS.get()
@@ -290,9 +336,33 @@ fn feed(
         {
             conn.reset_tracking();
         }
+        let PendingControl { bytes: _, fds } = pending_ctrl;
+        return (Vec::new(), Vec::new(), fds);
     }
 
-    out
+    if !had_complete_msgs {
+        if pending_ctrl.bytes.is_empty() && pending_ctrl.fds.is_empty() {
+            return (Vec::new(), Vec::new(), Vec::new());
+        }
+
+        if let Some(m) = ctrl_storage.get()
+            && let Ok(mut ctrl_map) = m.lock()
+        {
+            ctrl_map.insert(fd, pending_ctrl);
+            return (Vec::new(), Vec::new(), Vec::new());
+        }
+
+        let PendingControl { bytes, fds } = pending_ctrl;
+        return (chunk.to_vec(), bytes, fds);
+    }
+
+    if out.is_empty() {
+        let PendingControl { bytes: _, fds } = pending_ctrl;
+        return (Vec::new(), Vec::new(), fds);
+    }
+
+    let PendingControl { bytes, fds } = pending_ctrl;
+    (out, bytes, fds)
 }
 
 fn should_suppress_inbound(fd: RawFd, oid: u32, op: u16, msg: &[u8]) -> bool {
@@ -648,6 +718,20 @@ pub(crate) fn on_close(fd: RawFd) {
     if let Some(m) = TX_BUFS.get() {
         let _ = m.lock().map(|mut g| g.remove(&fd));
     }
+    if let Some(m) = RX_PENDING_CTRL.get() {
+        if let Ok(mut g) = m.lock()
+            && let Some(pending) = g.remove(&fd)
+        {
+            close_pending_control(pending);
+        }
+    }
+    if let Some(m) = TX_PENDING_CTRL.get() {
+        if let Ok(mut g) = m.lock()
+            && let Some(pending) = g.remove(&fd)
+        {
+            close_pending_control(pending);
+        }
+    }
     if let Some(m) = CUSTOM_ID_MAP.get()
         && let Ok(mut map) = m.lock()
     {
@@ -841,6 +925,8 @@ pub(crate) fn init_state() {
     CUSTOM_ID_MAP.get_or_init(|| Mutex::new(HashMap::new()));
     RX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
     TX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
+    RX_PENDING_CTRL.get_or_init(|| Mutex::new(HashMap::new()));
+    TX_PENDING_CTRL.get_or_init(|| Mutex::new(HashMap::new()));
     NEXT_TOPLEVEL_CURSOR_ENTER.get_or_init(|| Mutex::new(Vec::new()));
     CURSOR_ENTER_WATCHERS.get_or_init(|| Mutex::new(HashMap::new()));
 }
@@ -870,6 +956,20 @@ pub(crate) fn clear_state() {
         && let Ok(mut map) = m.lock()
     {
         map.clear();
+    }
+    if let Some(m) = RX_PENDING_CTRL.get()
+        && let Ok(mut map) = m.lock()
+    {
+        for pending in map.drain().map(|(_, pending)| pending) {
+            close_pending_control(pending);
+        }
+    }
+    if let Some(m) = TX_PENDING_CTRL.get()
+        && let Ok(mut map) = m.lock()
+    {
+        for pending in map.drain().map(|(_, pending)| pending) {
+            close_pending_control(pending);
+        }
     }
     if let Some(m) = NEXT_TOPLEVEL_CURSOR_ENTER.get()
         && let Ok(mut cbs) = m.lock()
