@@ -6,8 +6,9 @@ import { getBridge } from "./bridge";
 
 const api = getBridge<InputRegionContract>("inputRegion");
 const inputRegionElements: Element[] = [];
-const observer =
-  api.platform === "linux" ? new ResizeObserver(refreshInputRegion) : null;
+
+let rAFId: number | null = null;
+const cachedBounds: number[] = [];
 
 export async function refreshInputRegion() {
   if (api.platform === "linux") {
@@ -35,30 +36,82 @@ export async function refreshInputRegion() {
   }
 }
 
+function tick() {
+  const len = inputRegionElements.length;
+  let cacheIdx = 0;
+  let anyChanged = false;
+
+  for (let i = 0; i < len; i++) {
+    const rect = inputRegionElements[i].getBoundingClientRect();
+
+    if (
+      cachedBounds[cacheIdx] !== rect.top ||
+      cachedBounds[cacheIdx + 1] !== rect.left ||
+      cachedBounds[cacheIdx + 2] !== rect.width ||
+      cachedBounds[cacheIdx + 3] !== rect.height
+    ) {
+      cachedBounds[cacheIdx] = rect.top;
+      cachedBounds[cacheIdx + 1] = rect.left;
+      cachedBounds[cacheIdx + 2] = rect.width;
+      cachedBounds[cacheIdx + 3] = rect.height;
+      anyChanged = true;
+    }
+    cacheIdx += 4;
+  }
+
+  rAFId = requestAnimationFrame(tick);
+
+  if (anyChanged) {
+    refreshInputRegion();
+  }
+}
+
 export function addInputRegion(el: Element) {
   inputRegionElements.push(el);
-  if (api.platform !== "linux" && el instanceof HTMLElement) {
+
+  if (api.platform === "linux") {
+    const rect = el.getBoundingClientRect();
+    cachedBounds.push(rect.top, rect.left, rect.width, rect.height);
+
+    if (rAFId === null) {
+      rAFId = requestAnimationFrame(tick);
+    }
+  } else if (el instanceof HTMLElement) {
     el.addEventListener("mouseenter", refreshInputRegion);
     el.addEventListener("mouseleave", refreshInputRegion);
   }
+
   refreshInputRegion();
 }
 
 export function removeInputRegion(el: Element) {
-  inputRegionElements.splice(inputRegionElements.indexOf(el), 1);
-  if (api.platform !== "linux" && el instanceof HTMLElement) {
-    el.removeEventListener("mouseenter", refreshInputRegion);
-    el.removeEventListener("mouseleave", refreshInputRegion);
+  const index = inputRegionElements.indexOf(el);
+  if (index > -1) {
+    if (api.platform === "linux") {
+      cachedBounds.splice(index * 4, 4);
+    }
+    inputRegionElements.splice(index, 1);
   }
+
+  if (api.platform === "linux") {
+    if (rAFId && inputRegionElements.length === 0) {
+      cancelAnimationFrame(rAFId);
+      rAFId = null;
+    }
+  } else {
+    if (el instanceof HTMLElement) {
+      el.removeEventListener("mouseenter", refreshInputRegion);
+      el.removeEventListener("mouseleave", refreshInputRegion);
+    }
+  }
+
   refreshInputRegion();
 }
 
 export const inputRegionAttachment: Attachment = (element) => {
   addInputRegion(element);
-  observer?.observe(element);
   return () => {
     removeInputRegion(element);
-    observer?.unobserve(element);
   };
 };
 
@@ -67,6 +120,6 @@ api.events.shown(async () => {
   // actually shown.
   for (let i = 0; i < 5; i++) {
     if (await refreshInputRegion()) return;
-    await new Promise((r) => setTimeout(r, (i + 1) * 50));
+    await new Promise((r) => setTimeout(r, (i + 1) * 100));
   }
 });
