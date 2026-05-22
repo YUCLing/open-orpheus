@@ -7,6 +7,8 @@ use std::{
 
 use libc::{AF_UNIX, c_void, sa_family_t, sockaddr, sockaddr_un};
 
+const X11_BUFFER_LIMIT: usize = 4 * 1024 * 1024;
+
 #[derive(PartialEq)]
 enum State {
     Setup,
@@ -26,6 +28,9 @@ struct X11Conn {
     rx_state: State,
     tx_buf: Vec<u8>,
     rx_buf: Vec<u8>,
+    tx_stream_remaining: usize,
+    rx_stream_remaining: usize,
+    rx_stream_drop: bool,
     is_le: bool,
     client_seq: u16,
     server_seq: u16,
@@ -48,6 +53,9 @@ impl X11Conn {
             rx_state: State::Setup,
             tx_buf: Vec::new(),
             rx_buf: Vec::new(),
+            tx_stream_remaining: 0,
+            rx_stream_remaining: 0,
+            rx_stream_drop: false,
             is_le: true,
             client_seq: 0,
             server_seq: 0,
@@ -62,6 +70,14 @@ impl X11Conn {
             button: 1, // Default to Left Click
         }
     }
+}
+
+fn checked_word_len(words: usize) -> Option<usize> {
+    words.checked_mul(4)
+}
+
+fn log_parser_close(fd: RawFd, direction: &str, reason: &str, buffered: usize) {
+    eprintln!("[proxy:x11] closing {direction} stream for fd {fd}: {reason}; buffered={buffered}");
 }
 
 static IS_X11: OnceLock<bool> = OnceLock::new();
@@ -104,20 +120,37 @@ fn update_last_active_fd(fd: RawFd) {
     }
 }
 
-pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
+pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Option<Vec<u8>> {
     update_last_active_fd(fd);
     let Some(m) = X11_CONNS.get() else {
-        return chunk.to_vec();
+        return Some(chunk.to_vec());
     };
     let Ok(mut map) = m.lock() else {
-        return chunk.to_vec();
+        return Some(chunk.to_vec());
     };
     let Some(conn) = map.get_mut(&fd) else {
-        return chunk.to_vec();
+        return Some(chunk.to_vec());
     };
 
     let mut out = Vec::new();
-    conn.rx_buf.extend_from_slice(chunk);
+    let mut chunk_off = 0;
+    if conn.rx_stream_remaining > 0 {
+        let n = conn.rx_stream_remaining.min(chunk.len());
+        if !conn.rx_stream_drop {
+            out.extend_from_slice(&chunk[..n]);
+        }
+        conn.rx_stream_remaining -= n;
+        if conn.rx_stream_remaining == 0 {
+            conn.rx_stream_drop = false;
+        }
+        chunk_off = n;
+    }
+
+    if chunk_off == chunk.len() {
+        return Some(out);
+    }
+
+    conn.rx_buf.extend_from_slice(&chunk[chunk_off..]);
 
     let mut off = 0;
     while off < conn.rx_buf.len() {
@@ -156,15 +189,27 @@ pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
             let is_reply_or_error = code == 0 || code == 1;
 
             let total = match code & 0x7F {
-                1 | 35 => 32 + (r32(&conn.rx_buf[off + 4..off + 8], conn.is_le) as usize) * 4,
+                1 | 35 => {
+                    let Some(extra) =
+                        checked_word_len(r32(&conn.rx_buf[off + 4..off + 8], conn.is_le) as usize)
+                    else {
+                        log_parser_close(fd, "inbound", "server message length overflow", 0);
+                        return None;
+                    };
+                    let Some(total) = 32usize.checked_add(extra) else {
+                        log_parser_close(fd, "inbound", "server message length overflow", 0);
+                        return None;
+                    };
+                    total
+                }
                 _ => 32,
             };
-            if conn.rx_buf.len() - off < total {
+            let inspect_len = if code & 0x7F == 35 { total.min(40) } else { 32 };
+            if conn.rx_buf.len() - off < inspect_len {
                 break;
             }
 
-            let mut msg = conn.rx_buf[off..off + total].to_vec();
-            let seq = r16(&msg[2..4], conn.is_le);
+            let seq = r16(&conn.rx_buf[off + 2..off + 4], conn.is_le);
             let mut drop = false;
 
             if is_reply_or_error && let Some(inj_type) = conn.injected_seqs.remove(&seq) {
@@ -172,12 +217,13 @@ pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
                 if code == 1 {
                     match inj_type {
                         InjectedType::InternAtomNetWmMoveresize => {
-                            conn.net_wm_moveresize = Some(r32(&msg[8..12], conn.is_le));
+                            conn.net_wm_moveresize =
+                                Some(r32(&conn.rx_buf[off + 8..off + 12], conn.is_le));
                         }
                         InjectedType::QueryExtensionShape => {
-                            let present = msg[8] != 0;
+                            let present = conn.rx_buf[off + 8] != 0;
                             if present {
-                                conn.shape_opcode = Some(msg[9]);
+                                conn.shape_opcode = Some(conn.rx_buf[off + 9]);
                             }
                         }
                         _ => {}
@@ -185,8 +231,12 @@ pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
                 }
             }
 
+            let available = conn.rx_buf.len() - off;
+            let forward_len = available.min(total);
+            let out_start = out.len();
             if !drop {
                 let evt_code = code & 0x7F;
+                out.extend_from_slice(&conn.rx_buf[off..off + forward_len]);
 
                 if evt_code != 11 {
                     // KeymapNotify is unsequenced
@@ -198,56 +248,78 @@ pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
                     }
                     if applied_offset > 0 {
                         let new_seq = seq.wrapping_sub(applied_offset);
-                        write_u16(&mut msg[2..4], new_seq, conn.is_le);
+                        write_u16(&mut out[out_start + 2..out_start + 4], new_seq, conn.is_le);
                     }
                 }
 
                 if evt_code == 4 || evt_code == 5 || evt_code == 6 {
-                    conn.root_window = r32(&msg[8..12], conn.is_le);
+                    conn.root_window = r32(&conn.rx_buf[off + 8..off + 12], conn.is_le);
                     if evt_code == 4 {
-                        conn.button = msg[1];
-                        conn.root_x = r16(&msg[20..22], conn.is_le) as i16;
-                        conn.root_y = r16(&msg[22..24], conn.is_le) as i16;
+                        conn.button = conn.rx_buf[off + 1];
+                        conn.root_x = r16(&conn.rx_buf[off + 20..off + 22], conn.is_le) as i16;
+                        conn.root_y = r16(&conn.rx_buf[off + 22..off + 24], conn.is_le) as i16;
                     }
-                } else if evt_code == 35 && msg.len() >= 40 {
-                    let evtype = r16(&msg[8..10], conn.is_le);
+                } else if evt_code == 35 && inspect_len >= 40 {
+                    let evtype = r16(&conn.rx_buf[off + 8..off + 10], conn.is_le);
                     if evtype == 4 || evtype == 5 || evtype == 6 {
-                        conn.root_window = r32(&msg[20..24], conn.is_le);
+                        conn.root_window = r32(&conn.rx_buf[off + 20..off + 24], conn.is_le);
                         if evtype == 4 {
-                            conn.button = r32(&msg[16..20], conn.is_le) as u8;
-                            let rx_fp = r32(&msg[32..36], conn.is_le) as i32;
-                            let ry_fp = r32(&msg[36..40], conn.is_le) as i32;
+                            conn.button = r32(&conn.rx_buf[off + 16..off + 20], conn.is_le) as u8;
+                            let rx_fp = r32(&conn.rx_buf[off + 32..off + 36], conn.is_le) as i32;
+                            let ry_fp = r32(&conn.rx_buf[off + 36..off + 40], conn.is_le) as i32;
                             conn.root_x = (rx_fp >> 16) as i16;
                             conn.root_y = (ry_fp >> 16) as i16;
                         }
                     }
                 }
-                out.extend_from_slice(&msg);
             }
-            off += total;
+
+            if forward_len < total {
+                conn.rx_stream_remaining = total - forward_len;
+                conn.rx_stream_drop = drop;
+            }
+            off += forward_len;
         }
     }
     conn.rx_buf.drain(..off);
-    if conn.rx_buf.len() > 4 * 1024 * 1024 {
-        conn.rx_buf.clear();
+    if conn.rx_buf.len() > X11_BUFFER_LIMIT {
+        log_parser_close(
+            fd,
+            "inbound",
+            "buffer exceeded hard limit before a full X11 frame was inspectable",
+            conn.rx_buf.len(),
+        );
+        return None;
     }
-    out
+    Some(out)
 }
 
-pub(crate) fn feed_outbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
+pub(crate) fn feed_outbound(fd: RawFd, chunk: &[u8]) -> Option<Vec<u8>> {
     update_last_active_fd(fd);
     let Some(m) = X11_CONNS.get() else {
-        return chunk.to_vec();
+        return Some(chunk.to_vec());
     };
     let Ok(mut map) = m.lock() else {
-        return chunk.to_vec();
+        return Some(chunk.to_vec());
     };
     let Some(conn) = map.get_mut(&fd) else {
-        return chunk.to_vec();
+        return Some(chunk.to_vec());
     };
 
     let mut out = Vec::new();
-    conn.tx_buf.extend_from_slice(chunk);
+    let mut chunk_off = 0;
+    if conn.tx_stream_remaining > 0 {
+        let n = conn.tx_stream_remaining.min(chunk.len());
+        out.extend_from_slice(&chunk[..n]);
+        conn.tx_stream_remaining -= n;
+        chunk_off = n;
+    }
+
+    if chunk_off == chunk.len() {
+        return Some(out);
+    }
+
+    conn.tx_buf.extend_from_slice(&chunk[chunk_off..]);
 
     let mut off = 0;
     while off < conn.tx_buf.len() {
@@ -305,23 +377,46 @@ pub(crate) fn feed_outbound(fd: RawFd, chunk: &[u8]) -> Vec<u8> {
                 words = r32(&conn.tx_buf[off + 4..off + 8], conn.is_le) as usize;
                 hdr = 8;
             }
-            let total = words * 4;
-            if total < hdr || conn.tx_buf.len() - off < total {
+            let Some(total) = checked_word_len(words) else {
+                log_parser_close(fd, "outbound", "client request length overflow", 0);
+                return None;
+            };
+            if total < hdr {
+                log_parser_close(
+                    fd,
+                    "outbound",
+                    "client request length is shorter than its header",
+                    conn.tx_buf.len() - off,
+                );
+                return None;
+            }
+            if conn.tx_buf.len() - off < total && total <= X11_BUFFER_LIMIT {
                 break;
             }
 
             conn.client_seq = conn.client_seq.wrapping_add(1);
             conn.server_seq = conn.server_seq.wrapping_add(1);
-            out.extend_from_slice(&conn.tx_buf[off..off + total]);
-            off += total;
+            let available = conn.tx_buf.len() - off;
+            let forward_len = available.min(total);
+            out.extend_from_slice(&conn.tx_buf[off..off + forward_len]);
+            if forward_len < total {
+                conn.tx_stream_remaining = total - forward_len;
+            }
+            off += forward_len;
         }
     }
 
     conn.tx_buf.drain(..off);
-    if conn.tx_buf.len() > 4 * 1024 * 1024 {
-        conn.tx_buf.clear();
+    if conn.tx_buf.len() > X11_BUFFER_LIMIT {
+        log_parser_close(
+            fd,
+            "outbound",
+            "buffer exceeded hard limit before a full X11 frame was inspectable",
+            conn.tx_buf.len(),
+        );
+        return None;
     }
-    out
+    Some(out)
 }
 
 pub(crate) fn is_x11_socket(addr: *const c_void, addrlen: u32) -> bool {

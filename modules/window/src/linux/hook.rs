@@ -154,10 +154,12 @@ fn forward_msg(from: RawFd, to: RawFd, is_event: bool, app_fd: RawFd, proto: Pro
         }
         Protocol::X11 => {
             // X11 doesn't use ancillary data in the same way - no control data to track
-            let out = if is_event {
+            let Some(out) = (if is_event {
                 super::x11::feed_inbound(app_fd, data)
             } else {
                 super::x11::feed_outbound(app_fd, data)
+            }) else {
+                return false;
             };
             (out, Vec::new(), Vec::new())
         }
