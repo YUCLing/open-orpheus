@@ -55,7 +55,7 @@
 >
   {#if currentLine}
     <div
-      class="inline-block will-change-transform"
+      class="inline-block px-[2ch] will-change-transform"
       bind:clientWidth={textWidth}
       style="transform: translateX({-offset}px);"
     >
