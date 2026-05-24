@@ -20,4 +20,7 @@ export interface ManageContract {
   gpu: {
     openInfo(): Promise<void>;
   };
+  menu: {
+    enableDefaultMenu(): Promise<void>;
+  };
 }

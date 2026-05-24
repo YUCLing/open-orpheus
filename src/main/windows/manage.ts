@@ -1,7 +1,8 @@
+import os from "node:os";
 import path, { resolve } from "node:path";
 import { readdir, stat, rm } from "node:fs/promises";
 
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, Menu } from "electron";
 import packManager from "../pack";
 import WebPack from "../packs/WebPack";
 import { wasm as wasmDir } from "../folders";
@@ -115,6 +116,24 @@ export default function showManageWindow() {
             partition: "open-orpheus",
           },
         }).loadURL("chrome://gpu");
+      },
+    },
+
+    menu: {
+      enableDefaultMenu: async () => {
+        const macAppMenu: Electron.MenuItemConstructorOptions = {
+          role: "appMenu",
+        };
+        const template: Electron.MenuItemConstructorOptions[] = [
+          ...(os.platform() === "darwin" ? [macAppMenu] : []),
+          { role: "fileMenu" },
+          { role: "editMenu" },
+          { role: "viewMenu" },
+          { role: "windowMenu" },
+        ];
+
+        const menu = Menu.buildFromTemplate(template);
+        Menu.setApplicationMenu(menu);
       },
     },
   });

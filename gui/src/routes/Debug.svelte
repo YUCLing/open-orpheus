@@ -11,6 +11,9 @@
 <Button class="mt-4" onclick={() => api.gpu.openInfo()}
   >打开 chrome://gpu</Button
 >
+<Button class="mt-4" onclick={() => api.menu.enableDefaultMenu()}
+  >启用 Electron 默认菜单</Button
+>
 <p class="mt-2 text-sm text-gray-400">
   Node.JS {api.versions.node} | Chromium {api.versions.chrome} | Electron {api
     .versions.electron}
