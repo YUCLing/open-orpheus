@@ -19,7 +19,7 @@ depends=(
 )
 makedepends=('corepack' 'nodejs')
 source=("source.tar.gz::https://github.com/YUCLing/open-orpheus/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('c26b2d2b24a442768ef944c144d31d4df9deb6e43f06dfd5b1e5e693a6957e82')
+sha256sums=('7dedb4800dc063d3cba8ce067784e0d5607d5cafdf264becd322ca46671ad4e3')
 
 build() {
   cd "$srcdir/${pkgname}-${pkgver}"
