@@ -96,3 +96,8 @@ target
 
 # User Data
 /data/
+
+# Arch makepkg
+/packaging/aur/*/*
+!/packaging/aur/*/PKGBUILD
+!/packaging/aur/*/LICENSE
