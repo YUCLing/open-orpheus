@@ -24,7 +24,7 @@ sha256sums=('7dedb4800dc063d3cba8ce067784e0d5607d5cafdf264becd322ca46671ad4e3')
 build() {
   cd "$srcdir/${pkgname}-${pkgver}"
 
-  mkdir "$srcdir/bin"
+  mkdir -p "$srcdir/bin"
   corepack enable --install-directory "$srcdir/bin"
   export PATH="$srcdir/bin:$PATH"
 
@@ -36,5 +36,20 @@ build() {
 package() {
   cd "$srcdir/${pkgname}-${pkgver}"
 
-  # TODO: Install files
+  shopt -s nullglob
+  builddirs=("$PWD/out/${pkgname}-linux-"*)
+  shopt -u nullglob
+
+  if [ ${#builddirs[@]} -eq 0 ]; then
+    echo "Could not find built Electron app at $PWD/out/${pkgname}-linux-*"
+    return 1
+  fi
+
+  builddir="${builddirs[0]}"
+  if [ ${#builddirs[@]} -gt 1 ]; then
+    echo "Warning: multiple build directories found; using $builddir" >&2
+  fi
+
+  mkdir -p "$pkgdir"
+  node scripts/install-aur-scaffolding.mts "$builddir" "$pkgdir"
 }

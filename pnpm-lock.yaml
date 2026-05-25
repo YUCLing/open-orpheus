@@ -172,6 +172,9 @@ importers:
       '@malept/electron-installer-flatpak':
         specifier: ^0.11.4
         version: 0.11.4
+      electron-installer-debian:
+        specifier: ^3.2.0
+        version: 3.2.0
       electron-installer-redhat:
         specifier: ^3.4.0
         version: 3.4.0(patch_hash=8fe238a56db4de235c10dd7f02c6a523c6ac3010edcc1d547dbc5c6416b89a37)
@@ -7570,7 +7573,7 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 24.12.4
     optional: true
 
   '@types/http-cache-semantics@4.2.0': {}
@@ -7587,7 +7590,7 @@ snapshots:
 
   '@types/mute-stream@0.0.4':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 24.12.4
 
   '@types/node@22.19.19':
     dependencies:
@@ -9722,7 +9725,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 24.12.4
       merge-stream: 2.0.0
       supports-color: 8.1.1
 

@@ -45,6 +45,9 @@ typings/
 # Optional npm cache directory
 .npm
 
+# Optional pnpm store for Dev Containers
+.pnpm-store
+
 # Optional eslint cache
 .eslintcache
 
