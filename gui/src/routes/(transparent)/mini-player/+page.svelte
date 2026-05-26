@@ -99,12 +99,6 @@
     synchronizer.addEventListener("raf", ((e: RAFEvent) => {
       currentTime = e.detail.time;
     }) as () => void);
-
-    synchronizer.setRAFEnabled(true);
-
-    return () => {
-      synchronizer.setRAFEnabled(false);
-    };
   });
 
   let showList = $state(false);

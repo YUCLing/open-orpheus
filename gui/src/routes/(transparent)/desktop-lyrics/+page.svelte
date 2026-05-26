@@ -126,12 +126,6 @@
       currentTime = e.detail.time * 1000;
       playing = e.detail.playState;
     }) as EventListener);
-
-    synchronizer.setRAFEnabled(true);
-
-    return () => {
-      synchronizer.setRAFEnabled(false);
-    };
   });
 
   function onDrag() {

@@ -3,8 +3,6 @@ import type { LyricsStore } from "$sharedTypes/lyrics";
 
 import { getBridge } from "./bridge";
 
-type EventListeners = Record<string, EventListener>;
-
 const eventTarget = new EventTarget();
 
 const api = getBridge<LyricsContract>("lyrics");
@@ -51,19 +49,19 @@ api.events.timeUpdate((newTime) => {
 
 api.requestFullUpdate();
 
-const finalizer = new FinalizationRegistry<EventListeners>((value) => {
-  for (const e in value) {
-    const listener = value[e];
-    eventTarget.removeEventListener(e, listener);
-  }
-});
-
 export type RAFEvent = CustomEvent<{
   time: number;
   playState: boolean;
 }>;
 
 export default class LyricsSynchronizer extends EventTarget {
+  private static readonly forwardedEvents = [
+    "lyricsupdate",
+    "sloganupdate",
+    "playstateupdate",
+    "timeupdate",
+  ];
+
   get lyrics() {
     return lyricStore;
   }
@@ -85,29 +83,42 @@ export default class LyricsSynchronizer extends EventTarget {
   }
 
   private rafId: number | null = null;
+  private rafListeners = 0;
 
   constructor() {
     super();
 
-    const redispatch = ((e: CustomEvent) => {
-      this.dispatchEvent(new CustomEvent(e.type, e));
-    }) as EventListener;
-
-    const listeners: EventListeners = {
-      lyricsupdate: redispatch,
-      sloganupdate: redispatch,
-      playstateupdate: redispatch,
-      timeupdate: redispatch,
-    };
-
-    for (const e in listeners) {
-      const listener = listeners[e];
-      eventTarget.addEventListener(e, listener);
-    }
-
-    finalizer.register(this, listeners);
-
     this.onRAF = this.onRAF.bind(this);
+  }
+
+  addEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: AddEventListenerOptions | boolean
+  ): void {
+    if (LyricsSynchronizer.forwardedEvents.includes(type)) {
+      eventTarget.addEventListener(type, callback, options);
+      return;
+    }
+    super.addEventListener(type, callback, options);
+    if (type === "raf") {
+      this.rafListeners++;
+      this.setRAFEnabled(true);
+    }
+  }
+
+  removeEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: EventListenerOptions | boolean
+  ): void {
+    if (LyricsSynchronizer.forwardedEvents.includes(type)) {
+      eventTarget.removeEventListener(type, callback, options);
+      return;
+    }
+    super.removeEventListener(type, callback, options);
+    if (type === "raf") this.rafListeners--;
+    if (this.rafListeners === 0) this.setRAFEnabled(false);
   }
 
   private onRAF() {
@@ -122,13 +133,7 @@ export default class LyricsSynchronizer extends EventTarget {
     );
   }
 
-  /**
-   * Tell synchronizer to emit animation frame with the most accurate time possible.
-   *
-   * Note that you must stop the rAF manually if you don't need synchronizer anymore,
-   * otherwise you'll introduce a memory leak
-   */
-  setRAFEnabled(enabled: boolean) {
+  private setRAFEnabled(enabled: boolean) {
     if (this.rafId !== null) {
       // Stop the previous rAF regardless enabled or not.
       cancelAnimationFrame(this.rafId);
