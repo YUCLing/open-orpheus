@@ -1,4 +1,5 @@
-import type { AgentOptions } from "http";
+import type { AgentOptions } from "node:http";
+import tls from "node:tls";
 
 import { parseSetCookie, stringifyCookie } from "cookie";
 import got, { type Agents, type Got } from "got";
@@ -98,6 +99,12 @@ let client: Got = got.extend({
     setCookie: async (rawCookie: string, url: string) => {
       await setCookie(url, parseSetCookie(rawCookie));
     },
+  },
+  https: {
+    certificateAuthority: [
+      ...tls.getCACertificates("system"),
+      ...tls.rootCertificates,
+    ],
   },
 });
 
