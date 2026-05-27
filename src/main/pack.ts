@@ -3,8 +3,9 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import got from "got";
-import { pack as base } from "./folders";
+import Emittery from "emittery";
 
+import { pack as base } from "./folders";
 import type Pack from "./packs/Pack";
 
 import versions from "../../versions.json";
@@ -31,7 +32,16 @@ export type DownloadPackageProgress = {
   fileCount?: number;
 };
 
-export class PackManager extends EventTarget {
+export type PackManagerEvents = Record<
+  `${string}packloaded`,
+  {
+    name: string;
+    pack: Pack;
+    file?: string;
+  }
+>;
+
+export class PackManager extends Emittery<PackManagerEvents> {
   readonly packs: Map<string, Pack> = new Map();
 
   async loadWebPack() {
@@ -40,16 +50,12 @@ export class PackManager extends EventTarget {
     const wp = new WebPack(webPackPath);
     await wp.readPack();
     this.packs.set("web", wp);
-    this.dispatchEvent(new Event("webpackloaded"));
+    this.emit("webpackloaded", { name: "web", pack: wp });
   }
 
   async loadSkinPack(name: string, name2: string) {
     const SkinPack = await import("./packs/SkinPack").then((m) => m.default);
-    const loadOne = async (
-      packKey: "skin" | "skin2",
-      packName: string,
-      eventName: "skinpackloaded" | "skin2packloaded"
-    ) => {
+    const loadOne = async (packKey: "skin" | "skin2", packName: string) => {
       const skinPackPath = resolve(base, "package", `${packName}.skin`);
       if (!existsSync(skinPackPath)) {
         throw new Error(`Skin pack file not found: ${skinPackPath}`);
@@ -57,11 +63,15 @@ export class PackManager extends EventTarget {
       const skinPack = new SkinPack(skinPackPath);
       await skinPack.readPack();
       this.packs.set(packKey, skinPack);
-      this.dispatchEvent(new CustomEvent(eventName, { detail: packName }));
+      this.emit(`${packKey}packloaded`, {
+        name: packKey,
+        pack: skinPack,
+        file: `${packName}.skin`,
+      });
     };
 
-    await loadOne("skin", name, "skinpackloaded");
-    await loadOne("skin2", name2, "skin2packloaded");
+    await loadOne("skin", name);
+    await loadOne("skin2", name2);
   }
 
   getPack<T extends Pack>(pack: string): T {
@@ -77,13 +87,7 @@ export class PackManager extends EventTarget {
     if (p?.isLoaded) {
       return p as T;
     }
-    return new Promise<T>((resolve) => {
-      this.addEventListener(
-        `${pack}packloaded`,
-        () => resolve(this.packs.get(pack) as T),
-        { once: true }
-      );
-    });
+    return (await this.once(`${pack}packloaded`)).data.pack as T;
   }
 
   async downloadPackage(

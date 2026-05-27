@@ -11,7 +11,7 @@ import type { BtnImages, BtnState } from "../../../types/dui";
 import { dragWindow } from "@open-orpheus/window";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import packManager from "../pack";
-import SkinPack from "../packs/SkinPack";
+import type SkinPack from "../packs/SkinPack";
 import { extractColor } from "../skin/color";
 import { DOMParser, Element } from "@xmldom/xmldom";
 import { argbToCss, parseBtnState } from "../skin/dui";
@@ -104,8 +104,8 @@ const defaultStyle: MiniPlayerStyle = {
 
 let style: MiniPlayerStyle = defaultStyle;
 
-packManager.addEventListener("skin2packloaded", async () => {
-  const skinPack = packManager.getPack<SkinPack>("skin2");
+packManager.on("skin2packloaded", async (event) => {
+  const skinPack = event.data.pack as SkinPack;
   const [
     bg,
     listBg,

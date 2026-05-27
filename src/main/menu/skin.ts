@@ -1,7 +1,7 @@
 import photon from "@silvia-odwyer/photon-node";
 
 import packManager from "../pack";
-import SkinPack from "../packs/SkinPack";
+import type SkinPack from "../packs/SkinPack";
 import type { MenuSkin } from "$sharedTypes/menu";
 import { extractColor } from "../skin/color";
 import { argbToCss } from "../skin/dui";
@@ -23,8 +23,8 @@ function applyAlphaOverride(color: string, alphaDec?: string): string {
 }
 
 export function registerMenuSkinUpdater() {
-  packManager.addEventListener("skin2packloaded", async () => {
-    const skinPack = packManager.getPack<SkinPack>("skin2");
+  packManager.on("skin2packloaded", async (event) => {
+    const skinPack = event.data.pack as SkinPack;
     const [bg, hov, sep, elBuf] = await Promise.all(
       [
         "/menu/bk.png",
