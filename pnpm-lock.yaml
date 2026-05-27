@@ -108,6 +108,9 @@ importers:
       electron:
         specifier: 42.2.0
         version: 42.2.0
+      emittery:
+        specifier: ^2.0.0
+        version: 2.0.0
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.7.0)

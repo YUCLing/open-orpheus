@@ -52,6 +52,7 @@
     "@yxim/nim-web-sdk": "^9.21.14",
     "cookie": "^1.1.1",
     "electron": "42.2.0",
+    "emittery": "^2.0.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
