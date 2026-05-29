@@ -1,31 +1,32 @@
 import { KeyvSqlite } from "@keyv/sqlite";
-import { Keyv, KeyvHooks } from "keyv";
+import { Keyv } from "keyv";
 import { calculateDbSize } from "../util";
 
 export default class HttpCacheStorage extends Keyv {
   private driver: KeyvSqlite;
-  private _maxSize = 0;
-  private _lastSizeCheck = performance.now();
-
-  private async checkSizeForCleanup() {
-    if (!this._maxSize) return; // Limit's disabled
-
-    const now = performance.now();
-    if (now - this._lastSizeCheck < 60 * 1000) return; // Only once per minute at most
-    this._lastSizeCheck = now;
-
-    const size = await this.totalSize();
-    if (size < this._maxSize) return; // No cleanup needed
-  }
 
   constructor(driver: KeyvSqlite) {
     super(driver);
 
     this.driver = driver;
 
-    this.checkSizeForCleanup = this.checkSizeForCleanup.bind(this);
+    (async () => {
+      const lastVacuum = await this.get("httpCache::lastVacuum");
+      const now = Date.now();
+      if (typeof lastVacuum !== "number") {
+        await this.set("httpCache::lastVacuum", now);
+        return;
+      }
+      // 2 days
+      if (now - lastVacuum <= 48 * 60 * 60 * 1000) return;
+      await this.vacuum();
+    })();
+  }
 
-    this.hooks.addHandler(KeyvHooks.POST_SET, this.checkSizeForCleanup);
+  async vacuum() {
+    await this.driver.query("VACUUM;");
+    await this.driver.query("PRAGMA wal_checkpoint(TRUNCATE);");
+    await this.set("httpCache::lastVacuum", Date.now());
   }
 
   async totalSize() {

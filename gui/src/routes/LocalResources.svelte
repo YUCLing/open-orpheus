@@ -1,4 +1,8 @@
 <script lang="ts">
+  import QuestionIcon from "@lucide/svelte/icons/circle-question-mark";
+
+  import * as Tooltip from "$lib/components/ui/tooltip";
+
   import { Button } from "$lib/components/ui/button";
   import { getBridge } from "$lib/bridge";
   import type { ManageContract } from "$bridge/contracts/manage-api";
@@ -58,8 +62,31 @@
         <p class="mt-1 text-sm text-gray-600">{stats.http.entryCount} 个条目</p>
       {/if}
       <p class="text-sm text-gray-600">{formatBytes(stats.http.sizeBytes)}</p>
-      <p class="text-sm text-gray-600">
-        实际占用 {formatBytes(stats.http.sizeBytesOnDisk!)}
+      <p class="text-xs text-gray-600">
+        实际占用 {formatBytes(
+          stats.http.sizeBytesOnDisk!
+        )}（含预分配和暂存数据）
+        <Tooltip.Provider>
+          <Tooltip.Root>
+            <Tooltip.Trigger>
+              {#snippet child({ props })}
+                <QuestionIcon {...props} class="inline size-3.5" />
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content>
+              <div>
+                <p>
+                  清理缓存后，底层数据库不会立即缩减体积，而是保留为空白空间（预分配）以提升后续运行速度，实际占用大于缓存大小属正常现象。
+                </p>
+                <p>
+                  Open Orpheus 每两天会自动回收这些空间，您也可随时点击下方<b
+                    >释放空间</b
+                  >按钮立即回收。
+                </p>
+              </div>
+            </Tooltip.Content>
+          </Tooltip.Root>
+        </Tooltip.Provider>
       </p>
       <Button
         class="mt-3"
@@ -68,6 +95,14 @@
         disabled={clearing !== null}
         onclick={() => clearResources("http")}
         >{clearing === "http" ? "清除中…" : "清除"}</Button
+      >
+      <Button
+        class="mt-3"
+        variant="outline"
+        size="sm"
+        disabled={clearing !== null}
+        onclick={() => clearResources("http:vacuum")}
+        >{clearing === "http:vacuum" ? "释放中…" : "释放空间"}</Button
       >
     </div>
     <div class="rounded-lg border p-4">

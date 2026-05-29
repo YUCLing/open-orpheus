@@ -114,9 +114,11 @@ export default function showManageWindow() {
           wasm,
         };
       },
-      clearResources: async (_event, category: "http" | "lyrics" | "wasm") => {
+      clearResources: async (_event, category) => {
         if (category === "http") {
           await httpCacheStorage?.clear();
+        } else if (category === "http:vacuum") {
+          await httpCacheStorage?.vacuum();
         } else if (category === "lyrics") {
           await lyricCacheManager?.clear();
         } else if (category === "wasm") {

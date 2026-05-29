@@ -15,7 +15,9 @@ export interface ManageContract {
   };
   cache: {
     getStats(): Promise<AllCacheStats>;
-    clearResources(category: "http" | "lyrics" | "wasm"): Promise<void>;
+    clearResources(
+      category: "http" | "http:vacuum" | "lyrics" | "wasm"
+    ): Promise<void>;
   };
   protocol: {
     isClient(): Promise<boolean>;
