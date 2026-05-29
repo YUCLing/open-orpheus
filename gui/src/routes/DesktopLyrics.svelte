@@ -22,12 +22,9 @@
       id="toggle-2"
       bind:checked={
         () => interpolatedLyricLine ?? true,
-        async (v) => {
-          settings.set("desktopLyrics.interpolatedLyricLine", v).then(() => {
-            interpolatedLyricLinePromise = settings.get(
-              "desktopLyrics.interpolatedLyricLine"
-            ) as Promise<boolean | undefined>;
-          });
+        (v) => {
+          settings.set("desktopLyrics.interpolatedLyricLine", v);
+          interpolatedLyricLinePromise = Promise.resolve(v);
         }
       }
       class="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700"
