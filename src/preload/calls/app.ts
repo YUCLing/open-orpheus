@@ -8,6 +8,7 @@ import {
   startContinuousRecord,
   stopContinuousRecord,
 } from "../recorder";
+import { sleep } from "../../util";
 
 // These are not needed?
 registerCallHandler<[], void>("app.statis", () => {
@@ -131,7 +132,7 @@ registerCallHandler<[string], void>("app.recognizeMusic", async (guid) => {
     await startContinuousRecord(guid);
 
     for (let times = 1; times <= 5; times++) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await sleep(3000);
       if (!activeRecognizeTasks.has(guid)) break;
 
       const duration = times * 3;
