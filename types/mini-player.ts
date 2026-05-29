@@ -53,6 +53,7 @@ export interface MiniPlayerFullState {
   coverUrl: string | null;
   likeMark: MiniPlayerLikeMark;
   favour: boolean;
+  mute: boolean;
   currentPlay: string | null;
   playState: MiniPlayerPlayState;
   listItems: MiniPlayerListElement[];

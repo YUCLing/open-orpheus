@@ -33,6 +33,7 @@ let playInfo: MiniPlayerPlayInfo | null = null;
 let coverUrl: string | null = null;
 let likeMark: MiniPlayerLikeMark = 0;
 let favour = false;
+let mute = false;
 let currentPlay: string | null = null;
 let playState: MiniPlayerPlayState = { playing: false };
 let listItems: MiniPlayerListElement[] = [];
@@ -370,6 +371,11 @@ export function updateFavour(favourited: boolean) {
   sendToMiniPlayer("favourUpdate", favourited);
 }
 
+export function updateMute(muted: boolean) {
+  mute = muted;
+  sendToMiniPlayer("muteUpdate", muted);
+}
+
 export function updatePlayState(playing: boolean) {
   playState = { playing };
   sendToMiniPlayer("playStateUpdate", playState);
@@ -404,6 +410,7 @@ export function getFullState(): MiniPlayerFullState {
     coverUrl,
     likeMark,
     favour,
+    mute,
     currentPlay,
     playState,
     listItems,

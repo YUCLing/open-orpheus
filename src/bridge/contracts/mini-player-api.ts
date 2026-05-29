@@ -16,6 +16,7 @@ export interface MiniPlayerContract {
     coverUpdate(callback: (url: string | null) => void): void;
     likeUpdate(callback: (liked: MiniPlayerLikeMark) => void): void;
     favourUpdate(callback: (favourited: boolean) => void): void;
+    muteUpdate(callback: (muted: boolean) => void): void;
     playStateUpdate(callback: (state: MiniPlayerPlayState) => void): void;
     listUpdate(callback: (data: MiniPlayerListData) => void): void;
     togetherStatusUpdate(

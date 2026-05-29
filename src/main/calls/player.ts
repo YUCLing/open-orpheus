@@ -31,6 +31,7 @@ import {
   showVolume,
   updateFavour,
   updateTogetherStatus,
+  updateMute,
 } from "../windows/mini-player";
 import { dirname } from "node:path";
 
@@ -119,6 +120,11 @@ registerCallHandler<[0 | 1], [boolean]>(
     return [true];
   }
 );
+
+registerCallHandler<[boolean], [boolean]>("player.mute", (event, mute) => {
+  updateMute(mute);
+  return [true];
+});
 
 registerCallHandler<
   [

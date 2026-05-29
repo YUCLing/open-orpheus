@@ -30,6 +30,7 @@
   let coverUrl = $state<string | null>(null);
   let likeMark = $state<MiniPlayerLikeMark>(0);
   let favour = $state(false);
+  let mute = $state(false);
   let playState = $state<MiniPlayerPlayState>({ playing: false });
   let listData = $state<MiniPlayerListData>({ items: [], currentPlay: null });
   let togetherStatus = $state<MiniPlayerTogetherStatus>({
@@ -47,6 +48,7 @@
     coverUrl = state.coverUrl;
     likeMark = state.likeMark;
     favour = state.favour;
+    mute = state.mute;
     playState = state.playState;
     listData = { items: state.listItems, currentPlay: state.currentPlay };
     togetherStatus = state.togetherStatus;
@@ -65,6 +67,9 @@
     });
     api.events.favourUpdate((favourited) => {
       favour = favourited;
+    });
+    api.events.muteUpdate((muted) => {
+      mute = muted;
     });
     api.events.playStateUpdate((state) => {
       playState = state;
@@ -103,7 +108,6 @@
   let showVolumeBar = $state(false);
   let showSongInfo = $state(false);
   let volume = $state(100);
-  //let muted = $state(false);
   let volumeButtonEl: HTMLElement | undefined = $state(undefined);
 
   function noPropagation(e: MouseEvent) {
@@ -271,7 +275,7 @@
     bind:element={volumeButtonEl}
     class="size-6 cursor-pointer"
     imgClass="size-full mt-px"
-    images={style?.volumeButton}
+    images={mute ? style?.volumeMutedButton : style?.volumeButton}
     onmousedown={noPropagation}
     onclick={() =>
       showVolumeBar
