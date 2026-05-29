@@ -122,6 +122,10 @@
     return currentIdx % 2 === 0 ? currentIdx + 1 : currentIdx;
   });
 
+  // Whether the primary/secondary line is the currently-playing line
+  let isPrimaryCurrent = $derived(upperIdx === currentIdx);
+  let isSecondaryCurrent = $derived(hasSecondary || lowerIdx === currentIdx);
+
   // Lines to display
   let sloganLine: LyricLine | null = $derived(
     !lyrics && slogan
@@ -157,12 +161,15 @@
     primaryLine && useProgress
       ? wordProgress(primaryLine, adjustedTime)
       : primaryLine
-        ? 1
+        ? isPrimaryCurrent
+          ? 1
+          : 0
         : 0
   );
 
   let secondaryProgress = $derived.by(() => {
-    if (!secondaryLine || !useProgress) return secondaryLine ? 1 : 0;
+    if (!secondaryLine) return 0;
+    if (!useProgress) return isSecondaryCurrent ? 1 : 0;
     // For translation lines or next lines, compute their own progress
     return wordProgress(secondaryLine, adjustedTime);
   });
@@ -318,7 +325,7 @@
             >
               {primaryLine.words.map((w) => w.text).join("")}
             </span>
-            {#if useProgress && playedOutline}
+            {#if playedOutline}
               <span
                 class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
                 style="
@@ -347,23 +354,21 @@
             {primaryLine.words.map((w) => w.text).join("")}
           </span>
           <!-- Played fill layer (clipped) -->
-          {#if useProgress}
-            <span
-              class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
-              style="
-                  background: {playedGradient};
-                  -webkit-background-clip: text;
-                  background-clip: text;
-                  clip-path: inset(0 {style.vertical
-                ? '0'
-                : `${(1 - primaryProgress) * 100}%`} {style.vertical
-                ? `${(1 - primaryProgress) * 100}%`
-                : '0'} 0);
-                "
-            >
-              {primaryLine.words.map((w) => w.text).join("")}
-            </span>
-          {/if}
+          <span
+            class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
+            style="
+                background: {playedGradient};
+                -webkit-background-clip: text;
+                background-clip: text;
+                clip-path: inset(0 {style.vertical
+              ? '0'
+              : `${(1 - primaryProgress) * 100}%`} {style.vertical
+              ? `${(1 - primaryProgress) * 100}%`
+              : '0'} 0);
+              "
+          >
+            {primaryLine.words.map((w) => w.text).join("")}
+          </span>
         </div>
       </div>
     {:else if style.lineMode === LineMode.Double}
@@ -405,7 +410,7 @@
             >
               {secondaryLine.words.map((w) => w.text).join("")}
             </span>
-            {#if useProgress && playedOutline}
+            {#if playedOutline}
               <span
                 class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
                 style="
@@ -433,23 +438,21 @@
           >
             {secondaryLine.words.map((w) => w.text).join("")}
           </span>
-          {#if useProgress}
-            <span
-              class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
-              style="
-                  background: {playedGradient};
-                  -webkit-background-clip: text;
-                  background-clip: text;
-                  clip-path: inset(0 {style.vertical
-                ? '0'
-                : `${(1 - secondaryProgress) * 100}%`} {style.vertical
-                ? `${(1 - secondaryProgress) * 100}%`
-                : '0'} 0);
-                "
-            >
-              {secondaryLine.words.map((w) => w.text).join("")}
-            </span>
-          {/if}
+          <span
+            class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
+            style="
+                background: {playedGradient};
+                -webkit-background-clip: text;
+                background-clip: text;
+                clip-path: inset(0 {style.vertical
+              ? '0'
+              : `${(1 - secondaryProgress) * 100}%`} {style.vertical
+              ? `${(1 - secondaryProgress) * 100}%`
+              : '0'} 0);
+              "
+          >
+            {secondaryLine.words.map((w) => w.text).join("")}
+          </span>
         </div>
       </div>
     {:else if style.lineMode === LineMode.Double}

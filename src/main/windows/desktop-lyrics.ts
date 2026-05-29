@@ -20,6 +20,7 @@ import type {
 } from "../../bridge/contracts/desktop-lyrics-api";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
+import { registerSettingsHandlers } from "../../bridge/common/settings";
 
 export let desktopLyricsWindow: BrowserWindow | null = null;
 
@@ -142,6 +143,7 @@ export default function createDesktopLyricsWindow() {
   );
   registerInputRegionHandlers(desktopLyricsWindow);
   registerLyricsHandlers(desktopLyricsWindow);
+  registerSettingsHandlers(desktopLyricsWindow);
 }
 
 // --- Preview ---

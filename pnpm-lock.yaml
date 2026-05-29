@@ -44,7 +44,7 @@ importers:
     devDependencies:
       '@electron-forge/cli':
         specifier: ^7.11.2
-        version: 7.11.2(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.15)
+        version: 7.11.2(encoding@0.1.13)(lightningcss@1.32.0)
       '@electron-forge/maker-deb':
         specifier: ^7.11.2
         version: 7.11.2
@@ -206,8 +206,8 @@ importers:
         specifier: ^3.12.1
         version: 3.12.1
       '@lucide/svelte':
-        specifier: 1.14.0
-        version: 1.14.0(svelte@5.55.5(@typescript-eslint/types@8.59.4))
+        specifier: 1.17.0
+        version: 1.17.0(svelte@5.55.5(@typescript-eslint/types@8.59.4))
       '@sveltejs/adapter-static':
         specifier: latest
         version: 3.0.10(@sveltejs/kit@2.59.1(@sveltejs/vite-plugin-svelte@6.2.4(svelte@5.55.5(@typescript-eslint/types@8.59.4))(vite@7.3.3(@types/node@24.12.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.4))(typescript@5.9.3)(vite@7.3.3(@types/node@24.12.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)))
@@ -1057,8 +1057,8 @@ packages:
     peerDependencies:
       '@inquirer/prompts': '>= 3 < 8'
 
-  '@lucide/svelte@1.14.0':
-    resolution: {integrity: sha512-MVuP5VRCBQa2OaIpaRbuEV4k5OV2dy9MyxA6Tf4Sz/IN0v3zzUU72ObHc9r2Zn/wSMXDg6lLrHrczqI7w7gCzQ==}
+  '@lucide/svelte@1.17.0':
+    resolution: {integrity: sha512-q06YCFBN5CO8cd1ADmLCxWRVMVb7xxvHzqC0lvNoxGa+FLW6Cd1Y1AOxgbQk4Iwe68vkAMCRveNHint4WoaVKg==}
     peerDependencies:
       svelte: ^5
 
@@ -5912,9 +5912,9 @@ snapshots:
       '@babel/helper-string-parser': 8.0.0-rc.5
       '@babel/helper-validator-identifier': 8.0.0-rc.5
 
-  '@electron-forge/cli@7.11.2(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.15)':
+  '@electron-forge/cli@7.11.2(encoding@0.1.13)(lightningcss@1.32.0)':
     dependencies:
-      '@electron-forge/core': 7.11.2(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.15)
+      '@electron-forge/core': 7.11.2(encoding@0.1.13)(lightningcss@1.32.0)
       '@electron-forge/core-utils': 7.11.2
       '@electron-forge/shared-types': 7.11.2
       '@electron/get': 3.1.0
@@ -5961,7 +5961,7 @@ snapshots:
       - bluebird
       - supports-color
 
-  '@electron-forge/core@7.11.2(encoding@0.1.13)(lightningcss@1.32.0)(postcss@8.5.15)':
+  '@electron-forge/core@7.11.2(encoding@0.1.13)(lightningcss@1.32.0)':
     dependencies:
       '@electron-forge/core-utils': 7.11.2
       '@electron-forge/maker-base': 7.11.2
@@ -5972,7 +5972,7 @@ snapshots:
       '@electron-forge/template-vite': 7.11.2
       '@electron-forge/template-vite-typescript': 7.11.2
       '@electron-forge/template-webpack': 7.11.2
-      '@electron-forge/template-webpack-typescript': 7.11.2(lightningcss@1.32.0)(postcss@8.5.15)
+      '@electron-forge/template-webpack-typescript': 7.11.2(lightningcss@1.32.0)
       '@electron-forge/tracer': 7.11.2
       '@electron/get': 3.1.0
       '@electron/packager': 18.4.4
@@ -6161,13 +6161,13 @@ snapshots:
       - bluebird
       - supports-color
 
-  '@electron-forge/template-webpack-typescript@7.11.2(lightningcss@1.32.0)(postcss@8.5.15)':
+  '@electron-forge/template-webpack-typescript@7.11.2(lightningcss@1.32.0)':
     dependencies:
       '@electron-forge/shared-types': 7.11.2
       '@electron-forge/template-base': 7.11.2
       fs-extra: 10.1.0
       typescript: 5.4.5
-      webpack: 5.107.1(lightningcss@1.32.0)(postcss@8.5.15)
+      webpack: 5.107.1(lightningcss@1.32.0)
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@swc/core'
@@ -6795,7 +6795,7 @@ snapshots:
       '@inquirer/prompts': 6.0.1
       '@inquirer/type': 1.5.5
 
-  '@lucide/svelte@1.14.0(svelte@5.55.5(@typescript-eslint/types@8.59.4))':
+  '@lucide/svelte@1.17.0(svelte@5.55.5(@typescript-eslint/types@8.59.4))':
     dependencies:
       svelte: 5.55.5(@typescript-eslint/types@8.59.4)
 
@@ -11145,16 +11145,15 @@ snapshots:
       rimraf: 2.6.3
     optional: true
 
-  terser-webpack-plugin@5.6.0(lightningcss@1.32.0)(postcss@8.5.15)(webpack@5.107.1(lightningcss@1.32.0)(postcss@8.5.15)):
+  terser-webpack-plugin@5.6.0(lightningcss@1.32.0)(webpack@5.107.1(lightningcss@1.32.0)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.48.0
-      webpack: 5.107.1(lightningcss@1.32.0)(postcss@8.5.15)
+      webpack: 5.107.1(lightningcss@1.32.0)
     optionalDependencies:
       lightningcss: 1.32.0
-      postcss: 8.5.15
 
   terser@5.48.0:
     dependencies:
@@ -11454,7 +11453,7 @@ snapshots:
 
   webpack-sources@3.4.1: {}
 
-  webpack@5.107.1(lightningcss@1.32.0)(postcss@8.5.15):
+  webpack@5.107.1(lightningcss@1.32.0):
     dependencies:
       '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
@@ -11476,7 +11475,7 @@ snapshots:
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.3
-      terser-webpack-plugin: 5.6.0(lightningcss@1.32.0)(postcss@8.5.15)(webpack@5.107.1(lightningcss@1.32.0)(postcss@8.5.15))
+      terser-webpack-plugin: 5.6.0(lightningcss@1.32.0)(webpack@5.107.1(lightningcss@1.32.0))
       watchpack: 2.5.1
       webpack-sources: 3.4.1
     transitivePeerDependencies:

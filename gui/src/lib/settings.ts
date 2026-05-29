@@ -39,9 +39,12 @@ export async function del(key: string | string[]): Promise<boolean> {
   return await api.delete(key);
 }
 
+export const events = emitter;
+
 export default {
   get,
   set,
   setMany,
   delete: del,
+  events: emitter,
 };

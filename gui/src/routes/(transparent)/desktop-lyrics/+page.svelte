@@ -15,18 +15,24 @@
     getPlayState,
     getTime,
   } from "$lib/lyrics";
+  import * as settings from "$lib/settings";
 
   const api = getBridge<DesktopLyricsContract>("desktopLyrics");
+
+  let lyricStyle = $state<LyricsStyle | null>(null);
 
   let lrcLyrics: Lyrics | null = $state(null);
   let perwordLyrics: Lyrics | null = $state(null);
   let translateLyrics: Lyrics | null = $state(null);
   let romaLyrics: Lyrics | null = $state(null);
   let slogan: string | null = $state(null);
+
   let currentTime = $state(0);
   let offset = $state(0);
   let playing = $state(false);
   let locked = $state(false);
+  let interpolatedLyricLine = $state(true);
+
   let lyrics = $derived.by(() => {
     if (perwordLyrics) return perwordLyrics;
     if (lrcLyrics) return lrcLyrics;
@@ -38,6 +44,7 @@
     if (lyricStyle.showTranslate === "roman") return romaLyrics;
     return null;
   });
+  let useProgress = $derived(perwordLyrics !== null || interpolatedLyricLine);
 
   const items: ([string, string, string] | [string, string, string, true])[] =
     $derived([
@@ -52,8 +59,6 @@
       ["close", "close", "关闭桌面歌词"],
     ]);
 
-  let lyricStyle = $state<LyricsStyle | null>(null);
-
   let previousVertical = false;
   $effect(() => {
     if (!lyricStyle) return;
@@ -61,6 +66,17 @@
       previousVertical = lyricStyle.vertical;
       api.changeOrientation();
     }
+  });
+
+  // This component would never be unmounted, events does not need to be removed.
+  settings.events.on("change", (e) => {
+    const { key, value } = e.data;
+    if (key !== "desktopLyrics.interpolatedLyricLine") return;
+    interpolatedLyricLine = value as boolean;
+  });
+  settings.get("desktopLyrics.interpolatedLyricLine").then((v) => {
+    if (v === undefined) return;
+    interpolatedLyricLine = v as boolean;
   });
 
   onMount(() => {
@@ -170,6 +186,7 @@
       {offset}
       {lyricStyle}
       {slogan}
+      {useProgress}
       class={lyricStyle.vertical ? "h-full" : "w-full"}
     />
   </div>

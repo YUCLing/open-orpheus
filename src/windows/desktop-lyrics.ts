@@ -7,3 +7,4 @@ exposeApi("inputRegion", {
   platform: process.platform,
 });
 exposeApi("lyrics");
+exposeApi("settings");

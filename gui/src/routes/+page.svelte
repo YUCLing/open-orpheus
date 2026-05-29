@@ -35,6 +35,9 @@
   import AppWindow from "@lucide/svelte/icons/app-window";
   import Window from "./Window.svelte";
 
+  import QuoteIcon from "@lucide/svelte/icons/quote";
+  import DesktopLyrics from "./DesktopLyrics.svelte";
+
   import TableOfContents from "@lucide/svelte/icons/table-of-contents";
   import Tray from "./Tray.svelte";
 
@@ -68,11 +71,19 @@
       component: Window,
     },
     {
-      id: "tray",
-      name: "托盘菜单",
-      icon: TableOfContents,
-      component: Tray,
+      id: "desktop-lyrics",
+      name: "桌面歌词",
+      icon: QuoteIcon,
+      component: DesktopLyrics,
     },
+    api.platform === "linux"
+      ? {
+          id: "tray",
+          name: "托盘菜单",
+          icon: TableOfContents,
+          component: Tray,
+        }
+      : undefined,
     {
       id: "debug",
       name: "调试",
@@ -80,6 +91,8 @@
       component: Debug,
     },
   ];
+
+  const shownItems = $derived(items.filter((v) => v !== undefined));
 
   let updateInfoPromise: Promise<UpdateInfo | null> = $state(api.checkUpdate());
   let showUpdateDialog = $state(false);
@@ -175,7 +188,7 @@
       <Sidebar.Group>
         <Sidebar.GroupContent>
           <Sidebar.Menu>
-            {#each items as item (item.id)}
+            {#each shownItems as item (item.id)}
               <Sidebar.MenuItem>
                 <Sidebar.MenuButton>
                   {#snippet child({ props })}
@@ -207,7 +220,7 @@
   </Sidebar.Root>
   <main class="h-screen flex-1 overflow-y-auto">
     <div class="w-full p-4 xl:mx-auto xl:w-4xl">
-      {#each items as item, i (item.id)}
+      {#each shownItems as item, i (item.id)}
         <div class="my-4" class:mt-0={i === 0} id={item.id}>
           <item.component />
         </div>
