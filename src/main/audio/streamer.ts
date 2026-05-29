@@ -498,9 +498,14 @@ export default class AudioStreamer extends Emittery<AudioStreamerEvents> {
     end: number,
     preOpenedStream?: OpenedRangeStream
   ): Promise<boolean> {
-    if (this.songBuffer !== sb) return false;
-    if (!canFetchRange(sb, start, end)) return false;
-    if (getRetryDelay(sb, start, end) > 0) return false;
+    if (
+      this.songBuffer !== sb ||
+      !canFetchRange(sb, start, end) ||
+      getRetryDelay(sb, start, end) > 0
+    ) {
+      preOpenedStream?.stream.destroy();
+      return false;
+    }
 
     IntervalMath.addPending(sb.pendingIntervals, [start, end]);
     let wroteBytes = false;
