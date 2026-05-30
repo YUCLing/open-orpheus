@@ -120,8 +120,9 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
         if (!state) return new Response("No play info yet", { status: 400 });
 
         if (state.type === AudioType.Local) {
-          const fileStat = await stat(state.path);
-          const nodeStream = createReadStream(state.path);
+          const path = state.path;
+          const fileStat = await stat(path);
+          const nodeStream = createReadStream(path);
 
           sendProgress(1);
 
@@ -129,7 +130,7 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
             status: 200,
             headers: {
               "Content-Type":
-                mime.getType(state.path) || "application/octet-stream",
+                mime.getType(path) || "application/octet-stream",
               "Content-Length": String(fileStat.size),
             },
           });
