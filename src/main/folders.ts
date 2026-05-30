@@ -13,6 +13,12 @@ export const userdata = resolve(data, "userdata");
 export const storage = resolve(data, "storage");
 export const wasm = resolve(data, "wasm");
 
+// Flag files
+export const disableHardwareAccelerationFlag = resolve(
+  data,
+  "disable-hw-accel"
+);
+
 export const defaultCache = resolve(data, "cache");
 
 export let cache = defaultCache;

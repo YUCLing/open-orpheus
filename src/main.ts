@@ -1,3 +1,8 @@
+import path from "node:path";
+import os from "node:os";
+import { mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+
 import {
   app,
   BrowserWindow,
@@ -7,9 +12,7 @@ import {
   screen,
   session,
 } from "electron";
-import path from "node:path";
-import os from "node:os";
-import { mkdir } from "node:fs/promises";
+
 import started from "electron-squirrel-startup";
 
 // We want to hook Wayland connections as early as possible.
@@ -21,7 +24,11 @@ import { onExit } from "@open-orpheus/lifecycle";
 import "./main/error";
 
 import { getWindowSizeStatus } from "./main/util";
-import { data as dataDir, userdata as userdataDir } from "./main/folders";
+import {
+  data as dataDir,
+  disableHardwareAccelerationFlag,
+  userdata as userdataDir,
+} from "./main/folders";
 import { prepareDeviceId } from "./main/device";
 import { CORE_VERSION } from "./constants";
 import packManager from "./main/pack";
@@ -91,6 +98,10 @@ app.setPath("userData", userdataDir);
 // see https://github.com/electron/electron/blob/c2a0ec9931096ec83441521c8a75449cae96cd85/shell/renderer/api/electron_api_context_bridge.cc#L37
 // see https://github.com/YUCLing/open-orpheus/pull/105#issue-4520228513
 app.commandLine.appendSwitch("enable-features", "ContextBridgeMutability");
+
+if (existsSync(disableHardwareAccelerationFlag)) {
+  app.disableHardwareAcceleration();
+}
 
 if (app.isPackaged)
   // Tell Electron we don't need a menu before Electron tries to create one,

@@ -1,5 +1,6 @@
 import os from "node:os";
-import { stat } from "node:fs/promises";
+import { rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 
 import {
   app,
@@ -17,6 +18,7 @@ import packManager from "../pack";
 import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
 import client, { getProxyAgent } from "../request";
+import { disableHardwareAccelerationFlag } from "../folders";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   console.log(...args);
@@ -83,10 +85,8 @@ registerCallHandler<[string, string], [string]>(
         return [proxyConf];
       }
       case "setting":
-        break;
-      case "features":
-        if (subItem === "hidpi") {
-          // Do nothing?
+        if (subItem === "hardware-acceleration") {
+          return [existsSync(disableHardwareAccelerationFlag) ? "0" : "1"];
         }
         break;
     }
@@ -101,6 +101,42 @@ registerCallHandler<[string, string, string], void>(
       case "Proxy":
         await settings.set("proxy", value);
         return;
+      case "setting":
+        if (subItem === "hardware-acceleration") {
+          if (value === "1") {
+            // Enable hardware accel
+            await rm(disableHardwareAccelerationFlag, { force: true });
+          } else {
+            // Disable hardware accel
+            await writeFile(disableHardwareAccelerationFlag, "", {
+              encoding: "utf-8",
+            });
+          }
+        }
+        return;
+    }
+  }
+);
+
+type Features = "hdpi";
+type FeaturesSwitch = Partial<Record<Features, boolean>>;
+registerCallHandler<[FeaturesSwitch], void>(
+  "app.featuresSwitch",
+  async (event, features) => {
+    for (const feature in features) {
+      const value = features[feature as Features];
+      if (feature === "hdpi") {
+        if (!value) {
+          // Disable HiDPI, it's there for Chromium 91, but Chromium now doesn't
+          // support disabling HiDPI
+          const wnd = BrowserWindow.fromWebContents(event.sender);
+          if (!wnd) return;
+          dialog.showMessageBox(wnd, {
+            title: "Open Orpheus",
+            message: "十分抱歉，但 Open Orpheus 不支持禁用高分辨率支持。",
+          });
+        }
+      }
     }
   }
 );
