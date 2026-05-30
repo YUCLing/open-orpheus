@@ -3,15 +3,7 @@ import os from "node:os";
 import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  Menu,
-  protocol,
-  screen,
-  session,
-} from "electron";
+import { app, dialog, Menu, protocol, session } from "electron";
 
 import started from "electron-squirrel-startup";
 
@@ -23,7 +15,6 @@ import { onExit } from "@open-orpheus/lifecycle";
 // Handle errors as early as possible
 import "./main/error";
 
-import { getWindowSizeStatus } from "./main/util";
 import {
   data as dataDir,
   disableHardwareAccelerationFlag,
@@ -33,17 +24,16 @@ import { prepareDeviceId } from "./main/device";
 import { CORE_VERSION } from "./constants";
 import packManager from "./main/pack";
 import showPackgeDownloadWindow from "./main/windows/package-download";
-import { mainWindow, setMainWindow } from "./main/window";
+import { mainWindow } from "./main/window";
 import {
   markStarted,
   started as appStarted,
-  quitting,
   markQuitting,
 } from "./main/lifecycle";
-import { stringifyError } from "./util";
 import registerAsProtocolClient, {
   checkOpenCommand as checkWebCommand,
 } from "./main/protocol";
+import { toError } from "./util";
 
 import type WebPack from "./main/packs/WebPack";
 import type { ProxyConfiguration } from "./main/request";
@@ -107,94 +97,6 @@ if (app.isPackaged)
   // Tell Electron we don't need a menu before Electron tries to create one,
   // this benefits the startup
   Menu.setApplicationMenu(null);
-
-const createWindow = async () => {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 720,
-    show: false,
-    frame: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-    },
-  });
-
-  const settings = (await import("./main/settings")).kv;
-
-  mainWindow.webContents.ipc.handle("audio.setDevice", async (e, deviceId) => {
-    return settings.set("audio.currentDevice", deviceId);
-  });
-
-  mainWindow.webContents.ipc.handle("audio.getDevice", async () => {
-    return settings.get("audio.currentDevice");
-  });
-
-  // Load App URL
-  mainWindow.loadURL("orpheus://orpheus/pub/app.html");
-
-  setMainWindow(mainWindow);
-
-  [
-    "maximize",
-    "minimize",
-    "restore",
-    os.platform() === "linux" ? "resize" : "resized",
-  ].forEach((event) => {
-    mainWindow.on(event as unknown as "maximize", () => {
-      // resize is triggered instead of restore on Linux (Wayland)
-      mainWindow.webContents.send(
-        "channel.call",
-        "winhelper.onSizeStatus",
-        ...getWindowSizeStatus(mainWindow)
-      );
-    });
-  });
-
-  const sendResizeDone = () => {
-    const bounds = mainWindow.getBounds();
-    mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
-      top: 0,
-      left: 0,
-      right: bounds.width,
-      bottom: bounds.height,
-      deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
-    });
-  };
-
-  if (os.platform() !== "linux") {
-    mainWindow.on("resized", sendResizeDone);
-  } else {
-    let resizeEndTimer: NodeJS.Timeout | undefined;
-
-    mainWindow.on("resize", () => {
-      if (resizeEndTimer) {
-        clearTimeout(resizeEndTimer);
-      }
-
-      // Linux does not emit "resized", so debounce "resize" to emulate resize-end.
-      resizeEndTimer = setTimeout(sendResizeDone, 150);
-    });
-  }
-
-  mainWindow.on("focus", () => {
-    mainWindow.webContents.send("channel.call", "winhelper.onfocus");
-  });
-  mainWindow.on("blur", () => {
-    mainWindow.webContents.send("channel.call", "winhelper.onlosefocus");
-  });
-
-  mainWindow.on("show", () => {
-    // Make sure mini player doesn't show together with main window
-    import("./main/windows/mini-player").then((m) => m.hideMiniPlayerWindow());
-  });
-
-  mainWindow.on("close", (e) => {
-    if (quitting) return;
-    mainWindow.webContents.send("channel.call", "winhelper.onclose");
-    e.preventDefault();
-  });
-};
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -295,8 +197,6 @@ app.on("ready", async () => {
     });
 
     await Promise.all([
-      // Initialize util module
-      import("./main/util").then((m) => m.default()),
       // Set temp dir for streamer and run cleanup
       import("./main/audio/OnlineStreamer").then(async (m) => {
         m.OnlineStreamer.tempDir = path.resolve(
@@ -314,6 +214,7 @@ app.on("ready", async () => {
       import("./main/request").then(async (m) => {
         m.setupRequestInterceptors();
 
+        // Apply stored proxy settings
         const { kv: settings } = await import("./main/settings");
         const proxy = await settings.get("proxy");
         if (typeof proxy !== "string" || !proxy) return;
@@ -369,7 +270,8 @@ app.on("ready", async () => {
       app.quit(); // Graceful exit
     });
 
-    createWindow();
+    // Create main window
+    await (await import("./main/windows/main")).default();
 
     markStarted();
 
@@ -384,28 +286,17 @@ app.on("ready", async () => {
       dialog.showErrorBox(
         "Initialization Failed",
         "An error occurred during application initialization. Open Orpheus will now exit.\n\nDetails:\n" +
-          stringifyError(error)
+          toError(error)
       );
     }
     app.exit(1);
   }
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on("window-all-closed", () => {
   // Make sure we don't quit because of package download window being closed before main window has started
-  if (process.platform !== "darwin" && appStarted) {
+  if (appStarted) {
     app.quit();
-  }
-});
-
-app.on("activate", () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
   }
 });
 

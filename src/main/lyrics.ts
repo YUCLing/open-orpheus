@@ -1,15 +1,18 @@
-import { ipcMain } from "electron";
-
+import { events as lifecycleEvents } from "./lifecycle";
 import LyricsDispatcher from "./lyrics/LyricsDispatcher";
 
 export const lyricsDispatcher = new LyricsDispatcher();
 
 // Lyrics update events are handled in calls.
 
-ipcMain.on("lyrics.setPlayState", (event, playState) => {
-  lyricsDispatcher.playState = playState;
-});
+lifecycleEvents.on("mainwindowcreated", (e) => {
+  const mainWindow = e.data;
 
-ipcMain.on("lyrics.setTime", (event, time) => {
-  lyricsDispatcher.time = time;
+  mainWindow.webContents.ipc.on("lyrics.setPlayState", (event, playState) => {
+    lyricsDispatcher.playState = playState;
+  });
+
+  mainWindow.webContents.ipc.on("lyrics.setTime", (event, time) => {
+    lyricsDispatcher.time = time;
+  });
 });

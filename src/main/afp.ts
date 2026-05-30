@@ -1,7 +1,9 @@
 import { createCipheriv } from "node:crypto";
 import { deflateSync } from "node:zlib";
-import { ipcMain } from "electron";
+
 import FFT from "fft.js";
+
+import { events as lifecycleEvents } from "./lifecycle";
 
 const VERSION = "hyai_1.2.0_client_1.0.0";
 const VERSION_BYTES = new TextEncoder().encode(VERSION);
@@ -316,6 +318,11 @@ export function GenerateFP(samples: Float32Array): string {
   return encryptRawFingerprint(buildRawFingerprint(duration, peaks));
 }
 
-ipcMain.handle("afp.generateFP", (_event, data: ArrayBuffer) => {
-  return GenerateFP(new Float32Array(data));
+lifecycleEvents.on("mainwindowcreated", (e) => {
+  e.data.webContents.ipc.handle(
+    "afp.generateFP",
+    (_event, data: ArrayBuffer) => {
+      return GenerateFP(new Float32Array(data));
+    }
+  );
 });

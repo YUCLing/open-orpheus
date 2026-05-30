@@ -1,7 +1,7 @@
 import path, { join } from "node:path";
 import { readFile, stat } from "node:fs/promises";
 
-import { ipcMain, Protocol } from "electron";
+import { Protocol } from "electron";
 import mime from "mime";
 
 import { OnlineStreamer } from "./audio/OnlineStreamer";
@@ -11,9 +11,11 @@ import { mainWindow } from "./window";
 import { playCacheManager } from "./cache";
 import { normalizePath, sanitizeRelativePath } from "./util";
 import { pack as packageDir } from "./folders";
-import { stringifyError } from "../util";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
+import { events as lifecycleEvents } from "./lifecycle";
+import { kv as settings } from "./settings";
+import { toError } from "../util";
 
 enum AudioType {
   Local,
@@ -38,68 +40,6 @@ function sendProgress(prog: number) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send("audio.onProgress", prog);
 }
-
-ipcMain.handle(
-  "audio.updatePlayInfo",
-  (event, playInfo: AudioPlayInfo | null) => {
-    if (state?.type === AudioType.URL) {
-      // We don't await this, let it destroy in background
-      state.streamer.destroy().catch((e) => {
-        console.error("Failed to destroy previous OnlineStreamer", e);
-      });
-    }
-    state = null;
-    if (!playInfo) return;
-
-    if (playInfo.type === 0) {
-      // Local File Play
-      playInfo.path = normalizePath(playInfo.path);
-      state = {
-        type: AudioType.Local,
-        playInfo,
-        path: playInfo.path,
-      };
-    } else if (playInfo.type === 4) {
-      // URL Play
-      const songId = playInfo.songId;
-      const streamer = new OnlineStreamer(playInfo.musicurl);
-
-      streamer.on("progress", (e) => {
-        sendProgress(e.data.loaded / e.data.total);
-      });
-
-      streamer.on("complete", async () => {
-        if (state?.playInfo.songId !== songId) return;
-        try {
-          const buf = await streamer.readBuffer();
-          playCacheManager
-            ?.cacheTrack(songId, buf, {
-              md5: playInfo.md5,
-              bitrate: playInfo.bitrate,
-              playInfoStr: playInfo.playInfoStr,
-              volumeGain: 0,
-              fileSize: buf.length,
-            })
-            .catch((err) => {
-              console.error("[PlayCacheManager] Failed to cache track:", err);
-            });
-        } catch (e) {
-          console.log("Cannot get streamed track:", e);
-        }
-      });
-
-      streamer.on("error", (e) => {
-        console.log("OnlineStreamer error:", e.data);
-      });
-
-      state = {
-        type: AudioType.URL,
-        playInfo,
-        streamer,
-      };
-    }
-  }
-);
 
 export default function registerAudioStreamerScheme(protocol: Protocol) {
   protocol.handle("audio", async (request) => {
@@ -165,10 +105,83 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
             },
           });
         } catch (err) {
-          return new Response(stringifyError(err), { status: 500 });
+          return new Response(toError(err).message, { status: 500 });
         }
       }
     }
     return new Response("Not Found", { status: 404 });
   });
 }
+
+lifecycleEvents.on("mainwindowcreated", (e) => {
+  const mainWindow = e.data;
+  mainWindow.webContents.ipc.handle("audio.setDevice", async (e, deviceId) => {
+    return settings.set("audio.currentDevice", deviceId);
+  });
+
+  mainWindow.webContents.ipc.handle("audio.getDevice", async () => {
+    return settings.get("audio.currentDevice");
+  });
+
+  mainWindow.webContents.ipc.handle(
+    "audio.updatePlayInfo",
+    (event, playInfo: AudioPlayInfo | null) => {
+      if (state?.type === AudioType.URL) {
+        // We don't await this, let it destroy in background
+        state.streamer.destroy().catch((e) => {
+          console.error("Failed to destroy previous OnlineStreamer", e);
+        });
+      }
+      state = null;
+      if (!playInfo) return;
+
+      if (playInfo.type === 0) {
+        // Local File Play
+        playInfo.path = normalizePath(playInfo.path);
+        state = {
+          type: AudioType.Local,
+          playInfo,
+          path: playInfo.path,
+        };
+      } else if (playInfo.type === 4) {
+        // URL Play
+        const songId = playInfo.songId;
+        const streamer = new OnlineStreamer(playInfo.musicurl);
+
+        streamer.on("progress", (e) => {
+          sendProgress(e.data.loaded / e.data.total);
+        });
+
+        streamer.on("complete", async () => {
+          if (state?.playInfo.songId !== songId) return;
+          try {
+            const buf = await streamer.readBuffer();
+            playCacheManager
+              ?.cacheTrack(songId, buf, {
+                md5: playInfo.md5,
+                bitrate: playInfo.bitrate,
+                playInfoStr: playInfo.playInfoStr,
+                volumeGain: 0,
+                fileSize: buf.length,
+              })
+              .catch((err) => {
+                console.error("[PlayCacheManager] Failed to cache track:", err);
+              });
+          } catch (e) {
+            console.log("Cannot get streamed track:", e);
+          }
+        });
+
+        streamer.on("error", (e) => {
+          console.log("OnlineStreamer error:", e.data);
+        });
+
+        state = {
+          type: AudioType.URL,
+          playInfo,
+          streamer,
+        };
+      }
+    }
+  );
+});

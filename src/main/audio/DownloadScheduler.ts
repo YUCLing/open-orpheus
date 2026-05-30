@@ -1,5 +1,7 @@
 import got from "got";
 
+import { toError } from "../../util";
+
 import type ChunkTracker from "./ChunkTracker";
 import type StorageManager from "./StorageManager";
 
@@ -464,11 +466,6 @@ export default class DownloadScheduler {
     this.completeEmitted = true;
     this.onComplete();
   }
-}
-
-function toError(error: unknown) {
-  if (error instanceof Error) return error;
-  return new Error(String(error));
 }
 
 function isFatalBackgroundError(error: Error) {

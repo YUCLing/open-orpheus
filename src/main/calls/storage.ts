@@ -36,7 +36,7 @@ import createCacheManager, {
   lyricCacheManager,
   playCacheManager,
 } from "../cache";
-import { stringifyError } from "../../util";
+import { toError } from "../../util";
 import { deData, enData, ID3_AES_KEY } from "../crypto";
 
 const ID3_COMMENT_PREFIX = "163 key(Don't modify):";
@@ -72,9 +72,7 @@ async function readDownloadedMusicInfo(
     if (!decryptedComment) return;
     comment = decryptedComment ? decryptedComment.toString("utf-8") : "";
   } catch (error) {
-    console.error(
-      `Error reading ID3 tags from ${filePath}: ${stringifyError(error)}`
-    );
+    console.error(`Error reading ID3 tags from ${filePath}:`, error);
   }
   const statResult = await stat(filePath);
   return {
@@ -156,7 +154,7 @@ registerCallHandler<[string, string], void>(
         ...execResult
       );
     } catch (error) {
-      console.error(`Error executing SQL: ${stringifyError(error)}`);
+      console.error(`Error executing SQL:`, error);
       event.sender.send(
         "channel.call",
         "storage.onexecsqldone",
@@ -181,9 +179,7 @@ registerCallHandler<[string, string], void>(
         ...execResult
       );
     } catch (error) {
-      console.error(
-        `Error executing SQL transaction: ${stringifyError(error)}`
-      );
+      console.error(`Error executing SQL transaction:`, error);
       event.sender.send(
         "channel.call",
         "storage.onexecsqldone",
@@ -224,7 +220,7 @@ registerCallHandler<
         "storage.onsavetofiledone",
         taskId,
         -1,
-        stringifyError(error)
+        toError(error).message
       );
     }
   }
@@ -342,9 +338,7 @@ registerCallHandler<[string, boolean, string, number, string[]], void>(
 
         flush();
       } catch (err) {
-        console.error(
-          `DownloadScanner: scanner path ${path}: ${stringifyError(err)}`
-        );
+        console.error(`DownloadScanner: scanner path ${path}:`, err);
       }
     })();
   }
@@ -414,9 +408,7 @@ registerCallHandler<[string], void>(
     try {
       content = (await lyricCacheManager?.get(songId)) ?? "";
     } catch (error) {
-      console.error(
-        `Error reading temp file for songId ${songId}: ${stringifyError(error)}`
-      );
+      console.error(`Error reading temp file for songId ${songId}:`, error);
     }
     event.sender.send(
       "channel.call",
@@ -441,9 +433,7 @@ registerCallHandler<[string, string, string], void>(
     try {
       await lyricCacheManager.set(songId, content);
     } catch (error) {
-      console.error(
-        `Error writing temp file for songId ${songId}: ${stringifyError(error)}`
-      );
+      console.error(`Error writing temp file for songId ${songId}:`, error);
     }
   }
 );
@@ -612,7 +602,7 @@ async function handleFileBatch(
       })
     );
   } catch (error) {
-    console.error(`Error when ${type} files: ${stringifyError(error)}`);
+    console.error(`Error when ${type} files:`, error);
     event.sender.send("channel.call", `storage.on${type}process`, {
       code: 1,
       state: srcPaths.length - processedCount,

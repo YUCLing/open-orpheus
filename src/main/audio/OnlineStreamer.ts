@@ -7,6 +7,8 @@ import { randomUUID } from "node:crypto";
 import Emittery from "emittery";
 import got from "got";
 
+import { toError } from "../../util";
+
 import ChunkTracker from "./ChunkTracker";
 import DownloadScheduler from "./DownloadScheduler";
 import StorageManager from "./StorageManager";
@@ -458,9 +460,4 @@ function normalizeBoundary(value: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function toError(error: unknown) {
-  if (error instanceof Error) return error;
-  return new Error(String(error));
 }

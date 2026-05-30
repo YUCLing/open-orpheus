@@ -1,4 +1,3 @@
-import { stringifyError } from "../../util";
 import { registerCallHandler } from "../calls";
 import { getCookies, getFullCookies, removeCookie, setCookie } from "../cookie";
 
@@ -89,7 +88,7 @@ registerCallHandler<[SetCookie], [boolean]>(
         sameSite: cookie.samesite,
       });
     } catch (error) {
-      console.error(`Error setting cookie: ${stringifyError(error)}`);
+      console.error(`Error setting cookie:`, error);
       return [false];
     }
     return [true];

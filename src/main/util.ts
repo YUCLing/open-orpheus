@@ -3,16 +3,10 @@ import { stat } from "node:fs/promises";
 import os from "node:os";
 
 import { BrowserWindow, screen } from "electron";
-
-let photon: typeof import("@silvia-odwyer/photon-node") | null = null;
-let mime: typeof import("mime") | null = null;
-
-function ensureModule<T>(mod: T): asserts mod is NonNullable<T> {
-  if (!mod) throw new Error("util is not initialized");
-}
+import photon from "@silvia-odwyer/photon-node";
+import mime from "mime";
 
 export function pngFromIco(icoData: Uint8Array): Uint8Array {
-  ensureModule(photon);
   const icoImage = photon.PhotonImage.new_from_byteslice(icoData);
   const pngData = icoImage.get_bytes();
   return pngData;
@@ -41,39 +35,13 @@ export function sanitizeRelativePath(
   return resolvedPath;
 }
 
-export function getWindowState(
-  wnd: BrowserWindow
-): "minimize" | "maximize" | "restore" {
-  return wnd.isMinimized()
-    ? "minimize"
-    : wnd.isMaximized()
-      ? "maximize"
-      : "restore";
-}
-
-export function getWindowSizeStatus(
-  wnd: BrowserWindow
-): ["minimize" | "maximize" | "restore", number, number, number] {
-  const bounds = wnd.getBounds();
-  const screenScaleFactor = screen.getDisplayMatching(bounds).scaleFactor;
-  // TODO: Confirm macOS desired behavior, Windows and Linux (Wayland) is already tested to be correct
-  const scaleFactor = os.platform() === "win32" ? 1 : screenScaleFactor;
-  return [
-    getWindowState(wnd),
-    bounds.width * scaleFactor,
-    bounds.height * scaleFactor,
-    screenScaleFactor,
-  ];
-}
-
 export function getWindowScaleFactor(wnd: BrowserWindow): number {
   const bounds = wnd.getBounds();
   return screen.getDisplayMatching(bounds).scaleFactor;
 }
 
 export function isMusicFile(fileOrPath: string): boolean {
-  ensureModule(mime);
-  return mime.default.getType(fileOrPath)?.startsWith("audio/") || false;
+  return mime.getType(fileOrPath)?.startsWith("audio/") || false;
 }
 
 export async function calculateDbSize(db: string): Promise<number> {
@@ -94,11 +62,4 @@ export async function calculateDbSize(db: string): Promise<number> {
   ]);
 
   return sizeBytes;
-}
-
-export default async function initialize() {
-  [photon, mime] = await Promise.all([
-    import("@silvia-odwyer/photon-node"),
-    import("mime"),
-  ]);
 }
