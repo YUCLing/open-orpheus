@@ -292,7 +292,11 @@ app.on("ready", async () => {
           os.tmpdir(),
           "open-orpheus-streamer"
         );
-        await m.OnlineStreamer.cleanup();
+        // This will be done in the background, the OnlineStreamer will know what files are
+        // currently being used, cleanup will only clean the leftovers from previous usages.
+        m.OnlineStreamer.cleanup().catch((e) => {
+          console.error("Failed to cleanup OnlineStreamer temporary files:", e);
+        });
       }),
       import("./main/afp"),
       import("./main/channel"),
