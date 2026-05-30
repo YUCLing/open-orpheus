@@ -47,6 +47,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
   private readonly scheduler: DownloadScheduler;
   private readonly metaAbortController = new AbortController();
   private readonly metaReadyPromise: Promise<void>;
+  private readonly emittedErrors = new WeakSet<Error>();
   private mimeType = DEFAULT_MIME_TYPE;
   private destroyed = false;
 
@@ -316,6 +317,9 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
   private emitError(error: Error) {
     if (this.destroyed) return;
+    if (this.emittedErrors.has(error)) return;
+
+    this.emittedErrors.add(error);
     void this.emit("error", error).catch((emitError: unknown) =>
       console.error(emitError)
     );
