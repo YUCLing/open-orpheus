@@ -35,7 +35,10 @@ if (os.platform() === "linux") {
       onClickBehaviorUpdate(value);
     }
   });
-  settings.kv.get("tray.clickBehavior").then((v) => onClickBehaviorUpdate(v)).catch(console.error);
+  settings.kv
+    .get("tray.clickBehavior")
+    .then((v) => onClickBehaviorUpdate(v))
+    .catch(console.error);
 }
 
 registerCallHandler<[string], void>(
