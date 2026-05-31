@@ -1,13 +1,8 @@
-import { ipcRenderer } from "electron";
 import { SECRET_KEY } from "../../constants";
 import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
 import { fireNativeCall } from "../channel";
-import {
-  recCtx,
-  startContinuousRecord,
-  stopContinuousRecord,
-} from "../recorder";
+import MusicRecognizer from "../MusicRecognizer";
 
 // These are not needed?
 registerCallHandler<[], void>("app.statis", () => {
@@ -120,106 +115,40 @@ registerCallHandler<[{ path: string; pathtype: string }], void>(
   }
 );
 
-const activeRecognizeTasks = new Set<string>();
-registerCallHandler<[string], void>("app.recognizeMusic", async (guid) => {
-  activeRecognizeTasks.add(guid);
+const recognizeTasks = new Map<string, MusicRecognizer>();
 
-  const sessionId = crypto.randomUUID().toUpperCase();
-  const recordtime = Date.now();
+registerCallHandler<[string], void>("app.recognizeMusic", async (guid) => {
+  recognizeTasks.get(guid)?.stop();
+
+  const recognizer = new MusicRecognizer();
+  recognizeTasks.set(guid, recognizer);
 
   try {
-    await startContinuousRecord(guid);
-
-    for (let times = 1; times <= 5; times++) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      if (!activeRecognizeTasks.has(guid)) break;
-
-      const duration = times * 3;
-      const endSample = duration * 8000;
-
-      const chunk = recCtx!.buffer.subarray(
-        0,
-        Math.min(endSample, recCtx!.getOffset())
-      );
-      const rawdata = await ipcRenderer.invoke(
-        "afp.generateFP",
-        chunk.buffer.slice(
-          chunk.byteOffset,
-          chunk.byteOffset + chunk.byteLength
-        )
-      );
-
-      const payload = new URLSearchParams({
-        algorithmCode: "shazam_v2",
-        duration: duration.toString(),
-        rawdata,
-        sessionId,
-        decrypt: "1",
-        from: "pc_back_discern",
-        times: times.toString(),
-      }).toString();
-
-      const [res] = await ipcRenderer.invoke("channel.call", "network.fetch", {
-        url: `https://interfacepc.music.163.com/api/music/audio/match?${payload}`,
-        method: "GET",
-        body: "",
-        retryCount: 1,
+    const result = await recognizer.start();
+    if (result) {
+      fireNativeCall("app.onRecognizeMusic", {
+        ...result,
+        guid,
       });
-
-      const responsetime = Date.now();
-      let code = res.status === 200 ? 0 : res.status;
-      const httpmsg = res.blob || "{}";
-      let hasMatch = false;
-
-      try {
-        const body = JSON.parse(httpmsg);
-        if (body.code === 200 && body.data?.result !== null) {
-          hasMatch = true;
-        }
-      } catch (e) {
-        console.error(e);
-        code = -101;
-      }
-
-      if (hasMatch || times === 5) {
-        fireNativeCall("app.onRecognizeMusic", {
-          code,
-          duration,
-          guid,
-          httpmsg,
-          recordtime,
-          responsetime,
-          sessionId,
-          times,
-        });
-
-        break;
-      }
     }
-  } catch (err) {
-    console.error(err);
-    fireNativeCall("app.onRecognizeMusic", {
-      code: -100,
-      duration: 0,
-      guid,
-      httpmsg: {},
-      recordtime,
-      responsetime: Date.now(),
-      sessionId,
-      times: 0,
-    });
   } finally {
-    stopContinuousRecord(guid);
-    activeRecognizeTasks.delete(guid);
+    if (recognizeTasks.get(guid) === recognizer) {
+      recognizeTasks.delete(guid);
+    }
   }
 });
 
+function stopRecognizeTask(guid: string) {
+  const recognizer = recognizeTasks.get(guid);
+  if (!recognizer) return;
+  recognizer.stop();
+  recognizeTasks.delete(guid);
+}
+
 registerCallHandler<[string], void>("app.stopRecognizeMusic", (guid) => {
-  activeRecognizeTasks.delete(guid);
-  stopContinuousRecord(guid);
+  stopRecognizeTask(guid);
 });
 
 registerCallHandler<[string], void>("app.clearRecognizeMusicCache", (guid) => {
-  activeRecognizeTasks.delete(guid);
-  stopContinuousRecord(guid);
+  stopRecognizeTask(guid);
 });

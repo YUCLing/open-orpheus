@@ -110,6 +110,11 @@ const config: ForgeConfig = {
           config: "vite.worklets.config.ts",
           target: "preload",
         },
+        {
+          entry: "src/worklets/music-recorder.ts",
+          config: "vite.worklets.config.ts",
+          target: "preload",
+        },
       ],
       renderer: [
         {
