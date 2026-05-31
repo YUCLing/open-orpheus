@@ -142,7 +142,6 @@ export default class MusicRecognizer extends Emittery<MusicRecognizerEvents> {
       };
 
       source.connect(recorder);
-      recorder.connect(ctx.destination);
 
       if (ctx.state === "suspended") {
         await ctx.resume();
