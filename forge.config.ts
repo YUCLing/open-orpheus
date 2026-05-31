@@ -106,7 +106,7 @@ const config: ForgeConfig = {
           target: "preload",
         },
         {
-          entry: "src/worklets/audio-data.ts",
+          entry: "src/worklets/pcm-honeypot.ts",
           config: "vite.worklets.config.ts",
           target: "preload",
         },

@@ -122,7 +122,7 @@ export default class MusicRecognizer extends Emittery<MusicRecognizerEvents> {
 
       const recorder = new AudioWorkletNode(ctx, "music-recorder", {
         numberOfInputs: 1,
-        numberOfOutputs: 1,
+        numberOfOutputs: 0,
         channelCount: 1,
         channelCountMode: "explicit",
         processorOptions: {

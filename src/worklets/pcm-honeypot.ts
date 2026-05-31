@@ -3,7 +3,7 @@
 const PACKET_FRAMES = 3200; // 3200 stereo frames * 2ch * 2B = 12800 bytes
 const PACKET_BYTES = PACKET_FRAMES * 2 * 2;
 
-class PcmTapProcessor extends AudioWorkletProcessor {
+class PcmHoneypotProcessor extends AudioWorkletProcessor {
   private _buf: ArrayBuffer;
   private _dv: DataView;
   private _off: number;
@@ -26,17 +26,11 @@ class PcmTapProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+  process(inputs: Float32Array[][]): boolean {
     const input = inputs[0];
-    const output = outputs[0];
     if (!input || !input.length || !input[0]) return true;
 
     const len = input[0].length;
-
-    // Pass-through
-    for (let ch = 0; ch < output.length; ch++) {
-      output[ch].set(input[Math.min(ch, input.length - 1)]);
-    }
 
     // Convert float -> stereo interleaved int16 LE
     for (let i = 0; i < len; i++) {
@@ -63,4 +57,4 @@ class PcmTapProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("pcm-tap", PcmTapProcessor);
+registerProcessor("pcm-honeypot", PcmHoneypotProcessor);
