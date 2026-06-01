@@ -33,6 +33,9 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

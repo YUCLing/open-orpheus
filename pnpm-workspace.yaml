@@ -8,10 +8,13 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true
 patchedDependencies:
-  # Patches better-sqlite3 out of package.json, so Electron package won't be confused
+  # inlineDynamicImports is deprecated in Vite 8
+  "@electron-forge/plugin-vite": patches/@electron-forge__plugin-vite.patch
+  # Patches better-sqlite3 out of package.json, so Electron's packaging won't be confused
   "@keyv/sqlite": patches/@keyv__sqlite.patch
   # Fixes compatibility with latest rpmbuild
   electron-installer-redhat@3.4.0: patches/electron-installer-redhat@3.4.0.patch
+  # Fixes listener leak
   keyv@6.0.0-alpha.3: patches/keyv@6.0.0-alpha.3.patch
 blockExoticSubdeps: false
 nodeLinker: hoisted
@@ -24,3 +27,5 @@ overrides:
   # Our environment is locked to Node.JS 24+, so there will always be node:sqlite
   "@keyv/sqlite>better-sqlite3": "-"
   "@keyv/sqlite>sqlite3": "-"
+  # Safe to upgrade (no actual breaking changes for this project)
+  "@electron-forge/plugin-fuses>@electron/fuses": "$@electron/fuses"

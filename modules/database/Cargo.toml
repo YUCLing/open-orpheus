@@ -9,10 +9,10 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi        = "3.0.0"
-napi-derive = "3.0.0"
+napi.workspace = true
+napi-derive.workspace = true
 pinyin      = { version = "0.11", features = ["plain"] }
-rusqlite    = { version = "0.38.0", features = ["bundled", "collation"] }
+rusqlite    = { version = "0.40.0", features = ["bundled", "collation"] }
 
 [build-dependencies]
 napi-build = "2"

@@ -2,6 +2,10 @@
 members = ["modules/database", "modules/window", "modules/ui"]
 resolver = "3"
 
+[workspace.dependencies]
+napi = "3.0.0"
+napi-derive = "3.0.0"
+
 [profile.release]
 lto   = true
 strip = "symbols"
