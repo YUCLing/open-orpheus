@@ -338,7 +338,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       },
       reportSize: async (_event, width, height) => {
         if (this.closed || wnd.isDestroyed()) return;
-        const { x: dx, y: dy, width: dw, height: dh } = display.workArea;
+        const { x: dx, y: dy, width: dw, height: dh } = display.bounds;
         const onBottomHalf = cursor.y > dy + dh / 2;
         let x = cursor.x;
         let y = onBottomHalf ? cursor.y - height : cursor.y;
