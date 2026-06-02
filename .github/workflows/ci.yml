@@ -9,15 +9,6 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-          - ubuntu-24.04-arm
-
     uses: ./.github/workflows/build.yml
     with:
-      runner: ${{ matrix.runner }}
+      runner: windows-11-arm64
