@@ -94,7 +94,7 @@ jobs:
     needs: prepare
     uses: ./.github/workflows/build.yml
     with:
-      runner: windows-11-arm64
+      runner: windows-11-arm
       ref: ${{ needs.prepare.outputs.commit-sha }}
 
   publish:

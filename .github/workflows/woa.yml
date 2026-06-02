@@ -8,4 +8,4 @@ jobs:
     name: Build WOA
     uses: ./.github/workflows/build.yml
     with:
-      runner: windows-11-arm64
+      runner: windows-11-arm
