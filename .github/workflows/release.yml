@@ -76,114 +76,12 @@ jobs:
             ${{ inputs.pre_release && '--prerelease' || '' }} \
             ${{ inputs.previous_tag && format('--notes-start-tag "{0}"', inputs.previous_tag) || '' }} \
 
-      - name: Fetch auto-generated release notes
-        if: ${{ !inputs.skip_commit }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release view "v${{ inputs.version }}" \
-            --json body \
-            -q '.body' > /tmp/release-notes.md
-
-      - name: Generate metainfo descriptions via DeepSeek
-        if: ${{ !inputs.skip_commit }}
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: |
-          jq -n \
-            --rawfile notes /tmp/release-notes.md \
-            '{
-              model: "deepseek-chat",
-              messages: [
-                {
-                  role: "system",
-                  content: "You are a release note writer for a Linux desktop app called Open Orpheus (an open-source Netease Cloud Music client). Given GitHub auto-generated release notes, produce a concise, organized summary in English and Chinese. AppStream requires translating individual <li/> items, not whole <ul/> groups. So use a SINGLE <ul> where each English <li> is immediately followed by its Chinese translation as <li xml:lang=\"zh-CN\">. Example: <ul><li>Fixed cookie expiration time.</li><li xml:lang=\"zh-CN\">修复 Cookie 过期时间。</li></ul>. Only describe changes actually present in the notes — never invent features. If the notes are empty or contain nothing meaningful (e.g., only a version bump), only mention: <ul><li>Version bump.</li><li xml:lang=\"zh-CN\">版本更新。</li></ul>. Output ONLY valid JSON: {\"description\": \"<ul>...</ul>\"}"
-                },
-                {
-                  role: "user",
-                  content: $notes
-                }
-              ]
-            }' | curl -s https://api.deepseek.com/v1/chat/completions \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-              -d @- | jq -r '.choices[0].message.content' > /tmp/deepseek.raw
-
-      - name: Update metainfo.xml
-        if: ${{ !inputs.skip_commit }}
-        run: |
-          python3 << 'PYEOF'
-          import json
-          import re
-          import xml.etree.ElementTree as ET
-          from datetime import date
-
-          ET.register_namespace('xml', 'http://www.w3.org/XML/1998/namespace')
-
-          with open('/tmp/deepseek.raw') as f:
-              raw = f.read().strip()
-
-          m = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', raw, re.DOTALL)
-          if m:
-              raw = m.group(1)
-
-          data = json.loads(raw)
-          version = "${{ inputs.version }}"
-          today = date.today().isoformat()
-
-          tree = ET.parse('packaging/flatpak/metainfo.xml')
-          root = tree.getroot()
-          releases = root.find('releases')
-
-          release = ET.Element('release', version=version, date=today)
-
-          url_el = ET.SubElement(release, 'url', type='details')
-          url_el.text = f'https://github.com/YUCLing/open-orpheus/releases/tag/v{version}'
-
-          desc_html = data['description'].strip()
-          try:
-              desc_el = ET.fromstring(f'<description>{desc_html}</description>')
-          except ET.ParseError:
-              desc_el = ET.Element('description')
-              desc_el.text = desc_html
-          release.append(desc_el)
-
-          releases.insert(0, release)
-
-          ET.indent(tree, space='  ')
-
-          xml_str = ET.tostring(root, encoding='unicode')
-
-          # Restore blank lines between major sections
-          for close_tag, next_tag in [
-              ('</id>', '<name'),
-              ('</url>', '<metadata_license'),
-              ('</project_license>', '<supports'),
-              ('</supports>', '<description'),
-              ('</description>', '<launchable'),
-              ('</launchable>', '<branding'),
-              ('</branding>', '<screenshots'),
-              ('</screenshots>', '<releases'),
-              ('</releases>', '<content_rating'),
-          ]:
-              xml_str = re.sub(
-                  rf'({re.escape(close_tag)}\n)(  {re.escape(next_tag)})',
-                  r'\1\n\2',
-                  xml_str
-              )
-
-          with open('packaging/flatpak/metainfo.xml', 'w') as f:
-              f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-              f.write(xml_str)
-              f.write('\n')
-          PYEOF
-
       - name: Commit and push
         if: ${{ !inputs.skip_commit }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json packaging/flatpak/metainfo.xml
+          git add package.json
           git commit -m "chore: bump version to ${{ inputs.version }}"
           git push origin main
 
@@ -192,19 +90,11 @@ jobs:
         run: echo "commit-sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
   build:
-    name: Build ${{ matrix.runner }}
+    name: Build WOA (Windows on ARM64)
     needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-          - ubuntu-24.04-arm
     uses: ./.github/workflows/build.yml
     with:
-      runner: ${{ matrix.runner }}
+      runner: windows-11-arm64
       ref: ${{ needs.prepare.outputs.commit-sha }}
 
   publish:
@@ -231,15 +121,8 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p release-files
-          find artifacts -type f | while read f; do
-            case "$f" in
-              artifacts/squirrel-*/*)
-                case "$f" in
-                  *.exe) cp "$f" release-files/ ;;
-                esac
-                ;;
-              *) cp "$f" release-files/ ;;
-            esac
+          find artifacts -type f -name '*.exe' -o -name '*.zip' | while read f; do
+            cp "$f" release-files/
           done
 
       - name: Upload assets to release
@@ -256,12 +139,6 @@ jobs:
             --draft=false \
             ${{ inputs.pre_release && '--prerelease' || '' }} \
             ${{ inputs.discussion_category && format('--discussion-category "{0}"', inputs.discussion_category) || '' }}
-
-      - name: Trigger Flathub publish workflow
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run flathub.yml --ref main
 
   cleanup:
     name: Clean up draft release on failure
