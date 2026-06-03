@@ -728,11 +728,6 @@ pub(super) fn query_pointer(window: u32) -> Option<(i16, i16)> {
         (conn.real_fd, conn.is_le, effective_window)
     };
 
-    // Release write lock before waiting — inbound processing in forward_msg
-    // does not require the write lock, so the proxy loop can still deliver
-    // the reply while we wait.
-    drop(write_guard);
-
     let mut payload = [0u8; 8];
     payload[0] = 38; // QueryPointer opcode
     write_u16(&mut payload[2..4], 2, is_le); // length = 2 words
@@ -748,6 +743,10 @@ pub(super) fn query_pointer(window: u32) -> Option<(i16, i16)> {
         }
         return None;
     }
+    // Release write lock before waiting — inbound processing in forward_msg
+    // does not require the write lock, so the proxy loop can still deliver
+    // the reply while we wait.
+    drop(write_guard);
 
     // Wait for the reply to arrive via feed_inbound
     let result = {
