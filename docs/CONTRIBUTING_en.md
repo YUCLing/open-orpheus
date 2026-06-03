@@ -22,13 +22,13 @@ Open Orpheus is an Electron-based host for Netease Cloud Music's Orpheus browser
 
 ### Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| App Shell | Electron + Node |
-| Native Modules | Rust (napi-rs), managed via Cargo workspace |
-| Renderer UI | Svelte 5 + Tailwind CSS (`gui/`, including settings, context menus, etc.) |
-| Build Tools | Electron Forge + Vite |
-| Package Manager | pnpm workspace |
+| Layer           | Technology                                                                |
+| --------------- | ------------------------------------------------------------------------- |
+| App Shell       | Electron + Node                                                           |
+| Native Modules  | Rust (napi-rs), managed via Cargo workspace                               |
+| Renderer UI     | Svelte 5 + Tailwind CSS (`gui/`, including settings, context menus, etc.) |
+| Build Tools     | Electron Forge + Vite                                                     |
+| Package Manager | pnpm workspace                                                            |
 
 ### Directory Structure
 

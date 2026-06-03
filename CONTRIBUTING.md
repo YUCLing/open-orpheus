@@ -22,13 +22,13 @@ Open Orpheus 是一个基于 Electron 打造的网易云音乐 Orpheus 浏览器
 
 ### 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 应用壳 | Electron + Node |
-| 原生模块 | Rust（napi-rs），通过 Cargo workspace 管理 |
+| 层级     | 技术                                                      |
+| -------- | --------------------------------------------------------- |
+| 应用壳   | Electron + Node                                           |
+| 原生模块 | Rust（napi-rs），通过 Cargo workspace 管理                |
 | 渲染界面 | Svelte 5 + Tailwind CSS（`gui/`，包括设置页、右键菜单等） |
-| 构建工具 | Electron Forge + Vite |
-| 包管理 | pnpm workspace |
+| 构建工具 | Electron Forge + Vite                                     |
+| 包管理   | pnpm workspace                                            |
 
 ### 目录结构
 
