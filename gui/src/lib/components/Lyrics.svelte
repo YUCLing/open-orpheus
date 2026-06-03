@@ -122,9 +122,13 @@
     return currentIdx % 2 === 0 ? currentIdx + 1 : currentIdx;
   });
 
-  // Whether the primary/secondary line is the currently-playing line
+  // Whether the primary line is the currently-playing line (used for binary progress fallback)
   let isPrimaryCurrent = $derived(upperIdx === currentIdx);
-  let isSecondaryCurrent = $derived(hasSecondary || lowerIdx === currentIdx);
+
+  // When translations are shown (hasSecondary), the secondary line is always fully
+  // highlighted so the translated text remains readable. In paired double-line mode
+  // without translations, it follows the lower line's playing state.
+  let secondaryAlwaysFull = $derived(hasSecondary || lowerIdx === currentIdx);
 
   // Lines to display
   let sloganLine: LyricLine | null = $derived(
@@ -157,22 +161,23 @@
     return null;
   });
 
-  let primaryProgress = $derived(
-    primaryLine && useProgress
-      ? wordProgress(primaryLine, adjustedTime)
-      : primaryLine
-        ? isPrimaryCurrent
-          ? 1
-          : 0
-        : 0
+  // Base word-level progress — computed once per line, shared by visual & scroll
+  let primaryWordProgress = $derived(
+    primaryLine ? wordProgress(primaryLine, adjustedTime) : 0
   );
 
-  let secondaryProgress = $derived.by(() => {
-    if (!secondaryLine) return 0;
-    if (!useProgress) return isSecondaryCurrent ? 1 : 0;
-    // For translation lines or next lines, compute their own progress
-    return wordProgress(secondaryLine, adjustedTime);
-  });
+  let secondaryWordProgress = $derived(
+    secondaryLine ? wordProgress(secondaryLine, adjustedTime) : 0
+  );
+
+  // Visual progress: respects useProgress flag (binary 0/1 when disabled)
+  let primaryProgress = $derived(
+    useProgress ? primaryWordProgress : primaryLine && isPrimaryCurrent ? 1 : 0
+  );
+
+  let secondaryProgress = $derived(
+    useProgress ? secondaryWordProgress : secondaryAlwaysFull ? 1 : 0
+  );
 
   // Overflow scrolling: measure text wrapper width vs line container width
   let line1WrapperEl: HTMLDivElement | undefined = $state();
@@ -200,54 +205,40 @@
     return () => ro.disconnect();
   });
 
+  // Measure overflow for a single line; returns px of hidden content
+  function measureLineOverflow(
+    lineContainerEl: HTMLDivElement | undefined,
+    vertical: boolean
+  ): number {
+    if (!lineContainerEl) return 0;
+    const scrollDim = vertical
+      ? lineContainerEl.scrollHeight
+      : lineContainerEl.scrollWidth;
+    const boxDim = vertical
+      ? lineContainerEl.clientHeight
+      : lineContainerEl.clientWidth;
+    return Math.max(0, scrollDim - boxDim);
+  }
+
   // Re-measure overflow whenever line content, orientation, font size, or container size changes
   $effect(() => {
     void primaryLine;
-    void style.vertical;
-    void style.font.size;
-    void containerWidth;
-    void containerHeight;
-    requestAnimationFrame(() => {
-      if (line1WrapperEl && line1ContainerEl) {
-        const scrollDim = style.vertical
-          ? line1ContainerEl.scrollHeight
-          : line1ContainerEl.scrollWidth;
-        const boxDim = style.vertical
-          ? line1ContainerEl.clientHeight
-          : line1ContainerEl.clientWidth;
-        line1Overflow = Math.max(0, scrollDim - boxDim);
-      } else {
-        line1Overflow = 0;
-      }
-    });
-  });
-
-  $effect(() => {
     void secondaryLine;
     void style.vertical;
     void style.font.size;
     void containerWidth;
     void containerHeight;
     requestAnimationFrame(() => {
-      if (line2WrapperEl && line2ContainerEl) {
-        const scrollDim = style.vertical
-          ? line2ContainerEl.scrollHeight
-          : line2ContainerEl.scrollWidth;
-        const boxDim = style.vertical
-          ? line2ContainerEl.clientHeight
-          : line2ContainerEl.clientWidth;
-        line2Overflow = Math.max(0, scrollDim - boxDim);
-      } else {
-        line2Overflow = 0;
-      }
+      line1Overflow = measureLineOverflow(line1ContainerEl, style.vertical);
+      line2Overflow = measureLineOverflow(line2ContainerEl, style.vertical);
     });
   });
 
   let line1Scroll = $derived(
-    line1Overflow > 0 ? line1Overflow * primaryProgress : 0
+    line1Overflow > 0 ? line1Overflow * primaryWordProgress : 0
   );
   let line2Scroll = $derived(
-    line2Overflow > 0 ? line2Overflow * secondaryProgress : 0
+    line2Overflow > 0 ? line2Overflow * secondaryWordProgress : 0
   );
 
   // Font style string
@@ -297,6 +288,64 @@
     bind:this={containerEl}
     {...rest}
   >
+    {#snippet lyricLineContent(line: LyricLine, progress: number)}
+      <!-- Outline layer (behind everything) -->
+      {#if unplayedOutline || playedOutline}
+        <span
+          class="absolute top-0 left-0 inline text-transparent select-none"
+          style="
+              {unplayedOutline ? `text-shadow: ${unplayedOutline};` : ''}
+              {shadowStyle}
+            "
+        >
+          {line.words.map((w) => w.text).join("")}
+        </span>
+        {#if playedOutline}
+          <span
+            class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
+            style="
+                {playedOutline ? `text-shadow: ${playedOutline};` : ''}
+                clip-path: inset(0 {style.vertical
+              ? '0'
+              : `${(1 - progress) * 100}%`} {style.vertical
+              ? `${(1 - progress) * 100}%`
+              : '0'} 0);
+              "
+          >
+            {line.words.map((w) => w.text).join("")}
+          </span>
+        {/if}
+      {/if}
+      <!-- Unplayed fill layer -->
+      <span
+        class="relative inline text-transparent select-none"
+        style="
+            background: {unplayedGradient};
+            -webkit-background-clip: text;
+            background-clip: text;
+            {shadowStyle}
+          "
+      >
+        {line.words.map((w) => w.text).join("")}
+      </span>
+      <!-- Played fill layer (clipped) -->
+      <span
+        class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
+        style="
+            background: {playedGradient};
+            -webkit-background-clip: text;
+            background-clip: text;
+            clip-path: inset(0 {style.vertical
+          ? '0'
+          : `${(1 - progress) * 100}%`} {style.vertical
+          ? `${(1 - progress) * 100}%`
+          : '0'} 0);
+          "
+      >
+        {line.words.map((w) => w.text).join("")}
+      </span>
+    {/snippet}
+
     {#if primaryLine}
       <div
         class="relative -m-2 overflow-hidden p-2 leading-[1.3] whitespace-nowrap {style.vertical
@@ -314,61 +363,7 @@
             ? `transform: translateY(-${line1Scroll}px);`
             : `transform: translateX(-${line1Scroll}px);`}
         >
-          <!-- Outline layer (behind everything) -->
-          {#if unplayedOutline || playedOutline}
-            <span
-              class="absolute top-0 left-0 inline text-transparent select-none"
-              style="
-                  {unplayedOutline ? `text-shadow: ${unplayedOutline};` : ''}
-                  {shadowStyle}
-                "
-            >
-              {primaryLine.words.map((w) => w.text).join("")}
-            </span>
-            {#if playedOutline}
-              <span
-                class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
-                style="
-                    {playedOutline ? `text-shadow: ${playedOutline};` : ''}
-                    clip-path: inset(0 {style.vertical
-                  ? '0'
-                  : `${(1 - primaryProgress) * 100}%`} {style.vertical
-                  ? `${(1 - primaryProgress) * 100}%`
-                  : '0'} 0);
-                  "
-              >
-                {primaryLine.words.map((w) => w.text).join("")}
-              </span>
-            {/if}
-          {/if}
-          <!-- Unplayed fill layer -->
-          <span
-            class="relative inline text-transparent select-none"
-            style="
-                background: {unplayedGradient};
-                -webkit-background-clip: text;
-                background-clip: text;
-                {shadowStyle}
-              "
-          >
-            {primaryLine.words.map((w) => w.text).join("")}
-          </span>
-          <!-- Played fill layer (clipped) -->
-          <span
-            class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
-            style="
-                background: {playedGradient};
-                -webkit-background-clip: text;
-                background-clip: text;
-                clip-path: inset(0 {style.vertical
-              ? '0'
-              : `${(1 - primaryProgress) * 100}%`} {style.vertical
-              ? `${(1 - primaryProgress) * 100}%`
-              : '0'} 0);
-              "
-          >
-            {primaryLine.words.map((w) => w.text).join("")}
-          </span>
+          {@render lyricLineContent(primaryLine, primaryProgress)}
         </div>
       </div>
     {:else if style.lineMode === LineMode.Double}
@@ -399,60 +394,7 @@
             ? `transform: translateY(-${line2Scroll}px);`
             : `transform: translateX(-${line2Scroll}px);`}
         >
-          <!-- Outline layer -->
-          {#if unplayedOutline || playedOutline}
-            <span
-              class="absolute top-0 left-0 inline text-transparent select-none"
-              style="
-                  {unplayedOutline ? `text-shadow: ${unplayedOutline};` : ''}
-                  {shadowStyle}
-                "
-            >
-              {secondaryLine.words.map((w) => w.text).join("")}
-            </span>
-            {#if playedOutline}
-              <span
-                class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
-                style="
-                    {playedOutline ? `text-shadow: ${playedOutline};` : ''}
-                    clip-path: inset(0 {style.vertical
-                  ? '0'
-                  : `${(1 - secondaryProgress) * 100}%`} {style.vertical
-                  ? `${(1 - secondaryProgress) * 100}%`
-                  : '0'} 0);
-                  "
-              >
-                {secondaryLine.words.map((w) => w.text).join("")}
-              </span>
-            {/if}
-          {/if}
-          <!-- Unplayed fill layer -->
-          <span
-            class="relative inline text-transparent select-none"
-            style="
-                background: {unplayedGradient};
-                -webkit-background-clip: text;
-                background-clip: text;
-                {shadowStyle}
-              "
-          >
-            {secondaryLine.words.map((w) => w.text).join("")}
-          </span>
-          <span
-            class="absolute top-0 left-0 inline text-transparent will-change-[clip-path] select-none"
-            style="
-                background: {playedGradient};
-                -webkit-background-clip: text;
-                background-clip: text;
-                clip-path: inset(0 {style.vertical
-              ? '0'
-              : `${(1 - secondaryProgress) * 100}%`} {style.vertical
-              ? `${(1 - secondaryProgress) * 100}%`
-              : '0'} 0);
-              "
-          >
-            {secondaryLine.words.map((w) => w.text).join("")}
-          </span>
+          {@render lyricLineContent(secondaryLine, secondaryProgress)}
         </div>
       </div>
     {:else if style.lineMode === LineMode.Double}
