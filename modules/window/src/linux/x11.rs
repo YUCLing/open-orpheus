@@ -762,8 +762,10 @@ pub(super) fn query_pointer(window: u32) -> Option<(i16, i16)> {
                 .ok()?;
             result_guard = guard;
             if timeout_result.timed_out() {
-                // Clean up pending state so a late reply doesn't
-                // erroneously signal a future call's condvar
+                // Drop result_guard before acquiring X11_CONNS to avoid
+                // deadlock: feed_inbound locks X11_CONNS → pending.result,
+                // so we must not hold pending.result while locking X11_CONNS.
+                drop(result_guard);
                 if let Some(m) = X11_CONNS.get()
                     && let Ok(mut map) = m.lock()
                     && let Some(conn) = map.get_mut(&fd)
