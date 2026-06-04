@@ -16,7 +16,7 @@ import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-nati
 
 import * as options from "./packaging/options";
 
-const LOCALES = ["en-US", "zh-CN"];
+const LOCALES = ["en", "en-US", "zh-CN"];
 
 const config: ForgeConfig = {
   packagerConfig: {
