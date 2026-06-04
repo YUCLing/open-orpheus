@@ -1,6 +1,5 @@
 import { readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import os from "node:os";
 
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
@@ -28,10 +27,37 @@ const config: ForgeConfig = {
 
     afterExtract: [
       async (buildPath, electronVersion, platform, arch, callback) => {
-        const localesPath = resolve(buildPath, "locales");
+        if (platform === "mas" || platform === "darwin") {
+          const resourcesPath = resolve(
+            buildPath,
+            "Electron.app/Contents/Resources"
+          );
 
-        // `.lproj` on macOS, `.pak` for others
-        const extLen = os.platform() === "darwin" ? 6 : 4;
+          const resources = await readdir(resourcesPath, {
+            withFileTypes: true,
+          });
+          await Promise.all(
+            resources.map(async (locale) => {
+              if (!locale.isDirectory() || !locale.name.endsWith(".lproj"))
+                return;
+              if (
+                LOCALES.includes(
+                  locale.name
+                    .substring(0, locale.name.length - 6)
+                    .replace("_", "-")
+                )
+              )
+                return;
+              await rm(resolve(locale.parentPath, locale.name), {
+                recursive: true,
+              });
+            })
+          );
+
+          callback();
+          return;
+        }
+        const localesPath = resolve(buildPath, "locales");
 
         const locales = await readdir(localesPath, { withFileTypes: true });
         await Promise.all(
@@ -40,7 +66,7 @@ const config: ForgeConfig = {
             if (
               LOCALES.includes(
                 locale.name
-                  .substring(0, locale.name.length - extLen)
+                  .substring(0, locale.name.length - 4)
                   .replace("_", "-")
               )
             )
