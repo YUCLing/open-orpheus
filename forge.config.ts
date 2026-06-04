@@ -1,5 +1,5 @@
-import { readdir, rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
@@ -78,6 +78,19 @@ const config: ForgeConfig = {
           })
         );
 
+        callback();
+      },
+      // Extract LICENSES.chromium.html to a separate directory when
+      // EXTRACT_LICENSES_TO is set, then remove it from the build.
+      async (buildPath, _electronVersion, _platform, _arch, callback) => {
+        const destDir = process.env.EXTRACT_LICENSES_TO;
+        if (destDir) {
+          const src = resolve(buildPath, "LICENSES.chromium.html");
+          const dest = resolve(destDir, "LICENSES.chromium.html");
+          await mkdir(dirname(dest), { recursive: true });
+          await copyFile(src, dest);
+          await rm(src);
+        }
         callback();
       },
     ],

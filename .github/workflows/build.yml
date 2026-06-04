@@ -64,6 +64,15 @@ jobs:
 
       - name: Build application bundles
         run: pnpm make
+        env:
+          EXTRACT_LICENSES_TO: out/license
+
+      - name: Upload licenses
+        uses: actions/upload-artifact@v7
+        with:
+          name: licenses-${{ inputs.runner }}
+          path: out/license/**
+          if-no-files-found: ignore
 
       - name: Upload flatpak
         uses: actions/upload-artifact@v7
