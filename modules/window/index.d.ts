@@ -18,6 +18,13 @@ export declare const enum DesktopEnvironment {
 export declare function dragWindow(handle: Buffer): void
 
 /**
+ * Gets the position of the cursor
+ *
+ * Only for X11 on Linux.
+ */
+export declare function getCursorPosition(): [number, number] | null
+
+/**
  * Get current detected desktop environment.
  *
  * Mostly for Linux to use, on Windows/macOS, returns hardcoded values.

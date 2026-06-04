@@ -58,6 +58,9 @@ jobs:
 
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ vars.RUST_VERSION || 'stable' }}
+          components: clippy,rustfmt
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

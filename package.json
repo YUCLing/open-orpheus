@@ -1,7 +1,7 @@
 {
   "name": "open-orpheus",
   "productName": "open-orpheus",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "An open-source implementation of Netease Cloud Music's Orpheus browser host.",
   "main": ".vite/build/main.js",
   "private": true,

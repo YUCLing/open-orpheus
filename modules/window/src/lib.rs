@@ -98,4 +98,23 @@ pub fn capture_next_window_first_cursor_enter(
     }
 }
 
+/// Gets the position of the cursor
+///
+/// Only for X11 on Linux.
+#[napi]
+pub fn get_cursor_position() -> Result<Option<(f64, f64)>> {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::linux::get_cursor_position as get_cursor_position_impl;
+        Ok(get_cursor_position_impl().map(|(x, y)| (x as f64, y as f64)))
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        use napi::Error;
+
+        Err(Error::from_reason("Only supports Linux"))
+    }
+}
+
 // endregion

@@ -179,6 +179,21 @@
                 </p>
                 <p>"网易云音乐"、"Orpheus" 等名称及相关商标归网易公司所有。</p>
               </div>
+              <div class="text-center">
+                <p>
+                  Open Orpheus 的诞生离不开 <Button
+                    class="px-0"
+                    target="_blank"
+                    href="https://www.chromium.org/"
+                    variant="link">Chromium</Button
+                  > 开源项目以及其他<Button
+                    class="px-0"
+                    target="_blank"
+                    href="https://github.com/YUCLing/open-orpheus/releases/download/v{__APP_VERSION__}/LICENSES.chromium.{api.platform}.html"
+                    variant="link">开源软件</Button
+                  >。
+                </p>
+              </div>
             </Dialog.Content>
           </Dialog.Root>
         </Sidebar.MenuItem>

@@ -105,6 +105,17 @@ pub fn set_input_region(window_handle: Unknown, rects: Option<Array>) -> Result<
     Ok(false)
 }
 
+/// Fetch the current cursor position via an injected X11 QueryPointer request.
+///
+/// Returns `Some((x, y))` in root-window coordinates on success, or `None` if
+/// X11 is not active or the query timed out.
+pub fn get_cursor_position() -> Option<(i32, i32)> {
+    if !x11::is_x11() {
+        return None;
+    }
+    x11::query_pointer(0).map(|(x, y)| (x as i32, y as i32))
+}
+
 pub fn capture_next_window_first_cursor_enter(
     env: Env,
     callback: Function<FnArgs<(i32, i32)>, ()>,

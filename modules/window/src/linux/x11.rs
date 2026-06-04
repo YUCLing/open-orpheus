@@ -2,7 +2,8 @@ use std::{
     collections::HashMap,
     mem,
     os::fd::RawFd,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Condvar, Mutex, OnceLock},
+    time::Duration,
 };
 
 use libc::{AF_UNIX, c_void, sa_family_t, sockaddr, sockaddr_un};
@@ -19,7 +20,13 @@ enum State {
 enum InjectedType {
     InternAtomNetWmMoveresize,
     QueryExtensionShape,
+    QueryPointer,
     Other,
+}
+
+struct QueryPointerPending {
+    result: Mutex<Option<(i16, i16)>>,
+    condvar: Condvar,
 }
 
 struct X11Conn {
@@ -44,6 +51,7 @@ struct X11Conn {
     root_x: i16,
     root_y: i16,
     button: u8,
+    query_pointer_pending: Option<Arc<QueryPointerPending>>,
 }
 
 impl X11Conn {
@@ -70,6 +78,7 @@ impl X11Conn {
             root_x: 0,
             root_y: 0,
             button: 1, // Default to Left Click
+            query_pointer_pending: None,
         }
     }
 }
@@ -249,6 +258,16 @@ pub(crate) fn feed_inbound(fd: RawFd, chunk: &[u8]) -> Option<Vec<u8>> {
                             let present = conn.rx_buf[off + 8] != 0;
                             if present {
                                 conn.shape_opcode = Some(conn.rx_buf[off + 9]);
+                            }
+                        }
+                        InjectedType::QueryPointer => {
+                            let root_x = r16(&conn.rx_buf[off + 16..off + 18], conn.is_le) as i16;
+                            let root_y = r16(&conn.rx_buf[off + 18..off + 20], conn.is_le) as i16;
+                            if let Some(ref pending) = conn.query_pointer_pending
+                                && let Ok(mut result) = pending.result.lock()
+                            {
+                                *result = Some((root_x, root_y));
+                                pending.condvar.notify_one();
                             }
                         }
                         _ => {}
@@ -659,6 +678,115 @@ pub(super) fn set_input_region_rects(window: u32, rects: Option<&[super::Rect]>)
 
         super::hook::send_raw_msg(real_fd, &payload)
     }
+}
+
+pub(super) fn query_pointer(window: u32) -> Option<(i16, i16)> {
+    let fd = {
+        let m = LAST_ACTIVE_FD.get()?;
+        let opt = m.lock().ok()?;
+        (*opt)?
+    };
+
+    let write_lock = server_write_lock(fd)?;
+    let write_guard = write_lock.lock().ok()?;
+
+    let pending = Arc::new(QueryPointerPending {
+        result: Mutex::new(None),
+        condvar: Condvar::new(),
+    });
+
+    let (real_fd, is_le, window) = {
+        let m = X11_CONNS.get()?;
+        let mut map = m.lock().ok()?;
+        let conn = map.get_mut(&fd)?;
+
+        conn.query_pointer_pending = Some(Arc::clone(&pending));
+
+        // If window is 0, fall back to the tracked root window
+        let effective_window = if window == 0 {
+            if conn.root_window == 0 {
+                return None;
+            }
+            conn.root_window
+        } else {
+            window
+        };
+
+        // Manually track the injected QueryPointer request sequence
+        conn.server_seq = conn.server_seq.wrapping_add(1);
+        conn.seq_offset = conn.seq_offset.wrapping_add(1);
+        conn.injected_seqs
+            .insert(conn.server_seq, InjectedType::QueryPointer);
+        conn.offset_transitions
+            .push((conn.server_seq.wrapping_add(1), conn.seq_offset));
+        if conn.offset_transitions.len() > 32 {
+            conn.offset_transitions.drain(0..16);
+        }
+        conn.injected_seqs
+            .retain(|&k, _| conn.server_seq.wrapping_sub(k) < 32768);
+
+        (conn.real_fd, conn.is_le, effective_window)
+    };
+
+    let mut payload = [0u8; 8];
+    payload[0] = 38; // QueryPointer opcode
+    write_u16(&mut payload[2..4], 2, is_le); // length = 2 words
+    write_u32(&mut payload[4..8], window, is_le);
+
+    if !super::hook::send_raw_msg(real_fd, &payload) {
+        // Roll back sequence tracking and pending state on send failure
+        if let Some(m) = X11_CONNS.get()
+            && let Ok(mut map) = m.lock()
+            && let Some(conn) = map.get_mut(&fd)
+        {
+            conn.query_pointer_pending = None;
+            conn.injected_seqs.remove(&conn.server_seq);
+            conn.offset_transitions.pop();
+            conn.server_seq = conn.server_seq.wrapping_sub(1);
+            conn.seq_offset = conn.seq_offset.wrapping_sub(1);
+        }
+        return None;
+    }
+    // Release write lock before waiting — inbound processing in forward_msg
+    // does not require the write lock, so the proxy loop can still deliver
+    // the reply while we wait.
+    drop(write_guard);
+
+    // Wait for the reply to arrive via feed_inbound
+    let result = {
+        let mut result_guard = pending.result.lock().ok()?;
+        while result_guard.is_none() {
+            let (guard, timeout_result) = pending
+                .condvar
+                .wait_timeout(result_guard, Duration::from_millis(500))
+                .ok()?;
+            result_guard = guard;
+            if timeout_result.timed_out() {
+                // Drop result_guard before acquiring X11_CONNS to avoid
+                // deadlock: feed_inbound locks X11_CONNS → pending.result,
+                // so we must not hold pending.result while locking X11_CONNS.
+                drop(result_guard);
+                if let Some(m) = X11_CONNS.get()
+                    && let Ok(mut map) = m.lock()
+                    && let Some(conn) = map.get_mut(&fd)
+                {
+                    conn.query_pointer_pending = None;
+                }
+                return None;
+            }
+        }
+        *result_guard
+    };
+
+    // Clean up
+    if let Some(m) = X11_CONNS.get()
+        && let Ok(mut map) = m.lock()
+        && let Some(conn) = map.get_mut(&fd)
+    {
+        conn.query_pointer_pending = None;
+    }
+
+    result
 }
 
 pub(crate) fn init_state() {

@@ -6,6 +6,7 @@ import Emittery from "emittery";
 import {
   captureNextWindowFirstCursorEnter,
   DesktopEnvironment,
+  getCursorPosition,
   getDesktopEnvironment,
 } from "@open-orpheus/window";
 
@@ -229,8 +230,19 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
   // --- Non-Wayland: transparent popup BrowserWindow ---
   private showWindow() {
+    const de = getDesktopEnvironment();
+
     const wnd = createMenuWindow();
-    const cursor = screen.getCursorScreenPoint();
+    let cursor = screen.getCursorScreenPoint();
+    if (de === DesktopEnvironment.X11) {
+      const pos = getCursorPosition();
+      if (pos) {
+        cursor = screen.screenToDipPoint({
+          x: pos[0],
+          y: pos[1],
+        });
+      }
+    }
     const display = screen.getDisplayNearestPoint(cursor);
 
     const closeSubmenuWindow = () => {

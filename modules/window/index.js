@@ -589,5 +589,6 @@ module.exports = nativeBinding
 module.exports.captureNextWindowFirstCursorEnter = nativeBinding.captureNextWindowFirstCursorEnter
 module.exports.DesktopEnvironment = nativeBinding.DesktopEnvironment
 module.exports.dragWindow = nativeBinding.dragWindow
+module.exports.getCursorPosition = nativeBinding.getCursorPosition
 module.exports.getDesktopEnvironment = nativeBinding.getDesktopEnvironment
 module.exports.setInputRegion = nativeBinding.setInputRegion

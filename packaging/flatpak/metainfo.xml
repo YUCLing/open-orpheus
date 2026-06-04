@@ -62,6 +62,23 @@
   </screenshots>
 
   <releases>
+    <release version="0.13.1" date="2026-06-04">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.13.1</url>
+      <description>
+        <ul>
+          <li>Fixed the current line not scrolling when desktop lyrics interpolation is disabled.</li>
+          <li xml:lang="zh-CN">修复禁用桌面歌词插值后当前行不滚动。</li>
+          <li>Fixed incorrect X11 tray menu position.</li>
+          <li xml:lang="zh-CN">修复 X11 托盘菜单位置不正确。</li>
+          <li>Updated dependencies.</li>
+          <li xml:lang="zh-CN">更新依赖。</li>
+          <li>Removed unused localization resources.</li>
+          <li xml:lang="zh-CN">删除不使用的本地化资源。</li>
+          <li>Moved Chromium license agreement from package to Assets.</li>
+          <li xml:lang="zh-CN">将 Chromium 许可协议从包中移动到 Assets 中。</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.13.0" date="2026-05-31">
       <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.13.0</url>
       <description>
