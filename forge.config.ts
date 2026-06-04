@@ -1,3 +1,7 @@
+import { readdir, rm } from "node:fs/promises";
+import { resolve } from "node:path";
+import os from "node:os";
+
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
@@ -13,12 +17,41 @@ import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-nati
 
 import * as options from "./packaging/options";
 
+const LOCALES = ["en-US", "zh-CN"];
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: {
       unpack: "**/*.{so*,dylib,dll}",
     },
     derefSymlinks: true, // TODO: Remove in Electron Forge 8
+
+    afterExtract: [
+      async (buildPath, electronVersion, platform, arch, callback) => {
+        const localesPath = resolve(buildPath, "locales");
+
+        // `.lproj` on macOS, `.pak` for others
+        const extLen = os.platform() === "darwin" ? 6 : 4;
+
+        const locales = await readdir(localesPath, { withFileTypes: true });
+        await Promise.all(
+          locales.map(async (locale) => {
+            if (!locale.isFile()) return;
+            if (
+              LOCALES.includes(
+                locale.name
+                  .substring(0, locale.name.length - extLen)
+                  .replace("_", "-")
+              )
+            )
+              return;
+            await rm(resolve(locale.parentPath, locale.name));
+          })
+        );
+
+        callback();
+      },
+    ],
 
     // In offline environments (e.g. flatpak sandbox), SHASUMS256.txt cannot be
     // downloaded from GitHub. The electron zip is already verified by sha256 in
