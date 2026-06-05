@@ -469,3 +469,91 @@ registerCallHandler<[number, ProxyTypes, string, string, string, string], void>(
     })();
   }
 );
+
+registerCallHandler<[], [string]>("app.getAppStartType", () => {
+  for (const arg of process.argv) {
+    if (arg.startsWith("--orpheus-startup=")) {
+      return [arg.substring(18)];
+    }
+  }
+  return [""];
+});
+
+const AUTORUN_ARGS = ["--orpheus-startup=autorun"];
+registerCallHandler<[string], [boolean]>(
+  "app.getAutoRunState",
+  (event, appName) => {
+    if (os.platform() === "linux") {
+      // Not supported on Linux
+      return [false];
+    }
+    switch (appName) {
+      case "cloudmusic": {
+        const result = app.getLoginItemSettings({
+          args: AUTORUN_ARGS,
+        });
+        return [result.openAtLogin];
+      }
+      default:
+        console.warn("Unsupported app", appName, "for getting autorun");
+        return [false];
+    }
+  }
+);
+
+registerCallHandler<[string, "autorun"], [boolean]>(
+  "app.setAutoRun",
+  (event, appName) => {
+    switch (appName) {
+      case "cloudmusic": {
+        if (os.platform() === "linux") {
+          // Not supported on Linux，show a dialog to provide
+          // information on enabling main program's autorun
+          // here for Linux users
+          const wnd = BrowserWindow.fromWebContents(event.sender);
+          if (wnd)
+            dialog.showMessageBox(wnd, {
+              message:
+                "暂不支持在 Linux 上设置自动启动。\n\n如有需要可根据系统自行设置并附加参数：" +
+                AUTORUN_ARGS.join(" "),
+              title: "Open Orpheus",
+              type: "warning",
+            });
+          return [false];
+        }
+        app.setLoginItemSettings({
+          openAtLogin: true,
+          enabled: true,
+          args: AUTORUN_ARGS,
+        });
+        return [true];
+      }
+      default:
+        console.warn("Unsupported app", appName, "for setting autorun");
+        return [false];
+    }
+  }
+);
+
+registerCallHandler<[string], [boolean]>(
+  "app.cancelAutoRun",
+  (event, appName) => {
+    if (os.platform() === "linux") {
+      // Not supported on Linux
+      return [false];
+    }
+    switch (appName) {
+      case "cloudmusic": {
+        app.setLoginItemSettings({
+          openAtLogin: false,
+          enabled: false,
+          args: AUTORUN_ARGS,
+        });
+        return [true];
+      }
+      default:
+        console.warn("Unsupported app", appName, "for cancelling autorun");
+        return [false];
+    }
+  }
+);
