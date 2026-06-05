@@ -63,10 +63,6 @@ registerCallHandler<[], [string]>("app.getAppStartTime", () => {
   return ["542493"]; // What is this?
 });
 
-registerCallHandler<[], [string]>("app.getAppStartType", () => {
-  return [""];
-});
-
 registerCallHandler<[], [boolean]>("app.initUrls", () => {
   // TODO: Implement this properly? What does this even do?
   return [true];
