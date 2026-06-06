@@ -1,7 +1,10 @@
+import { cp, mkdir, rm } from "node:fs/promises";
+import { dirname } from "node:path";
+
 import { registerCallHandler } from "../calls";
 import startDownload, { type DownloadTask } from "../download";
-import { downloadTemp } from "../folders";
-import { normalizePath } from "../util";
+import { data as dataDir, downloadTemp } from "../folders";
+import { normalizePath, sanitizeRelativePath } from "../util";
 
 type DownloadStartRequest = {
   ext_header: string;
@@ -13,6 +16,7 @@ type DownloadStartRequest = {
   rel_path: string;
   size: number;
   url: string;
+  type?: number;
 };
 
 // Payload of `download.onprocess`
@@ -41,6 +45,7 @@ registerCallHandler<[DownloadStartRequest], void>(
       rel_path,
       size,
       url,
+      type = 0,
     } = request;
 
     // Parse headers from JSON string
@@ -70,11 +75,23 @@ registerCallHandler<[DownloadStartRequest], void>(
         relative: rel_path,
         speed: e.data.speed,
         total: e.data.total || size,
-        type: 0,
+        type,
       });
     });
 
-    task.on("end", (e) => {
+    task.on("end", async (e) => {
+      if (type === 2) {
+        // Audio effect, ...?
+        const finalPath = sanitizeRelativePath(dataDir, rel_path);
+        if (finalPath === false) {
+          // Trigger task error
+          throw new Error("Illegal path: " + rel_path);
+        }
+        await mkdir(dirname(finalPath), { recursive: true });
+        await cp(destPath, finalPath);
+        await rm(destPath);
+      }
+
       event.sender.send("channel.call", "download.onprocess", id, {
         down: e.data.downloaded,
         islast: true,
@@ -82,8 +99,9 @@ registerCallHandler<[DownloadStartRequest], void>(
         relative: rel_path,
         speed: e.data.speed,
         total: e.data.total || size,
-        type: 0,
+        type,
       });
+
       downloadTasks.delete(id);
     });
 
@@ -96,7 +114,7 @@ registerCallHandler<[DownloadStartRequest], void>(
         relative: rel_path,
         speed: 0,
         total: size,
-        type: 1,
+        type,
       });
       downloadTasks.delete(id);
     });

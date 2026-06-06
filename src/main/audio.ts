@@ -10,7 +10,7 @@ import type { AudioPlayInfo } from "../preload/Player";
 import { mainWindow } from "./window";
 import { playCacheManager } from "./cache";
 import { normalizePath, sanitizeRelativePath } from "./util";
-import { pack as packageDir } from "./folders";
+import { data as dataDir, pack as packageDir } from "./folders";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { events as lifecycleEvents } from "./lifecycle";
@@ -122,6 +122,36 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
   mainWindow.webContents.ipc.handle("audio.getDevice", async () => {
     return settings.get("audio.currentDevice");
   });
+
+  mainWindow.webContents.ipc.handle(
+    "audio.readEffect",
+    async (
+      event,
+      pathInfo: {
+        pathtype: number;
+        path: string;
+      }
+    ) => {
+      if (pathInfo.pathtype !== 2) {
+        console.warn("Unsupported audio.readEffect pathtype:", pathInfo);
+        return null;
+      }
+      if (pathInfo.path.endsWith(".ncae")) {
+        console.warn("ncae format is not supported yet");
+        return null;
+      }
+      const path = sanitizeRelativePath(dataDir, pathInfo.path);
+      if (path === false) {
+        return null;
+      }
+      return await readFile(path, {
+        encoding: "utf-8",
+      }).catch((err) => {
+        console.error("Failed to read audio effect:", err);
+        return null;
+      });
+    }
+  );
 
   mainWindow.webContents.ipc.handle(
     "audio.updatePlayInfo",
