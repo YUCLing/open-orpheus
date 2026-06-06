@@ -52,7 +52,7 @@ function getLibraryPath(library: MusicLibraries): string | null {
     case "<itunes>":
       return null;
     default:
-      return library;
+      return normalizePath(library);
   }
 }
 
@@ -139,7 +139,7 @@ registerCallHandler<[MusicLibraries], void>(
   (event, lib) => {
     if (libWatchers.has(lib)) return;
     const libPath = getLibraryPath(lib);
-    if (!libPath) return;
+    if (!libPath || !existsSync(libPath)) return;
     const watcher = watch(
       libPath,
       { recursive: true },
@@ -182,7 +182,7 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
   "musiclibrary.addLibrary",
   async (_event, library) => {
     const libPath = getLibraryPath(library);
-    if (!libPath) return [true];
+    if (!libPath || !existsSync(libPath)) return [true];
     const db = getMusicLibraryDb();
 
     const entries = await readdir(libPath, { recursive: true });
