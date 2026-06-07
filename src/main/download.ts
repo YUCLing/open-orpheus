@@ -102,7 +102,6 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
       });
 
       this.request.on("end", async () => {
-        console.log(`Download completed: ${this.url} -> ${this.path}`);
         if (this.hash) {
           const calculatedHash = this.hash.digest("hex");
           if (this.options.md5 && calculatedHash !== this.options.md5) {
@@ -125,7 +124,7 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
             this.request?.downloadProgress?.total || this.options.size || 0,
           downloaded: this.request?.downloadProgress?.transferred || 0,
           speed: this.ema,
-        });
+        }).catch((err) => this.emit("error", err));
       });
 
       this.request.on("error", async (error) => {

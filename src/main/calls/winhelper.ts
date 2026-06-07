@@ -20,9 +20,9 @@ import {
   setMinimumSize,
 } from "../window";
 import AppMenu from "../menu";
-import showManageWindow from "../windows/manage";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
 import * as settings from "../settings";
+import { LifecycleState, setLifecycleState } from "../lifecycle";
 
 function shouldApplyScaleFactor() {
   const de = getDesktopEnvironment();
@@ -97,8 +97,12 @@ registerCallHandler<[string], void>(
 registerCallHandler<[], void>("winhelper.initMainWindow", () => {
   return;
 });
-registerCallHandler<[], void>("winhelper.finishLoadMainWindow", () => {
-  return;
+registerCallHandler<[], void>("winhelper.finishLoadMainWindow", (event) => {
+  // Window cannot be not existing at this time
+  setLifecycleState(
+    LifecycleState.MainWindowLoaded,
+    BrowserWindow.fromWebContents(event.sender)!
+  );
 });
 
 type WindowPosition = {
@@ -374,22 +378,6 @@ registerCallHandler<MenuRequest, void>(
       (await settings.kv.get("tray.clickBehavior")) === "always-show-menu";
     for (let i = 0; i < parsedMenuData.content.length; i++) {
       const item = parsedMenuData.content[i];
-      // Inject "Manage Open Orpheus" menu item before "Settings" menu item
-      if (
-        item.image_path &&
-        item.image_path.indexOf("menu/setting.svg") !== -1
-      ) {
-        parsedMenuData.content.splice(i + 1, 0, {
-          menu: true,
-          separator: false,
-          enable: true,
-          children: null,
-          image_color: "#00000000",
-          menu_id: "openOrpheus.manage",
-          text: "管理 Open Orpheus",
-        });
-        i++; // Skip the injected menu item
-      }
       // Inject show main window menu item if tray.clickBehavior is "always-show-menu"
       if (injectShowMainWindowMenuItem && item.menu_id === "exitApp") {
         parsedMenuData.content.splice(i, 0, {
@@ -405,10 +393,6 @@ registerCallHandler<MenuRequest, void>(
       }
     }
     const onClick = (itemId: string | null) => {
-      if (itemId === "openOrpheus.manage") {
-        showManageWindow();
-        return;
-      }
       if (itemId === "openOrpheus.showMainWindow") {
         event.sender.send("channel.call", "trayicon.onclick");
         return;

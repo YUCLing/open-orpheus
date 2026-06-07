@@ -1,5 +1,7 @@
 import Emittery from "emittery";
 
+import AudioEffectManager from "./AudioEffectManager";
+
 export enum AudioPlayerState {
   Null = 0,
   Playing = 1,
@@ -102,11 +104,11 @@ export default class Player extends Emittery<PlayerEvents> {
   private _audioCtx: AudioContext = new AudioContext();
   private _audio = new Audio();
 
+  private _audioEffectManager = new AudioEffectManager(this._audioCtx);
+
   private _audioSourceNode = this._audioCtx.createMediaElementSource(
     this._audio
   );
-
-  private _gainNode = this._audioCtx.createGain();
 
   private _honeyPotPromise: Promise<AudioWorkletNode>;
 
@@ -135,7 +137,7 @@ export default class Player extends Emittery<PlayerEvents> {
   }
 
   get gainNode() {
-    return this._gainNode;
+    return this._audioEffectManager.output;
   }
 
   get currentId() {
@@ -147,11 +149,15 @@ export default class Player extends Emittery<PlayerEvents> {
   }
 
   get volume() {
-    return this._gainNode.gain.value;
+    return this.gainNode.gain.value;
   }
   set volume(value: number) {
-    this._gainNode.gain.value = value;
+    this.gainNode.gain.value = value;
     this.emit("volumechange", value);
+  }
+
+  get audioEffectManager() {
+    return this._audioEffectManager;
   }
   // #endregion
 
@@ -161,8 +167,9 @@ export default class Player extends Emittery<PlayerEvents> {
     this._audio.crossOrigin = "anonymous";
     this._audio.volume = 1;
 
-    this._audioSourceNode.connect(this._gainNode);
-    this._gainNode.connect(this._audioCtx.destination);
+    // Reuse the output gain node
+    this._audioSourceNode.connect(this._audioEffectManager.output);
+    this._audioEffectManager.output.connect(this._audioCtx.destination);
 
     this._honeyPotPromise = new Promise((resolve, reject) => {
       let attempts = 0;
@@ -197,6 +204,24 @@ export default class Player extends Emittery<PlayerEvents> {
       // Start the initial attempt
       loadHoneypot();
     });
+  }
+
+  setAudioEffectEnabled(enabled: boolean) {
+    if (enabled) {
+      try {
+        this._audioSourceNode.disconnect(this._audioEffectManager.output);
+      } catch {
+        /* silent */
+      }
+      this._audioSourceNode.connect(this._audioEffectManager.input);
+    } else {
+      try {
+        this._audioSourceNode.disconnect(this._audioEffectManager.input);
+      } catch {
+        /* silent */
+      }
+      this._audioSourceNode.connect(this._audioEffectManager.output);
+    }
   }
 
   async load(playInfo: AudioPlayInfo): Promise<HTMLAudioElement> {

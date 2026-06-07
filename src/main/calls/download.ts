@@ -1,7 +1,10 @@
+import { cp, mkdir, rm } from "node:fs/promises";
+import { dirname } from "node:path";
+
 import { registerCallHandler } from "../calls";
 import startDownload, { type DownloadTask } from "../download";
-import { downloadTemp } from "../folders";
-import { normalizePath } from "../util";
+import { data as dataDir, downloadTemp } from "../folders";
+import { normalizePath, sanitizeRelativePath } from "../util";
 
 type DownloadStartRequest = {
   ext_header: string;
@@ -13,6 +16,7 @@ type DownloadStartRequest = {
   rel_path: string;
   size: number;
   url: string;
+  type?: number;
 };
 
 // Payload of `download.onprocess`
@@ -23,7 +27,7 @@ type DownloadStartRequest = {
   relative: string; // Relative path from the download request
   speed: number; // Download speed in bytes/sec
   total: number; // Total bytes to download
-  type: number;
+  type: number; // Event type, not download type
 }; */
 
 const downloadTasks = new Map<string, DownloadTask>();
@@ -41,6 +45,7 @@ registerCallHandler<[DownloadStartRequest], void>(
       rel_path,
       size,
       url,
+      type = 0,
     } = request;
 
     // Parse headers from JSON string
@@ -74,7 +79,19 @@ registerCallHandler<[DownloadStartRequest], void>(
       });
     });
 
-    task.on("end", (e) => {
+    task.on("end", async (e) => {
+      if (type === 2) {
+        // Audio effect, ...?
+        const finalPath = sanitizeRelativePath(dataDir, rel_path);
+        if (finalPath === false) {
+          // Trigger task error
+          throw new Error("Illegal path: " + rel_path);
+        }
+        await mkdir(dirname(finalPath), { recursive: true });
+        await cp(destPath, finalPath);
+        await rm(destPath);
+      }
+
       event.sender.send("channel.call", "download.onprocess", id, {
         down: e.data.downloaded,
         islast: true,
@@ -84,6 +101,7 @@ registerCallHandler<[DownloadStartRequest], void>(
         total: e.data.total || size,
         type: 0,
       });
+
       downloadTasks.delete(id);
     });
 

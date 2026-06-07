@@ -19,6 +19,7 @@ import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
 import client, { getProxyAgent } from "../request";
 import { disableHardwareAccelerationFlag } from "../folders";
+import { LifecycleState, setLifecycleState } from "../lifecycle";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   console.log(...args);
@@ -247,7 +248,7 @@ registerCallHandler<
   /* empty */
 });
 registerCallHandler<[], void>("app.appStartUpEnd", () => {
-  /* empty */
+  setLifecycleState(LifecycleState.Started);
 });
 
 registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [
@@ -390,6 +391,25 @@ registerCallbackHandler<
       yes: string;
       no: string;
       userdata: string;
+    } | {
+      type: "immersive_push_notify",
+      priority: "queue", // TODO: To be expanded
+      userdata: string; // JSON string
+      btn_1_content: string, // "查看详情 >"
+      btn_2_content: string, // "一键播放"
+      free_audition: boolean,
+      menu: string, // AppMenu
+      title: string,
+      cover: string, // Image URL
+      desc: string,
+      push_icon_small: "",
+      push_icon_big: "",
+      daytime_formatpath: string, // "orpheus://orpheus/pub/public/assets/svg/home-page/date-%d.svg"
+      songs: {
+        songName: string,
+        songCover: string,
+        artist: string,
+      }[]
     },
   ]
 >("app.systemUIHint", (callback, event, params) => {

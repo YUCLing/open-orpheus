@@ -25,11 +25,6 @@ import { CORE_VERSION } from "./constants";
 import packManager from "./main/pack";
 import showPackgeDownloadWindow from "./main/windows/package-download";
 import { mainWindow } from "./main/window";
-import {
-  markStarted,
-  started as appStarted,
-  markQuitting,
-} from "./main/lifecycle";
 import registerAsProtocolClient, {
   checkOpenCommand as checkWebCommand,
 } from "./main/protocol";
@@ -37,6 +32,11 @@ import { toError } from "./util";
 
 import type WebPack from "./main/packs/WebPack";
 import type { ProxyConfiguration } from "./main/request";
+import {
+  LifecycleState,
+  setLifecycleState,
+  state as lifecycleState,
+} from "./main/lifecycle";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -197,6 +197,8 @@ app.on("ready", async () => {
     });
 
     await Promise.all([
+      // Install the tray icon
+      import("./main/tray"),
       // Set temp dir for streamer and run cleanup
       import("./main/audio/OnlineStreamer").then(async (m) => {
         m.OnlineStreamer.tempDir = path.resolve(
@@ -273,8 +275,6 @@ app.on("ready", async () => {
     // Create main window
     await (await import("./main/windows/main")).default();
 
-    markStarted();
-
     // TODO: Maybe only do this on first launch?
     // Register as orpheus:// clent
     registerAsProtocolClient();
@@ -295,14 +295,14 @@ app.on("ready", async () => {
 
 app.on("window-all-closed", () => {
   // Make sure we don't quit because of package download window being closed before main window has started
-  if (appStarted) {
+  if (lifecycleState !== LifecycleState.Starting) {
     app.quit();
   }
 });
 
 app.on("before-quit", () => {
   // Allow some windows to be closed.
-  markQuitting();
+  setLifecycleState(LifecycleState.Quitting);
 });
 
 app.on("second-instance", (event, argv) => {

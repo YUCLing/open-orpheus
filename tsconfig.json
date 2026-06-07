@@ -11,6 +11,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "noEmit": true,
+    "types": ["vite/client"],
     "paths": {
       "$sharedTypes/*": ["./types/*"]
     }
@@ -20,7 +21,8 @@
     "forge.env.d.ts",
     "packaging/**/*.ts",
     "scripts/*.mts",
-    "scripts/*.ts"
+    "scripts/*.ts",
+    "types/*.ts"
   ],
   "exclude": ["gui"]
 }

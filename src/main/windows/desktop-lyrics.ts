@@ -12,7 +12,7 @@ import {
 } from "$sharedTypes/desktop-lyrics";
 
 import { mainWindow, setWindowId } from "../window";
-import { quitting } from "../lifecycle";
+import { LifecycleState, state as lifecycleState } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
   DesktopLyricsContract,
@@ -109,7 +109,7 @@ export default function createDesktopLyricsWindow() {
   setWindowId(desktopLyricsWindow, "desktop_lyrics");
 
   desktopLyricsWindow.on("close", (e) => {
-    if (quitting) return; // If the app is quitting we allow the window to close
+    if (lifecycleState === LifecycleState.Quitting) return; // If the app is quitting we allow the window to close
     // Not closing, but telling NCM to hide.
     e.preventDefault();
     performAction("close");

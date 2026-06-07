@@ -10,12 +10,13 @@ import type { AudioPlayInfo } from "../preload/Player";
 import { mainWindow } from "./window";
 import { playCacheManager } from "./cache";
 import { normalizePath, sanitizeRelativePath } from "./util";
-import { pack as packageDir } from "./folders";
+import { data as dataDir, pack as packageDir } from "./folders";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { events as lifecycleEvents } from "./lifecycle";
 import { kv as settings } from "./settings";
 import { toError } from "../util";
+import { decodeNcae } from "./ncae";
 
 enum AudioType {
   Local,
@@ -122,6 +123,42 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
   mainWindow.webContents.ipc.handle("audio.getDevice", async () => {
     return settings.get("audio.currentDevice");
   });
+
+  mainWindow.webContents.ipc.handle(
+    "audio.readEffect",
+    async (
+      event,
+      pathInfo: {
+        pathtype: number;
+        path: string;
+      }
+    ) => {
+      if (pathInfo.pathtype !== 2) {
+        console.warn("Unsupported audio.readEffect pathtype:", pathInfo);
+        return null;
+      }
+      const path = sanitizeRelativePath(dataDir, pathInfo.path);
+      if (path === false) {
+        return null;
+      }
+      if (pathInfo.path.endsWith(".ncae")) {
+        try {
+          const content = await readFile(path);
+          const ncae = await decodeNcae(content);
+          return ncae;
+        } catch (err) {
+          console.error("Failed to load NCAE:", err);
+          return null;
+        }
+      }
+      return await readFile(path, {
+        encoding: "utf-8",
+      }).catch((err) => {
+        console.error("Failed to read audio effect:", err);
+        return null;
+      });
+    }
+  );
 
   mainWindow.webContents.ipc.handle(
     "audio.updatePlayInfo",

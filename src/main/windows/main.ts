@@ -5,7 +5,11 @@ import { BrowserWindow, screen } from "electron";
 
 import { setMainWindow } from "../window";
 import { hideMiniPlayerWindow } from "./mini-player";
-import { events as lifecycleEvents, quitting } from "../lifecycle";
+import {
+  LifecycleState,
+  state as lifecycleState,
+  setLifecycleState,
+} from "../lifecycle";
 
 function getWindowState(
   wnd: BrowserWindow
@@ -99,19 +103,12 @@ export default async function createMainWindow() {
   });
 
   mainWindow.on("close", (e) => {
-    if (quitting) return;
+    if (lifecycleState === LifecycleState.Quitting) return;
     mainWindow.webContents.send("channel.call", "winhelper.onclose");
     e.preventDefault();
   });
 
-  try {
-    await lifecycleEvents.emit("mainwindowcreated", mainWindow);
-  } catch (err) {
-    console.error(
-      "Some of 'mainwindowcreated' event listeners failed to run:",
-      err
-    );
-  }
+  setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);
 
   // Load App URL
   mainWindow.loadURL("orpheus://orpheus/pub/app.html");

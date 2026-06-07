@@ -1,19 +1,65 @@
 import os from "node:os";
+import { resolve } from "node:path";
 
-import { Menu, nativeImage, NativeImage, Tray } from "electron";
+import {
+  app,
+  Menu,
+  MenuItemConstructorOptions,
+  nativeImage,
+  NativeImage,
+  Tray,
+} from "electron";
 
 import { mainWindow } from "./window";
 import { kv as settings } from "./settings";
 
+import showManageWindow from "./windows/manage";
+
+import iconFilename from "../../assets/icon_256.png?no-inline";
+
+let quitRequested = false;
+
+const defaultIconPath = resolve(__dirname, `.${iconFilename}`);
+const defaultMenuItems: MenuItemConstructorOptions[] = [
+  {
+    label: "管理 Open Orpheus",
+    click: () => {
+      showManageWindow();
+    },
+  },
+  {
+    label: "退出",
+    click: () => {
+      if (
+        trayInstalled &&
+        !quitRequested &&
+        mainWindow &&
+        !mainWindow.isDestroyed()
+      ) {
+        // NCM seems to be ready, and is not , we will go with graceful way as of now
+        mainWindow.webContents.send(
+          "channel.call",
+          "winhelper.onmenuclick",
+          "exitApp",
+          0
+        );
+        quitRequested = true;
+        return;
+      }
+      app.quit();
+    },
+  },
+];
+
+export let trayInstalled = false;
+
 let icon: NativeImage | null = null;
 let tooltip: string | null = null;
-let menu: Menu | null = null;
 
-let trayIcon: Tray | null = null;
+const trayIcon = new Tray(defaultIconPath);
 
-export function get(): Tray | null {
-  return trayIcon;
-}
+trayIcon.setToolTip("Open Orpheus 启动中");
+trayIcon.setContextMenu(Menu.buildFromTemplate(defaultMenuItems));
 
 export function setIcon(newIcon: NativeImage) {
   if (os.platform() === "darwin") {
@@ -35,65 +81,89 @@ export function setIcon(newIcon: NativeImage) {
     newIcon = image;
   }
   icon = newIcon;
-  if (trayIcon) {
+  if (trayInstalled) {
     trayIcon.setImage(newIcon);
   }
 }
 
 export function setTooltip(newTooltip: string) {
   tooltip = newTooltip;
-  if (trayIcon) {
+  if (trayInstalled) {
     trayIcon.setToolTip(newTooltip);
   }
 }
 
-export function setMenu(newMenu: Menu | null) {
-  menu = newMenu;
-  if (trayIcon) {
-    trayIcon.setContextMenu(newMenu);
-  }
+async function clickHandler() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  // Linux can only receives click, so a different behavior is used
+  // The `onclick` will be send when main window is invisible, and `onrightclick` will be send when main window is visible
+  const clickBehavior = await settings.get("tray.clickBehavior");
+  mainWindow.webContents.send(
+    "channel.call",
+    // We only send rightclick here if is Linux, the main window is visible, and the user has not set the click behavior to "always-show-main-window",
+    // or, on Linux, if the user has set the click behavior to "always-show-menu", in which case we always send rightclick to show the menu
+    os.platform() !== "linux" ||
+      (clickBehavior !== "always-show-menu" && !mainWindow.isVisible()) ||
+      clickBehavior === "always-show-main-window"
+      ? "trayicon.onclick"
+      : "trayicon.onrightclick"
+  );
+}
+
+function rightClickHandler() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
 }
 
 export function install() {
-  if (trayIcon) {
-    throw new Error("Tray icon already installed");
+  if (trayInstalled) {
+    throw new Error("NCM already installed the tray icon");
   }
   if (!icon) {
     throw new Error("Tray icon not initialized");
   }
-  trayIcon = new Tray(icon);
+  trayIcon.setImage(icon);
   if (tooltip) {
     trayIcon.setToolTip(tooltip);
+  } else {
+    trayIcon.setToolTip("");
   }
-  if (menu) {
-    trayIcon.setContextMenu(menu);
-  }
-  trayIcon.on("click", async () => {
-    if (!mainWindow) return;
-    // Linux can only receives click, so a different behavior is used
-    // The `onclick` will be send when main window is invisible, and `onrightclick` will be send when main window is visible
-    mainWindow.webContents.send(
-      "channel.call",
-      // We only send rightclick here if is Linux, the main window is visible, and the user has not set the click behavior to "with-native-menu",
-      // or, on Linux, if the user has set the click behavior to "always-show-menu", in which case we always send rightclick to show the menu
-      os.platform() !== "linux" ||
-        ((await settings.get("tray.clickBehavior")) !== "always-show-menu" &&
-          !mainWindow.isVisible()) ||
-        (await settings.get("tray.clickBehavior")) === "with-native-menu"
-        ? "trayicon.onclick"
-        : "trayicon.onrightclick"
+  trayIcon.on("click", clickHandler);
+  trayIcon.on("right-click", rightClickHandler);
+  if (os.platform() === "linux") {
+    trayIcon.setContextMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "显示网易云音乐菜单",
+          click: () => {
+            // Although it can't be non-existing...
+            if (!mainWindow || mainWindow.isDestroyed()) return;
+            mainWindow.webContents.send(
+              "channel.call",
+              "trayicon.onrightclick"
+            );
+          },
+        },
+        {
+          type: "separator",
+        },
+        ...defaultMenuItems,
+      ])
     );
-  });
-  trayIcon.on("right-click", () => {
-    if (!mainWindow) return;
-    mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
-  });
+  } else {
+    trayIcon.setContextMenu(null);
+  }
+  trayInstalled = true;
 }
 
 export function uninstall() {
-  if (!trayIcon) {
+  if (!trayInstalled) {
     throw new Error("Tray icon not installed");
   }
-  trayIcon.destroy();
-  trayIcon = null;
+  trayIcon.setToolTip("");
+  trayIcon.off("click", clickHandler);
+  trayIcon.off("right-click", rightClickHandler);
+  trayIcon.setImage(defaultIconPath);
+  trayIcon.setContextMenu(Menu.buildFromTemplate(defaultMenuItems));
+  trayInstalled = false;
 }

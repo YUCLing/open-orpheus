@@ -6,13 +6,13 @@
   type TrayClickBehavior =
     | "depends-on-main-window"
     | "always-show-menu"
-    | "with-native-menu";
+    | "always-show-main-window";
 
   let clickBehaviorPromise = $state(settings.get("tray.clickBehavior"));
 </script>
 
-<h1 class="text-2xl font-bold">托盘菜单</h1>
-<p class="mt-2 text-gray-700">选择托盘菜单如何响应你的操作。</p>
+<h1 class="text-2xl font-bold">托盘图标</h1>
+<p class="mt-2 text-gray-700">选择托盘图标如何响应你的左键点击（激活）。</p>
 
 {#await clickBehaviorPromise then value}
   <RadioGroup.Root
@@ -50,15 +50,18 @@
         <RadioGroup.Item id="always-show-menu" value="always-show-menu" />
       </Field.Field>
     </Field.Label>
-    <Field.Label for="with-native-menu">
+    <Field.Label for="always-show-main-window">
       <Field.Field orientation="horizontal">
         <Field.Content>
-          <Field.Title>使用原生菜单</Field.Title>
+          <Field.Title>总是打开主窗口</Field.Title>
           <Field.Description>
-            无论主窗口状态如何，点击托盘图标都会显示主窗口。右击托盘图标会显示一个原生菜单，仅包含“显示菜单”选项，用于呼出菜单。
+            无论主窗口状态如何，点击托盘图标都会打开主窗口。
           </Field.Description>
         </Field.Content>
-        <RadioGroup.Item id="with-native-menu" value="with-native-menu" />
+        <RadioGroup.Item
+          id="always-show-main-window"
+          value="always-show-main-window"
+        />
       </Field.Field>
     </Field.Label>
   </RadioGroup.Root>
