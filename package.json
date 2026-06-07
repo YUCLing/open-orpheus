@@ -40,6 +40,7 @@
     "@electron/fuses": "^2.1.1",
     "@eslint/js": "^10.0.1",
     "@keyv/sqlite": "6.0.0-alpha.3",
+    "@open-orpheus/audio-effect": "workspace:*",
     "@open-orpheus/lifecycle": "workspace:*",
     "@reforged/maker-appimage": "^5.2.0",
     "@types/audioworklet": "^0.0.100",

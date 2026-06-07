@@ -54,10 +54,15 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
           path.normalize(requestUrl.pathname)
         );
         try {
-          const code = await readFile(workletPath, "utf-8");
-          return new Response(code, {
+          const isWasm = workletPath.endsWith(".wasm");
+          const content = await readFile(workletPath, isWasm ? null : "utf-8");
+          return new Response(content, {
             status: 200,
-            headers: { "Content-Type": "application/javascript" },
+            headers: {
+              "Content-Type": isWasm
+                ? "application/wasm"
+                : "application/javascript",
+            },
           });
         } catch (e) {
           console.error("Failed to load worklet", e);

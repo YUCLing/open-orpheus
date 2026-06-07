@@ -102,11 +102,12 @@ type EqualizerData = {
   };
 };
 
-function applyEqualizer(eq: string) {
+function applyEqualizer(eq: string | null = null) {
+  const effectManager = player.audioEffectManager;
   try {
+    if (!eq) throw "DISABLE_EQ";
     const equalizer = JSON.parse(eq) as EqualizerData;
     player.setAudioEffectEnabled(true);
-    const effectManager = player.audioEffectManager;
     if (equalizer.eq.on) {
       effectManager.setEqualizers(equalizer.eq.eqs);
     } else {
@@ -120,7 +121,11 @@ function applyEqualizer(eq: string) {
       effectManager.setTreble(0);
     }
   } catch (err) {
-    console.error("Failed to apply audio effect", err);
+    if (err !== "DISABLE_EQ")
+      console.error("Failed to apply audio effect", err);
+    effectManager.setEqualizers(null);
+    effectManager.setBass(0);
+    effectManager.setTreble(0);
   }
 }
 
@@ -135,25 +140,32 @@ registerCallHandler<
     string | null,
   ],
   void
->("audioeffect.setParams", async (argCount, path, enabled, eqData) => {
+>("audioeffect.setParams", async (argCount, path, enabled, fallbackEqData) => {
   if (!enabled) {
     player.setAudioEffectEnabled(false);
     return;
   }
-  const rawEqualizerData: null | string | Ncae =
-    (await ipcRenderer.invoke("audio.readEffect", path)) ?? eqData;
-  if (!rawEqualizerData) return;
+  let eqData = fallbackEqData ?? null;
+  let wavIr: Uint8Array | null = null;
 
-  if (typeof rawEqualizerData === "string") {
-    applyEqualizer(rawEqualizerData);
-    return;
+  const audioEffect: null | string | Ncae = await ipcRenderer.invoke(
+    "audio.readEffect",
+    path
+  );
+
+  if (audioEffect) {
+    if (typeof audioEffect === "string") {
+      eqData = audioEffect;
+    } else if (audioEffect.header.type === NcaeType.Json) {
+      eqData = audioEffect.payload as string;
+    } else {
+      // TODO: Implement reverb
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      wavIr = audioEffect.payload as Uint8Array;
+    }
   }
 
-  if (rawEqualizerData.header.type === NcaeType.Json) {
-    applyEqualizer(rawEqualizerData.payload as string);
-  } else {
-    console.warn("WAV audio effect is not yet supported");
-  }
+  applyEqualizer(eqData);
 });
 
 registerCallHandler<[boolean], void>("audioeffect.setLoudnessON", () => {

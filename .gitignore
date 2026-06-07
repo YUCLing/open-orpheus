@@ -96,3 +96,6 @@ target
 
 # User Data
 /data/
+
+# Module Dist
+/modules/*/dist

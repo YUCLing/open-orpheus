@@ -191,6 +191,11 @@ const config: ForgeConfig = {
           config: "vite.worklets.config.ts",
           target: "preload",
         },
+        {
+          entry: "src/worklets/audio-effect.ts",
+          config: "vite.worklets.config.ts",
+          target: "preload",
+        },
       ],
       renderer: [
         {

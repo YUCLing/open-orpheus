@@ -33,10 +33,12 @@ export default class AudioEffectManager {
   private readonly trebleFilter: BiquadFilterNode;
   private readonly eqBands: BiquadFilterNode[];
   private readonly eqTail: AudioNode;
+  private _workletNode: AudioWorkletNode | null = null;
   // #endregion
 
   // #region Router state
   private readonly slots: Slot[];
+  private readonly _workletPromise: Promise<void>;
   // #endregion
 
   constructor(ctx: AudioContext) {
@@ -95,6 +97,53 @@ export default class AudioEffectManager {
 
     // Initial state: all bypassed, input → output
     this.input.connect(this.output);
+
+    // Load the WASM-backed audio-effect worklet asynchronously.
+    // Non-fatal on failure — audio still plays without advanced effects.
+    this._workletPromise = this._initWorklet();
+  }
+
+  /**
+   * Resolves when the audio-effect worklet module has been loaded and the
+   * AudioWorkletNode is ready.  Safe to await before activating the worklet
+   * slot.
+   */
+  get workletReady(): Promise<void> {
+    return this._workletPromise;
+  }
+
+  private async _initWorklet(): Promise<void> {
+    try {
+      // WASM is being bundled because `audio-effect.ts` imports the wasm-bindgen
+      // loader, so it'll be available at this URL
+      const response = await fetch(
+        "audio://worklet/assets/audio_effect_bg.wasm"
+      );
+      const wasmModule = await WebAssembly.compile(
+        await response.arrayBuffer()
+      );
+
+      await this.ctx.audioWorklet.addModule("audio://worklet/audio-effect.js");
+
+      this._workletNode = new AudioWorkletNode(this.ctx, "audio-effect", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        channelCount: 2,
+        channelCountMode: "explicit",
+        processorOptions: { wasmModule },
+      });
+
+      // Append the worklet slot dynamically (added after the treble slot).
+      this.slots.push({
+        name: "worklet",
+        input: this._workletNode,
+        output: this._workletNode,
+        active: false,
+      });
+    } catch (err) {
+      console.error("Failed to load audio-effect worklet:", err);
+      // Non-fatal: audio still works without advanced effects.
+    }
   }
 
   // #region Equalizer
@@ -141,6 +190,38 @@ export default class AudioEffectManager {
   setTreble(treble: number): void {
     this.trebleFilter.gain.value = treble;
     this.setSlotActive("treble", treble !== 0);
+  }
+
+  // #endregion
+
+  // #region Worklet (WASM-backed audio effects)
+
+  /**
+   * The underlying AudioWorkletNode, or `null` if the module hasn't loaded
+   * yet or failed to load.
+   */
+  get workletNode(): AudioWorkletNode | null {
+    return this._workletNode;
+  }
+
+  /**
+   * Send a parameter update to the audio-effect worklet.
+   *
+   * Safe to call before the worklet is ready — the message is queued and
+   * delivered once the node is available.
+   *
+   * @param data  Arbitrary structured-cloneable payload forwarded to the
+   *              worklet's `port.onmessage` handler.
+   */
+  postWorkletMessage(data: unknown): void {
+    if (this._workletNode) {
+      this._workletNode.port.postMessage(data);
+    } else {
+      // Queue for delivery once the worklet is ready.
+      this._workletPromise.then(() => {
+        this._workletNode?.port.postMessage(data);
+      });
+    }
   }
 
   // #endregion

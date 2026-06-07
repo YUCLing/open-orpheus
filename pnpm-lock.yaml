@@ -80,6 +80,9 @@ importers:
       '@keyv/sqlite':
         specifier: 6.0.0-alpha.3
         version: 6.0.0-alpha.3(patch_hash=1cada073ff6388fdb15be147fcb3f584274c9fdcf3f0db118d29570b5f40c0b2)(keyv@6.0.0-alpha.3(patch_hash=90ba5e5df47cf0a73e3d7e3d2fbda69cdd09c33f0651dc9bad121d7782800685))
+      '@open-orpheus/audio-effect':
+        specifier: workspace:*
+        version: link:modules/audio-effect
       '@open-orpheus/lifecycle':
         specifier: workspace:*
         version: link:modules/lifecycle
@@ -258,6 +261,8 @@ importers:
       vite:
         specifier: ^8.0.14
         version: 8.0.14(@types/node@24.12.4)(jiti@2.7.0)(terser@5.48.0)
+
+  modules/audio-effect: {}
 
   modules/database:
     devDependencies:

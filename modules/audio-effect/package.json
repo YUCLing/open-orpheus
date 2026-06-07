@@ -1,0 +1,16 @@
+{
+  "name": "@open-orpheus/audio-effect",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/audio_effect.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "cargo build --target wasm32-unknown-unknown --release && wasm-bindgen --out-dir dist --target web ../../target/wasm32-unknown-unknown/release/audio_effect.wasm"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module"
+}

@@ -6,6 +6,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         entryFileNames: "worklets/[name].js",
+        assetFileNames: "worklets/assets/[name][extname]",
       },
     },
   },
