@@ -27,7 +27,7 @@ type DownloadStartRequest = {
   relative: string; // Relative path from the download request
   speed: number; // Download speed in bytes/sec
   total: number; // Total bytes to download
-  type: number;
+  type: number; // Event type, not download type
 }; */
 
 const downloadTasks = new Map<string, DownloadTask>();
@@ -75,7 +75,7 @@ registerCallHandler<[DownloadStartRequest], void>(
         relative: rel_path,
         speed: e.data.speed,
         total: e.data.total || size,
-        type,
+        type: 0,
       });
     });
 
@@ -99,7 +99,7 @@ registerCallHandler<[DownloadStartRequest], void>(
         relative: rel_path,
         speed: e.data.speed,
         total: e.data.total || size,
-        type,
+        type: 0,
       });
 
       downloadTasks.delete(id);
@@ -114,7 +114,7 @@ registerCallHandler<[DownloadStartRequest], void>(
         relative: rel_path,
         speed: 0,
         total: size,
-        type,
+        type: 1,
       });
       downloadTasks.delete(id);
     });

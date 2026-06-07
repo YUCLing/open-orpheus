@@ -1,4 +1,7 @@
 import { ipcRenderer } from "electron";
+
+import { Ncae, NcaeType } from "$sharedTypes/ncae";
+
 import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
 
@@ -75,7 +78,51 @@ type EqualizerData = {
     sshaper: boolean;
     ambience: number;
   };
+  rotate: {
+    on: boolean;
+    velocity: number;
+  };
+  peq: {
+    on: boolean;
+    gain: number;
+    f: {
+      band: number;
+      on: boolean;
+      freq: number;
+      gain: number;
+      q: number;
+      type: number;
+    }[];
+  };
+  limiter: {
+    on: boolean;
+  };
+  cmp: {
+    on: boolean;
+  };
 };
+
+function applyEqualizer(eq: string) {
+  try {
+    const equalizer = JSON.parse(eq) as EqualizerData;
+    player.setAudioEffectEnabled(true);
+    const effectManager = player.audioEffectManager;
+    if (equalizer.eq.on) {
+      effectManager.setEqualizers(equalizer.eq.eqs);
+    } else {
+      effectManager.setEqualizers(null);
+    }
+    if (equalizer.bt.on) {
+      effectManager.setBass(equalizer.bt.bass);
+      effectManager.setTreble(equalizer.bt.treble);
+    } else {
+      effectManager.setBass(0);
+      effectManager.setTreble(0);
+    }
+  } catch (err) {
+    console.error("Failed to apply audio effect", err);
+  }
+}
 
 registerCallHandler<
   [
@@ -93,28 +140,19 @@ registerCallHandler<
     player.setAudioEffectEnabled(false);
     return;
   }
-  // We don't know what ncae is, always assume it's equalizer data now.
-  const rawEqualizerData =
+  const rawEqualizerData: null | string | Ncae =
     (await ipcRenderer.invoke("audio.readEffect", path)) ?? eqData;
   if (!rawEqualizerData) return;
-  try {
-    const equalizer = JSON.parse(rawEqualizerData) as EqualizerData;
-    player.setAudioEffectEnabled(true);
-    const effectManager = player.audioEffectManager;
-    if (equalizer.eq.on) {
-      effectManager.setEqualizers(equalizer.eq.eqs);
-    } else {
-      effectManager.setEqualizers(null);
-    }
-    if (equalizer.bt.on) {
-      effectManager.setBass(equalizer.bt.bass);
-      effectManager.setTreble(equalizer.bt.treble);
-    } else {
-      effectManager.setBass(0);
-      effectManager.setTreble(0);
-    }
-  } catch (err) {
-    console.error("Failed to apply audio effect", err);
+
+  if (typeof rawEqualizerData === "string") {
+    applyEqualizer(rawEqualizerData);
+    return;
+  }
+
+  if (rawEqualizerData.header.type === NcaeType.Json) {
+    applyEqualizer(rawEqualizerData.payload as string);
+  } else {
+    console.warn("WAV audio effect is not yet supported");
   }
 });
 

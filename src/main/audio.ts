@@ -16,6 +16,7 @@ import { Readable } from "node:stream";
 import { events as lifecycleEvents } from "./lifecycle";
 import { kv as settings } from "./settings";
 import { toError } from "../util";
+import { decodeNcae } from "./ncae";
 
 enum AudioType {
   Local,
@@ -136,13 +137,19 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
         console.warn("Unsupported audio.readEffect pathtype:", pathInfo);
         return null;
       }
-      if (pathInfo.path.endsWith(".ncae")) {
-        console.warn("ncae format is not supported yet");
-        return null;
-      }
       const path = sanitizeRelativePath(dataDir, pathInfo.path);
       if (path === false) {
         return null;
+      }
+      if (pathInfo.path.endsWith(".ncae")) {
+        try {
+          const content = await readFile(path);
+          const ncae = await decodeNcae(content);
+          return ncae;
+        } catch (err) {
+          console.error("Failed to load NCAE:", err);
+          return null;
+        }
       }
       return await readFile(path, {
         encoding: "utf-8",
