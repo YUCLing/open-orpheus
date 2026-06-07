@@ -6,7 +6,7 @@ import type { WriteStream } from "node:fs";
 import type { Request } from "got";
 import Emittery from "emittery";
 
-import client from "./request";
+import { client } from "./request";
 
 export type DownloadStartOptions = {
   headers?: Record<string, string>;

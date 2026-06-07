@@ -5,9 +5,9 @@ import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
 
 import Emittery from "emittery";
-import got from "got";
 
 import { toError } from "../../util";
+import { client } from "../request";
 
 import ChunkTracker from "./ChunkTracker";
 import DownloadScheduler from "./DownloadScheduler";
@@ -212,7 +212,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
   }
 
   private async fetchHeadMetadata(): Promise<SourceMetadata | null> {
-    const response = await got(this.url, {
+    const response = await client(this.url, {
       method: "HEAD",
       throwHttpErrors: false,
       signal: this.metaAbortController.signal,
@@ -234,7 +234,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
   private fetchRangeMetadata(): Promise<SourceMetadata> {
     return new Promise((resolve, reject) => {
-      const request = got.stream(this.url, {
+      const request = client.stream(this.url, {
         headers: {
           Range: "bytes=0-0",
         },

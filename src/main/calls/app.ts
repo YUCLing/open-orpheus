@@ -17,7 +17,7 @@ import { pngFromIco } from "../util";
 import packManager from "../pack";
 import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
-import client, { getProxyAgent } from "../request";
+import { client, getProxyAgent } from "../request";
 import { disableHardwareAccelerationFlag } from "../folders";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
 

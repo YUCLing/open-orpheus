@@ -11,7 +11,7 @@ import packManager from "./pack";
 import WebPack from "./packs/WebPack";
 import { sanitizeRelativePath } from "./util";
 import { data as dataDir, storage as storageDir, wasm } from "./folders";
-import client from "./request";
+import { client } from "./request";
 
 class NetworkError extends Error {
   constructor(message: string, options?: ErrorOptions) {

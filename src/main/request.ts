@@ -86,7 +86,7 @@ export async function getProxyAgent(
   }
 }
 
-let client: Got = got.extend({
+export let client: Got = got.extend({
   headers: {
     // We get User-Agent from Electron, so make sure this module is only imported after app ready.
     "User-Agent": session.defaultSession.getUserAgent(),
@@ -107,8 +107,6 @@ let client: Got = got.extend({
     ],
   },
 });
-
-export default client;
 
 export function setProxy(agents: Agents | undefined) {
   client = client.extend({

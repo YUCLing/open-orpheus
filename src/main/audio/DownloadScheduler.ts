@@ -1,11 +1,10 @@
-import got from "got";
-
 import { toError } from "../../util";
+import { client } from "../request";
 
 import type ChunkTracker from "./ChunkTracker";
 import type StorageManager from "./StorageManager";
 
-type GotStream = ReturnType<typeof got.stream>;
+type GotStream = ReturnType<typeof client.stream>;
 
 const BACKGROUND_RETRY_MIN_DELAY = 1000;
 const BACKGROUND_RETRY_MAX_DELAY = 15_000;
@@ -322,7 +321,7 @@ export default class DownloadScheduler {
 
     let offset = start;
     let stopReason: "abort" | "collision" | null = null;
-    const request = got.stream(this.url, {
+    const request = client.stream(this.url, {
       headers: {
         Range: `bytes=${start}-${end - 1}`,
       },

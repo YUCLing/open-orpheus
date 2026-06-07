@@ -5,7 +5,7 @@ import type { Method } from "got";
 
 import { registerCallHandler } from "../calls";
 import { deserialData } from "../crypto";
-import client from "../request";
+import { client } from "../request";
 import interceptAnonymousRequest from "../anonymous";
 
 let globalFailCount = 0;

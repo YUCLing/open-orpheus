@@ -7,7 +7,7 @@ import type { Progress } from "got";
 
 import { registerCallHandler } from "../calls";
 import { serialData } from "../crypto";
-import client, { type ProxyTypes } from "../request";
+import { client, type ProxyTypes } from "../request";
 import { normalizePath } from "../util";
 import { basename, extname } from "node:path";
 
