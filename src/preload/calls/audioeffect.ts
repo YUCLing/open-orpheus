@@ -313,7 +313,7 @@ registerCallHandler<
     string | null,
   ],
   void
->("audioeffect.setParams", async (argCount, path, enabled, fallbackEqData) => {
+>("audioeffect.setParams", async (argCount, path, enabled, eqDataOverride) => {
   if (!enabled) {
     applyEqualizer(null);
     player.audioEffectManager.clearConvolutionIR();
@@ -338,7 +338,7 @@ registerCallHandler<
     }
   }
 
-  if (fallbackEqData) eqData = fallbackEqData;
+  if (eqDataOverride) eqData = eqDataOverride;
 
   if (eqData || wavIr) {
     player.setAudioEffectEnabled(true);
