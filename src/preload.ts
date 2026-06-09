@@ -14,9 +14,6 @@ async function getCJKFonts(): Promise<string[]> {
 }
 
 if (isMain) {
-  // Lyrics is only used in main window
-  import("./preload/lyrics");
-
   // Expose it so it can be fetched in the main world later
   contextBridge.exposeInMainWorld("_OPEN_ORPHEUS_getCJKFonts", getCJKFonts);
 }

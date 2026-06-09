@@ -8,11 +8,11 @@ export const lyricsDispatcher = new LyricsDispatcher();
 lifecycleEvents.on("mainwindowcreated", (e) => {
   const mainWindow = e.data;
 
-  mainWindow.webContents.ipc.on("lyrics.setPlayState", (event, playState) => {
+  mainWindow.webContents.ipc.on("player.statechange", (event, playState) => {
     lyricsDispatcher.playState = playState;
   });
 
-  mainWindow.webContents.ipc.on("lyrics.setTime", (event, time) => {
+  mainWindow.webContents.ipc.on("player.timeupdate", (event, time) => {
     lyricsDispatcher.time = time;
   });
 });

@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import {
   LineMode,
   ShowTranslate,
@@ -33,7 +35,7 @@ import {
   updateTogetherStatus,
   updateMute,
 } from "../windows/mini-player";
-import { dirname } from "node:path";
+import { mediaSession } from "../mediaSession";
 
 let listItems: ListElement[] = [];
 let currentPlay: string | null = null;
@@ -49,6 +51,13 @@ export type PlayInfo = {
 };
 
 registerCallHandler<[PlayInfo], void>("player.setInfo", (_event, playInfo) => {
+  mediaSession.setMetadata({
+    id: playInfo.playId,
+    title: playInfo.songName,
+    artist: playInfo.artistName,
+    album: playInfo.albumName,
+    url: playInfo.url,
+  });
   updatePlayInfo(playInfo);
 });
 

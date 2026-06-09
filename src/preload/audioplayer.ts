@@ -32,10 +32,14 @@ function notifyBuffering(isBuffering: boolean) {
 }
 
 player.on("playinfoupdate", async (event) => {
+  // Playback's stopped, it's replacing, tell main process
+  ipcRenderer.send("player.timeupdate", null);
   await ipcRenderer.invoke("audio.updatePlayInfo", event.data);
 });
 
 player.on("load", (event) => {
+  // Playback's ready, tell main process.
+  ipcRenderer.send("player.timeupdate", 0);
   const { id } = event.data;
   bufferProgress = 0;
   fireNativeCall("audioplayer.onLoad", id, {
@@ -148,6 +152,11 @@ ipcRenderer.on("audio.onProgress", (event, progress) => {
 
 player.on("volumechange", (event) => {
   fireNativeCall("audioplayer.onVolume", player.currentId, "", 0, event.data);
+  ipcRenderer.send("player.volumechange", event.data);
+});
+
+player.on("playbackratechange", (event) => {
+  ipcRenderer.send("player.playbackratechange", event.data);
 });
 
 player.on("audiodata", (event) => {
@@ -169,12 +178,14 @@ navigator.mediaSession.playbackState = "paused";
 
 PLAYING_EVENTS.forEach((e) =>
   player.audio.addEventListener(e, () => {
+    ipcRenderer.send("player.statechange", true);
     navigator.mediaSession.playbackState = "playing";
     updatePositionState();
   })
 );
 [...HALTED_EVENTS, "seeking"].forEach((e) =>
   player.audio.addEventListener(e, () => {
+    ipcRenderer.send("player.statechange", false);
     navigator.mediaSession.playbackState = "paused";
     updatePositionState();
   })
@@ -210,3 +221,23 @@ navigator.mediaSession.setActionHandler("stop", () => {
     });
   }
 );
+
+player.audio.addEventListener("seeked", () =>
+  ipcRenderer.send("player.seeked", player.audio.currentTime)
+);
+player.audio.addEventListener("timeupdate", () =>
+  ipcRenderer.send("player.timeupdate", player.audio.currentTime)
+);
+player.audio.addEventListener("durationchange", () => {
+  let duration: number | null = player.audio.duration;
+  if (!isFinite(duration) || duration < 0) duration = null;
+  ipcRenderer.send("player.durationchange", duration);
+});
+
+ipcRenderer.on("player.seek", (e, delta) => {
+  player.audio.currentTime += delta;
+});
+
+ipcRenderer.on("player.seekto", (e, position) => {
+  player.audio.currentTime = position;
+});

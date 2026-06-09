@@ -230,6 +230,7 @@ app.on("ready", async () => {
       })(),
       import("./main/afp"),
       import("./main/fonts"),
+      import("./main/mediaSession").then((m) => m.createMediaSession()),
       import("./main/channel"),
       import("./main/request").then(async (m) => {
         m.setupRequestInterceptors();

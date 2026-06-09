@@ -95,6 +95,7 @@ export type AudioPlayInfo = {
 export type PlayerEvents = {
   lyriccontentupdate: LyricContent | null;
   volumechange: number;
+  playbackratechange: number;
   audiodata: { data: ArrayBuffer; pts: number };
   lyricstyleupdate: { key: string | symbol; value: unknown };
   playinfoupdate: AudioPlayInfo;
@@ -174,6 +175,14 @@ export default class Player extends Emittery<PlayerEvents> {
     // TODO: Maybe allow user to custom minimal dB value in the future
     this.gainNode.gain.value = volumeToGain(value);
     this.emit("volumechange", value);
+  }
+
+  get playbackRate() {
+    return this.audio.playbackRate;
+  }
+  set playbackRate(value: number) {
+    this.audio.playbackRate = value;
+    this.emit("playbackratechange", value);
   }
 
   get replayGain() {

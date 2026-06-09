@@ -1,0 +1,19 @@
+
+[package]
+authors = ["YUCLing <luotianyi@luotianyi.me>"]
+edition = "2021"
+name    = "dbus"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi.workspace = true
+napi-derive.workspace = true
+serde = "1.0.228"
+smol = "2.0.2"
+zbus = "5.16.0"
+
+[build-dependencies]
+napi-build = "2"

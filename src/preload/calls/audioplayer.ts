@@ -50,7 +50,7 @@ registerCallHandler<[string, string, number], void>(
 );
 
 registerCallHandler<[number], void>("audioplayer.setPlaybackRate", (rate) => {
-  player.audio.playbackRate = rate;
+  player.playbackRate = rate;
 });
 
 // TODO: What's this?
