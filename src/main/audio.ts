@@ -42,6 +42,32 @@ function sendProgress(prog: number) {
   mainWindow.webContents.send("audio.onProgress", prog);
 }
 
+export async function readEffect(pathInfo: { path: string; pathtype: number }) {
+  if (pathInfo.pathtype !== 2) {
+    throw new Error(
+      "Unsupported audio.readEffect pathtype: " + pathInfo.pathtype
+    );
+  }
+  const path = sanitizeRelativePath(dataDir, pathInfo.path);
+  if (path === false) {
+    throw new Error("Illegal path: " + pathInfo.path);
+  }
+  if (pathInfo.path.endsWith(".ncae")) {
+    try {
+      const content = await readFile(path);
+      const ncae = await decodeNcae(content);
+      return ncae;
+    } catch (err) {
+      throw new Error("Failed to load NCAE", {
+        cause: err,
+      });
+    }
+  }
+  return await readFile(path, {
+    encoding: "utf-8",
+  });
+}
+
 export default function registerAudioStreamerScheme(protocol: Protocol) {
   protocol.handle("audio", async (request) => {
     const requestUrl = new URL(request.url);
@@ -138,30 +164,12 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
         path: string;
       }
     ) => {
-      if (pathInfo.pathtype !== 2) {
-        console.warn("Unsupported audio.readEffect pathtype:", pathInfo);
+      try {
+        return await readEffect(pathInfo);
+      } catch (err) {
+        console.error(err);
         return null;
       }
-      const path = sanitizeRelativePath(dataDir, pathInfo.path);
-      if (path === false) {
-        return null;
-      }
-      if (pathInfo.path.endsWith(".ncae")) {
-        try {
-          const content = await readFile(path);
-          const ncae = await decodeNcae(content);
-          return ncae;
-        } catch (err) {
-          console.error("Failed to load NCAE:", err);
-          return null;
-        }
-      }
-      return await readFile(path, {
-        encoding: "utf-8",
-      }).catch((err) => {
-        console.error("Failed to read audio effect:", err);
-        return null;
-      });
     }
   );
 

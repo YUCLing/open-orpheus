@@ -284,8 +284,6 @@ function applyEqualizer(eq: string | null = null) {
     m.setWorkletActive(
       Boolean(workletParams.rvb || workletParams.se || workletParams.rotate)
     );
-
-    console.log("EFFECT APPLIED", e);
   } catch (err) {
     if (err !== "DISABLE_EQ")
       console.error("Failed to apply audio effect", err);
@@ -322,7 +320,7 @@ registerCallHandler<
     player.setAudioEffectEnabled(false);
     return;
   }
-  let eqData = fallbackEqData ?? null;
+  let eqData = null;
   let wavIr: Uint8Array | null = null;
 
   const audioEffect: null | string | Ncae = await ipcRenderer.invoke(
@@ -339,6 +337,8 @@ registerCallHandler<
       wavIr = audioEffect.payload as Uint8Array;
     }
   }
+
+  if (fallbackEqData) eqData = fallbackEqData;
 
   if (eqData || wavIr) {
     player.setAudioEffectEnabled(true);

@@ -1,4 +1,5 @@
 import "./app";
+import "./audioeffect";
 import "./winhelper";
 import "./browser";
 import "./desktop";
