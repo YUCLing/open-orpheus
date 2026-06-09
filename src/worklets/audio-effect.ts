@@ -8,14 +8,14 @@ import {
   SpatialEnhancer,
 } from "@open-orpheus/audio-effect";
 
-// ── Rotation state (pure JS, not in WASM) ──────────────────
+// #region Type definitions
+
 interface RotateState {
   on: boolean;
   velocity: number;
   phase: number;
 }
 
-// ── Parameter snapshots (updated from MessagePort) ────────
 interface RvbParams {
   on: boolean;
   er: { on: boolean; pattern: number; rsize: number; sdelay: number };
@@ -59,7 +59,9 @@ interface RotateParams {
   velocity: number;
 }
 
-// ─────────────────────────────────────────────────────────────
+// #endregion
+
+// #region AudioEffectProcessor
 
 class AudioEffectProcessor extends AudioWorkletProcessor {
   // WASM DSP instances
@@ -118,13 +120,11 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
         new WorkletBiquad(sr),
         new WorkletBiquad(sr),
       ];
-
-      console.log("audio-effect: WASM DSP engines initialized @", sr, "Hz");
     } catch (err) {
       console.error("audio-effect: WASM init failed", err);
     }
 
-    // ── MessagePort: receive param updates from main thread ──
+    // #region MessagePort
     this.port.onmessage = (e: MessageEvent) => {
       const { module, params } = e.data ?? {};
       if (module === "setParams") {
@@ -133,7 +133,9 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
     };
   }
 
-  // ── Apply parameter updates ──────────────────────────────
+  // #endregion
+
+  // #region Apply parameter updates
 
   private applyParams(
     params: {
@@ -144,7 +146,12 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
   ): void {
     this.active = false;
 
-    // ── Reverb ────────────────────────────────────────────
+    // #region Reverb
+    if (params.rvb?.on) {
+      if (!this.fdn || !this.er) {
+        console.warn("audio-effect: reverb requested but WASM not available");
+      }
+    }
     if (params.rvb?.on && this.fdn && this.er) {
       this.rvbParams = params.rvb;
       this.active = true;
@@ -182,7 +189,14 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       this.configureRvbTc(null);
     }
 
-    // ── Spatial Enhancement ───────────────────────────────
+    // #endregion
+
+    // #region Spatial Enhancement
+    if (params.se?.on && !this.se) {
+      console.warn(
+        "audio-effect: spatial enhancer requested but WASM not available"
+      );
+    }
     if (params.se?.on && this.se) {
       this.seParams = params.se;
       this.active = true;
@@ -196,7 +210,9 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       this.seParams = null;
     }
 
-    // ── Rotation ──────────────────────────────────────────
+    // #endregion
+
+    // #region Rotation
     if (params.rotate?.on) {
       this.rotate.on = true;
       this.rotate.velocity = params.rotate.velocity;
@@ -204,9 +220,12 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
     } else {
       this.rotate.on = false;
     }
+    // #endregion
   }
 
-  // ── Audio processing callback ───────────────────────────
+  // #endregion
+
+  // #region Audio processing callback
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const input = inputs[0];
@@ -220,7 +239,7 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
     const n = Math.min(inL.length, outL.length);
 
     // Fast path: no effects → passthrough
-    if (!this.active || !this.fdn || !this.er || !this.se) {
+    if (!this.active) {
       for (let i = 0; i < n; i++) {
         outL[i] = inL[i];
         outR[i] = inR[i];
@@ -238,19 +257,21 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       this.reverbInBufR = new Float32Array(n);
     }
 
-    // ── SE: spatial enhancement (in-place on output copy) ─
+    // #region SE: spatial enhancement
     for (let i = 0; i < n; i++) {
       outL[i] = inL[i];
       outR[i] = inR[i];
     }
     if (this.seParams?.on) {
-      this.se.process_block(
+      this.se!.process_block(
         outL.subarray(0, n) as Float32Array,
         outR.subarray(0, n) as Float32Array
       );
     }
 
-    // ── Rotation feeds both dry output and reverb input ───
+    // #endregion
+
+    // #region Rotation feed
     if (this.rotate.on) {
       this.applyRotation(outL, outR, n);
     }
@@ -262,9 +283,11 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       }
     }
 
-    // ── ER: early reflections ─────────────────────────────
+    // #endregion
+
+    // #region ER: early reflections
     if (this.rvbParams?.er.on && this.erGain > 0.001) {
-      this.er.process_block(
+      this.er!.process_block(
         this.reverbInBufL.subarray(0, n) as Float32Array,
         this.reverbInBufR.subarray(0, n) as Float32Array,
         this.wetBufL.subarray(0, n) as Float32Array,
@@ -275,9 +298,11 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       this.wetBufR.fill(0, 0, n);
     }
 
-    // ── FDN: late reverb ──────────────────────────────────
+    // #endregion
+
+    // #region FDN: late reverb
     if (this.rvbParams?.rvb && this.rvbGain > 0.001) {
-      this.fdn.process_block(
+      this.fdn!.process_block(
         this.reverbInBufL.subarray(0, n) as Float32Array,
         this.reverbInBufR.subarray(0, n) as Float32Array,
         this.lateBufL.subarray(0, n) as Float32Array,
@@ -309,16 +334,22 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       }
     }
 
-    // ── Mix dry + wet ─────────────────────────────────────
+    // #endregion
+
+    // #region Mix dry + wet
     for (let i = 0; i < n; i++) {
       outL[i] = outL[i] * this.dryGain + this.wetBufL[i];
       outR[i] = outR[i] * this.dryGain + this.wetBufR[i];
     }
 
+    // #endregion
+
     return true;
   }
 
-  // ── Stereo rotation (LFO-driven rotation matrix) ─────────
+  // #endregion
+
+  // #region Stereo rotation
 
   private applyRotation(l: Float32Array, r: Float32Array, n: number): void {
     const sr = sampleRate as number;
@@ -341,6 +372,10 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
     }
   }
 
+  // #endregion
+
+  // #region Tone control
+
   private configureRvbTc(tc: RvbParams["tc"] | null): void {
     this.rvbTcEnabled = Boolean(tc?.on);
     for (const filter of this.rvbTcFilters) {
@@ -360,9 +395,13 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       );
     }
   }
+
+  // #endregion
 }
 
-// ── Utility ──────────────────────────────────────────────────
+// #endregion
+
+// #region Utility
 
 function dbToGain(db: number): number {
   return 10 ** (db / 20);
@@ -371,6 +410,10 @@ function dbToGain(db: number): number {
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
+
+// #endregion
+
+// #region WorkletBiquad
 
 class WorkletBiquad {
   private b0 = 1;
@@ -491,6 +534,6 @@ class WorkletBiquad {
   }
 }
 
-// ── Register ─────────────────────────────────────────────────
+// #endregion
 
 registerProcessor("audio-effect", AudioEffectProcessor);

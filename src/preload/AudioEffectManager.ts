@@ -486,6 +486,7 @@ export default class AudioEffectManager {
     const pending = this.pendingSlotStates.get(slot.name);
     if (pending !== undefined) {
       slot.active = pending;
+      this.pendingSlotStates.delete(slot.name);
     }
 
     this.slots.push(slot);
