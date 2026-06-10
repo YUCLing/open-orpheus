@@ -192,6 +192,9 @@ importers:
       '@malept/electron-installer-flatpak':
         specifier: ^0.11.4
         version: 0.11.4
+      electron-installer-debian:
+        specifier: ^3.2.0
+        version: 3.2.0
       electron-installer-redhat:
         specifier: ^3.4.0
         version: 3.4.0(patch_hash=8fe238a56db4de235c10dd7f02c6a523c6ac3010edcc1d547dbc5c6416b89a37)

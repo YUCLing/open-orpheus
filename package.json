@@ -88,6 +88,7 @@
   },
   "optionalDependencies": {
     "@malept/electron-installer-flatpak": "^0.11.4",
+    "electron-installer-debian": "^3.2.0",
     "electron-installer-redhat": "^3.4.0"
   },
   "packageManager": "pnpm@11.5.0+sha512.dbfcc4f81cf48597afd4bc391ffdf12c11f1a9fb83a395bfa6b0a2d9cc2fd8ffebafdb1ccbd529632153f793904c2615b7f09fe1a345473fd1c35845172a8eb1"
