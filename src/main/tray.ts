@@ -56,30 +56,37 @@ export let trayInstalled = false;
 let icon: NativeImage | null = null;
 let tooltip: string | null = null;
 
-const trayIcon = new Tray(defaultIconPath);
+const defaultIcon = createIconForDarwin(
+  nativeImage.createFromPath(defaultIconPath)
+);
+
+const trayIcon = new Tray(defaultIcon);
 
 trayIcon.setToolTip("Open Orpheus 启动中");
 trayIcon.setContextMenu(Menu.buildFromTemplate(defaultMenuItems));
 
-export function setIcon(newIcon: NativeImage) {
-  if (os.platform() === "darwin") {
-    // On macOS, we need to generate a set of icons with different sizes
-    const image = nativeImage.createEmpty();
+function createIconForDarwin(icon: NativeImage) {
+  if (os.platform() !== "darwin") return icon;
+  // On macOS, we need to generate a set of icons with different sizes
+  const image = nativeImage.createEmpty();
 
-    const sizes = [16, 32, 64];
+  const sizes = [16, 32, 64];
 
-    for (let i = 0; i < sizes.length; i++) {
-      const size = sizes[i];
-      image.addRepresentation({
-        scaleFactor: i + 1,
-        width: size,
-        height: size,
-        buffer: newIcon.resize({ width: size, height: size }).toPNG(),
-      });
-    }
-
-    newIcon = image;
+  for (let i = 0; i < sizes.length; i++) {
+    const size = sizes[i];
+    image.addRepresentation({
+      scaleFactor: i + 1,
+      width: size,
+      height: size,
+      buffer: icon.resize({ width: size, height: size }).toPNG(),
+    });
   }
+
+  return image;
+}
+
+export function setIcon(newIcon: NativeImage) {
+  newIcon = createIconForDarwin(newIcon);
   icon = newIcon;
   if (trayInstalled) {
     trayIcon.setImage(newIcon);
@@ -163,7 +170,7 @@ export function uninstall() {
   trayIcon.setToolTip("");
   trayIcon.off("click", clickHandler);
   trayIcon.off("right-click", rightClickHandler);
-  trayIcon.setImage(defaultIconPath);
+  trayIcon.setImage(defaultIcon);
   trayIcon.setContextMenu(Menu.buildFromTemplate(defaultMenuItems));
   trayInstalled = false;
 }
