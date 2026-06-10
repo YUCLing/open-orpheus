@@ -153,9 +153,9 @@
     <div
       class="flex justify-center gap-2 {api.platform === 'linux' && locked
         ? 'opacity-25 group-hover:opacity-100'
-        : 'invisible group-hover:visible'}{lyricStyle.vertical
-        ? ' flex-col'
-        : ''}"
+        : 'invisible group-hover:visible'} {lyricStyle.vertical
+        ? 'w-12 flex-col'
+        : 'h-12'}"
     >
       {#if locked}
         <button
