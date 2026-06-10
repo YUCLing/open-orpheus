@@ -268,6 +268,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       });
 
       const sub = new BrowserWindow({
+        title: "Open Orpheus Menu",
         show: false,
         frame: false,
         transparent: true,

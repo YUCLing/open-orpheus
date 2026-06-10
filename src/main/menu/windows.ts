@@ -11,6 +11,7 @@ export function createMenuWindow(): BrowserWindow {
   }
 
   menuWindow = new BrowserWindow({
+    title: "Open Orpheus Menu",
     width: 300,
     height: 400,
     show: false,
@@ -47,6 +48,7 @@ export function createOverlayWindow(): BrowserWindow {
   }
 
   overlayWindow = new BrowserWindow({
+    title: "Open Orpheus Menu",
     x: 0,
     y: 0,
     frame: false,
