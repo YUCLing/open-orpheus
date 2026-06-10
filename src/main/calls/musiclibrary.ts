@@ -9,6 +9,7 @@ import { MusicTagger } from "music-tag-native";
 import { getMusicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
 import { isMusicFile, normalizePath } from "../util";
+import { toError } from "../../util";
 
 type MusicLibraries =
   | "<mymusic>"
@@ -140,6 +141,7 @@ registerCallHandler<[MusicLibraries], void>(
     if (libWatchers.has(lib)) return;
     const libPath = getLibraryPath(lib);
     if (!libPath || !existsSync(libPath)) return;
+
     const watcher = watch(
       libPath,
       { recursive: true },
@@ -180,23 +182,50 @@ registerCallHandler<[MusicLibraries], void>(
 
 registerCallHandler<[MusicLibraries, number], [boolean]>(
   "musiclibrary.addLibrary",
-  async (_event, library) => {
-    const libPath = getLibraryPath(library);
-    if (!libPath || !existsSync(libPath)) return [true];
-    const db = getMusicLibraryDb();
+  (event, library) => {
+    (async () => {
+      try {
+        const libPath = getLibraryPath(library);
+        if (!libPath || !existsSync(libPath)) {
+          event.sender.send("channel.call", "musiclibrary.onaddend", {
+            dirs: undefined,
+            library,
+            reason: "",
+            result: 0,
+          });
+          return;
+        }
+        const db = getMusicLibraryDb();
 
-    const entries = await readdir(libPath, { recursive: true });
-    for (const relative of entries) {
-      if (!isMusicFile(relative)) continue;
-      const filePath = path.join(libPath, relative);
-      const entry = await trackEntryFromFile(library, filePath);
-      db.exec("DELETE FROM track WHERE file = ?", [filePath]);
-      db.execNamed(
-        `INSERT INTO track (file, tid, aid, dir, title, album, genre, artist, duration, timestamp, bitrate, filesize, ignored, id, artistid, parentdir, track, librarypath, tracknumber, source, starttime, type)
-         VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
-        entry
-      );
-    }
+        const entries = await readdir(libPath, { recursive: true });
+        for (const relative of entries) {
+          if (!isMusicFile(relative)) continue;
+          const filePath = path.join(libPath, relative);
+          const entry = await trackEntryFromFile(library, filePath);
+          db.exec("DELETE FROM track WHERE file = ?", [filePath]);
+          db.execNamed(
+            `INSERT INTO track (file, tid, aid, dir, title, album, genre, artist, duration, timestamp, bitrate, filesize, ignored, id, artistid, parentdir, track, librarypath, tracknumber, source, starttime, type)
+            VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
+            entry
+          );
+        }
+
+        event.sender.send("channel.call", "musiclibrary.onaddend", {
+          dirs: [libPath],
+          library,
+          reason: "",
+          result: 0,
+        });
+      } catch (err) {
+        console.error("Failed to add music library:", err);
+        event.sender.send("channel.call", "musiclibrary.onaddend", {
+          dirs: undefined,
+          library,
+          reason: toError(err).message,
+          result: 1,
+        });
+      }
+    })();
 
     return [true];
   }
