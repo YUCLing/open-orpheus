@@ -7,9 +7,19 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  changes:
+    name: Detect relevant changes
+    uses: ./.github/workflows/changes.yml
+
   lint-node:
     name: JS/TS Lint & Prettier
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.node == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -46,6 +56,8 @@ jobs:
 
   lint-rust:
     name: Clippy & Rustfmt (${{ matrix.os }})
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

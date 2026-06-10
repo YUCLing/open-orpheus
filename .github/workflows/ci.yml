@@ -7,8 +7,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  changes:
+    name: Detect relevant changes
+    uses: ./.github/workflows/changes.yml
+
   build:
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.build == 'true' }}
     strategy:
       fail-fast: false
       matrix:

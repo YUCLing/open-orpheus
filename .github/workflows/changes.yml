@@ -1,0 +1,95 @@
+name: Detect Changes
+
+on:
+  workflow_call:
+    outputs:
+      node:
+        description: JS, TypeScript, Svelte, tooling, or formatting files changed
+        value: ${{ jobs.changes.outputs.node }}
+      rust:
+        description: Rust files or Cargo metadata changed
+        value: ${{ jobs.changes.outputs.rust }}
+      build:
+        description: Application bundle inputs changed
+        value: ${{ jobs.changes.outputs.build }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      node: ${{ steps.filter.outputs.node }}
+      rust: ${{ steps.filter.outputs.rust }}
+      build: ${{ steps.filter.outputs.build }}
+
+    steps:
+      - name: Checkout repository
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            node:
+              - ".github/workflows/changes.yml"
+              - ".github/workflows/lint.yml"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "eslint.config.ts"
+              - ".prettierignore"
+              - ".prettierrc"
+              - "tsconfig.json"
+              - "forge.config.ts"
+              - "forge.env.d.ts"
+              - "vite*.config.ts"
+              - "gui/**"
+              - "src/**"
+              - "types/**"
+              - "modules/**/*.ts"
+              - "modules/**/package.json"
+              - "modules/**/tsconfig.json"
+              - "modules/**/tsdown.config.ts"
+              - "packaging/**/*.ts"
+              - "packaging/**/*.d.ts"
+              - "scripts/**/*.ts"
+              - "scripts/**/*.mts"
+              - "patches/**"
+            rust:
+              - ".github/workflows/changes.yml"
+              - ".github/workflows/lint.yml"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "modules/**/Cargo.toml"
+              - "modules/**/*.rs"
+            build:
+              - ".github/workflows/changes.yml"
+              - ".github/workflows/ci.yml"
+              - ".github/workflows/build.yml"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "forge.config.ts"
+              - "forge.env.d.ts"
+              - "vite*.config.ts"
+              - "tsconfig.json"
+              - "src/**"
+              - "gui/**"
+              - "types/**"
+              - "modules/**"
+              - "scripts/**"
+              - "packaging/**"
+              - "patches/**"
+              - "assets/**"
+              - "versions.json"
