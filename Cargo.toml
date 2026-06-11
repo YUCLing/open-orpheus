@@ -5,6 +5,7 @@ resolver = "3"
 [workspace.dependencies]
 napi = "3.0.0"
 napi-derive = "3.0.0"
+wasm-bindgen = "0.2.123"
 
 [profile.release]
 lto   = true

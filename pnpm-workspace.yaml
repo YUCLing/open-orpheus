@@ -22,6 +22,8 @@ patchedDependencies:
 blockExoticSubdeps: false
 nodeLinker: hoisted
 overrides:
+  # See https://github.com/electron/electron/issues/51619
+  "yauzl@2.10.0": "^3.3.1"
   # Got (cacheable-request) uses Keyv 5, but we are using v6, they are mostly compatible, we are overriding it here, and patch cacheable-request
   "got>keyv": "catalog:"
   "cacheable-request>keyv": "catalog:"

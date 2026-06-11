@@ -1,48 +1,24 @@
 import { dirname, resolve } from "node:path";
-import {
-  cp,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
 
-const pkg = JSON.parse(
-  await readFile(resolve(projectRoot, "package.json"), "utf-8")
-);
 const { flatpak: flatpakOptions } = await import(
   new URL("../packaging/options.ts", import.meta.url).href
 );
 
-const electronVersion: string = pkg.devDependencies.electron;
+const appDir = process.argv[2];
+if (!appDir) {
+  throw new Error(
+    "Usage: node install-flatpak-scaffolding.mts <packaged-app-dir>"
+  );
+}
+console.log(`Using packaged app directory: ${appDir}`);
 
-// Create a minimal fake app dir so electron-installer-flatpak can generate
-// desktop file, wrapper, metadata, and other scaffolding content.
-const fakeAppDir = await mkdtemp(resolve(tmpdir(), "fake-electron-app-"));
-const fakeOutputDir = await mkdtemp(resolve(tmpdir(), "flatpak-scaffold-out-"));
-
-await writeFile(resolve(fakeAppDir, "version"), electronVersion);
-await mkdir(resolve(fakeAppDir, "resources/app"), { recursive: true });
-await writeFile(
-  resolve(fakeAppDir, "resources/app/package.json"),
-  JSON.stringify({
-    name: pkg.name,
-    version: pkg.version,
-    description: flatpakOptions.description,
-    license: flatpakOptions.license,
-    homepage: flatpakOptions.homepage,
-    productName: flatpakOptions.productName,
-  })
-);
-await cp(resolve(projectRoot, "LICENSE"), resolve(fakeAppDir, "LICENSE"));
-await writeFile(resolve(fakeAppDir, "chrome-sandbox"), "");
+const tempOutputDir = await mkdtemp(resolve(tmpdir(), "flatpak-scaffold-out-"));
 
 const { Installer } = await import("@malept/electron-installer-flatpak");
 
@@ -51,8 +27,8 @@ const installer = new Installer({
   icon: flatpakOptions.icon
     ? resolve(projectRoot, flatpakOptions.icon as string)
     : undefined,
-  src: fakeAppDir,
-  dest: fakeOutputDir,
+  src: appDir,
+  dest: tempOutputDir,
   arch: "noarch",
   logger: () => {},
 });
@@ -85,7 +61,6 @@ for (const entry of await readdir(installer.stagingDir)) {
   });
 }
 
-await rm(fakeAppDir, { recursive: true, force: true });
-await rm(fakeOutputDir, { recursive: true, force: true });
+await rm(tempOutputDir, { recursive: true, force: true });
 
 console.log("Flatpak scaffolding installed to /app");

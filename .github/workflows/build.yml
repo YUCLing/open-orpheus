@@ -40,9 +40,11 @@ jobs:
           target: wasm32-unknown-unknown
 
       - name: Install dependencies
+        shell: bash
         run: |
           pnpm install --frozen-lockfile
-          cargo install wasm-bindgen-cli@0.2.123
+          version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          cargo install "wasm-bindgen-cli@$version"
 
       - name: Build native modules
         run: pnpm build:modules
