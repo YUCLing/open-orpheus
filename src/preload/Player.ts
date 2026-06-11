@@ -1,6 +1,7 @@
 import Emittery from "emittery";
 
 import AudioEffectManager from "./AudioEffectManager";
+import { dbToGain } from "../util";
 
 export enum AudioPlayerState {
   Null = 0,
@@ -100,6 +101,21 @@ export type PlayerEvents = {
   load: { id: string };
 };
 
+/**
+ * Convert volume (0-1) to gain dB, logrithmic.
+ *
+ * @param input
+ * @returns
+ */
+function volumeToGain(input: number, minDb = 40) {
+  if (input === 0) return 0;
+
+  // Convert volume to dB
+  const db = minDb * (1 - input);
+
+  return dbToGain(db);
+}
+
 export default class Player extends Emittery<PlayerEvents> {
   private _audioCtx: AudioContext = new AudioContext();
   private _audio = new Audio();
@@ -116,6 +132,8 @@ export default class Player extends Emittery<PlayerEvents> {
 
   private _playInfo: AudioPlayInfo | null = null;
   private _lyricContent: LyricContent | null = null;
+
+  private _volume = 1;
 
   songInfo: SongInfo | null = null;
   playlist: Playlist = { items: [], currentPlay: "" };
@@ -151,10 +169,12 @@ export default class Player extends Emittery<PlayerEvents> {
   }
 
   get volume() {
-    return this.gainNode.gain.value;
+    return this._volume;
   }
   set volume(value: number) {
-    this.gainNode.gain.value = value;
+    this._volume = value;
+    // TODO: Maybe allow user to custom minimal dB value in the future
+    this.gainNode.gain.value = volumeToGain(value);
     this.emit("volumechange", value);
   }
 
@@ -177,6 +197,9 @@ export default class Player extends Emittery<PlayerEvents> {
 
     this._audio.crossOrigin = "anonymous";
     this._audio.volume = 1;
+
+    // Ensure they are consistent
+    this.volume = this._volume;
 
     this._audioSourceNode.connect(this._loudnessGainNode);
 
