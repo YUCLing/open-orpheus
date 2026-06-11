@@ -62,6 +62,41 @@
   </screenshots>
 
   <releases>
+    <release version="0.14.0" date="2026-06-11">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.14.0</url>
+      <description>
+        <ul>
+          <li>Support setting auto-start on boot.</li>
+          <li xml:lang="zh-CN">支持设置开机自动启动。</li>
+          <li>Support for NCAE audio format parsing.</li>
+          <li xml:lang="zh-CN">NCAE 音效格式解析。</li>
+          <li>Support for audio effects.</li>
+          <li xml:lang="zh-CN">音效支持。</li>
+          <li>Customizable desktop lyrics background opacity.</li>
+          <li xml:lang="zh-CN">桌面歌词自定义透明度。</li>
+          <li>Fixed local folder path separator error.</li>
+          <li xml:lang="zh-CN">本地文件夹分隔符错误。</li>
+          <li>Fixed local music scanning.</li>
+          <li xml:lang="zh-CN">修复本地音乐扫描。</li>
+          <li>Fixed local music not supporting Range requests.</li>
+          <li xml:lang="zh-CN">修复本地音乐不支持 Range 请求。</li>
+          <li>Refactored tray icon interaction logic on Linux.</li>
+          <li xml:lang="zh-CN">重构 Linux 下托盘图标交互逻辑。</li>
+          <li>Fixed configured proxy server not being used.</li>
+          <li xml:lang="zh-CN">修复配置的代理服务器未被使用。</li>
+          <li>Do not load unnecessary modules in child windows.</li>
+          <li xml:lang="zh-CN">不在子窗口加载非必要模块。</li>
+          <li>Added title to menu window.</li>
+          <li xml:lang="zh-CN">为菜单窗口添加标题。</li>
+          <li>Ensured consistent height of desktop lyrics toolbar.</li>
+          <li xml:lang="zh-CN">确保桌面歌词工具栏高度一致。</li>
+          <li>Use logarithmic volume conversion.</li>
+          <li xml:lang="zh-CN">使用对数转换音量。</li>
+          <li>Updated dependencies.</li>
+          <li xml:lang="zh-CN">更新依赖。</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.13.1" date="2026-06-04">
       <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.13.1</url>
       <description>
