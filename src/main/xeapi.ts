@@ -2,7 +2,6 @@ import {
   createCipheriv,
   createDecipheriv,
   createHmac,
-  createPrivateKey,
   createPublicKey,
   diffieHellman,
   generateKeyPairSync,
@@ -11,19 +10,16 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
+import { escape } from "node:querystring";
 
-import { data } from "./folders";
+import { toError } from "../util";
+import { aegisPublicKey } from "./folders";
 
 const STATIC_KEY_BASE64 = "hw7WBGc5HWCZzhBM50P3pDvtn/RzxDy+FW+wygIErn4=";
 const SIGN_KEY =
   "YN6+QFyG6D3rc3J1VT6sqwaPKE+GdwxtDweGmEPklcgrEohaE60m4Y/TtI4R/vVi17JUwwCIQF0Q2FXFmMlGrg==";
 const X25519_SPKI_PREFIX = Buffer.from("302a300506032b656e032100", "hex");
-const X25519_PKCS8_PREFIX = Buffer.from(
-  "302e020100300506032b656e04220420",
-  "hex"
-);
-const PUBLIC_KEY_CACHE_PATH = resolve(data, "Aegis", "pubkey");
 const DEFAULT_DYNAMIC_KEY_INTERVAL_MINUTE = 5;
 const LOCAL_ENCRYPT_FAILURE_THRESHOLD = 1;
 const PUBLIC_KEY_UPDATE_FAILURE_THRESHOLD = 3;
@@ -80,11 +76,11 @@ export class XeapiAegis {
   private sessionKey = "";
   private state = AegisEncryptState.LocalFallback;
   private callbacks: AegisCallbacks | null = null;
-  private pendingPublicKeyNonce = "";
+  private pendingPublicKeyNonces = new Set<string>();
   private localEncryptFailCount = 0;
   private publicKeyUpdateFailCount = 0;
 
-  constructor(publicKeyCachePath = PUBLIC_KEY_CACHE_PATH) {
+  constructor(publicKeyCachePath = aegisPublicKey) {
     this.publicKeyCachePath = publicKeyCachePath;
   }
 
@@ -129,9 +125,9 @@ export class XeapiAegis {
 
       this.localEncryptFailCount = 0;
       return [
-        `B=${urlEncode(b.toString("base64"))}`,
-        `S=${urlEncode(s.toString("base64"))}`,
-        `R=${urlEncode(r.toString("base64"))}`,
+        `B=${escape(b.toString("base64"))}`,
+        `S=${escape(s.toString("base64"))}`,
+        `R=${escape(r.toString("base64"))}`,
       ].join("&");
     } catch (error) {
       this.recordLocalEncryptFailure(error);
@@ -148,7 +144,7 @@ export class XeapiAegis {
       return false;
     }
 
-    if (response.code && response.code !== 200) {
+    if (response.code !== undefined && response.code !== 200) {
       if (response.code !== 429) {
         this.recordPublicKeyUpdateFailure(
           `public_key_response_code_${response.code}`
@@ -163,12 +159,11 @@ export class XeapiAegis {
       return false;
     }
 
-    const timestampText = String(timestamp);
-    const expectedSignature = hmacSha256Base64(
-      SIGN_KEY,
-      timestampText + this.pendingPublicKeyNonce
+    const matchedNonce = this.findMatchingPublicKeyNonce(
+      String(timestamp),
+      signature
     );
-    if (signature !== expectedSignature) {
+    if (!matchedNonce) {
       this.recordPublicKeyUpdateFailure(
         "invalid_public_key_response_signature"
       );
@@ -194,6 +189,7 @@ export class XeapiAegis {
     }
 
     this.publicKey = nextPublicKey;
+    this.pendingPublicKeyNonces.clear();
     this.publicKeyUpdateFailCount = 0;
     this.saveCachedPublicKey(plaintext);
     this.updateState(AegisEncryptState.Normal, "public_key_updated");
@@ -203,7 +199,7 @@ export class XeapiAegis {
   private requestPublicKey(requestType: "active" | "passive") {
     const timestamp = String(Date.now());
     const nonce = makeNonce();
-    this.pendingPublicKeyNonce = nonce;
+    this.pendingPublicKeyNonces.add(nonce);
     this.callbacks?.onRequestPublicKey({
       currentKeyVersion: this.publicKey?.version ?? "",
       requestType,
@@ -219,6 +215,15 @@ export class XeapiAegis {
     this.callbacks?.onEncryptStateChange(state, reason);
   }
 
+  private findMatchingPublicKeyNonce(timestamp: string, signature: string) {
+    for (const nonce of this.pendingPublicKeyNonces) {
+      if (signature === hmacSha256Base64(SIGN_KEY, timestamp + nonce)) {
+        return nonce;
+      }
+    }
+    return "";
+  }
+
   private recordLocalEncryptFailure(error: unknown) {
     this.localEncryptFailCount++;
     if (this.localEncryptFailCount < LOCAL_ENCRYPT_FAILURE_THRESHOLD) return;
@@ -227,7 +232,7 @@ export class XeapiAegis {
       this.publicKey
         ? AegisEncryptState.ClientFallback
         : AegisEncryptState.LocalFallback,
-      `local_encrypt_failed:${getErrorMessage(error)}`
+      `local_encrypt_failed:${toError(error).message}`
     );
   }
 
@@ -366,28 +371,8 @@ function makeNonce() {
   return values.join("");
 }
 
-function urlEncode(value: string) {
-  return value.replace(
-    /[^A-Za-z0-9\-._~]/g,
-    (char) =>
-      `%${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`
-  );
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function exportRawX25519PublicKey(key: KeyObject) {
   return Buffer.from(key.export({ format: "der", type: "spki" })).subarray(-32);
-}
-
-export function importRawX25519PrivateKey(rawKey: Buffer) {
-  return createPrivateKey({
-    key: Buffer.concat([X25519_PKCS8_PREFIX, rawKey]),
-    format: "der",
-    type: "pkcs8",
-  });
 }
 
 function isPublicKeyState(value: unknown): value is PublicKeyState {
