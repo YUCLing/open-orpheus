@@ -156,9 +156,11 @@ player.on("audiodata", (event) => {
 });
 
 function updatePositionState() {
+  const duration = player.audio.duration;
+  if (!isFinite(duration) || duration < 0) return;
   navigator.mediaSession.setPositionState({
-    duration: player.audio.duration,
-    position: player.audio.currentTime,
+    duration,
+    position: Math.min(player.audio.currentTime, duration),
     playbackRate: player.audio.playbackRate,
   });
 }
@@ -191,12 +193,12 @@ navigator.mediaSession.setActionHandler("seekto", ({ seekTime }) => {
   player.audio.currentTime = seekTime as number;
 });
 navigator.mediaSession.setActionHandler("seekforward", ({ seekOffset }) => {
-  if (isNaN(Number(seekOffset))) return;
-  player.audio.currentTime += seekOffset as number;
+  const offset = seekOffset ?? 10;
+  player.audio.currentTime += offset;
 });
 navigator.mediaSession.setActionHandler("seekbackward", ({ seekOffset }) => {
-  if (isNaN(Number(seekOffset))) return;
-  player.audio.currentTime -= seekOffset as number;
+  const offset = seekOffset ?? 10;
+  player.audio.currentTime -= offset;
 });
 navigator.mediaSession.setActionHandler("stop", () => {
   fireNativeCall("winhelper.onHotkey", "stop", true);
