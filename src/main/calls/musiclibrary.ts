@@ -1,5 +1,5 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path, { basename } from "node:path";
 import { createHash } from "node:crypto";
 
@@ -69,11 +69,11 @@ async function trackEntryFromFile(
   lib: string,
   file: string
 ): Promise<TrackEntry> {
-  const fstat = await stat(file);
+  const [fstat, content] = await Promise.all([stat(file), readFile(file)]);
   const extName = path.extname(file);
 
   const tagger = new MusicTagger();
-  tagger.loadPath(file);
+  tagger.loadBuffer(content);
 
   let title = tagger.title || path.basename(file, extName);
   let album = tagger.album || "";

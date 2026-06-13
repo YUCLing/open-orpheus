@@ -55,9 +55,11 @@ async function readDownloadedMusicInfo(
   const filePath = normalizePath(base ?? "", file);
   let comment = "";
   try {
+    const content = await readFile(filePath);
+
     const tagger = new MusicTagger();
 
-    tagger.loadPath(filePath);
+    tagger.loadBuffer(content);
     const json = commentToID3Json(tagger.comment);
     tagger.dispose();
 
