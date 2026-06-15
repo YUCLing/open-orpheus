@@ -32,6 +32,7 @@ export interface PeqBand {
 }
 
 export default class AudioEffectManager {
+  private enabled = false;
   private ctx: AudioContext;
 
   /** Entry point — external source connects here */
@@ -233,6 +234,16 @@ export default class AudioEffectManager {
       console.error("Failed to load audio-effect worklet:", err);
       // Non-fatal: audio still works without advanced effects.
     }
+  }
+
+  /**
+   * Set if the audio effects should be enabled.
+   *
+   * @param enabled Should audio effects be enabled.
+   */
+  setEnabled(enabled: boolean) {
+    this.enabled = enabled;
+    this.rebuildChain();
   }
 
   // #region Equalizer
@@ -468,10 +479,12 @@ export default class AudioEffectManager {
 
     let prev: AudioNode = this.input;
 
-    for (const slot of this.slots) {
-      if (slot.active) {
-        prev.connect(slot.input);
-        prev = slot.output;
+    if (this.enabled) {
+      for (const slot of this.slots) {
+        if (slot.active) {
+          prev.connect(slot.input);
+          prev = slot.output;
+        }
       }
     }
 

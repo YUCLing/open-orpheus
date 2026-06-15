@@ -318,7 +318,7 @@ registerCallHandler<
   if (!enabled) {
     applyEqualizer(null);
     player.audioEffectManager.clearConvolutionIR();
-    player.setAudioEffectEnabled(false);
+    player.audioEffectManager.setEnabled(false);
     return;
   }
   let eqData = null;
@@ -342,7 +342,7 @@ registerCallHandler<
   if (eqDataOverride) eqData = eqDataOverride;
 
   if (eqData || wavIr) {
-    player.setAudioEffectEnabled(true);
+    player.audioEffectManager.setEnabled(true);
     applyEqualizer(eqData);
     if (wavIr) {
       void player.audioEffectManager.setConvolutionIR(wavIr);
@@ -352,7 +352,7 @@ registerCallHandler<
   } else {
     applyEqualizer(null);
     player.audioEffectManager.clearConvolutionIR();
-    player.setAudioEffectEnabled(false);
+    player.audioEffectManager.setEnabled(false);
   }
 });
 
@@ -361,9 +361,9 @@ let loudnessGainDb = 0;
 registerCallHandler<[boolean], void>("audioeffect.setLoudnessON", (enabled) => {
   loudnessGainEnabled = enabled;
   if (enabled) {
-    player.loudnessGain.gain.value = dbToGain(loudnessGainDb);
+    player.replayGain.gain.value = dbToGain(loudnessGainDb);
   } else {
-    player.loudnessGain.gain.value = 1;
+    player.replayGain.gain.value = 1;
   }
 });
 
@@ -373,7 +373,7 @@ registerCallHandler<[{ gain: number }], void>(
     const { gain } = params;
     loudnessGainDb = gain / 10000;
     if (loudnessGainEnabled) {
-      player.loudnessGain.gain.value = dbToGain(loudnessGainDb);
+      player.replayGain.gain.value = dbToGain(loudnessGainDb);
     }
   }
 );

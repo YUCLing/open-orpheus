@@ -126,8 +126,6 @@ export default class Player extends Emittery<PlayerEvents> {
     this._audio
   );
 
-  private _loudnessGainNode = this._audioCtx.createGain();
-
   private _honeyPotPromise: Promise<AudioWorkletNode>;
 
   private _playInfo: AudioPlayInfo | null = null;
@@ -178,14 +176,15 @@ export default class Player extends Emittery<PlayerEvents> {
     this.emit("volumechange", value);
   }
 
-  get loudnessGain() {
-    return this._loudnessGainNode;
+  get replayGain() {
+    return this._audioEffectManager.input;
   }
 
   /**
    * The audio effect manager of the player.
    *
-   * Note that its output is currently being used as volume gain.
+   * Note that its input is currently being used as replay gain, and
+   * its output is currently being used as volume gain.
    */
   get audioEffectManager() {
     return this._audioEffectManager;
@@ -209,10 +208,7 @@ export default class Player extends Emittery<PlayerEvents> {
     // Ensure they are consistent
     this.volume = this._volume;
 
-    this._audioSourceNode.connect(this._loudnessGainNode);
-
-    // Reuse the output gain node as volume gain
-    this._loudnessGainNode.connect(this._audioEffectManager.output);
+    this._audioSourceNode.connect(this._audioEffectManager.input);
     this._audioEffectManager.output.connect(this._audioCtx.destination);
 
     this._honeyPotPromise = new Promise((resolve, reject) => {
@@ -255,24 +251,6 @@ export default class Player extends Emittery<PlayerEvents> {
       await this._audioCtx.resume();
     } else if (!running && this._audioCtx.state === "running") {
       await this._audioCtx.suspend();
-    }
-  }
-
-  setAudioEffectEnabled(enabled: boolean) {
-    if (enabled) {
-      try {
-        this._loudnessGainNode.disconnect(this._audioEffectManager.output);
-      } catch {
-        /* silent */
-      }
-      this._loudnessGainNode.connect(this._audioEffectManager.input);
-    } else {
-      try {
-        this._loudnessGainNode.disconnect(this._audioEffectManager.input);
-      } catch {
-        /* silent */
-      }
-      this._loudnessGainNode.connect(this._audioEffectManager.output);
     }
   }
 
