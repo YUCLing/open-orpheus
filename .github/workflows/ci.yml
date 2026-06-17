@@ -24,9 +24,10 @@ jobs:
       matrix:
         runner:
           - ubuntu-latest
+          - ubuntu-24.04-arm
           - macos-latest
           - windows-latest
-          - ubuntu-24.04-arm
+          - windows-11-arm
 
     uses: ./.github/workflows/build.yml
     with:

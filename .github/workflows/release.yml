@@ -199,9 +199,10 @@ jobs:
       matrix:
         runner:
           - ubuntu-latest
+          - ubuntu-24.04-arm
           - macos-latest
           - windows-latest
-          - ubuntu-24.04-arm
+          - windows-11-arm
     uses: ./.github/workflows/build.yml
     with:
       runner: ${{ matrix.runner }}
@@ -235,7 +236,15 @@ jobs:
             case "$f" in
               artifacts/squirrel-*/*)
                 case "$f" in
-                  *.exe) cp "$f" release-files/ ;;
+                  *.exe)
+                    case "$f" in
+                      *arm*) arch="arm64" ;;
+                      *) arch="x64" ;;
+                    esac
+                    basename="${f##*/}"
+                    new_name="${basename%Setup.exe}${arch}.Setup.exe"
+                    cp "$f" "release-files/${new_name}"
+                    ;;
                 esac
                 ;;
               *) cp "$f" release-files/ ;;
