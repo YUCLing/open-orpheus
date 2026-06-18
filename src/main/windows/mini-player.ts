@@ -25,6 +25,7 @@ import type {
   MiniPlayerTogetherStatus,
 } from "$sharedTypes/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
+import { LifecycleState, state as lifecycleState } from "../lifecycle";
 
 let miniPlayerWindow: BrowserWindow | null = null;
 
@@ -441,6 +442,13 @@ export default function createMiniPlayerWindow() {
     miniPlayerWindow.loadURL("gui://frontend/mini-player");
   }
   setWindowId(miniPlayerWindow, "mini_player");
+
+  miniPlayerWindow.on("close", (e) => {
+    if (lifecycleState === LifecycleState.Quitting) return; // Allow closing when quitting
+    e.preventDefault();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
+  });
 
   registerIpcHandlers<MiniPlayerContract>(
     miniPlayerWindow.webContents,
