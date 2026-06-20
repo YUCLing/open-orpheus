@@ -20,10 +20,18 @@ import type { ProxyConfiguration, ProxyTypes } from "../request";
 import { client, getProxyAgent } from "../request";
 import { disableHardwareAccelerationFlag } from "../folders";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
+import { DawnEntry, setStatisEndpoint, statisV2 } from "../dawn";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   console.log(...args);
 });
+
+registerCallHandler<["dawn", DawnEntry[]], void>(
+  "app.statisV2",
+  (event, type, data) => {
+    statisV2(type, data);
+  }
+);
 
 registerCallHandler<string[], void>("app.exit", (event, action, ...params) => {
   let args = process.argv.slice(1); // Skip the first argument which is the executable path
@@ -223,6 +231,34 @@ registerCallHandler<[ThumbnailOptions], void>(
     );
   }
 );
+
+registerCallHandler<
+  [
+    {
+      dawn: string;
+      discern: string;
+      discern_uri: string;
+      e_batch_url: string;
+      e_url: string;
+      fixdiscern: string;
+      fixdiscern_uri: string;
+      hostgroup1: string[];
+      hostgroup2: string[];
+      hostgroup3: string[];
+      hostgroup4: string[];
+      lyric: string;
+      mam: string;
+      monitor: string;
+      nsinfo: string;
+      refer: string;
+      statis: string;
+    },
+  ],
+  [boolean]
+>("app.initUrls", (event, urls) => {
+  setStatisEndpoint(urls.dawn);
+  return [true];
+});
 
 registerCallHandler<[string, string], [boolean]>(
   "app.loadSkinPackets",

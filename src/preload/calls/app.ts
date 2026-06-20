@@ -8,16 +8,13 @@ import MusicRecognizer from "../MusicRecognizer";
 registerCallHandler<[], void>("app.statis", () => {
   /* empty */
 });
-registerCallHandler<[], void>("app.statisV2", () => {
-  /* empty */
-});
 registerCallHandler<[], void>("app.sendStatis", () => {
   /* empty */
 });
 
 // Need more info on these
 registerCallHandler<[], string[]>("app.getABTestKeys", () => [
-  //"PH-PC-DAWNLOG-NEW",
+  "PH-PC-DAWNLOG-NEW",
   //"PC-blur-enable",
   //"PH-PC-P2P-Enable",
   //"PC-GPU-enable",
@@ -61,11 +58,6 @@ registerCallHandler<[], [typeof cooperation]>("app.getCooperation", () => [
 registerCallHandler<[], [string]>("app.getAppStartTime", () => {
   // TODO: Implement this properly
   return ["542493"]; // What is this?
-});
-
-registerCallHandler<[], [boolean]>("app.initUrls", () => {
-  // TODO: Implement this properly? What does this even do?
-  return [true];
 });
 
 registerCallHandler<[string], [string]>("app.getP2PUrl", (url) => {
