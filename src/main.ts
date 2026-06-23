@@ -256,7 +256,10 @@ app.on("ready", async () => {
           console.warn("Failed to get proxy configuration", err);
         }
       }),
-      prepareDeviceId(),
+      prepareDeviceId().then(async () => {
+        // Initialize initial cookies
+        await (await import("./main/cookie")).default();
+      }),
       packManager.getPack<WebPack>("web").readPack(),
       import("./main/windows/desktop-lyrics").then((m) => {
         // Create desktop lyrics window
