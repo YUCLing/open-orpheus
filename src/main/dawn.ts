@@ -36,6 +36,7 @@ function deriveNonceCounter(data: Buffer): { nonce: Buffer; counter: number } {
 const logBuffer: string[] = [];
 let seqNum = 0;
 let uploadUrl: string | null = null; // no default — must be set via setStatisEndpoint
+let refererUrl: string | null = null;
 const pendingBundles: { filename: string; data: Buffer }[] = [];
 let uploadInProgress = false;
 
@@ -185,6 +186,7 @@ async function uploadBundles(): Promise<void> {
   uploadInProgress = true;
   try {
     const url = uploadUrl; // capture in case it changes mid-loop
+    const referer = refererUrl ?? undefined;
 
     for (let i = 0; i < pendingBundles.length; i++) {
       const { filename, data } = pendingBundles[i];
@@ -199,7 +201,7 @@ async function uploadBundles(): Promise<void> {
         const r = await httpClient.post(url, {
           headers: {
             "Content-Type": `multipart/form-data; boundary=${boundary}`,
-            Referer: "https://music.163.com/di",
+            Referer: referer,
           },
           body,
           throwHttpErrors: false,
@@ -310,9 +312,11 @@ export function statisV2(type: string, entries: DawnEntry[]): void {
  * on the next timer tick.
  *
  * @param url The full upload URL.
+ * @param referer The Referer URL to be used when uploading.
  */
-export function setStatisEndpoint(url: string): void {
+export function setStatisEndpoint(url: string, referer?: string): void {
   uploadUrl = url;
+  refererUrl = referer ?? null;
   scheduleFlush();
 }
 

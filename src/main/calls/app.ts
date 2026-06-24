@@ -256,7 +256,7 @@ registerCallHandler<
   ],
   [boolean]
 >("app.initUrls", (event, urls) => {
-  setStatisEndpoint(urls.dawn);
+  setStatisEndpoint(urls.dawn, urls.refer);
   return [true];
 });
 
