@@ -543,8 +543,8 @@ registerCallHandler<[string, string, string, string, AddId3Request], void>(
 
       tagger.dispose();
 
-      await rm(imageFullPath);
-      await rm(mediaPath);
+      await rm(imageFullPath, { force: true });
+      await rm(mediaPath, { force: true });
 
       event.sender.send(
         "channel.call",
@@ -553,7 +553,10 @@ registerCallHandler<[string, string, string, string, AddId3Request], void>(
         1,
         relPath
       );
-    })();
+    })().catch((err) => {
+      console.error("Failed to write ID3 tag", err);
+      event.sender.send("channel.call", "storage.onaddid3done", taskId, 0);
+    });
   }
 );
 
