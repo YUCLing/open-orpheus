@@ -14,7 +14,7 @@ import { existsSync, mkdirSync } from "node:fs";
 
 import { app } from "electron";
 import mime from "mime";
-import { MetaPicture, MusicTagger } from "music-tag-native";
+import { MetaPicture, MusicFile } from "music-tag-native";
 
 import {
   data as dataDir,
@@ -55,13 +55,8 @@ async function readDownloadedMusicInfo(
   const filePath = normalizePath(base ?? "", file);
   let comment;
   try {
-    const content = await readFile(filePath);
-
-    const tagger = new MusicTagger();
-
-    tagger.loadBuffer(content);
-    const json = commentToID3Json(tagger.comment);
-    tagger.dispose();
+    const taggedFile = await MusicFile.load(filePath);
+    const json = commentToID3Json(taggedFile.comment);
 
     if (!json) return;
 
@@ -504,31 +499,29 @@ registerCallHandler<[string, string, string, string, AddId3Request], void>(
   (event, taskId, mediaPath, imagePath, mediaInfo, id3Info) => {
     // Don't block the call.
     (async () => {
-      const tagger = new MusicTagger();
-
       mediaPath = normalizePath(mediaPath);
 
-      tagger.loadPath(mediaPath);
+      const file = await MusicFile.load(mediaPath);
 
-      tagger.album = id3Info.talb;
-      tagger.title = id3Info.tit2;
-      tagger.artist =
+      file.album = id3Info.talb;
+      file.title = id3Info.tit2;
+      file.artist =
         typeof id3Info.tpe1 === "string"
           ? id3Info.tpe1
           : id3Info.tpe1.join(",");
-      tagger.discNumber = parseInt(id3Info.tpos) || 0;
-      tagger.trackNumber = parseInt(id3Info.trck) || 0;
+      file.discNumber = parseInt(id3Info.tpos) || 0;
+      file.trackNumber = parseInt(id3Info.trck) || 0;
 
       const imageFullPath = normalizePath(downloadTemp, imagePath);
       if (existsSync(imageFullPath)) {
         const mimeType = mime.getType(imageFullPath);
         if (mimeType) {
           const imageData = await readFile(imageFullPath);
-          tagger.pictures = [new MetaPicture(mimeType, imageData)];
+          file.pictures = [new MetaPicture(mimeType, imageData)];
         }
       }
 
-      tagger.comment = ID3JsonToComment(mediaInfo);
+      file.comment = ID3JsonToComment(mediaInfo);
 
       let relPath = id3Info.media_rel_path;
       if (relPath.endsWith(".ncm")) {
@@ -539,9 +532,7 @@ registerCallHandler<[string, string, string, string, AddId3Request], void>(
 
       const finalPath = normalizePath(download, relPath);
       await mkdir(dirname(finalPath), { recursive: true });
-      tagger.save(finalPath);
-
-      tagger.dispose();
+      await file.save(finalPath);
 
       await rm(imageFullPath, { force: true });
       await rm(mediaPath, { force: true });

@@ -1,10 +1,10 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path, { basename } from "node:path";
 import { createHash } from "node:crypto";
 
 import { app } from "electron";
-import { MusicTagger } from "music-tag-native";
+import { MusicFile } from "music-tag-native";
 
 import { musicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
@@ -73,26 +73,26 @@ async function trackEntryFromFile(
   lib: string,
   file: string
 ): Promise<TrackEntry> {
-  const [fstat, content] = await Promise.all([stat(file), readFile(file)]);
+  const [fstat, taggedFile] = await Promise.all([
+    stat(file),
+    MusicFile.load(file),
+  ]);
   const extName = path.extname(file);
 
-  const tagger = new MusicTagger();
-  tagger.loadBuffer(content);
-
-  let title = tagger.title || path.basename(file, extName);
-  let album = tagger.album || "";
-  const genre = tagger.genre || "";
-  let artist = tagger.artist || "";
-  let duration = tagger.duration || 0;
-  let bitrate = tagger.bitRate || 0;
-  const tracknumber = tagger.trackNumber || 10000;
+  let title = taggedFile.title || path.basename(file, extName);
+  let album = taggedFile.album || "";
+  const genre = taggedFile.genre || "";
+  let artist = taggedFile.artist || "";
+  let duration = taggedFile.duration || 0;
+  let bitrate = taggedFile.bitRate || 0;
+  const tracknumber = taggedFile.trackNumber || 10000;
 
   let tid = "";
   let aid = "";
   let artistid = "";
   let track = "";
 
-  const metadata = commentToID3Metadata(tagger.comment);
+  const metadata = commentToID3Metadata(taggedFile.comment);
   if (metadata) {
     tid = metadata.musicId;
     aid = `album${metadata.albumId}`;
@@ -135,8 +135,6 @@ async function trackEntryFromFile(
       fee: metadata.fee,
     });
   }
-
-  tagger.dispose();
 
   return {
     file,
@@ -400,12 +398,11 @@ registerCallHandler<[string, string, boolean], void>(
         );
         return;
       }
-      const tagger = new MusicTagger();
-
       try {
-        const stats = await stat(fullPath);
-
-        tagger.loadPath(fullPath);
+        const [stats, taggedFile] = await Promise.all([
+          stat(fullPath),
+          MusicFile.load(fullPath),
+        ]);
 
         event.sender.send(
           "channel.call",
@@ -414,15 +411,15 @@ registerCallHandler<[string, string, boolean], void>(
           path,
           0,
           {
-            album: tagger.album,
-            artist: tagger.artist,
+            album: taggedFile.album,
+            artist: taggedFile.artist,
             audiomd5: "",
-            bitrate: tagger.bitRate,
-            comment: tagger.comment,
-            duration: tagger.duration,
+            bitrate: taggedFile.bitRate,
+            comment: taggedFile.comment,
+            duration: taggedFile.duration,
             filesize: stats.size,
-            genre: tagger.genre,
-            title: tagger.title || basename(fullPath),
+            genre: taggedFile.genre,
+            title: taggedFile.title || basename(fullPath),
           }
         );
       } catch {
@@ -435,8 +432,6 @@ registerCallHandler<[string, string, boolean], void>(
           {}
         );
       }
-
-      if (!tagger.isDisposed()) tagger.dispose();
     })();
   }
 );

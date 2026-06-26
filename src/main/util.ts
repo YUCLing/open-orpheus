@@ -70,7 +70,7 @@ export function selectBestMusicPic(pics: MetaPicture[]): MetaPicture | null {
   let pic: MetaPicture | null = null;
   for (const p of pics) {
     // Use CoverFront directly
-    if (p.coverType === "CoverFront") return p;
+    if (p.coverType === "Cover Art (Front)") return p;
     // Use the first found if no CoverFront
     if (pic === null) pic = p;
   }

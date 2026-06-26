@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { Protocol } from "electron";
 import mime from "mime";
 import unzipper from "unzipper";
-import { MusicTagger } from "music-tag-native";
+import { MusicFile } from "music-tag-native";
 
 import packManager from "./pack";
 import WebPack from "./packs/WebPack";
@@ -299,11 +299,8 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
         if (!existsSync(path)) {
           throw new LoadError("File not found", 404);
         }
-        const buf = await readFile(path);
-        const tagger = new MusicTagger();
-        tagger.loadBuffer(buf);
-        const pictures = tagger.pictures;
-        tagger.dispose();
+        const taggedFile = await MusicFile.load(path);
+        const pictures = taggedFile.pictures;
         if (!pictures) {
           throw new LoadError("No pictures for this media", 404);
         }
@@ -327,11 +324,8 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
         if (!existsSync(path)) {
           throw new LoadError("File not found", 404);
         }
-        const buf = await readFile(path);
-        const tagger = new MusicTagger();
-        tagger.loadBuffer(buf);
-        const lyrics = tagger.lyrics;
-        tagger.dispose();
+        const taggedFile = await MusicFile.load(path);
+        const lyrics = taggedFile.lyrics;
         if (!lyrics) {
           // NCM accepts everything, must return with hard error
           throw new NetworkError("No lyrics");

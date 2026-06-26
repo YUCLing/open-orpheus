@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 
-import { MusicTagger } from "music-tag-native";
+import { MusicFile } from "music-tag-native";
 import type { Progress } from "got";
 
 import { registerCallHandler } from "../calls";
@@ -75,8 +75,6 @@ async function handleUpload(
     return;
   }
 
-  const tagger = new MusicTagger();
-
   event.sender.send(
     "channel.call",
     "subprocess.oncall",
@@ -101,7 +99,7 @@ async function handleUpload(
       readFile(fullPath),
     ]);
 
-    tagger.loadBuffer(content);
+    const taggedFile = await MusicFile.load(content);
 
     const md5 = createHash("md5").update(content).digest("hex");
 
@@ -120,7 +118,7 @@ async function handleUpload(
         form: {
           params: serialData(payload.audioMd5CheckUri, {
             ...encryptParam,
-            bitrate: tagger.bitRate,
+            bitrate: taggedFile.bitRate,
             checkToken,
             ext: extname(fullPath),
             length: stats.size,
@@ -398,8 +396,6 @@ async function handleUpload(
       })
     );
   }
-
-  if (!tagger.isDisposed()) tagger.dispose();
 }
 
 registerCallHandler<[number, string, string, string], void>(

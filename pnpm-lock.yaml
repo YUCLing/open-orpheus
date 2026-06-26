@@ -50,8 +50,8 @@ importers:
         specifier: ^1.0.1
         version: 1.0.1
       music-tag-native:
-        specifier: ^0.2.5
-        version: 0.2.5(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)
+        specifier: ^1.0.0
+        version: 1.0.0(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)
     devDependencies:
       '@electron-forge/cli':
         specifier: ^7.11.2
@@ -1170,8 +1170,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@napi-rs/wasm-runtime@1.1.5':
-    resolution: {integrity: sha512-AWPoBRJ9tsnVhor4sjO7rkni+7p+2IAEFj6cx06UgP10jkQHqay/36uRV/bFkgrh18D9vb4cr8Q0Pthskgzy+Q==}
+  '@napi-rs/wasm-runtime@1.1.6':
+    resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
     peerDependencies:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
@@ -1828,6 +1828,9 @@ packages:
 
   '@tybys/wasm-util@0.10.2':
     resolution: {integrity: sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg==}
+
+  '@tybys/wasm-util@0.10.3':
+    resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
 
   '@types/audioworklet@0.0.100':
     resolution: {integrity: sha512-mWt4Z5CWi0CupDnSYWJgx6dw61XUk9JSRGrM9F/YNrpOoY/0XG+sxP+8rAjQq80H4febOe8PrzGmmN/X3w8LsQ==}
@@ -4057,89 +4060,89 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  music-tag-native-android-arm64@0.2.5:
-    resolution: {integrity: sha512-Xgqp4fBy83H5wvzqEIfsJff8bzgA1vBKd15ht7E8jMkoaW3d+8XYC9+NLUTU7pVcEU5O11YdZYkcsyVs9ExS2A==}
+  music-tag-native-android-arm64@1.0.0:
+    resolution: {integrity: sha512-L48f5JwQiA00uMJKWKwhbT1g7toFyPPQHMVjxB1reEPkDsjQcL2Uw8REp1i8WG7qFZHTr3ds9pq9Ifpz/SdEpw==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [android]
 
-  music-tag-native-darwin-arm64@0.2.5:
-    resolution: {integrity: sha512-ZLsWWP2Jk1vpP6mGCDExZtSx0/dKsrlNlblaWVBnfOQ1eoSu12BI0LE60d6uL02pOzn/hUyTG1/FmpNl9Cn8tQ==}
+  music-tag-native-darwin-arm64@1.0.0:
+    resolution: {integrity: sha512-I0HD3F4PHdMjjE+qvqWuR3xuMJeR+wMNXgPsBxOBEqUTxsvzNvcLmyOBt8EFNFqhbQzMoU6O+7Qa8VhiC2wm4g==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  music-tag-native-darwin-x64@0.2.5:
-    resolution: {integrity: sha512-JSPUbRuZ1kLed+ncbXi4fZP+3hABq+7UFxccdaCzXkUaSsBrM/VKnxVeqp139ibxRBlftOHrEioO5pRXDmT1WA==}
+  music-tag-native-darwin-x64@1.0.0:
+    resolution: {integrity: sha512-D8v8kubw6ZytedxR2MrFUaWi40aQb087oRzym4L9Alepf0N6XxnvGlnpkVIgJmqHLZ9sUpdsFNNf/5ixeo9Jnw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  music-tag-native-linux-arm-gnueabihf@0.2.5:
-    resolution: {integrity: sha512-Q4axi6daTF/xmOVk9QZ/d18biVf3qeF6yP05gLJCPdELtSwddhJNw6YqgbHL89Slq1Wa77WvVyZpUz3cFkww6g==}
+  music-tag-native-linux-arm-gnueabihf@1.0.0:
+    resolution: {integrity: sha512-jBJyxEv75ICsnK4IVjeR3k5iKDY8AWvV/Vf/wpU1jy2QvZPiYXg9YQfBevt0HMDMxAY6zbPq6aocLNP+8Qz0ew==}
     engines: {node: '>= 10'}
     cpu: [arm]
     os: [linux]
 
-  music-tag-native-linux-arm-musleabihf@0.2.5:
-    resolution: {integrity: sha512-Bl3nSkhWw6YIqWp9+bpNMpllBDe7WSUeCw0Q7p09D4Bd9StaTPSheJOYPktWHawCEQdm70Bc4AR/rE6FOyxmZA==}
+  music-tag-native-linux-arm-musleabihf@1.0.0:
+    resolution: {integrity: sha512-ij5ZINJPyrJzfQEAdj8KsEnWxk0vvmD7cvas8hFouFIzbcLIzPWV+kMdwuc/gszWErx2e83c/WG9aUdYxYpryQ==}
     engines: {node: '>= 10'}
     cpu: [arm]
     os: [linux]
 
-  music-tag-native-linux-arm64-gnu@0.2.5:
-    resolution: {integrity: sha512-vPhl6Hxe0xEdA6OLbAhs0Ukd2qAQQqtNDGJrh6djMB0d1lwL2E49hSE58InanYmvIy2gGg2+hWR4dWhfb3yKBw==}
+  music-tag-native-linux-arm64-gnu@1.0.0:
+    resolution: {integrity: sha512-VF4kZiv7fmDBuIEoHK0/oBZiyKkR6JdiJQfSl/yLriv3L+Ab6I5gv8WrTb4HLjV3p/Y0EV+PPpfsv2C321QZ8g==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  music-tag-native-linux-arm64-musl@0.2.5:
-    resolution: {integrity: sha512-2C8kyUkb+O1EEdWWL899/eLHOCATrBoOuLX3NEAXyqvEwMtzcJJSLQz+g10SIQw4Eo0k4q2OQ9sjyGEp3gJShA==}
+  music-tag-native-linux-arm64-musl@1.0.0:
+    resolution: {integrity: sha512-Lqz0O8TbC19RcIIM+MYFVnxrK8807bAQ6yDoAZEctseuQKbR+ecHGJHF1bh2d0SjqP9IYWoT7ALVKW+imFz5+Q==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  music-tag-native-linux-x64-gnu@0.2.5:
-    resolution: {integrity: sha512-j2YKrjn8JCOSSFx5KsYyKZ+/bnW6eCv9dBOUC1lpHm8nDtCNBT7zmAOapBCREQR1BZAJKfxo5ap1rU4RHVqRYw==}
+  music-tag-native-linux-x64-gnu@1.0.0:
+    resolution: {integrity: sha512-1rxrvXZNnMGXgJAPG2eCmLdygtdHHw+xtRZsLBnGncB6y7iXNsOCJyATk127S+NdkFN4Ad9EQjiLi6Rgo4cTdw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  music-tag-native-linux-x64-musl@0.2.5:
-    resolution: {integrity: sha512-0iwQtMY0fODV8e8zbdk48VNtBNNv4xTX7h4bAhyptCEX+u1vGk3qYXboEVc8dwGGsaQWJFcD+5JuFfi7utcMFg==}
+  music-tag-native-linux-x64-musl@1.0.0:
+    resolution: {integrity: sha512-JZcV9N3nsZrvdoat9XzUgG8+qPNXCohv589ZdC8ej3eKPqXKms7GrUFpXk6XCz+xYmcUXtyL2kbCT1Q32JP76Q==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  music-tag-native-wasm32-wasi@0.2.5:
-    resolution: {integrity: sha512-CeosbJTc09Q14PG3YMgoTwj7dckCPTKyOet2dWRIXNaUof9Wxgmdr8DnqMsgD46ih/dsU6F+xP7tujaxnRJ2GQ==}
+  music-tag-native-wasm32-wasi@1.0.0:
+    resolution: {integrity: sha512-iSqNu/3fpigWK2b0MhG2Wl1+sQ6bbwCt04jLYkK2CoLD85ds1gZs1y4zm5QoXln+CFidV4A+xBW0goObtYlJcw==}
     engines: {node: '>=14.0.0'}
     cpu: [wasm32]
 
-  music-tag-native-win32-arm64-msvc@0.2.5:
-    resolution: {integrity: sha512-R53oysvkzJ/AGt7HK5G/qvyT9ICdkEs+eroHiw/dm9V6AaqqbtTYtd/wfKZx3TBpgWC6j5hmkIvsHerfwvuhdw==}
+  music-tag-native-win32-arm64-msvc@1.0.0:
+    resolution: {integrity: sha512-80gToMAbXFQNNxrFUPIN0snF1m3+VqpHBGj1YDFBCF8UHsU8cqWiouP6zIaJzmrWQWu7hsYwR/cMyqmWWwf0ZA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [win32]
 
-  music-tag-native-win32-ia32-msvc@0.2.5:
-    resolution: {integrity: sha512-FPNR/vgCrFo7B0qFLwOwHjXuc1x7hiCqLrAW+w2jb+XkvjtuXvmzOyiEtK0JwUUZX8BXz/XcDhjUMgpNd0mXlA==}
+  music-tag-native-win32-ia32-msvc@1.0.0:
+    resolution: {integrity: sha512-fqbqvv+MvgERBh9CUUGlQ8OCI7xSpffiIc7M9mISHMi5hMG5gZBJySjxFwAQNh6uBt4LnD9dI6AG5Z7LJtCQmQ==}
     engines: {node: '>= 10'}
     cpu: [ia32]
     os: [win32]
 
-  music-tag-native-win32-x64-msvc@0.2.5:
-    resolution: {integrity: sha512-CsZUOQ0j0ObVWqR7NqxOqrCVmVXWAcKRPqjxDGUXZlmw6WUZ6KjnrDh0lAFTAU6/mUQRyvWRZ385lfWaitpvLQ==}
+  music-tag-native-win32-x64-msvc@1.0.0:
+    resolution: {integrity: sha512-D2f1wS0cKISu1KStbJuKP/qftaG4NsjsyJbX04mDIwhZOaNqUwSWaJB0qJZf8uL23u5XV5O3FZE0UYq5OPGh5A==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
 
-  music-tag-native@0.2.5:
-    resolution: {integrity: sha512-ZBvk99um2NbSFOb7TFbhIHtJligBtH857HS1QhCfo2SdwWgBUCtvR5Zx0P2oV+G5C38lZr/aPDKhq6VIvVBY3w==}
+  music-tag-native@1.0.0:
+    resolution: {integrity: sha512-7Yu9BaE1YRkTDhqSzpM64ZtXb8j2Lt2cgtmWnVwumCJmKzsf1gHjYHS5rmx3MVf/I7Mp/OeGz9PS2og7Vr/iqQ==}
     engines: {node: '>= 10'}
 
   mute-stream@1.0.0:
@@ -6652,11 +6655,11 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
-  '@napi-rs/wasm-runtime@1.1.5(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)':
+  '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)':
     dependencies:
       '@emnapi/core': 1.11.0
       '@emnapi/runtime': 1.11.0
-      '@tybys/wasm-util': 0.10.2
+      '@tybys/wasm-util': 0.10.3
     optional: true
 
   '@napi-rs/wasm-tools-android-arm-eabi@1.0.1':
@@ -7155,6 +7158,11 @@ snapshots:
   '@tybys/wasm-util@0.10.2':
     dependencies:
       tslib: 2.8.1
+
+  '@tybys/wasm-util@0.10.3':
+    dependencies:
+      tslib: 2.8.1
+    optional: true
 
   '@types/audioworklet@0.0.100': {}
 
@@ -9533,65 +9541,65 @@ snapshots:
 
   ms@2.1.3: {}
 
-  music-tag-native-android-arm64@0.2.5:
+  music-tag-native-android-arm64@1.0.0:
     optional: true
 
-  music-tag-native-darwin-arm64@0.2.5:
+  music-tag-native-darwin-arm64@1.0.0:
     optional: true
 
-  music-tag-native-darwin-x64@0.2.5:
+  music-tag-native-darwin-x64@1.0.0:
     optional: true
 
-  music-tag-native-linux-arm-gnueabihf@0.2.5:
+  music-tag-native-linux-arm-gnueabihf@1.0.0:
     optional: true
 
-  music-tag-native-linux-arm-musleabihf@0.2.5:
+  music-tag-native-linux-arm-musleabihf@1.0.0:
     optional: true
 
-  music-tag-native-linux-arm64-gnu@0.2.5:
+  music-tag-native-linux-arm64-gnu@1.0.0:
     optional: true
 
-  music-tag-native-linux-arm64-musl@0.2.5:
+  music-tag-native-linux-arm64-musl@1.0.0:
     optional: true
 
-  music-tag-native-linux-x64-gnu@0.2.5:
+  music-tag-native-linux-x64-gnu@1.0.0:
     optional: true
 
-  music-tag-native-linux-x64-musl@0.2.5:
+  music-tag-native-linux-x64-musl@1.0.0:
     optional: true
 
-  music-tag-native-wasm32-wasi@0.2.5(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0):
+  music-tag-native-wasm32-wasi@1.0.0(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0):
     dependencies:
-      '@napi-rs/wasm-runtime': 1.1.5(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)
+      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
     optional: true
 
-  music-tag-native-win32-arm64-msvc@0.2.5:
+  music-tag-native-win32-arm64-msvc@1.0.0:
     optional: true
 
-  music-tag-native-win32-ia32-msvc@0.2.5:
+  music-tag-native-win32-ia32-msvc@1.0.0:
     optional: true
 
-  music-tag-native-win32-x64-msvc@0.2.5:
+  music-tag-native-win32-x64-msvc@1.0.0:
     optional: true
 
-  music-tag-native@0.2.5(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0):
+  music-tag-native@1.0.0(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0):
     optionalDependencies:
-      music-tag-native-android-arm64: 0.2.5
-      music-tag-native-darwin-arm64: 0.2.5
-      music-tag-native-darwin-x64: 0.2.5
-      music-tag-native-linux-arm-gnueabihf: 0.2.5
-      music-tag-native-linux-arm-musleabihf: 0.2.5
-      music-tag-native-linux-arm64-gnu: 0.2.5
-      music-tag-native-linux-arm64-musl: 0.2.5
-      music-tag-native-linux-x64-gnu: 0.2.5
-      music-tag-native-linux-x64-musl: 0.2.5
-      music-tag-native-wasm32-wasi: 0.2.5(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)
-      music-tag-native-win32-arm64-msvc: 0.2.5
-      music-tag-native-win32-ia32-msvc: 0.2.5
-      music-tag-native-win32-x64-msvc: 0.2.5
+      music-tag-native-android-arm64: 1.0.0
+      music-tag-native-darwin-arm64: 1.0.0
+      music-tag-native-darwin-x64: 1.0.0
+      music-tag-native-linux-arm-gnueabihf: 1.0.0
+      music-tag-native-linux-arm-musleabihf: 1.0.0
+      music-tag-native-linux-arm64-gnu: 1.0.0
+      music-tag-native-linux-arm64-musl: 1.0.0
+      music-tag-native-linux-x64-gnu: 1.0.0
+      music-tag-native-linux-x64-musl: 1.0.0
+      music-tag-native-wasm32-wasi: 1.0.0(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)
+      music-tag-native-win32-arm64-msvc: 1.0.0
+      music-tag-native-win32-ia32-msvc: 1.0.0
+      music-tag-native-win32-x64-msvc: 1.0.0
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
