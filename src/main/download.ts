@@ -39,6 +39,9 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
   private lastTime = 0;
   private lastBytes = 0;
 
+  // Throttle UI/Progress updates to ensure EMA mathematical accuracy and prevent UI lag
+  private static readonly UPDATE_INTERVAL_MS = 500;
+
   get isPaused() {
     return this.request?.isPaused() ?? true;
   }
@@ -53,23 +56,34 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
     this.hash = options.md5 ? crypto.createHash("md5") : null;
   }
 
-  private updateSpeed() {
+  private updateSpeed(isEnd = false) {
     if (!this.request) return;
 
-    const now = Date.now();
+    const now = performance.now();
     const prog = this.request.downloadProgress;
     const downloaded = prog.transferred;
-    const deltaBytes = downloaded - this.lastBytes;
+
     const deltaTime = now - this.lastTime;
 
-    if (deltaTime > 0) {
-      const instantSpeed = (deltaBytes * 1000) / deltaTime; // bytes/sec
-      this.ema = this.ema ? 0.8 * this.ema + 0.2 * instantSpeed : instantSpeed;
+    // Only update and emit if enough time has passed OR if it's the final forced emit
+    if (deltaTime >= DownloadTask.UPDATE_INTERVAL_MS || isEnd) {
+      const deltaBytes = downloaded - this.lastBytes;
+
+      if (deltaTime > 0) {
+        const instantSpeed = (deltaBytes * 1000) / deltaTime; // bytes/sec
+        this.ema = this.ema
+          ? 0.8 * this.ema + 0.2 * instantSpeed
+          : instantSpeed;
+      }
 
       this.emit("progress", {
         path: this.path,
-        percent: prog.percent,
-        total: prog.total || this.options.size || 0,
+        // Hardcode percent to 1 on completion to prevent 0% UI flashes when Content-Length is missing
+        percent: isEnd ? 1 : prog.percent,
+        // If it's the end and total is missing, the total is exactly what was downloaded
+        total: isEnd
+          ? prog.total || downloaded || this.options.size || 0
+          : prog.total || this.options.size || 0,
         downloaded,
         speed: this.ema,
       });
@@ -81,7 +95,8 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
 
   private async errored() {
     await this.cancel().catch(() => {}); // Ensure resources are cleaned up
-    await fs.rm(this.path).catch(() => {}); // Clean up partial file
+    // Clean up partial file.
+    await fs.rm(this.path, { force: true }).catch(() => {});
   }
 
   async start() {
@@ -95,6 +110,11 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
       this.request = client.stream(this.url, {
         headers: this.options.headers,
       });
+
+      // Initialize trackers exactly when data is about to start flowing
+      this.lastTime = performance.now();
+      this.lastBytes = 0;
+      this.ema = 0;
 
       this.request.on("data", (chunk: Buffer) => {
         this.hash?.update(chunk);
@@ -117,12 +137,17 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
         this.writeStream?.end();
         await this.fsHandle?.close().catch(() => {}); // Ensure we attempt to close the file handle
 
+        // Force a final speed/progress update to ensure it reaches 100%
+        this.updateSpeed(true);
+
+        const prog = this.request?.downloadProgress;
+        const downloaded = prog?.transferred || 0;
+
         this.emit("end", {
           path: this.path,
           percent: 1,
-          total:
-            this.request?.downloadProgress?.total || this.options.size || 0,
-          downloaded: this.request?.downloadProgress?.transferred || 0,
+          total: prog?.total || downloaded || this.options.size || 0,
+          downloaded,
           speed: this.ema,
         }).catch((err) => this.emit("error", err));
       });
@@ -132,6 +157,7 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
         this.errored().catch(() => {}); // Ensure we attempt to clean up on error
         this.emit("error", error);
       });
+
       this.writeStream.on("error", async (error) => {
         console.error("Write stream error:", error);
         this.errored().catch(() => {}); // Ensure we attempt to clean up on error
@@ -151,16 +177,17 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
   }
 
   resume() {
-    this.lastTime = Date.now();
-    this.lastBytes = 0;
-    this.ema = 0;
+    this.lastTime = performance.now();
+    // Use actual transferred bytes instead of 0 to prevent a massive instantSpeed spike
+    this.lastBytes = this.request?.downloadProgress?.transferred || 0;
+    // We intentionally do not reset ema to 0 so the UI doesn't drop to 0
     this.request?.resume();
   }
 
   async cancel() {
     this.request?.destroy();
     this.writeStream?.end();
-    await this.fsHandle?.close();
+    await this.fsHandle?.close().catch(() => {});
   }
 }
 
