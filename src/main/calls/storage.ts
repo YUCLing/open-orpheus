@@ -1,5 +1,6 @@
 import {
   copyFile,
+  cp,
   mkdir,
   readdir,
   readFile,
@@ -479,49 +480,66 @@ registerCallHandler<[string, "abs" | "rel", "", string], void>(
   }
 );
 
+// Those fields that marked as optional are missing from private cloud files, same goes to `mediaPath` and `imagePath` below
 type AddId3Request = {
-  encrypt: boolean; // Should use .ncm format
+  encrypt?: boolean; // Should use .ncm format
   image_rel_path: string;
   media_rel_path: string;
-  talb: string; // Track album
-  tit2: string; // Track title
-  tpe1: string | string[]; // Track artists, an array if podcast
-  tpos: string; // Disc number
-  trck: string; // Track pos
+  talb?: string; // Track album
+  tit2?: string; // Track title
+  tpe1?: string | string[]; // Track artists, an array if podcast
+  tpos?: string; // Disc number
+  trck?: string; // Track pos
 };
 // `mediaInfo` is saved to comment, with encryption (enData using its own key), prefixed with `163 key(Don't modify):`
 // Reply with `storage.onaddid3done`
 // - taskId
 // - code? 1
 // - final media path relative to download path
-registerCallHandler<[string, string, string, string, AddId3Request], void>(
+registerCallHandler<
+  [string, string, string | "", string | "", AddId3Request],
+  void
+>(
   "storage.addid3",
   (event, taskId, mediaPath, imagePath, mediaInfo, id3Info) => {
     // Don't block the call.
     (async () => {
       mediaPath = normalizePath(mediaPath);
 
-      const file = await MusicFile.load(mediaPath);
+      const { talb, tit2, tpe1, tpos, trck } = id3Info;
 
-      file.album = id3Info.talb;
-      file.title = id3Info.tit2;
-      file.artist =
-        typeof id3Info.tpe1 === "string"
-          ? id3Info.tpe1
-          : id3Info.tpe1.join(",");
-      file.discNumber = parseInt(id3Info.tpos) || 0;
-      file.trackNumber = parseInt(id3Info.trck) || 0;
+      const hasID3Meta =
+        talb !== undefined &&
+        tit2 !== undefined &&
+        tpe1 !== undefined &&
+        tpos !== undefined &&
+        trck !== undefined;
+      let taggedFile: MusicFile | null = null;
+      let imageFullPath: string | null = null;
+      if (hasID3Meta || imagePath || mediaInfo) {
+        taggedFile = await MusicFile.load(mediaPath);
 
-      const imageFullPath = normalizePath(downloadTemp, imagePath);
-      if (existsSync(imageFullPath)) {
-        const mimeType = mime.getType(imageFullPath);
-        if (mimeType) {
-          const imageData = await readFile(imageFullPath);
-          file.pictures = [new MetaPicture(mimeType, imageData)];
+        if (hasID3Meta) {
+          taggedFile.album = talb;
+          taggedFile.title = tit2;
+          taggedFile.artist = typeof tpe1 === "string" ? tpe1 : tpe1.join(",");
+          taggedFile.discNumber = parseInt(tpos) || 0;
+          taggedFile.trackNumber = parseInt(trck) || 0;
         }
-      }
 
-      file.comment = ID3JsonToComment(mediaInfo);
+        if (imagePath) {
+          imageFullPath = normalizePath(downloadTemp, imagePath);
+          if (existsSync(imageFullPath)) {
+            const mimeType = mime.getType(imageFullPath);
+            if (mimeType) {
+              const imageData = await readFile(imageFullPath);
+              taggedFile.pictures = [new MetaPicture(mimeType, imageData)];
+            }
+          }
+        }
+
+        if (mediaInfo) taggedFile.comment = ID3JsonToComment(mediaInfo);
+      }
 
       let relPath = id3Info.media_rel_path;
       if (relPath.endsWith(".ncm")) {
@@ -532,9 +550,10 @@ registerCallHandler<[string, string, string, string, AddId3Request], void>(
 
       const finalPath = normalizePath(download, relPath);
       await mkdir(dirname(finalPath), { recursive: true });
-      await file.save(finalPath);
+      if (taggedFile) await taggedFile.save(finalPath);
+      else await cp(mediaPath, finalPath);
 
-      await rm(imageFullPath, { force: true });
+      if (imageFullPath) await rm(imageFullPath, { force: true });
       await rm(mediaPath, { force: true });
 
       event.sender.send(
