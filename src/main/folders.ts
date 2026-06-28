@@ -5,6 +5,10 @@ export const downloadTemp = resolve(
   app.getPath("temp"),
   "open-orpheus-download-temp"
 );
+export const streamerTemp = resolve(
+  app.getPath("temp"),
+  "open-orpheus-streamer-temp"
+);
 
 export const data = resolve(app.isPackaged ? app.getPath("userData") : "data");
 

@@ -1,6 +1,6 @@
 import path from "node:path";
 import os from "node:os";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
 import { app, dialog, Menu, protocol, session } from "electron";
@@ -18,6 +18,8 @@ import "./main/error";
 import {
   data as dataDir,
   disableHardwareAccelerationFlag,
+  downloadTemp as downloadTempDir,
+  streamerTemp as streamerTempDir,
   userdata as userdataDir,
 } from "./main/folders";
 import { prepareDeviceId } from "./main/device";
@@ -37,6 +39,7 @@ import {
   setLifecycleState,
   state as lifecycleState,
 } from "./main/lifecycle";
+import { isFileNotFound } from "./main/util";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -204,16 +207,30 @@ app.on("ready", async () => {
       import("./main/tray"),
       // Set temp dir for streamer and run cleanup
       import("./main/audio/OnlineStreamer").then(async (m) => {
-        m.OnlineStreamer.tempDir = path.resolve(
-          os.tmpdir(),
-          "open-orpheus-streamer"
-        );
+        m.OnlineStreamer.tempDir = streamerTempDir;
         // This will be done in the background, the OnlineStreamer will know what files are
         // currently being used, cleanup will only clean the leftovers from previous usages.
         m.OnlineStreamer.cleanup().catch((e) => {
           console.error("Failed to cleanup OnlineStreamer temporary files:", e);
         });
       }),
+      (async () => {
+        try {
+          const entries = await readdir(downloadTempDir);
+          for (const entry of entries) {
+            // Fire-and-forget for existing files
+            rm(path.resolve(downloadTempDir, entry), {
+              force: true,
+              recursive: true,
+            }).catch((e) =>
+              console.error("Failed to delete download temp file", entry, e)
+            );
+          }
+        } catch (err) {
+          if (isFileNotFound(err)) return;
+          console.error("Failed to cleanup download temp", err);
+        }
+      })(),
       import("./main/afp"),
       import("./main/channel"),
       import("./main/request").then(async (m) => {
