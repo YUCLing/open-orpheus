@@ -11,7 +11,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
 
 import { app } from "electron";
 import mime from "mime";
@@ -26,7 +25,13 @@ import {
   setDownloadPath,
 } from "../folders";
 import { registerCallHandler } from "../calls";
-import { isMusicFile, normalizePath, sanitizeRelativePath } from "../util";
+import {
+  fileExists,
+  isFileNotFound,
+  isMusicFile,
+  normalizePath,
+  sanitizeRelativePath,
+} from "../util";
 import { webDb } from "../database";
 import {
   CacheTrackMeta,
@@ -79,7 +84,7 @@ async function readDownloadedMusicInfo(
 
 registerCallHandler<[string, string, string], [string, string]>(
   "storage.init",
-  (event, downloadDir, someNumStr, cacheDir) => {
+  async (event, downloadDir, someNumStr, cacheDir) => {
     if (!downloadDir) {
       downloadDir = resolve(app.getPath("downloads"), "CloudMusic");
       if (process.env.FLATPAK_ID) {
@@ -96,8 +101,10 @@ registerCallHandler<[string, string, string], [string, string]>(
     if (!cacheDir) {
       cacheDir = defaultCache;
     }
-    mkdirSync(downloadDir, { recursive: true });
-    mkdirSync(cacheDir, { recursive: true });
+    await Promise.all([
+      mkdir(downloadDir, { recursive: true }),
+      mkdir(cacheDir, { recursive: true }),
+    ]);
     setDownloadPath(downloadDir);
     setCachePath(cacheDir);
     createCacheManager();
@@ -232,17 +239,6 @@ registerCallHandler<[string, "abs" | "rel", "", string, boolean], void>(
       filePath = normalizePath(path);
     }
 
-    if (!existsSync(filePath)) {
-      event.sender.send(
-        "channel.call",
-        "storage.ondeletefilesdone",
-        taskId,
-        1,
-        undefined
-      );
-      return;
-    }
-
     try {
       await rm(filePath);
       event.sender.send(
@@ -253,6 +249,16 @@ registerCallHandler<[string, "abs" | "rel", "", string, boolean], void>(
         [filePath]
       );
     } catch (err) {
+      if (isFileNotFound(err)) {
+        event.sender.send(
+          "channel.call",
+          "storage.ondeletefilesdone",
+          taskId,
+          1,
+          undefined
+        );
+        return;
+      }
       console.error("Failed to delete file", err);
       event.sender.send(
         "channel.call",
@@ -271,7 +277,10 @@ registerCallHandler<[string, { id: string; path: string }[], string], void>(
     const results = await Promise.all(
       files.map(async (file) => {
         const filePath = normalizePath(basePath, file.path);
-        return { id: file.id, exists: existsSync(filePath) };
+        return {
+          id: file.id,
+          exists: await fileExists(filePath),
+        };
       })
     );
     event.sender.send(
@@ -529,11 +538,13 @@ registerCallHandler<
 
         if (imagePath) {
           imageFullPath = normalizePath(downloadTemp, imagePath);
-          if (existsSync(imageFullPath)) {
-            const mimeType = mime.getType(imageFullPath);
-            if (mimeType) {
+          const mimeType = mime.getType(imageFullPath);
+          if (mimeType) {
+            try {
               const imageData = await readFile(imageFullPath);
               taggedFile.pictures = [new MetaPicture(mimeType, imageData)];
+            } catch (err) {
+              console.error("Failed to insert cover art to media file", err);
             }
           }
         }
@@ -591,10 +602,14 @@ async function handleFileBatch(
         src = normalizePath(src);
         const dest = normalizePath(destPaths[index]);
         await mkdir(dirname(dest), { recursive: true });
-        if (existsSync(src)) {
-          // Simply no-op if source doesn't exist
+        try {
           if (type === "copy") await copyFile(src, dest);
           else await rename(src, dest);
+        } catch (err) {
+          // Simply no-op if source doesn't exist
+          if (!isFileNotFound(err)) {
+            throw err;
+          }
         }
         processedCount++;
         lastSrc = src;

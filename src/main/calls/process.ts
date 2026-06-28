@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 
 import { MusicFile } from "music-tag-native";
@@ -8,7 +7,7 @@ import type { Progress } from "got";
 import { registerCallHandler } from "../calls";
 import { serialData } from "../crypto";
 import { client, type ProxyTypes } from "../request";
-import { normalizePath } from "../util";
+import { isFileNotFound, normalizePath } from "../util";
 import { basename, extname } from "node:path";
 
 type UploadPayload = {
@@ -54,7 +53,12 @@ async function handleUpload(
 
   const fullPath = normalizePath(payload.path);
 
-  if (!existsSync(fullPath)) {
+  try {
+    const [stats, content] = await Promise.all([
+      stat(fullPath),
+      readFile(fullPath),
+    ]);
+
     event.sender.send(
       "channel.call",
       "subprocess.oncall",
@@ -62,42 +66,16 @@ async function handleUpload(
       "upload.onUpload",
       JSON.stringify({
         activeCode: 0,
-        code: -5,
-        end: true,
+        code: 0,
+        end: false,
         path: payload.path,
         response: "",
-        schedule: 1.0,
+        schedule: 0.0,
         songId: "",
         upload: {},
-        url: payload.audioMd5CheckUrl,
+        url: "",
       })
     );
-    return;
-  }
-
-  event.sender.send(
-    "channel.call",
-    "subprocess.oncall",
-    0,
-    "upload.onUpload",
-    JSON.stringify({
-      activeCode: 0,
-      code: 0,
-      end: false,
-      path: payload.path,
-      response: "",
-      schedule: 0.0,
-      songId: "",
-      upload: {},
-      url: "",
-    })
-  );
-
-  try {
-    const [stats, content] = await Promise.all([
-      stat(fullPath),
-      readFile(fullPath),
-    ]);
 
     const taggedFile = await MusicFile.load(content);
 
@@ -377,7 +355,7 @@ async function handleUpload(
       );
     }
   } catch (e) {
-    console.error("Upload failed", e);
+    if (!isFileNotFound(e)) console.error("Upload failed", e);
     event.sender.send(
       "channel.call",
       "subprocess.oncall",

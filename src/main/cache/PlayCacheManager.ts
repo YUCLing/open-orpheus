@@ -1,4 +1,5 @@
 import {
+  access,
   mkdir,
   readdir,
   readFile,
@@ -6,7 +7,6 @@ import {
   rm,
   statfs,
 } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { mainWindow } from "../window";
@@ -162,8 +162,10 @@ export default class PlayCacheManager {
     if (!meta) return null;
 
     const audioPath = resolve(this.cachePath, songId, "audio");
-    if (!existsSync(audioPath)) {
-      // Audio file missing — remove from index
+    try {
+      await access(audioPath);
+    } catch {
+      // Audio file missing or unreadable — remove from index
       this.trackIndex.delete(songId);
       return null;
     }

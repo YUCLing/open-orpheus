@@ -1,6 +1,5 @@
 import os from "node:os";
 import { rm, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 
 import {
   app,
@@ -13,7 +12,7 @@ import {
 
 import { registerCallHandler, registerCallbackHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
-import { pngFromIco } from "../util";
+import { fileExists, pngFromIco } from "../util";
 import packManager from "../pack";
 import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
@@ -95,7 +94,9 @@ registerCallHandler<[string, string], [string]>(
       }
       case "setting":
         if (subItem === "hardware-acceleration") {
-          return [existsSync(disableHardwareAccelerationFlag) ? "0" : "1"];
+          return [
+            (await fileExists(disableHardwareAccelerationFlag)) ? "0" : "1",
+          ];
         }
         break;
     }

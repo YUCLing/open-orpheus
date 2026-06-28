@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import got from "got";
@@ -10,16 +9,22 @@ import type Pack from "./packs/Pack";
 
 import versions from "../../versions.json";
 
-function chooseWebPackFile() {
+async function chooseWebPackFile() {
   const webPack = resolve(base, "package", "web.pack");
-  if (existsSync(webPack)) {
+  try {
+    await access(webPack);
     return webPack;
+  } catch {
+    /* empty */
   }
   const orpheusPack = resolve(base, "package", "orpheus.ntpk");
-  if (existsSync(orpheusPack)) {
+  try {
+    await access(orpheusPack);
     return orpheusPack;
+  } catch {
+    /* empty */
   }
-  throw new Error("No pack file found");
+  throw new Error("No usable web pack file found");
 }
 
 export type DownloadPackageProgress = {
@@ -45,7 +50,7 @@ export class PackManager extends Emittery<PackManagerEvents> {
   readonly packs: Map<string, Pack> = new Map();
 
   async loadWebPack() {
-    const webPackPath = chooseWebPackFile();
+    const webPackPath = await chooseWebPackFile();
     const WebPack = await import("./packs/WebPack").then((m) => m.default);
     const wp = new WebPack(webPackPath);
     await wp.readPack();
@@ -57,8 +62,12 @@ export class PackManager extends Emittery<PackManagerEvents> {
     const SkinPack = await import("./packs/SkinPack").then((m) => m.default);
     const loadOne = async (packKey: "skin" | "skin2", packName: string) => {
       const skinPackPath = resolve(base, "package", `${packName}.skin`);
-      if (!existsSync(skinPackPath)) {
-        throw new Error(`Skin pack file not found: ${skinPackPath}`);
+      try {
+        await access(skinPackPath);
+      } catch (err) {
+        throw new Error(`Cannot load skin pack: ${skinPackPath}`, {
+          cause: err,
+        });
       }
       const skinPack = new SkinPack(skinPackPath);
       await skinPack.readPack();

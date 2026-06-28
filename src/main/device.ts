@@ -1,9 +1,9 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 
 import { data as dataDir } from "./folders";
+import { isFileNotFound } from "./util";
 
 const deviceIdFilePath = join(dataDir, "device_id.json");
 
@@ -41,23 +41,22 @@ function buildLegacyHardwareToken(seed: string) {
 }
 
 export async function prepareDeviceId() {
-  if (existsSync(deviceIdFilePath)) {
-    try {
-      const savedDeviceId: {
-        deviceId: string;
-        ADDeviceId: string;
-      } = JSON.parse(await readFile(deviceIdFilePath, "utf-8"));
-      deviceId = savedDeviceId.deviceId;
-      ADDeviceId = savedDeviceId.ADDeviceId;
-      if (deviceId && ADDeviceId) {
-        return;
-      }
-    } catch (e) {
+  try {
+    const savedDeviceId: {
+      deviceId: string;
+      ADDeviceId: string;
+    } = JSON.parse(await readFile(deviceIdFilePath, "utf-8"));
+    deviceId = savedDeviceId.deviceId;
+    ADDeviceId = savedDeviceId.ADDeviceId;
+    if (deviceId && ADDeviceId) {
+      return;
+    }
+  } catch (e) {
+    if (!isFileNotFound(e))
       console.error(
         "Failed to read device ID from file, generating new ones.",
         e
       );
-    }
   }
   // Generate a legal host MAC address: unicast and universally administered.
   const macBytes = randomBytes(6);

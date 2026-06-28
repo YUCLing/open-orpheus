@@ -1,4 +1,4 @@
-import { existsSync, watch, type FSWatcher } from "node:fs";
+import { watch, type FSWatcher } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import path, { basename } from "node:path";
 import { createHash } from "node:crypto";
@@ -8,7 +8,12 @@ import { MusicFile } from "music-tag-native";
 
 import { musicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
-import { isMusicFile, normalizePath } from "../util";
+import {
+  fileExists,
+  isFileNotFound,
+  isMusicFile,
+  normalizePath,
+} from "../util";
 import { toError } from "../../util";
 import { commentToID3Metadata } from "../id3";
 
@@ -193,44 +198,48 @@ registerCallHandler<[MusicLibraries], void>(
   (event, lib) => {
     if (libWatchers.has(lib)) return;
     const libPath = getLibraryPath(lib);
-    if (!libPath || !existsSync(libPath)) return;
+    if (!libPath) return;
 
-    const watcher = watch(
-      libPath,
-      { recursive: true },
-      async (eventType, filename) => {
-        if (!filename) return;
-        if (!isMusicFile(filename)) return;
-        const filePath = path.resolve(libPath, filename);
-        const db = musicLibraryDb;
-        db.exec("DELETE FROM track WHERE file = ?", [filePath]);
-        if (existsSync(filePath)) {
+    try {
+      const watcher = watch(
+        libPath,
+        { recursive: true },
+        async (eventType, filename) => {
+          if (!filename) return;
+          if (!isMusicFile(filename)) return;
+          const filePath = path.resolve(libPath, filename);
+          const db = musicLibraryDb;
+          db.exec("DELETE FROM track WHERE file = ?", [filePath]);
           try {
             const entry = await trackEntryFromFile(lib, filePath);
             db.execNamed(
               `INSERT INTO track (file, tid, aid, dir, title, album, genre, artist, duration, timestamp, bitrate, filesize, ignored, id, artistid, parentdir, track, librarypath, tracknumber, source, starttime, type)
-              VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
+            VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
               entry
             );
           } catch (err) {
-            console.error(
-              "Failed to refresh music",
-              filename,
-              "metadata in library",
-              lib,
-              err
-            );
+            if (!isFileNotFound(err))
+              console.error(
+                "Failed to refresh music",
+                filename,
+                "metadata in library",
+                lib,
+                err
+              );
           }
+          event.sender.send("channel.call", "musiclibrary.onobserveLibrary", {
+            library: lib,
+          });
         }
-        event.sender.send("channel.call", "musiclibrary.onobserveLibrary", {
-          library: lib,
-        });
-      }
-    );
-    watcher.on("error", (err) => {
-      console.error("Library observer encountered error:", err);
-    });
-    libWatchers.set(lib, watcher);
+      );
+      watcher.on("error", (err) => {
+        console.error("Library observer encountered error:", err);
+      });
+      libWatchers.set(lib, watcher);
+    } catch (err) {
+      if (!isFileNotFound(err))
+        console.error("Cannot monitor music library", lib, err);
+    }
   }
 );
 
@@ -250,7 +259,7 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
     (async () => {
       try {
         const libPath = getLibraryPath(library);
-        if (!libPath || !existsSync(libPath)) {
+        if (!libPath || !(await fileExists(libPath))) {
           event.sender.send("channel.call", "musiclibrary.onaddend", {
             dirs: undefined,
             library,
@@ -387,17 +396,6 @@ registerCallHandler<[string, string, boolean], void>(
   (event, taskId, path) => {
     (async () => {
       const fullPath = normalizePath(path);
-      if (!existsSync(fullPath)) {
-        event.sender.send(
-          "channel.call",
-          "musiclibrary.onreadmusicinfo",
-          taskId,
-          path,
-          5,
-          {}
-        );
-        return;
-      }
       try {
         const [stats, taggedFile] = await Promise.all([
           stat(fullPath),
@@ -422,13 +420,13 @@ registerCallHandler<[string, string, boolean], void>(
             title: taggedFile.title || basename(fullPath),
           }
         );
-      } catch {
+      } catch (err) {
         event.sender.send(
           "channel.call",
           "musiclibrary.onreadmusicinfo",
           taskId,
           path,
-          6,
+          isFileNotFound(err) ? 5 : 6,
           {}
         );
       }

@@ -1,5 +1,5 @@
 import { resolve, join, normalize } from "node:path";
-import { stat } from "node:fs/promises";
+import { access, stat } from "node:fs/promises";
 import os from "node:os";
 
 import { BrowserWindow, screen } from "electron";
@@ -43,6 +43,24 @@ export function getWindowScaleFactor(wnd: BrowserWindow): number {
 
 export function isMusicFile(fileOrPath: string): boolean {
   return mime.getType(fileOrPath)?.startsWith("audio/") || false;
+}
+
+export function isFileNotFound(err: unknown) {
+  return err instanceof Error && "code" in err && err.code === "ENOENT";
+}
+
+/**
+ * Asynchronous version of {@link existsSync}
+ *
+ * @param path Path to file
+ */
+export async function fileExists(path: string) {
+  return await access(path)
+    .then(() => true)
+    .catch((err) => {
+      if (isFileNotFound(err)) return false;
+      throw err;
+    });
 }
 
 export async function calculateDbSize(db: string): Promise<number> {

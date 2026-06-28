@@ -1,6 +1,6 @@
 import { dirname, extname, resolve } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+
 import { createHash } from "node:crypto";
 
 import { Protocol } from "electron";
@@ -11,6 +11,7 @@ import { MusicFile } from "music-tag-native";
 import packManager from "./pack";
 import WebPack from "./packs/WebPack";
 import {
+  isFileNotFound,
   normalizePath,
   sanitizeRelativePath,
   selectBestMusicPic,
@@ -116,8 +117,7 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
           fileExt = extname(wasmUrl);
         }
         const cachedPath = resolve(wasm, md5 + fileExt);
-        const cacheExists = existsSync(cachedPath);
-        let shouldWriteCache = fetchFromServer || !cacheExists;
+        let shouldWriteCache = fetchFromServer;
         let buf!: Buffer<ArrayBuffer>;
         const doFetch = async () => {
           const res = await client(wasmUrl, { throwHttpErrors: false });
@@ -129,12 +129,21 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
           }
           buf = Buffer.from(res.rawBody) as Buffer<ArrayBuffer>;
         };
-        if (!fetchFromServer && cacheExists) {
-          buf = (await readFile(cachedPath)) as Buffer<ArrayBuffer>;
-          const actualMd5 = getMd5(buf);
-          if (md5 !== actualMd5) {
-            await doFetch();
-            shouldWriteCache = true;
+        if (!fetchFromServer) {
+          try {
+            buf = (await readFile(cachedPath)) as Buffer<ArrayBuffer>;
+            const actualMd5 = getMd5(buf);
+            if (md5 !== actualMd5) {
+              await doFetch();
+              shouldWriteCache = true;
+            }
+          } catch (err) {
+            if (isFileNotFound(err)) {
+              await doFetch();
+              shouldWriteCache = true;
+            } else {
+              throw err;
+            }
           }
         } else {
           await doFetch();
@@ -237,14 +246,17 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
           await writeFile(cachedPath, buf);
         } else {
           // Read from path + name
-          if (!existsSync(cachedPath)) {
-            throw new LoadError(
-              `Not Found: Custom skin does not exist locally: ${name}`,
-              404
-            );
+          try {
+            buf = (await readFile(cachedPath)) as Buffer<ArrayBuffer>;
+          } catch (err) {
+            if (isFileNotFound(err)) {
+              throw new LoadError(
+                `Not Found: Custom skin does not exist locally: ${name}`,
+                404
+              );
+            }
+            throw err;
           }
-
-          buf = (await readFile(cachedPath)) as Buffer<ArrayBuffer>;
         }
 
         // 3. Respond with the fetched/read data
@@ -296,23 +308,25 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
         const path = normalizePath(
           decodeURIComponent(parsedUrl.search.substring(1))
         ); // remove leading '?'
-        if (!existsSync(path)) {
-          throw new LoadError("File not found", 404);
+        try {
+          const taggedFile = await MusicFile.load(path);
+          const pictures = taggedFile.pictures;
+          if (!pictures) {
+            throw new LoadError("No pictures for this media", 404);
+          }
+          const pic = selectBestMusicPic(pictures);
+          if (!pic) {
+            throw new LoadError("No pictures for this media", 404);
+          }
+          return {
+            // SAFETY: Uint8Array created by NAPI-RS
+            content: pic.data.buffer as unknown as ArrayBuffer,
+            contentType: pic.mimeType ?? "image/png",
+          };
+        } catch (err) {
+          if (err instanceof LoadError) throw err;
+          throw new LoadError("Failed to load the file", 404);
         }
-        const taggedFile = await MusicFile.load(path);
-        const pictures = taggedFile.pictures;
-        if (!pictures) {
-          throw new LoadError("No pictures for this media", 404);
-        }
-        const pic = selectBestMusicPic(pictures);
-        if (!pic) {
-          throw new LoadError("No pictures for this media", 404);
-        }
-        return {
-          // SAFETY: Uint8Array created by NAPI-RS
-          content: pic.data.buffer as unknown as ArrayBuffer,
-          contentType: pic.mimeType ?? "image/png",
-        };
       }
       // #endregion
 
@@ -321,19 +335,20 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
         const path = normalizePath(
           decodeURIComponent(parsedUrl.search.substring(1))
         ); // remove leading '?'
-        if (!existsSync(path)) {
-          throw new LoadError("File not found", 404);
-        }
-        const taggedFile = await MusicFile.load(path);
-        const lyrics = taggedFile.lyrics;
-        if (!lyrics) {
-          // NCM accepts everything, must return with hard error
+        try {
+          const taggedFile = await MusicFile.load(path);
+          const lyrics = taggedFile.lyrics;
+          if (!lyrics) {
+            // NCM accepts everything, must return with hard error
+            throw lyrics; // try catch will convert it to NetworkError
+          }
+          return {
+            content: lyrics,
+            contentType: "text/plain",
+          };
+        } catch {
           throw new NetworkError("No lyrics");
         }
-        return {
-          content: lyrics,
-          contentType: "text/plain",
-        };
       }
       // #endregion
 

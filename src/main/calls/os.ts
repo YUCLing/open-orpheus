@@ -1,21 +1,25 @@
-import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import os from "node:os";
+import { statfs } from "node:fs/promises";
 
 import { BrowserWindow, powerSaveBlocker, screen, shell } from "electron";
 
 import { getSystemFonts } from "@open-orpheus/ui";
 
-import { normalizePath, sanitizeRelativePath } from "../util";
+import { fileExists, normalizePath, sanitizeRelativePath } from "../util";
 import { registerCallHandler } from "../calls";
 import { getADDeviceId, getDeviceId } from "../device";
-import { statfs } from "node:fs/promises";
 
-registerCallHandler<[string], [boolean]>("os.isFileExist", (event, path) => {
-  const filePath = isAbsolute(path) ? path : sanitizeRelativePath("data", path);
-  if (filePath === false) return [false];
-  return [existsSync(normalizePath(filePath))];
-});
+registerCallHandler<[string], [boolean]>(
+  "os.isFileExist",
+  async (event, path) => {
+    const filePath = isAbsolute(path)
+      ? path
+      : sanitizeRelativePath("data", path);
+    if (filePath === false) return [false];
+    return [await fileExists(normalizePath(filePath))];
+  }
+);
 
 registerCallHandler<[], [string]>("os.getDeviceId", () => {
   return [getDeviceId()];
