@@ -62,6 +62,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.15.3" date="2026-06-29">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.15.3</url>
+      <description>
+        <ul>
+          <li>Fixed abnormal mouse state after dragging on X11.</li>
+          <li xml:lang="zh-CN">修复 X11 下拖动后鼠标状态异常。</li>
+          <li>Fixed built-in custom skin loading.</li>
+          <li xml:lang="zh-CN">修复自带自定义皮肤加载。</li>
+          <li>Organized power management code.</li>
+          <li xml:lang="zh-CN">整理电源管理代码。</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.15.2" date="2026-06-28">
       <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.15.2</url>
       <description>
