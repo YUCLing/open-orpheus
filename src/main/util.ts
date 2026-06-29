@@ -1,4 +1,4 @@
-import { resolve, join, normalize } from "node:path";
+import { resolve, join, normalize, sep } from "node:path";
 import { access, stat } from "node:fs/promises";
 import os from "node:os";
 
@@ -30,7 +30,10 @@ export function sanitizeRelativePath(
   const resolvedBase = resolve(base);
   const normalizedPath = normalizePath(path);
   const resolvedPath = resolve(join(resolvedBase, normalizedPath));
-  if (!resolvedPath.startsWith(resolvedBase)) {
+  const baseWithSep = resolvedBase.endsWith(sep)
+    ? resolvedBase
+    : resolvedBase + sep;
+  if (resolvedPath !== resolvedBase && !resolvedPath.startsWith(baseWithSep)) {
     return false;
   }
   return resolvedPath;

@@ -11,6 +11,7 @@ import { MusicFile } from "music-tag-native";
 import packManager from "./pack";
 import WebPack from "./packs/WebPack";
 import {
+  fileExists,
   isFileNotFound,
   normalizePath,
   sanitizeRelativePath,
@@ -59,6 +60,24 @@ function getMd5(content: Uint8Array): string {
   return createHash("md5").update(content).digest("hex");
 }
 
+/**
+ * Parse search params from an orpheus URL, handling `&&` as the parameter
+ * separator (rather than `&`) so that values containing `&&` are preserved.
+ */
+function getSearchParams(url: string): URLSearchParams {
+  const rawSearchIndex = url.indexOf("?");
+  const rawSearch = rawSearchIndex >= 0 ? url.slice(rawSearchIndex + 1) : "";
+  if (rawSearch.includes("&&")) {
+    return new URLSearchParams(
+      rawSearch
+        .replace(/&&/g, "__ORPHEUS_PARAM_SEP__")
+        .replace(/&/g, "%26")
+        .replace(/__ORPHEUS_PARAM_SEP__/g, "&")
+    );
+  }
+  return new URL(url).searchParams;
+}
+
 export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
   const parsedUrl = new URL(url);
   if (parsedUrl.protocol !== "orpheus:") {
@@ -89,17 +108,7 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
       // #region orpheus://orpheus/wasm/
       if (parsedUrl.pathname.startsWith("/wasm/")) {
         const type = parsedUrl.pathname.slice("/wasm/".length);
-        const rawSearchIndex = url.indexOf("?");
-        const rawSearch =
-          rawSearchIndex >= 0 ? url.slice(rawSearchIndex + 1) : "";
-        const wasmParams = rawSearch.includes("&&")
-          ? new URLSearchParams(
-              rawSearch
-                .replace(/&&/g, "__ORPHEUS_PARAM_SEP__")
-                .replace(/&/g, "%26")
-                .replace(/__ORPHEUS_PARAM_SEP__/g, "&")
-            )
-          : parsedUrl.searchParams;
+        const wasmParams = getSearchParams(url);
         const wasmUrl = wasmParams.get("url");
         const md5 = wasmParams.get("MD5");
         const fetchFromServer = wasmParams.get("fetchFromServer") === "true";
@@ -194,23 +203,20 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
 
       // #region orpheus://orpheus/customskin
       if (parsedUrl.pathname === "/customskin") {
-        const path = "wasm/skin/customskin";
-        const rawSearchIndex = url.indexOf("?");
-        const rawSearch =
-          rawSearchIndex >= 0 ? url.slice(rawSearchIndex + 1) : "";
-        const skinParams = rawSearch.includes("&&")
-          ? new URLSearchParams(
-              rawSearch
-                .replace(/&&/g, "__ORPHEUS_PARAM_SEP__")
-                .replace(/&/g, "%26")
-                .replace(/__ORPHEUS_PARAM_SEP__/g, "&")
-            )
-          : parsedUrl.searchParams;
-        const picUrl = skinParams.get("url");
+        const skinParams = getSearchParams(url);
+        const id = skinParams.get("id");
+        const type = skinParams.get("type");
+        const fileUrl = skinParams.get("url");
         const name = skinParams.get("name");
         const fetchFromServer = skinParams.get("fetchFromServer") !== "false";
 
         // 1. Validate required parameters
+        if (!id) {
+          throw new LoadError(
+            "Bad Request: Missing id parameter for custom skin",
+            400
+          );
+        }
         if (!name) {
           throw new LoadError(
             "Bad Request: Missing name parameter for custom skin",
@@ -218,20 +224,49 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
           );
         }
 
-        const cachedPath = resolve(dataDir, path, name);
-        let buf!: Buffer<ArrayBuffer>;
+        // Validate id does not escape the skin base directory
+        const skinBaseDir = resolve(dataDir, "wasm/skin");
+        const skinPath = sanitizeRelativePath(skinBaseDir, id);
+        if (skinPath === false) {
+          throw new LoadError(
+            "Bad Request: Invalid id parameter for custom skin",
+            400
+          );
+        }
 
-        // 2. Handle fetching or reading locally
-        if (fetchFromServer) {
-          if (!picUrl) {
+        // Validate name does not escape skinPath
+        const filePath = sanitizeRelativePath(skinPath, name);
+        if (filePath === false) {
+          throw new LoadError(
+            "Bad Request: Invalid name parameter for custom skin",
+            400
+          );
+        }
+        const isImage = type === "image";
+
+        // 2. Determine if we need to fetch (check if filePath exists)
+        const needsFetch = fetchFromServer || !(await fileExists(filePath));
+
+        if (needsFetch) {
+          if (!fileUrl) {
             throw new LoadError(
               "Bad Request: Missing url parameter to fetch custom skin",
               400
             );
           }
 
+          // Verify fileUrl is a valid URL
+          try {
+            new URL(fileUrl);
+          } catch {
+            throw new LoadError(
+              `Bad Request: Invalid url parameter for custom skin: ${fileUrl}`,
+              400
+            );
+          }
+
           // Fetch from server
-          const res = await client(picUrl, { throwHttpErrors: false });
+          const res = await client(fileUrl, { throwHttpErrors: false });
           if (res.statusCode < 200 || res.statusCode >= 300) {
             throw new LoadError(
               `Failed to fetch custom skin from url: ${res.statusMessage}`,
@@ -239,27 +274,46 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
             );
           }
 
-          buf = Buffer.from(res.rawBody) as Buffer<ArrayBuffer>;
+          const rawBuf = Buffer.from(res.rawBody) as Buffer<ArrayBuffer>;
 
-          // Save it to path + name
-          await mkdir(dirname(cachedPath), { recursive: true });
-          await writeFile(cachedPath, buf);
-        } else {
-          // Read from path + name
-          try {
-            buf = (await readFile(cachedPath)) as Buffer<ArrayBuffer>;
-          } catch (err) {
-            if (isFileNotFound(err)) {
-              throw new LoadError(
-                `Not Found: Custom skin does not exist locally: ${name}`,
-                404
-              );
-            }
-            throw err;
+          if (isImage) {
+            // Write raw content directly to filePath
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, rawBuf);
+          } else {
+            // Extract ZIP contents into skinPath
+            await mkdir(skinPath, { recursive: true });
+            const directory = await unzipper.Open.buffer(rawBuf);
+            await Promise.all(
+              directory.files.map(async (file) => {
+                const extractPath = sanitizeRelativePath(skinPath, file.path);
+                if (extractPath === false) return; // skip paths that escape skinPath (Zip Slip)
+                if (file.type === "Directory") {
+                  await mkdir(extractPath, { recursive: true });
+                } else {
+                  await mkdir(dirname(extractPath), { recursive: true });
+                  await writeFile(extractPath, await file.buffer());
+                }
+              })
+            );
           }
         }
 
-        // 3. Respond with the fetched/read data
+        // 3. Read the requested file from skinPath
+        let buf: Buffer<ArrayBuffer>;
+        try {
+          buf = (await readFile(filePath)) as Buffer<ArrayBuffer>;
+        } catch (err) {
+          if (isFileNotFound(err)) {
+            throw new LoadError(
+              `Not Found: Custom skin file does not exist: ${name}`,
+              404
+            );
+          }
+          throw err;
+        }
+
+        // 4. Respond with the read data
         return {
           content: buf,
           contentType:
