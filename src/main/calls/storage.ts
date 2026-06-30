@@ -1,3 +1,4 @@
+import { FSWatcher, watch } from "node:fs";
 import {
   copyFile,
   cp,
@@ -82,6 +83,7 @@ async function readDownloadedMusicInfo(
   };
 }
 
+let downloadDirWatcher: FSWatcher | null = null;
 registerCallHandler<[string, string, string], [string, string]>(
   "storage.init",
   async (event, downloadDir, someNumStr, cacheDir) => {
@@ -108,6 +110,37 @@ registerCallHandler<[string, string, string], [string, string]>(
     setDownloadPath(downloadDir);
     setCachePath(cacheDir);
     createCacheManager();
+
+    if (downloadDirWatcher !== null) {
+      downloadDirWatcher.close();
+      downloadDirWatcher = null;
+    }
+
+    try {
+      const watcher = watch(
+        downloadDir,
+        { recursive: true },
+        async (eventType, filename) => {
+          if (
+            filename &&
+            !(await fileExists(join(downloadDir, filename))) &&
+            !event.sender.isDestroyed()
+          ) {
+            event.sender.send(
+              "channel.call",
+              "storage.onfiledeleted",
+              filename
+            );
+          }
+        }
+      );
+      watcher.on("error", (err) => {
+        console.error("Download dir watcher encountered error", err);
+      });
+      downloadDirWatcher = watcher;
+    } catch (err) {
+      console.error("Cannot monitor download dir", err);
+    }
 
     return [downloadDir, cacheDir];
   }
