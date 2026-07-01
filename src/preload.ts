@@ -7,13 +7,15 @@ import "./preload/channel";
 
 import "./preload/calls/index";
 
-if (process.argv.includes("--preload-channel=main")) {
+const isMain = process.argv.includes("--preload-channel=main");
+
+if (isMain) {
   // Lyrics is only used in main window
   import("./preload/lyrics");
 }
 
 contextBridge.executeInMainWorld({
-  func: () => {
+  func: (isMain: boolean) => {
     const originalContentDocumentDescriptor = Object.getOwnPropertyDescriptor(
       HTMLIFrameElement.prototype,
       "contentDocument"
@@ -61,27 +63,57 @@ contextBridge.executeInMainWorld({
       img.crossOrigin = "anonymous";
       return img;
     } as unknown as typeof Image;
-    // Force desktop lyrics preview to refresh when updated
-    const originalSrcPropertyDescriptor = Object.getOwnPropertyDescriptor(
-      OriginalImage.prototype,
-      "src"
-    );
-    if (originalSrcPropertyDescriptor) {
-      Object.defineProperty(OriginalImage.prototype, "src", {
-        set(value) {
-          if (
-            typeof value !== "string" ||
-            value !== "orpheus://orpheus/storage/local?file=preview/font.png"
-          ) {
-            originalSrcPropertyDescriptor.set?.call(this, value);
-            return;
+
+    if (isMain) {
+      // Force desktop lyrics preview to refresh when updated
+      const originalSrcPropertyDescriptor = Object.getOwnPropertyDescriptor(
+        OriginalImage.prototype,
+        "src"
+      );
+      if (originalSrcPropertyDescriptor) {
+        Object.defineProperty(OriginalImage.prototype, "src", {
+          set(value) {
+            if (
+              typeof value !== "string" ||
+              value !== "orpheus://orpheus/storage/local?file=preview/font.png"
+            ) {
+              originalSrcPropertyDescriptor.set?.call(this, value);
+              return;
+            }
+            originalSrcPropertyDescriptor.set?.call(
+              this,
+              value + "&t=" + Date.now()
+            );
+          },
+        });
+      }
+
+      let fallbackTimeout: NodeJS.Timeout | null = null;
+      // We have Electron handle resize handlers for us, so we drop its own handlers to avoid "not responding" resizes
+      const handlerRemover = () => {
+        const handlers = document.querySelectorAll(
+          '[class*="App"] > [class*="Handler"]'
+        );
+        if (handlers.length === 0) {
+          if (fallbackTimeout === null) {
+            // Fallback in case there was no handler at all, so long-term performance won't be affected.
+            fallbackTimeout = setTimeout(() => {
+              window.removeEventListener("mousemove", handlerRemover);
+              // Try last time here
+              handlerRemover();
+            }, 3000);
           }
-          originalSrcPropertyDescriptor.set?.call(
-            this,
-            value + "&t=" + Date.now()
-          );
-        },
-      });
+          return;
+        }
+        window.removeEventListener("mousemove", handlerRemover);
+        for (const handler of handlers) {
+          handler.remove();
+        }
+        if (fallbackTimeout) clearTimeout(fallbackTimeout);
+      };
+      // Use `mousemove` because this means the app is fully ready
+      window.addEventListener("mousemove", handlerRemover);
     }
   },
+  args: [isMain],
 });
