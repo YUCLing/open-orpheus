@@ -5,7 +5,6 @@ import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { MakerDeb } from "@electron-forge/maker-deb";
-import { MakerRpm } from "@electron-forge/maker-rpm";
 import { MakerFlatpak } from "@electron-forge/maker-flatpak";
 import { MakerAppImage } from "@reforged/maker-appimage";
 import { VitePlugin } from "@electron-forge/plugin-vite";
@@ -14,6 +13,7 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
 import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives"; // TODO: Remove in Electron Forge 8
 
+import CustomMakerRpm from "./packaging/rpm/maker";
 import * as options from "./packaging/options";
 
 const LOCALES = ["en", "en-US", "zh-CN"];
@@ -127,8 +127,14 @@ const config: ForgeConfig = {
   makers: [
     new MakerSquirrel(options.squirrel),
     new MakerZIP({}, ["darwin"]),
-    new MakerRpm({
-      options: options.rpm,
+    new CustomMakerRpm({
+      options: {
+        icons: {
+          scalable: "assets/icon.svg",
+          "256x256": "assets/icon_256.png",
+          "512x512": "assets/icon_512.png",
+        },
+      },
     }),
     new MakerDeb({
       options: options.deb,

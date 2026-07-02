@@ -55,13 +55,13 @@ importers:
       '@electron-forge/cli':
         specifier: ^7.11.2
         version: 7.11.2(encoding@0.1.13)(postcss@8.5.15)
+      '@electron-forge/maker-base':
+        specifier: ^7.11.2
+        version: 7.11.2
       '@electron-forge/maker-deb':
         specifier: ^7.11.2
         version: 7.11.2
       '@electron-forge/maker-flatpak':
-        specifier: ^7.11.2
-        version: 7.11.2
-      '@electron-forge/maker-rpm':
         specifier: ^7.11.2
         version: 7.11.2
       '@electron-forge/maker-squirrel':
@@ -79,6 +79,12 @@ importers:
       '@electron-forge/plugin-vite':
         specifier: ^7.11.2
         version: 7.11.2(patch_hash=9a5c817bf1b67185b62107d78b283a7aa2b2d73ea1525adac32356f067a66e28)
+      '@electron-forge/shared-types':
+        specifier: ^7.11.2
+        version: 7.11.2
+      '@electron/asar':
+        specifier: ^4.2.0
+        version: 4.2.0
       '@electron/fuses':
         specifier: 'catalog:'
         version: 2.1.3
@@ -422,10 +428,6 @@ packages:
     resolution: {integrity: sha512-tc/lw1NVB8AGIVEozccFK4BR1oj9GTdV2tH+HDD6WSqvB4mjBKVKWjeR+8En3I546dnI/qWodtSN/OiL2ZTqIQ==}
     engines: {node: '>= 16.4.0'}
 
-  '@electron-forge/maker-rpm@7.11.2':
-    resolution: {integrity: sha512-BEj/DcW6bSpmOyKUa3UsOgT7Hm3ZuP0Wa6OuQEunjxeCWn7yoDTDtjuYA0xRvzk+T4NCyDO3RBGjy6nYNSPU2Q==}
-    engines: {node: '>= 16.4.0'}
-
   '@electron-forge/maker-squirrel@7.11.2':
     resolution: {integrity: sha512-4CILo57ZDEQH1mJxjhYCSXuv+WaU7oPq67KqiTLEUOEzmiPg9u9/z7FXE34H/Tn5aKWN3dy+ngAETzv6iERCGg==}
     engines: {node: '>= 16.4.0'}
@@ -491,6 +493,11 @@ packages:
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
     engines: {node: '>=10.12.0'}
+    hasBin: true
+
+  '@electron/asar@4.2.0':
+    resolution: {integrity: sha512-npW1NW5yy8EB9XY/vEw9sUdgmq0sJEhmSBb6bqyFOAw1CSkrhvAvO6QWlW8CdIMo8VN1lkdF345l/MeW0LrY0Q==}
+    engines: {node: '>=22.12.0'}
     hasBin: true
 
   '@electron/fuses@2.1.3':
@@ -2475,6 +2482,10 @@ packages:
   commander@11.1.0:
     resolution: {integrity: sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ==}
     engines: {node: '>=16'}
+
+  commander@13.1.0:
+    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
+    engines: {node: '>=18'}
 
   commander@14.0.3:
     resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
@@ -5625,16 +5636,6 @@ snapshots:
       - bluebird
       - supports-color
 
-  '@electron-forge/maker-rpm@7.11.2':
-    dependencies:
-      '@electron-forge/maker-base': 7.11.2
-      '@electron-forge/shared-types': 7.11.2
-    optionalDependencies:
-      electron-installer-redhat: 3.4.0(patch_hash=8fe238a56db4de235c10dd7f02c6a523c6ac3010edcc1d547dbc5c6416b89a37)
-    transitivePeerDependencies:
-      - bluebird
-      - supports-color
-
   '@electron-forge/maker-squirrel@7.11.2':
     dependencies:
       '@electron-forge/maker-base': 7.11.2
@@ -5785,6 +5786,12 @@ snapshots:
       commander: 5.1.0
       glob: 7.2.3
       minimatch: 3.1.5
+
+  '@electron/asar@4.2.0':
+    dependencies:
+      commander: 13.1.0
+      glob: 13.0.6
+      minimatch: 10.2.5
 
   '@electron/fuses@2.1.3': {}
 
@@ -7814,6 +7821,8 @@ snapshots:
   colorette@2.0.20: {}
 
   commander@11.1.0: {}
+
+  commander@13.1.0: {}
 
   commander@14.0.3: {}
 
