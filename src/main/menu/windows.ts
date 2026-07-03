@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
 import { join } from "node:path";
+import { workaroundEnabled, WorkaroundFlags } from "./workaround";
 
 let menuWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
@@ -58,8 +59,7 @@ export function createOverlayWindow(): BrowserWindow {
     resizable: true,
     alwaysOnTop: true,
     focusable: true,
-    // Only KDE allows fullscreen transparent windows, see https://gitlab.freedesktop.org/wayland/wayland-protocols/-/issues/116
-    fullscreen: process.env.XDG_CURRENT_DESKTOP === "KDE",
+    fullscreen: !workaroundEnabled(WorkaroundFlags.OverlayNoFullscreen),
     webPreferences: {
       partition: "open-orpheus",
       preload: join(__dirname, "menu.js"),
@@ -77,9 +77,12 @@ export function createOverlayWindow(): BrowserWindow {
     overlayWindow = null;
   });
 
-  // For other DEs, we can only use a maximized window, which means we are not able to cover the taskbar,
-  // so cursor capturing is not reliable in other DEs.
-  if (process.env.XDG_CURRENT_DESKTOP !== "KDE") {
+  // A maximized window can still provides a great coverage of the screen, but is not able to cover
+  // the taskbar, so cursor capturing is not reliable in DEs with this enabled.
+  if (
+    workaroundEnabled(WorkaroundFlags.OverlayNoFullscreen) &&
+    !workaroundEnabled(WorkaroundFlags.OverlayNoMaximize)
+  ) {
     overlayWindow.once("show", () => {
       overlayWindow?.maximize();
     });

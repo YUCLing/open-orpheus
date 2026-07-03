@@ -3,6 +3,7 @@ import { access, stat } from "node:fs/promises";
 import os from "node:os";
 
 import { BrowserWindow, screen } from "electron";
+// TODO: consider defer the load of these modules? or move them away?
 import photon from "@silvia-odwyer/photon-node";
 import mime from "mime";
 import { MetaPicture } from "music-tag-native";
@@ -96,4 +97,9 @@ export function selectBestMusicPic(pics: MetaPicture[]): MetaPicture | null {
     if (pic === null) pic = p;
   }
   return pic;
+}
+
+export function checkEnvFlagPresent(name: string) {
+  const val = process.env[name];
+  return val === "1" || val === "true";
 }

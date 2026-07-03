@@ -39,7 +39,7 @@ import {
   setLifecycleState,
   state as lifecycleState,
 } from "./main/lifecycle";
-import { isFileNotFound } from "./main/util";
+import { checkEnvFlagPresent, isFileNotFound } from "./main/util";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -96,10 +96,7 @@ if (existsSync(disableHardwareAccelerationFlag)) {
   app.disableHardwareAcceleration();
 }
 
-if (
-  app.isPackaged &&
-  !["1", "true"].includes(process.env.ENABLE_ELECTRON_MENUS ?? "")
-)
+if (app.isPackaged && !checkEnvFlagPresent("ENABLE_ELECTRON_MENUS"))
   // Tell Electron we don't need a menu before Electron tries to create one,
   // this benefits the startup time
   Menu.setApplicationMenu(null);
