@@ -1,7 +1,7 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 import "./preload/channel";
 
@@ -9,9 +9,16 @@ import "./preload/calls/index";
 
 const isMain = process.argv.includes("--preload-channel=main");
 
+async function getCJKFonts(): Promise<string[]> {
+  return await ipcRenderer.invoke("fonts.getCJKFonts");
+}
+
 if (isMain) {
   // Lyrics is only used in main window
   import("./preload/lyrics");
+
+  // Expose it so it can be fetched in the main world later
+  contextBridge.exposeInMainWorld("_OPEN_ORPHEUS_getCJKFonts", getCJKFonts);
 }
 
 contextBridge.executeInMainWorld({
@@ -65,6 +72,29 @@ contextBridge.executeInMainWorld({
     } as unknown as typeof Image;
 
     if (isMain) {
+      const systemFonts = new Set();
+
+      // Take the function and remove it
+      const getFonts = (
+        window as unknown as { _OPEN_ORPHEUS_getCJKFonts: typeof getCJKFonts }
+      )["_OPEN_ORPHEUS_getCJKFonts"];
+      delete (window as unknown as Record<string, unknown>)[
+        "_OPEN_ORPHEUS_getCJKFonts"
+      ];
+
+      getFonts().then((fonts) => {
+        for (const font of fonts) systemFonts.add(font);
+      });
+
+      const origTest = RegExp.prototype.test;
+      RegExp.prototype.test = function (str) {
+        // The CJK font-name filter regex in settings.
+        // Force it to always pass so all system fonts appear in the font picker.
+        if (this.source === "[\\u4E00-\\u9FA5]" && systemFonts.has(str))
+          return true;
+        return origTest.call(this, str);
+      };
+
       // Force desktop lyrics preview to refresh when updated
       const originalSrcPropertyDescriptor = Object.getOwnPropertyDescriptor(
         OriginalImage.prototype,
