@@ -23,7 +23,7 @@ overrides:
 
 patchedDependencies:
   '@electron-forge/plugin-vite': 9a5c817bf1b67185b62107d78b283a7aa2b2d73ea1525adac32356f067a66e28
-  '@keyv/sqlite': 1ba1b52357e59fbcd6bf5fe13a173e439a3a30b4cd47bc53ba660ac8673d4a07
+  '@keyv/sqlite': 1bb4edd0e388766416ff00de256fe153d64733390cf1b9ec5fe00fd9f2a6a2c6
   electron-installer-redhat@3.4.0: 8fe238a56db4de235c10dd7f02c6a523c6ac3010edcc1d547dbc5c6416b89a37
 
 importers:
@@ -87,7 +87,7 @@ importers:
         version: 10.0.1(eslint@10.6.0(jiti@2.7.0))
       '@keyv/sqlite':
         specifier: 6.0.0-beta.4
-        version: 6.0.0-beta.4(patch_hash=1ba1b52357e59fbcd6bf5fe13a173e439a3a30b4cd47bc53ba660ac8673d4a07)(keyv@6.0.0-beta.4)
+        version: 6.0.0-beta.4(patch_hash=1bb4edd0e388766416ff00de256fe153d64733390cf1b9ec5fe00fd9f2a6a2c6)(keyv@6.0.0-beta.4)
       '@open-orpheus/audio-effect':
         specifier: workspace:*
         version: link:modules/audio-effect
@@ -6279,7 +6279,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@keyv/sqlite@6.0.0-beta.4(patch_hash=1ba1b52357e59fbcd6bf5fe13a173e439a3a30b4cd47bc53ba660ac8673d4a07)(keyv@6.0.0-beta.4)':
+  '@keyv/sqlite@6.0.0-beta.4(patch_hash=1bb4edd0e388766416ff00de256fe153d64733390cf1b9ec5fe00fd9f2a6a2c6)(keyv@6.0.0-beta.4)':
     dependencies:
       hookified: 3.0.1
       keyv: 6.0.0-beta.4

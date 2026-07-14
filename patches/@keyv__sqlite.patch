@@ -1,8 +1,8 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 5cc116fc70c26e729ee5c8a278e4b8289f42619b..34a9a648624f771d1b575d2fe1f2a7299f9118bb 100644
+index 5cc116fc70c26e729ee5c8a278e4b8289f42619b..113da4c7709263700103ed36a3aed21143d2820b 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -30,49 +30,17 @@ let keyv = require("keyv");
+@@ -30,49 +30,21 @@ let keyv = require("keyv");
  keyv = __toESM(keyv, 1);
  let node_util = require("node:util");
  //#region src/drivers/index.ts
@@ -28,18 +28,19 @@ index 5cc116fc70c26e729ee5c8a278e4b8289f42619b..34a9a648624f771d1b575d2fe1f2a729
 -}
  /**
  * Resolves which SQLite driver to use.
--*
--* - If `preferred` is a {@link SqliteDriver} object, it is returned directly.
+ *
+ * - If `preferred` is a {@link SqliteDriver} object, it is returned directly.
 -* - If `preferred` is a driver name string, that specific driver is loaded (throws if unavailable).
 -* - If `preferred` is omitted, auto-detection tries drivers in priority order:
 -*   - **Bun**: `bun:sqlite` then `better-sqlite3`
 -*   - **Node.js**: `node:sqlite` then `better-sqlite3`
++* - If `preferred` is omitted, uses `node:sqlite`
  */
--async function resolveDriver(preferred) {
+ async function resolveDriver(preferred) {
 -	if (preferred !== void 0 && typeof preferred === "object" && "connect" in preferred) return preferred;
 -	if (typeof preferred === "string") try {
 -		return await loadDriver(preferred);
-+async function resolveDriver() {
++  if (preferred !== void 0 && typeof preferred === "object" && "connect" in preferred) return preferred;
 +	try {
 +		await import("node:sqlite");
 +    const { nodeSqliteDriver } = await Promise.resolve().then(() => require("./node-sqlite-driver-B-xX8Clp.cjs"));
@@ -59,20 +60,11 @@ index 5cc116fc70c26e729ee5c8a278e4b8289f42619b..34a9a648624f771d1b575d2fe1f2a729
  }
  //#endregion
  //#region src/drivers/sqlite3-driver.ts
-@@ -764,7 +732,7 @@ var KeyvSqlite = class extends hookified.Hookified {
- 	* @returns {Promise<Db>} An object with `query` and `close` functions for database operations.
- 	*/
- 	async createConnection() {
--		const driver = await resolveDriver(this._driver);
-+		const driver = await resolveDriver();
- 		this._resolvedDriverName = driver.name;
- 		return driver.connect({
- 			filename: this._db,
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 2e9bc4e192f0647ce180ab9eeefee81f24d2527e..8004bffcaea1dabb84f86f76413386cf12c68ce5 100644
+index 2e9bc4e192f0647ce180ab9eeefee81f24d2527e..3021cc4f397f8c3ecc0c395eb202abd396cec82f 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -3,49 +3,17 @@ import { Hookified } from "hookified";
+@@ -3,49 +3,21 @@ import { Hookified } from "hookified";
  import Keyv, { keyvStorageCapability } from "keyv";
  import { promisify } from "node:util";
  //#region src/drivers/index.ts
@@ -98,18 +90,19 @@ index 2e9bc4e192f0647ce180ab9eeefee81f24d2527e..8004bffcaea1dabb84f86f76413386cf
 -}
  /**
  * Resolves which SQLite driver to use.
--*
--* - If `preferred` is a {@link SqliteDriver} object, it is returned directly.
+ *
+ * - If `preferred` is a {@link SqliteDriver} object, it is returned directly.
 -* - If `preferred` is a driver name string, that specific driver is loaded (throws if unavailable).
 -* - If `preferred` is omitted, auto-detection tries drivers in priority order:
 -*   - **Bun**: `bun:sqlite` then `better-sqlite3`
 -*   - **Node.js**: `node:sqlite` then `better-sqlite3`
++* - If `preferred` is omitted, uses `node:sqlite`
  */
--async function resolveDriver(preferred) {
+ async function resolveDriver(preferred) {
 -	if (preferred !== void 0 && typeof preferred === "object" && "connect" in preferred) return preferred;
 -	if (typeof preferred === "string") try {
 -		return await loadDriver(preferred);
-+async function resolveDriver() {
++  if (preferred !== void 0 && typeof preferred === "object" && "connect" in preferred) return preferred;
 +	try {
 +		await import("node:sqlite");
 +		const { nodeSqliteDriver } = await import("./node-sqlite-driver-2C9o0LqR.mjs");
@@ -129,17 +122,8 @@ index 2e9bc4e192f0647ce180ab9eeefee81f24d2527e..8004bffcaea1dabb84f86f76413386cf
  }
  //#endregion
  //#region src/drivers/sqlite3-driver.ts
-@@ -737,7 +705,7 @@ var KeyvSqlite = class extends Hookified {
- 	* @returns {Promise<Db>} An object with `query` and `close` functions for database operations.
- 	*/
- 	async createConnection() {
--		const driver = await resolveDriver(this._driver);
-+		const driver = await resolveDriver();
- 		this._resolvedDriverName = driver.name;
- 		return driver.connect({
- 			filename: this._db,
 diff --git a/package.json b/package.json
-index a7574c374064343ed2bd62a3689ddc41382283c2..8ae3b4532f8b06f5edf1b7c6b30c3eafcd1b5aaf 100644
+index a7574c374064343ed2bd62a3689ddc41382283c2..a7d1eea12e94e35f2243cb0f39e7506fb390e632 100644
 --- a/package.json
 +++ b/package.json
 @@ -41,7 +41,6 @@
