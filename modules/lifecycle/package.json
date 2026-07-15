@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",
-    "@types/node": "^24.13.2",
-    "tsdown": "^0.22.3"
+    "@types/node": "^24.13.3",
+    "tsdown": "^0.22.7"
   }
 }

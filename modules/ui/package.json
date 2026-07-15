@@ -43,14 +43,14 @@
     "version": "napi version"
   },
   "devDependencies": {
-    "@emnapi/core": "^1.11.1",
-    "@emnapi/runtime": "^1.11.1",
-    "@napi-rs/cli": "^3.7.2",
+    "@emnapi/core": "^1.11.2",
+    "@emnapi/runtime": "^1.11.2",
+    "@napi-rs/cli": "^3.7.3",
     "@oxc-node/core": "^0.1.0",
     "@tybys/wasm-util": "^0.10.3",
-    "@types/node": "^24.13.2",
+    "@types/node": "^24.13.3",
     "ava": "^8.0.1",
-    "typescript": "^6.0.0"
+    "typescript": "catalog:"
   },
   "ava": {
     "extensions": [
