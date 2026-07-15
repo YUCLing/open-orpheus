@@ -19,6 +19,8 @@ export interface MenuContract {
     update(callback: (items: unknown[]) => void): void;
   };
 
+  getFont(): Promise<string | null>;
+
   pull(): Promise<MenuPullResult>;
   reportSize(width: number, height: number): Promise<void>;
   itemClick(menuId: string | null): Promise<void>;

@@ -7,6 +7,11 @@ export interface ManageContract {
   platform: NodeJS.Platform;
   versions: NodeJS.ProcessVersions;
 
+  events: {
+    setFont(callback: (font: string | null) => void): void;
+  };
+
+  getFont(): Promise<string | null>;
   checkUpdate(ignoreCache?: boolean): Promise<UpdateInfo | null>;
 
   pack: {

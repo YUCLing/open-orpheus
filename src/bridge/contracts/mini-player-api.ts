@@ -11,7 +11,6 @@ import type {
 
 export interface MiniPlayerContract {
   events: {
-    fullStateUpdate(callback: (state: MiniPlayerFullState) => void): void;
     playInfoUpdate(callback: (info: MiniPlayerPlayInfo | null) => void): void;
     coverUpdate(callback: (url: string | null) => void): void;
     likeUpdate(callback: (liked: MiniPlayerLikeMark) => void): void;
@@ -24,6 +23,7 @@ export interface MiniPlayerContract {
     ): void;
     showVolume(callback: (data: MiniPlayerShowVolumeRequest) => void): void;
     styleUpdate(callback: (style: MiniPlayerStyle | null) => void): void;
+    setFont(callback: (font: string | null) => void): void;
   };
 
   requestFullUpdate(): Promise<MiniPlayerFullState>;

@@ -13,6 +13,9 @@
 
   const api = getBridge<ManageContract>("manage");
 
+  api.getFont().then(setFont);
+  api.events.setFont(setFont);
+
   import GitHub from "$lib/assets/GitHub_Invertocat_Black_Clearspace.svg";
 
   const socials = [
@@ -44,6 +47,7 @@
   import Bug from "@lucide/svelte/icons/bug";
   import Debug from "./Debug.svelte";
   import { Button } from "$lib/components/ui/button";
+  import { setFont } from "$lib/font";
 
   const items = [
     {

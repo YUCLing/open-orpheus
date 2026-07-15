@@ -6,8 +6,18 @@ import mime from "mime";
 
 import packManager from "./pack";
 import type SkinPack from "./packs/SkinPack";
+import { setMiniPlayerFont } from "./windows/mini-player";
+import { setManageWindowFont } from "./windows/manage";
 
 const guiDir = join(__dirname, "gui");
+
+export let font: string | null = null;
+
+export function setFont(fnt: string | null) {
+  font = fnt;
+  setMiniPlayerFont(fnt);
+  setManageWindowFont(fnt);
+}
 
 async function loadSkinFileFromPack(
   packName: "skin" | "skin2",

@@ -34,6 +34,7 @@ import {
   updateMute,
 } from "../windows/mini-player";
 import { dirname } from "node:path";
+import { setFont } from "../gui";
 
 let listItems: ListElement[] = [];
 let currentPlay: string | null = null;
@@ -271,6 +272,14 @@ registerCallHandler<[boolean], [boolean]>(
   (event, horizontal) => {
     lyricsStyle.vertical = !horizontal;
     return [refreshLyricsStyle()];
+  }
+);
+
+registerCallHandler<[string, number], [boolean]>(
+  "player.setFont",
+  (event, font) => {
+    setFont(font);
+    return [true];
   }
 );
 

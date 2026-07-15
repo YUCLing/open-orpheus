@@ -13,7 +13,6 @@
   import type { MiniPlayerContract } from "$bridge/contracts/mini-player-api";
   import type {
     MiniPlayerLikeMark,
-    MiniPlayerFullState,
     MiniPlayerPlayInfo,
     MiniPlayerPlayState,
     MiniPlayerListData,
@@ -23,6 +22,7 @@
   import type { Lyrics } from "$sharedTypes/lyrics";
   import { lyricsBridgeEmitter, getLyrics } from "$lib/lyrics";
   import LyricsComponent from "./Lyrics.svelte";
+  import { setFont } from "$lib/font";
 
   const api = getBridge<MiniPlayerContract>("miniPlayer");
 
@@ -42,18 +42,6 @@
 
   let lyrics = $state<Lyrics | null>(null);
   let currentTime = $state(0);
-
-  function applyFullState(state: MiniPlayerFullState) {
-    playInfo = state.playInfo;
-    coverUrl = state.coverUrl;
-    likeMark = state.likeMark;
-    favour = state.favour;
-    mute = state.mute;
-    playState = state.playState;
-    listData = { items: state.listItems, currentPlay: state.currentPlay };
-    togetherStatus = state.togetherStatus;
-    style = state.style;
-  }
 
   onMount(() => {
     api.events.playInfoUpdate((info) => {
@@ -87,10 +75,19 @@
     api.events.styleUpdate((newStyle) => {
       style = newStyle;
     });
-    api.events.fullStateUpdate(applyFullState);
+    api.events.setFont(setFont);
 
-    api.requestFullUpdate().then((v) => {
-      applyFullState(v);
+    api.requestFullUpdate().then((state) => {
+      playInfo = state.playInfo;
+      coverUrl = state.coverUrl;
+      likeMark = state.likeMark;
+      favour = state.favour;
+      mute = state.mute;
+      playState = state.playState;
+      listData = { items: state.listItems, currentPlay: state.currentPlay };
+      togetherStatus = state.togetherStatus;
+      style = state.style;
+      setFont(state.font);
     });
 
     lyrics = getLyrics()?.regular ?? null;
