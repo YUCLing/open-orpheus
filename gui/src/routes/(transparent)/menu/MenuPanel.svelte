@@ -4,6 +4,7 @@
   import type { MenuItem, MenuItemBtn, LayoutNode } from "./types";
   import { getCachedTemplate } from "./template";
   import IconButton from "$lib/components/IconButton.svelte";
+  import { cn } from "$lib/utils";
 
   let {
     items,
@@ -15,6 +16,7 @@
     onitemhover,
     onitemleave,
     onbtnclick,
+    class: className,
     ...props
   }: {
     items: MenuItem[];
@@ -95,7 +97,10 @@
 {/snippet}
 
 <div
-  class="absolute max-w-80 min-w-58 overflow-hidden rounded-lg py-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)] select-none"
+  class={cn(
+    "absolute max-w-80 min-w-58 overflow-hidden rounded-lg py-1.5 select-none",
+    className
+  )}
   style="background-color: var(--menu-bg); {style ?? ''}"
   bind:this={el}
   {...props}
