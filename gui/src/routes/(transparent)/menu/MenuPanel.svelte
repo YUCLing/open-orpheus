@@ -117,7 +117,7 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        class="flex cursor-default items-center gap-3 px-4 py-2 text-sm whitespace-nowrap transition-colors duration-50 {!item.enable
+        class="flex cursor-default items-center gap-1.5 px-4 py-1.5 text-[13px] whitespace-nowrap transition-colors duration-50 {!item.enable
           ? 'pointer-events-none'
           : ''}"
         style="color: {!item.enable
@@ -131,7 +131,7 @@
       >
         {#if item.image_path}
           <span
-            class="size-5 shrink-0"
+            class="size-4.5 shrink-0"
             style="background-color: {!item.enable
               ? 'var(--menu-fg-disabled)'
               : 'var(--menu-fg)'}; mask-image: url('{item.image_path}'); -webkit-mask-image: url('{item.image_path}'); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center; mask-size: contain; -webkit-mask-size: contain;"
@@ -140,13 +140,13 @@
         <span class="flex-1">{item.text}</span>
         {#if item.check_image_path}
           <img
-            class="ml-auto size-5 shrink-0 {!item.enable ? 'opacity-40' : ''}"
+            class="ml-auto size-4.5 shrink-0 {!item.enable ? 'opacity-40' : ''}"
             src={item.check_image_path}
             alt=""
           />
         {:else if showSubmenuArrows && item.menu && item.children?.length}
           <img
-            class="ml-auto size-5 shrink-0 opacity-50"
+            class="ml-auto size-4.5 shrink-0 opacity-50"
             src="gui://skin2/menu/sub_icon.svg"
             alt=""
           />
