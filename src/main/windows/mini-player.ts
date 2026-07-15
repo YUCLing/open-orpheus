@@ -26,6 +26,7 @@ import type {
 } from "$sharedTypes/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { LifecycleState, state as lifecycleState } from "../lifecycle";
+import { font } from "../gui";
 
 let miniPlayerWindow: BrowserWindow | null = null;
 
@@ -405,6 +406,10 @@ export function updateStyle(newStyle: MiniPlayerStyle | null) {
   sendToMiniPlayer("styleUpdate", newStyle);
 }
 
+export function setMiniPlayerFont(font: string | null) {
+  sendToMiniPlayer("setFont", font);
+}
+
 export function getFullState(): MiniPlayerFullState {
   return {
     playInfo,
@@ -417,6 +422,7 @@ export function getFullState(): MiniPlayerFullState {
     listItems,
     togetherStatus,
     style,
+    font,
   };
 }
 

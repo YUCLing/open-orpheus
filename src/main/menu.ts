@@ -30,6 +30,7 @@ import type { ElementTemplate } from "./skin/dui";
 import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
 
 import type { AppMenuItem } from "$sharedTypes/menu";
+import { font } from "./gui";
 
 registerMenuSkinUpdater();
 
@@ -195,6 +196,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     });
 
     registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+      getFont: async () => font,
+
       // Pull-based: the renderer calls menu.pull once SvelteKit has mounted.
       // We show the window here, then wait for the native first-enter capture
       // (or a short timeout fallback) before returning the initial cursor anchor.
@@ -297,6 +300,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       });
 
       registerIpcHandlers<MenuContract>(sub.webContents, "menu", {
+        getFont: async () => font,
         pull: async () => {
           return { items, templates, colors: menuSkin };
         },
@@ -341,6 +345,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     };
 
     registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+      getFont: async () => font,
       // Pull-based bootstrap so renderer can always request data after mount.
       pull: async () => {
         return {

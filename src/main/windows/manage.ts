@@ -20,6 +20,7 @@ import registerAsProtocolClient, {
   unregisterAsProtocolClient,
 } from "../protocol";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
+import { font } from "../gui";
 
 let manageWndInstance: BrowserWindow | null = null;
 
@@ -50,6 +51,7 @@ export default function showManageWindow() {
     manageWnd.loadURL("gui://frontend/");
   }
   registerIpcHandlers<ManageContract>(manageWnd.webContents, "manage", {
+    getFont: async () => font,
     checkUpdate: async (event, ignoreCache = false) =>
       await checkUpdate(ignoreCache),
 
@@ -174,4 +176,8 @@ export default function showManageWindow() {
     },
   });
   registerSettingsHandlers(manageWnd);
+}
+
+export function setManageWindowFont(font: string | null) {
+  manageWndInstance?.webContents.send("manage.setFont", font);
 }

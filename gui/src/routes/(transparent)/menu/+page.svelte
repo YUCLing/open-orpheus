@@ -8,8 +8,11 @@
   import { getBridge } from "$lib/bridge";
   import type { MenuContract } from "$bridge/contracts/menu-api";
   import { inputRegionAttachment } from "$lib/inputRegion";
+  import { setFont } from "$lib/font";
 
   const api = getBridge<MenuContract>("menu");
+
+  api.getFont().then(setFont);
 
   let items: MenuItem[] = $state([]);
   let cursorX = $state(0);

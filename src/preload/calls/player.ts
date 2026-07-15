@@ -35,11 +35,6 @@ registerCallHandler<[number], [boolean]>("player.setTotalTime", () => {
   return [true];
 });
 
-registerCallHandler<[string, number], [boolean]>("player.setFont", () => {
-  // What font is this?
-  return [true];
-});
-
 player.on("load", () => {
   if (!currentMetadata) return;
   // Ensure media session update

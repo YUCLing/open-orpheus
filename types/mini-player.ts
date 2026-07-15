@@ -59,6 +59,7 @@ export interface MiniPlayerFullState {
   listItems: MiniPlayerListElement[];
   togetherStatus: MiniPlayerTogetherStatus;
   style: MiniPlayerStyle | null;
+  font: string | null;
 }
 
 export interface MiniPlayerStyle {
