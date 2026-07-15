@@ -81,17 +81,19 @@ player.audio.addEventListener("ended", () => {
 });
 
 player.audio.addEventListener("error", async () => {
-  // What to do with general errors?
+  // TODO: For network play errors, keep retrying in OnlineStreamer
   const id = player.currentId;
   const playInfo = player.currentPlayInfo;
-  const [res] = await ipcRenderer.invoke("channel.call", "network.fetch", {
-    url: player.audio.src,
-    method: "HEAD",
-    retryCount: 3,
-  });
-  if (player.currentId !== id) return; // Check if the current audio has changed
-  if (res.status === 403) {
-    fireNativeCall("audioplayer.onrequestrefreshsongurl", playInfo);
+  if (playInfo?.type === 4) {
+    const [res] = await ipcRenderer.invoke("channel.call", "network.fetch", {
+      url: playInfo.musicurl,
+      method: "HEAD",
+      retryCount: 3,
+    });
+    if (player.currentId !== id) return; // Check if the current audio has changed
+    if (res.status === 403) {
+      fireNativeCall("audioplayer.onrequestrefreshsongurl", playInfo);
+    }
   }
 });
 
