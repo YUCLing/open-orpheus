@@ -236,6 +236,7 @@
         style="left: {cursorX}px; top: {menuTop}px; visibility: {menuReady
           ? 'visible'
           : 'hidden'};"
+        class="shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]"
         {@attach inputRegionAttachment}
       />
 
@@ -254,6 +255,7 @@
           showSubmenuArrows={false}
           bind:el={submenuEl}
           style="left: {submenuX}px; top: {submenuY}px;"
+          class="shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]"
           {@attach inputRegionAttachment}
         />
       {/if}
