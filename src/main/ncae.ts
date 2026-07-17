@@ -185,12 +185,12 @@ export async function decodeNcae(buf: Buffer): Promise<Ncae> {
   // --- Stage 2: XOR-decrypt the header extension → RC4 key -----------------
   const keyStart = OFF_EXT_DATA;
   const keyEnd = keyStart + extCount;
-  const rc4Key = xorDecryptExtension(arr.slice(keyStart, keyEnd));
+  const rc4Key = xorDecryptExtension(arr.subarray(keyStart, keyEnd));
 
   // --- Stage 3: RC4-decrypt the payload ------------------------------------
   const payloadStart = keyEnd;
   const payloadEnd = payloadStart + payloadSize;
-  const encryptedPayload = arr.slice(payloadStart, payloadEnd);
+  const encryptedPayload = arr.subarray(payloadStart, payloadEnd);
   const rc4State = rc4Init(rc4Key);
   rc4Crypt(rc4State, encryptedPayload);
 

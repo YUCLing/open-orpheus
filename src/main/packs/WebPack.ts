@@ -33,12 +33,17 @@ async function verifySignature(file: string): Promise<boolean> {
       return false;
 
     const sig = header.subarray(36, 100);
-    const { size } = await fh.stat();
-    const zipData = Buffer.alloc(size - 100);
-    await fh.read(zipData, 0, size - 100, 100);
 
+    // Stream the ZIP data through the verifier instead of slurping
+    // the entire file into a single Buffer.
     const verify = crypto.createVerify("SHA1");
-    verify.update(zipData);
+    await new Promise<void>((resolve, reject) => {
+      const stream = createReadStream(file, { start: 100 });
+      stream.on("data", (chunk: Buffer) => verify.update(chunk));
+      stream.on("end", resolve);
+      stream.on("error", reject);
+    });
+
     return verify.verify(PUBLIC_KEY, sig);
   } finally {
     await fh.close();
@@ -69,14 +74,14 @@ export default class WebPack extends Pack {
     const zipper = await unzipper.Open.custom(createSource(this.path));
     for (const file of zipper.files) {
       if (file.type === "File") {
-        this.files.set(this.normalizePath(file.path), file);
+        this.files[this.normalizePath(file.path)] = file;
       }
     }
     this._isLoaded = true;
   }
 
   async readFile(path: string): Promise<Buffer> {
-    const file = this.files.get(this.normalizePath(path));
+    const file = this.files[this.normalizePath(path)];
     if (!file) {
       throw new Error(`File not found in pack: ${path}`);
     }

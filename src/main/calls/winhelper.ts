@@ -350,7 +350,7 @@ registerCallHandler<MenuRequest, void>(
     if (!wnd) return;
     id = 0; // TODO: id doesn't seem to be id, what it is?
     const menus = getMenus(wnd);
-    const menu = menus.get(id);
+    const menu = menus[id];
     if (!menu) {
       return;
     }
@@ -422,7 +422,7 @@ registerCallHandler<MenuRequest, void>(
       event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
     };
     const menu = new AppMenu(parsedMenuData.content);
-    menus.set(id, menu);
+    menus[id] = menu;
     menu.setClickHandler(onClick);
     menu.show();
   }

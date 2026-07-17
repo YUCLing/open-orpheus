@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open, stat } from "node:fs/promises";
+import { Readable } from "node:stream";
 
 import unzipper from "unzipper";
 import Pack from "./Pack";
@@ -75,11 +76,25 @@ function blobToPem(blob: Buffer): string {
 
 const PUBLIC_KEY_PEM = blobToPem(PUBLIC_KEY_BLOB);
 
-function verifySignature(sig: Buffer, data: Buffer): boolean {
+/**
+ * Stream-verify a skin-pack signature without loading the full ZIP into RAM.
+ * The Readable returned by `createZipStream()` pipes into the verifier.
+ */
+async function verifySignature(
+  sig: Buffer,
+  createZipStream: () => Readable
+): Promise<boolean> {
   // Signature is little-endian → reverse to PKCS#1 big-endian
   const sigBE = Buffer.from(sig).reverse();
   const verify = crypto.createVerify("SHA1");
-  verify.update(data);
+
+  await new Promise<void>((resolve, reject) => {
+    const stream = createZipStream();
+    stream.on("data", (chunk: Buffer) => verify.update(chunk));
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+
   return verify.verify(PUBLIC_KEY_PEM, sigBE);
 }
 
@@ -119,7 +134,7 @@ function createSource(file: string, zipOffset: number) {
 }
 
 export default class SkinPack extends Pack {
-  private buffers: Map<string, Buffer> = new Map();
+  private buffers: Record<string, Buffer> = Object.create(null);
 
   async readPack(verify = true): Promise<void> {
     const { sigSize, zipOffset } = await parseHeader(this.path);
@@ -130,12 +145,11 @@ export default class SkinPack extends Pack {
         const sig = Buffer.alloc(sigSize);
         await fh.read(sig, 0, sigSize, 16);
 
-        const { size } = await fh.stat();
-        const zipSize = size - zipOffset;
-        const zipData = Buffer.alloc(zipSize);
-        await fh.read(zipData, 0, zipSize, zipOffset);
-
-        if (!verifySignature(sig, zipData))
+        if (
+          !(await verifySignature(sig, () =>
+            createReadStream(this.path, { start: zipOffset })
+          ))
+        )
           throw new Error("Skin pack signature verification failed");
       } finally {
         await fh.close();
@@ -148,7 +162,7 @@ export default class SkinPack extends Pack {
     for (const file of zipper.files) {
       if (file.type === "File") {
         const key = this.normalizePath(file.path);
-        this.files.set(key, file);
+        this.files[key] = file;
       }
     }
 
@@ -157,14 +171,14 @@ export default class SkinPack extends Pack {
 
   async readFile(path: string): Promise<Buffer> {
     path = this.normalizePath(path);
-    const file = this.files.get(path);
+    const file = this.files[path];
     if (!file) {
       throw new Error(`File ${path} isn't found in skin pack.`);
     }
-    let buf = this.buffers.get(path);
+    let buf = this.buffers[path];
     if (!buf) {
       buf = await file.buffer(ZIP_PASSWORD);
-      this.buffers.set(path, buf);
+      this.buffers[path] = buf;
     }
     return buf;
   }

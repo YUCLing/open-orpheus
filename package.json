@@ -45,6 +45,7 @@
     "@reforged/maker-appimage": "^5.2.0",
     "@types/audioworklet": "^0.0.100",
     "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/node": "^25.9.5",
     "@types/semver": "^7.7.1",
     "@types/unzipper": "^0.10.11",
     "@typescript-eslint/eslint-plugin": "^8.64.0",
