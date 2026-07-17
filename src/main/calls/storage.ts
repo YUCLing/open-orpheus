@@ -119,7 +119,10 @@ registerCallHandler<[string, string, string], [string, string]>(
     try {
       const watcher = watch(
         downloadDir,
-        { recursive: true },
+        {
+          recursive: true,
+          ignore: (path) => !(mime.getType(path) ?? "").startsWith("audio/"),
+        },
         async (eventType, filename) => {
           if (
             filename &&

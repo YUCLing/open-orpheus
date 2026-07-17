@@ -4,12 +4,12 @@ import unzipper from "unzipper";
 
 export default abstract class Pack {
   protected path: string;
-  protected files: Map<string, unzipper.File> = new Map();
+  protected files: Record<string, unzipper.File> = Object.create(null);
 
   protected _isLoaded = false;
 
   get fileList(): string[] {
-    return Array.from(this.files.keys());
+    return Object.keys(this.files);
   }
 
   get isLoaded(): boolean {

@@ -14,7 +14,7 @@ type WindowProperties = {
   id?: string;
   maximumSize?: { x: number; y: number };
   minimumSize?: { x: number; y: number };
-  menus: Map<number, AppMenu>;
+  menus: Record<number, AppMenu>;
   customProps: Record<string, unknown>;
 };
 
@@ -52,7 +52,7 @@ function disableSizeConstraints(wnd: BrowserWindow) {
 
 app.on("browser-window-created", (event, wnd) => {
   windowProperties.set(wnd.id, {
-    menus: new Map(),
+    menus: Object.create(null),
     customProps: {},
   });
   wnd.on("closed", () => {
@@ -141,9 +141,9 @@ export function setMinimumSize(wnd: BrowserWindow, x: number, y: number) {
   }
 }
 
-export function getMenus(wnd: BrowserWindow): Map<number, AppMenu> {
+export function getMenus(wnd: BrowserWindow): Record<number, AppMenu> {
   const props = windowProperties.get(wnd.id);
-  return props ? props.menus : new Map();
+  return props ? props.menus : Object.create(null);
 }
 
 export function setWindowProp<T>(wnd: BrowserWindow, prop: string, value: T) {

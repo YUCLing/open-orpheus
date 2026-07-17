@@ -18,6 +18,7 @@ const RSA_EXPONENT = 65537n;
 
 const MAX_QUEUE_SIZE = 20; // entries — flush immediately when queue reaches this count
 const MAX_PENDING_BUNDLES = 50; // max pending bundles in RAM — drops oldest when exceeded
+const MAX_LOG_BUFFER = 2000; // hard cap on buffered entries — drops oldest when exceeded
 const DEBOUNCE_INTERVAL = 1000; // ms — flush when no new entries arrive for this long
 const UPLOAD_INTERVAL = 30000; // ms — safety-net periodic upload interval
 
@@ -290,6 +291,12 @@ export function statisV2(type: string, entries: DawnEntry[]): void {
 
   for (const e of entries) {
     logBuffer.push(formatEntry(e));
+  }
+
+  // Hard cap: if the buffer grows beyond MAX_LOG_BUFFER before a flush
+  // can fire (e.g. upload endpoint is down), drop the oldest entries.
+  if (logBuffer.length > MAX_LOG_BUFFER) {
+    logBuffer.splice(0, logBuffer.length - MAX_LOG_BUFFER);
   }
 
   if (logBuffer.length >= MAX_QUEUE_SIZE) {

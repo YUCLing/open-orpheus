@@ -9,14 +9,15 @@ export type CallbackHandlerFunction<Args extends unknown[] = unknown[]> = (
 ) => void | Promise<void>;
 
 export default class CallDispatcher {
-  private handlers: Map<string, HandlerFunction> = new Map();
-  private callbackHandlers: Map<string, CallbackHandlerFunction> = new Map();
+  private handlers: Record<string, HandlerFunction> = Object.create(null);
+  private callbackHandlers: Record<string, CallbackHandlerFunction> =
+    Object.create(null);
 
   registerHandler<Args extends unknown[], Return extends unknown[] | void>(
     cmd: string,
     handler: HandlerFunction<Args, Return>
   ) {
-    this.handlers.set(cmd, handler as unknown as HandlerFunction);
+    this.handlers[cmd] = handler as unknown as HandlerFunction;
   }
 
   registerHandlers(handlers: { [cmd: string]: HandlerFunction }) {
@@ -29,7 +30,7 @@ export default class CallDispatcher {
     cmd: string,
     handler: CallbackHandlerFunction<Args>
   ) {
-    this.callbackHandlers.set(cmd, handler as CallbackHandlerFunction);
+    this.callbackHandlers[cmd] = handler as CallbackHandlerFunction;
   }
 
   async dispatch(
@@ -37,12 +38,12 @@ export default class CallDispatcher {
     callback: (...args: unknown[]) => void,
     ...args: unknown[]
   ): Promise<void | false> {
-    const callbackHandler = this.callbackHandlers.get(cmd);
+    const callbackHandler = this.callbackHandlers[cmd];
     if (callbackHandler) {
       await callbackHandler(callback, ...args);
       return;
     }
-    const handler = this.handlers.get(cmd);
+    const handler = this.handlers[cmd];
     if (!handler) {
       return false;
     }
