@@ -16,6 +16,7 @@ export const pack = resolve(data, "package");
 export const userdata = resolve(data, "userdata");
 export const storage = resolve(data, "storage");
 export const wasm = resolve(data, "wasm");
+export const aegisPublicKey = resolve(data, "Aegis", "pubkey");
 
 // Flag files
 export const disableHardwareAccelerationFlag = resolve(
