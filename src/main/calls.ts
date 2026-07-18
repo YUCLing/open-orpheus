@@ -3,8 +3,13 @@ import CallDispatcher, {
   CallbackHandlerFunction,
   HandlerFunction,
 } from "../CallDispatcher";
+import logger from "./logger";
 
 export const dispatcher = new CallDispatcher();
+
+export function getCallLogger(namespace: string) {
+  return logger.child({ name: "call", namespace });
+}
 
 export function registerCallHandler<
   Args extends unknown[],

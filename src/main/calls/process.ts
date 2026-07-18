@@ -9,6 +9,7 @@ import { serialData } from "../crypto";
 import { client, type ProxyTypes } from "../request";
 import { isFileNotFound, normalizePath } from "../util";
 import { basename, extname } from "node:path";
+import globalLogger from "../logger";
 
 type UploadPayload = {
   encrypt: 0 | 1;
@@ -334,8 +335,6 @@ async function handleUpload(
         throw new Error("Meta upload failed");
       }
 
-      console.log(uploadMetaRes.body);
-
       event.sender.send(
         "channel.call",
         "subprocess.oncall",
@@ -355,7 +354,7 @@ async function handleUpload(
       );
     }
   } catch (e) {
-    if (!isFileNotFound(e)) console.error("Upload failed", e);
+    if (!isFileNotFound(e)) globalLogger.error({ name: "cloud-upload", err: e }, "Upload error");
     event.sender.send(
       "channel.call",
       "subprocess.oncall",

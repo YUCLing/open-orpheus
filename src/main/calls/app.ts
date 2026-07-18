@@ -10,7 +10,11 @@ import {
   WebContents,
 } from "electron";
 
-import { registerCallHandler, registerCallbackHandler } from "../calls";
+import {
+  getCallLogger,
+  registerCallHandler,
+  registerCallbackHandler,
+} from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { fileExists, pngFromIco } from "../util";
 import packManager from "../pack";
@@ -20,9 +24,17 @@ import { client, getProxyAgent } from "../request";
 import { disableHardwareAccelerationFlag } from "../folders";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../dawn";
+import globalLogger from "../logger";
+
+const logger = getCallLogger("app");
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
-  console.log(...args);
+  globalLogger.info(
+    {
+      name: "app",
+    },
+    args.map((v) => String(v)).join(" ")
+  );
 });
 
 registerCallHandler<["dawn", DawnEntry[]], void>(
@@ -268,7 +280,11 @@ registerCallHandler<[string, string], [boolean]>(
       await packManager.loadSkinPack(name, name2);
       return [true];
     } catch (e) {
-      console.error("Failed to load skin pack", e);
+      logger.error(
+        { call: "loadSkinPackets", packs: [name, name2] },
+        "Failed to load skin pack: %s",
+        e
+      );
     }
     return [false];
   }

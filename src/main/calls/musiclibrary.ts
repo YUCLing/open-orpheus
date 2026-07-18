@@ -8,7 +8,7 @@ import { MusicFile } from "music-tag-native";
 import mime from "mime";
 
 import { musicLibraryDb } from "../database";
-import { registerCallHandler } from "../calls";
+import { getCallLogger, registerCallHandler } from "../calls";
 import {
   fileExists,
   isFileNotFound,
@@ -17,6 +17,8 @@ import {
 } from "../util";
 import { toError } from "../../util";
 import { commentToID3Metadata } from "../id3";
+
+const logger = getCallLogger("musiclibrary");
 
 type MusicLibraries =
   "<mymusic>" | "<download>" | "<windowsmedia>" | "<itunes>" | string;
@@ -177,7 +179,11 @@ registerCallHandler<[string, string[]], [boolean]>(
         ...result,
       });
     } catch (error) {
-      console.error(`Error executing music library SQL: ${error}`);
+      logger.error(
+        { call: "execSql", sql },
+        "Error executing music library SQL: %s",
+        error
+      );
       event.sender.send("channel.call", "musiclibrary.onexecsql", {
         error: 1,
         id: taskId,
