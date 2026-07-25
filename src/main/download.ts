@@ -7,6 +7,9 @@ import type { Request } from "got";
 import Emittery from "emittery";
 
 import { client } from "./request";
+import parentLogger from "./logger";
+
+const logger = parentLogger.child({ name: "download" });
 
 export type DownloadStartOptions = {
   headers?: Record<string, string>;
@@ -122,11 +125,13 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
       });
 
       this.request.on("end", async () => {
+        logger.info({ dest: this.path }, "Download completed");
         if (this.hash) {
           const calculatedHash = this.hash.digest("hex");
           if (this.options.md5 && calculatedHash !== this.options.md5) {
-            console.error(
-              `MD5 mismatch: expected ${this.options.md5}, got ${calculatedHash}`
+            logger.error(
+              { expected: this.options.md5, got: calculatedHash },
+              "Downloaded file MD5 mismatch"
             );
             this.errored().catch(() => {}); // Clean up on error
             this.emit("error", new Error("MD5 checksum verification failed"));
@@ -153,20 +158,24 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
       });
 
       this.request.on("error", async (error) => {
-        console.error("Download error:", error);
+        logger.error({ dest: this.path, err: error }, "Download error");
         this.errored().catch(() => {}); // Ensure we attempt to clean up on error
         this.emit("error", error);
       });
 
       this.writeStream.on("error", async (error) => {
-        console.error("Write stream error:", error);
+        logger.error({ dest: this.path, err: error }, "Download write error");
         this.errored().catch(() => {}); // Ensure we attempt to clean up on error
         this.emit("error", error);
       });
 
       this.request.pipe(this.writeStream);
     } catch (error) {
-      console.error("Error download:", error);
+      logger.error(
+        { dest: this.path },
+        "Unrecognized error downloading: %s",
+        error
+      );
       this.errored().catch(() => {}); // Ensure we attempt to clean up on error
       this.emit("error", error);
     }

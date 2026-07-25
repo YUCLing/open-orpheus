@@ -4,6 +4,9 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { data as dataDir } from "./folders";
 import { isFileNotFound } from "./util";
+import parentLogger from "./logger";
+
+const logger = parentLogger.child({ name: "device" });
 
 const deviceIdFilePath = join(dataDir, "device_id.json");
 
@@ -53,9 +56,9 @@ export async function prepareDeviceId() {
     }
   } catch (e) {
     if (!isFileNotFound(e))
-      console.error(
+      logger.warn(
+        { err: e },
         "Failed to read device ID from file, generating new ones.",
-        e
       );
   }
   // Generate a legal host MAC address: unicast and universally administered.
@@ -83,6 +86,6 @@ export async function prepareDeviceId() {
       "utf-8"
     );
   } catch (e) {
-    console.error("Failed to write device ID to file.", e);
+    logger.warn("Failed to write device ID to file: %s", e);
   }
 }

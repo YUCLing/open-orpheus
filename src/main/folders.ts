@@ -1,5 +1,6 @@
-import { app } from "electron";
 import { resolve } from "node:path";
+
+import { app } from "electron";
 
 export const downloadTemp = resolve(
   app.getPath("temp"),
@@ -12,6 +13,7 @@ export const streamerTemp = resolve(
 
 export const data = resolve(app.isPackaged ? app.getPath("userData") : "data");
 
+export const log = resolve(data, "logs");
 export const pack = resolve(data, "package");
 export const userdata = resolve(data, "userdata");
 export const storage = resolve(data, "storage");

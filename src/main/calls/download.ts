@@ -1,10 +1,12 @@
 import { cp, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { registerCallHandler } from "../calls";
+import { getCallLogger, registerCallHandler } from "../calls";
 import startDownload, { type DownloadTask } from "../download";
 import { data as dataDir, downloadTemp } from "../folders";
 import { normalizePath, sanitizeRelativePath } from "../util";
+
+const logger = getCallLogger("download");
 
 type DownloadStartRequest = {
   ext_header: string;
@@ -54,7 +56,11 @@ registerCallHandler<[DownloadStartRequest], void>(
       try {
         headers = JSON.parse(ext_header);
       } catch (error) {
-        console.error("Failed to parse ext_header JSON:", error);
+        logger.error(
+          { call: "start", json: ext_header },
+          "Failed to parse ext_header: %s",
+          error
+        );
       }
     }
 
@@ -106,7 +112,7 @@ registerCallHandler<[DownloadStartRequest], void>(
     });
 
     task.on("error", (e) => {
-      console.error(`Download error for id ${id}:`, e.data);
+      logger.error({ call: "start", id, err: e.data }, "Download errored");
       event.sender.send("channel.call", "download.onprocess", id, {
         down: 0,
         islast: true,

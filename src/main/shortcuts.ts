@@ -1,5 +1,9 @@
 import { globalShortcut } from "electron";
 
+import parentLogger from "./logger";
+
+const logger = parentLogger.child({ name: "shortcuts" });
+
 export interface VkToElectronResult {
   accelerator: string | null;
   unsupportedVkCodes: number[];
@@ -118,13 +122,19 @@ export function registerGlobalShortcut(
   }
   const result = vkCodesToElectronAccelerator(keys.map(Number));
   if (!result.accelerator) {
-    console.warn(
-      "Failed to register hotkey, no valid trigger key found in",
-      keys,
-      "Unsupported VK codes:",
-      result.unsupportedVkCodes
+    logger.error(
+      { keys, unsupportedVkCodes: result.unsupportedVkCodes },
+      "Failed to register hotkey %s, no valid trigger key found",
+      name
     );
     return false;
+  }
+  if (result.unsupportedVkCodes.length > 0) {
+    logger.warn(
+      { keys, unsupportedVkCodes: result.unsupportedVkCodes },
+      "Unsupported VK codes found when registering %s",
+      name
+    );
   }
   const success = globalShortcut.register(result.accelerator, callback);
   if (success) {
@@ -136,10 +146,7 @@ export function registerGlobalShortcut(
 export function unregisterGlobalShortcut(name: string): void {
   const accelerator = registeredShortcuts.get(name);
   if (!accelerator) {
-    console.warn(
-      "Failed to unregister hotkey, no valid trigger key found for",
-      name
-    );
+    logger.error("Failed to unregister hotkey %s", name);
     return;
   }
   globalShortcut.unregister(accelerator);
