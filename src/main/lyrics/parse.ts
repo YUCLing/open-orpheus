@@ -25,6 +25,39 @@ function parseTimestamp(tag: string): number | null {
 }
 
 /**
+ * Parse a NetEase extended LRC line such as
+ * `{"t":0,"c":[{"tx":"作曲："},{"tx":"玉屋2060%"}]}`.
+ *
+ * `t` is the timestamp in milliseconds and `c` is a rich-text array whose
+ * actual text is the concatenation of each `tx` field. Returns `null` when
+ * the line is not a recognized NetEase JSON lyric entry.
+ */
+export function parseNeteaseJsonLyricLine(
+  line: string
+): { time: number; text: string } | null {
+  if (!line.startsWith("{")) return null;
+
+  let parsed: { t?: unknown; c?: unknown };
+  try {
+    parsed = JSON.parse(line) as { t?: unknown; c?: unknown };
+  } catch {
+    return null;
+  }
+
+  if (typeof parsed.t !== "number" || !Array.isArray(parsed.c)) return null;
+
+  const text = parsed.c
+    .map((segment) => {
+      if (typeof segment !== "object" || segment === null) return "";
+      const tx = (segment as { tx?: unknown }).tx;
+      return typeof tx === "string" ? tx : "";
+    })
+    .join("");
+
+  return { time: parsed.t, text };
+}
+
+/**
  * Parse an LRC string into {@link Lyrics}.
  *
  * Each `[mm:ss.xx]` line becomes a {@link LyricsLine} with a single
@@ -40,6 +73,12 @@ export function parseLrc(lrc: string): Lyrics {
   for (const raw of lrc.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
+
+    const jsonEntry = parseNeteaseJsonLyricLine(line);
+    if (jsonEntry) {
+      entries.push(jsonEntry);
+      continue;
+    }
 
     // Collect all tags at the start of the line
     const times: number[] = [];
