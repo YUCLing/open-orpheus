@@ -139,8 +139,28 @@ fn record_injected_request(conn: &mut X11Conn, count: u16) {
             .insert(conn.server_seq.wrapping_sub(i), InjectedType::Other);
     }
 
+    // The new offset must take effect starting at the FIRST injected request's
+    // server sequence, not the first request *after* the injected range.
+    //
+    // Injected requests consume server sequence numbers, and some of them make
+    // the server emit events (EnterNotify/LeaveNotify from the injected
+    // UngrabPointer, the ClientMessage echo from the injected SendEvent,
+    // ShapeNotify from the injected Shape request, ...). Those events carry one
+    // of the "phantom" server sequences inside the injected range. If the
+    // offset only changed *after* that range, such an event would be rewritten
+    // with the old (too-small) offset, producing a client-visible sequence of
+    // C+1..C+count (C = the client's own request counter) which is *greater*
+    // than the counter. libX11's poll_for_event rejects any event whose sequence
+    // exceeds the highest request the client sent ("Unknown sequence number
+    // while processing queue" -> xcb_xlib_threads_sequence_lost -> abort).
+    // Starting the offset at the first injected sequence rewrites those events
+    // to server_seq - new_offset <= C, which is always accepted. Replies to
+    // injected requests are dropped via injected_seqs, and replies to client
+    // requests never carry an injected-range sequence, so reply matching is
+    // unaffected.
+    let first_injected_seq = conn.server_seq.wrapping_sub(count - 1);
     conn.offset_transitions
-        .push((conn.server_seq.wrapping_add(1), conn.seq_offset));
+        .push((first_injected_seq, conn.seq_offset));
     if conn.offset_transitions.len() > 32 {
         conn.offset_transitions.drain(0..16);
     }
@@ -438,8 +458,10 @@ pub(crate) fn feed_outbound(fd: RawFd, chunk: &[u8]) -> Option<Vec<u8>> {
                 .insert(conn.server_seq, InjectedType::QueryExtensionShape);
             out.extend_from_slice(&req2);
 
+            // Offset takes effect at the first injected sequence (server_seq 1);
+            // see record_injected_request for why this matters.
             conn.offset_transitions
-                .push((conn.server_seq.wrapping_add(1), conn.seq_offset));
+                .push((conn.server_seq.wrapping_sub(1), conn.seq_offset));
         } else {
             if conn.tx_buf.len() - off < 4 {
                 break;
@@ -779,8 +801,10 @@ pub(super) fn query_pointer(window: u32) -> Option<(i16, i16)> {
         conn.seq_offset = conn.seq_offset.wrapping_add(1);
         conn.injected_seqs
             .insert(conn.server_seq, InjectedType::QueryPointer);
+        // Offset starts at the injected request's own sequence (see
+        // record_injected_request for why this matters).
         conn.offset_transitions
-            .push((conn.server_seq.wrapping_add(1), conn.seq_offset));
+            .push((conn.server_seq, conn.seq_offset));
         if conn.offset_transitions.len() > 32 {
             conn.offset_transitions.drain(0..16);
         }
