@@ -7,9 +7,11 @@ import { registerCallHandler } from "../calls";
 import { deserialData } from "../crypto";
 import { client } from "../request";
 import interceptAnonymousRequest from "../anonymous";
+import { AegisEncryptState, XeapiAegis, type AegisInitConfig } from "../xeapi";
 
 let globalFailCount = 0;
 let globalSucCount = 0;
+const aegis = new XeapiAegis();
 
 export type NetworkFetchRequest = {
   url: string;
@@ -151,3 +153,56 @@ registerCallHandler<
     unreachable: false,
   },
 ]);
+
+registerCallHandler<[AegisInitConfig], [{ errorCode: number }]>(
+  "network.initAegis",
+  (event, config) => [
+    aegis.init(config ?? {}, {
+      onEncryptStateChange: (state: AegisEncryptState, reason: string) => {
+        event.sender.send(
+          "channel.call",
+          "network.onEncryptStateChange",
+          state,
+          reason
+        );
+      },
+      onRequestPublicKey: (request) => {
+        event.sender.send(
+          "channel.call",
+          "network.onRequestAegisPublicKey",
+          request.currentKeyVersion,
+          request.requestType,
+          request.signature,
+          request.timestamp,
+          request.nonce
+        );
+      },
+    }),
+  ]
+);
+
+registerCallHandler<[{ body?: string }], [{ encryptedBody: string }]>(
+  "network.aegisEncrypt",
+  (_, request) => {
+    const body = request?.body ?? "";
+    try {
+      return [{ encryptedBody: aegis.encrypt(body) }];
+    } catch {
+      return [{ encryptedBody: body }];
+    }
+  }
+);
+
+registerCallHandler<[{ sessionId?: string; sessionKey?: string }], void>(
+  "network.setSession",
+  (_, session) => {
+    aegis.setSession(session?.sessionId ?? "", session?.sessionKey ?? "");
+  }
+);
+
+registerCallHandler<[{ response?: string }], void>(
+  "network.updateAegisPublicKey",
+  (_, response) => {
+    aegis.updatePublicKeyResponse(response?.response ?? "");
+  }
+);
