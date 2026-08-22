@@ -16,7 +16,13 @@ import {
   TextAlignType,
 } from "$sharedTypes/desktop-lyrics";
 
-import { mainWindow, setWindowId } from "../window";
+import {
+  mainWindow,
+  ManagedWindow,
+  OnDemandWindow,
+  OnDemandWindowState,
+  SimpleManagedWindow,
+} from "../window";
 import { LifecycleState, state as lifecycleState } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
@@ -26,8 +32,7 @@ import type {
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-
-export let desktopLyricsWindow: BrowserWindow | null = null;
+import { kv as settings } from "../settings";
 
 export const lyricsStyle: LyricsStyle = {
   font: {
@@ -56,36 +61,25 @@ export const lyricsStyle: LyricsStyle = {
   showTranslate: ShowTranslate.Translate,
 };
 export function refreshLyricsStyle() {
-  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return false;
-  desktopLyricsWindow.webContents.send(
-    "desktopLyrics.styleUpdate",
-    lyricsStyle
-  );
-  return true;
+  return window.send("desktopLyrics.styleUpdate", lyricsStyle);
 }
 
 export let lyricsOffset = 0;
 export function setLyricsOffset(offset: number) {
   lyricsOffset = offset;
-  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return false;
-  desktopLyricsWindow.webContents.send("desktopLyrics.offsetUpdate", offset);
-  return true;
+  return window.send("desktopLyrics.offsetUpdate", offset);
 }
 
 export let lyricsLocked = false;
 export function setLyricsLocked(locked: boolean) {
   lyricsLocked = locked;
-  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return false;
-  desktopLyricsWindow.webContents.send("desktopLyrics.lockUpdate", locked);
-  return true;
+  return window.send("desktopLyrics.lockUpdate", locked);
 }
 
 let lyricsPlayInfo: DesktopLyricsPlayInfo | null = null;
 export function updateLyricsPlayInfo(info: DesktopLyricsPlayInfo | null) {
   lyricsPlayInfo = info;
-  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return false;
-  desktopLyricsWindow.webContents.send("desktopLyrics.playInfoUpdate", info);
-  return true;
+  return window.send("desktopLyrics.playInfoUpdate", info);
 }
 
 function performAction(action: string) {
@@ -98,8 +92,8 @@ function performAction(action: string) {
   }
 }
 
-export default function createDesktopLyricsWindow() {
-  desktopLyricsWindow = new BrowserWindow({
+function createWindow(state?: OnDemandWindowState): BrowserWindow {
+  const desktopLyricsWindow = new BrowserWindow({
     width: 800, // TODO: Proper sizes
     height: 225,
     skipTaskbar: true,
@@ -119,7 +113,6 @@ export default function createDesktopLyricsWindow() {
   } else {
     desktopLyricsWindow.loadURL("gui://frontend/desktop-lyrics");
   }
-  setWindowId(desktopLyricsWindow, "desktop_lyrics");
 
   desktopLyricsWindow.on("blur", () => {
     if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
@@ -127,7 +120,8 @@ export default function createDesktopLyricsWindow() {
   });
 
   desktopLyricsWindow.on("close", (e) => {
-    if (lifecycleState === LifecycleState.Quitting) return; // If the app is quitting we allow the window to close
+    if ((state && !state.alive) || lifecycleState === LifecycleState.Quitting)
+      return; // Only allow direct close when not triggered externally or quitting
     // Not closing, but telling NCM to hide.
     e.preventDefault();
     performAction("close");
@@ -188,6 +182,23 @@ export default function createDesktopLyricsWindow() {
   registerInputRegionHandlers(desktopLyricsWindow);
   registerLyricsHandlers(desktopLyricsWindow);
   registerSettingsHandlers(desktopLyricsWindow);
+
+  return desktopLyricsWindow;
+}
+
+class DesktopLyricsOnDemandWindow extends OnDemandWindow {
+  createWindow(state: OnDemandWindowState): BrowserWindow {
+    return createWindow(state);
+  }
+}
+
+export let window: ManagedWindow;
+export default async function createDesktopLyricsWindow() {
+  window =
+    (await settings.get("window.lifecycle")) !== "on-demand"
+      ? new SimpleManagedWindow(createWindow())
+      : new DesktopLyricsOnDemandWindow();
+  window.setData("name", "desktop_lyrics");
 }
 
 // --- Preview ---

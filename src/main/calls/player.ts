@@ -18,7 +18,7 @@ import { parseLrc, parseYrc } from "../lyrics/parse";
 import { sanitizeRelativePath } from "../util";
 import {
   createDesktopLyricsPreview,
-  desktopLyricsWindow,
+  window as desktopLyricsWindow,
   lyricsStyle,
   refreshLyricsStyle,
   setLyricsLocked,
@@ -231,8 +231,6 @@ registerCallHandler<[boolean], [boolean]>(
 registerCallHandler<[boolean], [boolean]>(
   "player.setDesktopLyricTopMost",
   (event, topMost) => {
-    if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed())
-      return [false];
     desktopLyricsWindow.setAlwaysOnTop(topMost);
     return [true];
   }

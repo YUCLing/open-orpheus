@@ -12,13 +12,7 @@ import {
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
-import {
-  getMenus,
-  getWindowById,
-  mainWindow,
-  setMaximumSize,
-  setMinimumSize,
-} from "../window";
+import { mainWindow, ManagedWindow } from "../window";
 import AppMenu from "../menu";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
 import * as settings from "../settings";
@@ -165,8 +159,11 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
       (await settings.kv.get("window.overrideMainWindowSizeLimit")) !== "true"
     ) {
       // Use window module to set maximum size to avoid issues with maximized/fullscreen windows
-      setMinimumSize(wnd, min.x, min.y);
-      setMaximumSize(wnd, max.x * scaleFactor, max.y * scaleFactor);
+      const managed = ManagedWindow.fromBrowserWindow(wnd);
+      if (managed) {
+        managed.setMinimumSize(min.x, min.y);
+        managed.setMaximumSize(max.x * scaleFactor, max.y * scaleFactor);
+      }
     }
     if (wnd == mainWindow) {
       mainWindowSizeLimits = [
@@ -180,17 +177,17 @@ settings.events.on("change", (e) => {
   if (!mainWindow) return;
   const { key, value } = e.data;
   if (key === "window.overrideMainWindowSizeLimit") {
+    const managed = ManagedWindow.fromBrowserWindow(mainWindow);
+    if (!managed) return;
     if (value === "true" || !mainWindowSizeLimits) {
-      setMinimumSize(mainWindow, 0, 0);
-      setMaximumSize(mainWindow, 0, 0);
+      managed.setMinimumSize(0, 0);
+      managed.setMaximumSize(0, 0);
     } else {
-      setMinimumSize(
-        mainWindow,
+      managed.setMinimumSize(
         mainWindowSizeLimits[0].x,
         mainWindowSizeLimits[0].y
       );
-      setMaximumSize(
-        mainWindow,
+      managed.setMaximumSize(
         mainWindowSizeLimits[1].x,
         mainWindowSizeLimits[1].y
       );
@@ -217,13 +214,13 @@ registerCallHandler<
     },
   ],
   void
->("winhelper.setNativeWindowShow", (event, id, show /*, workArea*/) => {
+>("winhelper.setNativeWindowShow", async (event, id, show /*, workArea*/) => {
   if (!id) return;
-  const wnd = getWindowById(id);
+  const wnd = ManagedWindow.fromName(id);
   if (!wnd) return;
   if (show) {
-    wnd.show();
-    wnd.focus();
+    await wnd.show();
+    wnd.window?.focus();
   } else {
     wnd.hide();
   }
@@ -345,12 +342,12 @@ registerCallHandler<[boolean], void>(
 
 registerCallHandler<MenuRequest, void>(
   "winhelper.updateMenu",
-  async (event, data, id) => {
+  async (event, data /*id*/) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
-    id = 0; // TODO: id doesn't seem to be id, what it is?
-    const menus = getMenus(wnd);
-    const menu = menus[id];
+    const managed = ManagedWindow.fromBrowserWindow(wnd);
+    if (!managed) return;
+    const menu = managed.getData("menu");
     if (!menu) {
       return;
     }
@@ -371,8 +368,8 @@ registerCallHandler<MenuRequest, void>(
   async (event, data, id) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
-    id = 0; // TODO: id doesn't seem to be id, what it is?
-    const menus = getMenus(wnd);
+    const managed = ManagedWindow.fromBrowserWindow(wnd);
+    if (!managed) return;
     const parsedMenuData = parseMenuData(data);
     const platform = os.platform();
     const injectShowMainWindowMenuItem =
@@ -422,7 +419,7 @@ registerCallHandler<MenuRequest, void>(
       event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
     };
     const menu = new AppMenu(parsedMenuData.content);
-    menus[id] = menu;
+    managed.setData("menu", menu);
     menu.setClickHandler(onClick);
     menu.show();
   }

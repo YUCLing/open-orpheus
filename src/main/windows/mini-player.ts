@@ -6,7 +6,13 @@ import psd from "@webtoon/psd";
 import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
-import { mainWindow, setWindowId } from "../window";
+import {
+  mainWindow,
+  ManagedWindow,
+  OnDemandWindow,
+  OnDemandWindowState,
+  SimpleManagedWindow,
+} from "../window";
 import { registerIpcHandlers } from "../../bridge/register";
 import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
 import type { BtnImages, BtnState } from "../../../types/dui";
@@ -27,8 +33,7 @@ import type {
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { LifecycleState, state as lifecycleState } from "../lifecycle";
 import { font } from "../gui";
-
-let miniPlayerWindow: BrowserWindow | null = null;
+import { kv as settings } from "../settings";
 
 // State
 let playInfo: MiniPlayerPlayInfo | null = null;
@@ -352,9 +357,7 @@ packManager.on("skin2packloaded", async (event) => {
 });
 
 function sendToMiniPlayer(event: string, data: unknown) {
-  if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
-    miniPlayerWindow.webContents.send(`miniPlayer.${event}`, data);
-  }
+  window.send(`miniPlayer.${event}`, data);
 }
 
 export function updatePlayInfo(info: MiniPlayerPlayInfo | null) {
@@ -430,8 +433,8 @@ export function getFullState(): MiniPlayerFullState {
   };
 }
 
-export default function createMiniPlayerWindow() {
-  miniPlayerWindow = new BrowserWindow({
+function createWindow(state?: OnDemandWindowState): BrowserWindow {
+  const miniPlayerWindow = new BrowserWindow({
     width: 310,
     height: 50 + 340, // Total size: Main + List
     transparent: true,
@@ -451,10 +454,10 @@ export default function createMiniPlayerWindow() {
   } else {
     miniPlayerWindow.loadURL("gui://frontend/mini-player");
   }
-  setWindowId(miniPlayerWindow, "mini_player");
 
   miniPlayerWindow.on("close", (e) => {
-    if (lifecycleState === LifecycleState.Quitting) return; // Allow closing when quitting
+    if ((state && !state.alive) || lifecycleState === LifecycleState.Quitting)
+      return; // Allow closing when hiding or quitting
     e.preventDefault();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
@@ -478,9 +481,20 @@ export default function createMiniPlayerWindow() {
   );
   registerInputRegionHandlers(miniPlayerWindow);
   registerLyricsHandlers(miniPlayerWindow);
+  return miniPlayerWindow;
 }
 
-export function hideMiniPlayerWindow() {
-  if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
-  miniPlayerWindow.hide();
+class MiniPlayerOnDemandWindow extends OnDemandWindow {
+  createWindow(state: OnDemandWindowState): BrowserWindow {
+    return createWindow(state);
+  }
+}
+
+export let window: ManagedWindow;
+export default async function createMiniPlayerWindow() {
+  window =
+    (await settings.get("window.lifecycle")) !== "on-demand"
+      ? new SimpleManagedWindow(createWindow())
+      : new MiniPlayerOnDemandWindow();
+  window.setData("name", "mini_player");
 }

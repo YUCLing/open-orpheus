@@ -277,7 +277,6 @@ function scheduleFlush(): void {
 /**
  * Process dawn-log entries from the NCM web app.
  *
- * Called when the web app invokes `On.call("app.statisV2", "dawn", [...])`.
  * Entries are buffered in RAM. When the queue reaches {@link MAX_QUEUE_SIZE}
  * entries they are encrypted into a bundle and queued for upload.
  *

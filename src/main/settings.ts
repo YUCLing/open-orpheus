@@ -5,6 +5,7 @@ const KV_ENTRIES: Record<string, unknown> = {
   "desktopLyrics.opacity": 1,
   "tray.clickBehavior": "always-show-menu",
   "window.overrideMainWindowSizeLimit": undefined,
+  "window.lifecycle": "on-demand",
   proxy: undefined,
 };
 
