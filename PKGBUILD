@@ -34,6 +34,7 @@ makedepends=(
     'rust'
     'rust-wasm'
     'wasm-bindgen'
+    'rustup'
 )
 source=(
     "${_srcname}::git+https://gh-proxy.org/https://github.com/YUCLing/open-orpheus.git#tag=v${pkgver}"
