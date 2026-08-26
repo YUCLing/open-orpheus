@@ -1,10 +1,8 @@
 import { dirname, resolve } from "node:path";
 import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(__dirname, "..");
+const projectRoot = resolve(import.meta.dirname, "..");
 
 const { flatpak: flatpakOptions } = await import(
   new URL("../packaging/options.ts", import.meta.url).href

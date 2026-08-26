@@ -1,7 +1,6 @@
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
 async function runBuildCommand(modulePath: string, script: string) {
   return new Promise<{ status: number | null }>((resolve, reject) => {
@@ -122,10 +121,7 @@ function isPlatformCompatible(
 }
 
 async function buildModules() {
-  const modulesDir = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "../modules"
-  );
+  const modulesDir = resolve(import.meta.dirname, "../modules");
   const moduleNames = await readdir(modulesDir);
   const modules = await readModuleInfos(modulesDir, moduleNames);
   const layers = computeLayers(modules);

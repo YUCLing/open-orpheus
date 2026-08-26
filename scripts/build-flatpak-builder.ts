@@ -1,15 +1,13 @@
 import { execFile as execFileCb, spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { mkdir, mkdtemp, readFile, cp, rm, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 
 const execFile = promisify(execFileCb);
 import yaml from "yaml";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(__dirname, "..");
+const projectRoot = resolve(import.meta.dirname, "..");
 
 const pkg = JSON.parse(
   await readFile(resolve(projectRoot, "package.json"), "utf-8")
