@@ -5,6 +5,7 @@ import type { ForgePlatform } from "@electron-forge/shared-types";
 import type { MakerRpmOptions } from "../packaging/types.ts";
 
 import { buildRpm } from "../packaging/rpm/build.ts";
+import { makeInStaging } from "../packaging/common/maker.ts";
 
 /**
  * Custom RPM maker that reuses the already-packaged Electron app (and its
@@ -22,10 +23,13 @@ export default class MakerRpm extends MakerBase<MakerRpmOptions> {
 
   async make(opts: MakerOptions): Promise<string[]> {
     const { dir, makeDir } = opts;
-    return buildRpm({
-      outDir: resolve(makeDir, "rpm"),
-      prebuilt: dir,
-      nodeps: this.config.nodeps ?? true,
-    });
+    // Build everything in a temp staging dir; only the .rpm is moved out.
+    return makeInStaging(resolve(makeDir, "rpm"), (staging) =>
+      buildRpm({
+        outDir: staging,
+        prebuilt: dir,
+        nodeps: this.config.nodeps ?? true,
+      })
+    );
   }
 }

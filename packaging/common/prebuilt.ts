@@ -53,7 +53,12 @@ export async function createPrebuiltBundle(
   await mkdir(scaffoldOut, { recursive: true });
   await execFile(
     process.execPath,
-    [resolve(projectRoot, "scripts/build-scaffold.ts"), scaffoldOut],
+    [
+      resolve(projectRoot, "scripts/build-scaffold.ts"),
+      scaffoldOut,
+      "--name",
+      name,
+    ],
     { cwd: projectRoot }
   );
 

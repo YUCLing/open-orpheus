@@ -1,11 +1,11 @@
-import { execFile as execFileCb, spawn } from "node:child_process";
+import { execFile as execFileCb } from "node:child_process";
 import { resolve } from "node:path";
-import { mkdir, mkdtemp, readFile, cp, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import { tmpdir } from "node:os";
+import { createProjectTarball } from "../packaging/common/archive.ts";
+import { baseManifest, writeManifest } from "../packaging/flatpak/manifest.ts";
 
 const execFile = promisify(execFileCb);
-import yaml from "yaml";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
@@ -16,59 +16,7 @@ const { flatpak: flatpakOptions } = await import(
   new URL("../packaging/options.ts", import.meta.url).href
 );
 
-const electronVersion: string = pkg.devDependencies.electron;
 const outDir = resolve(projectRoot, "out/make/flatpak-builder");
-
-// --- Step 1: Create a minimal fake app dir for electron-installer-redhat ---
-// It needs: version file, resources/app/package.json, and a fake binary.
-// We only use this to let Installer compute resolved options (id, finishArgs, desktopExec).
-const fakeAppDir = await mkdtemp(resolve(tmpdir(), "fake-electron-app-"));
-await writeFile(resolve(fakeAppDir, "version"), electronVersion);
-await mkdir(resolve(fakeAppDir, "resources/app"), { recursive: true });
-await writeFile(
-  resolve(fakeAppDir, "resources/app/package.json"),
-  JSON.stringify({
-    name: pkg.name,
-    version: pkg.version,
-    description: flatpakOptions.description,
-    license: flatpakOptions.license,
-    homepage: flatpakOptions.homepage,
-    productName: flatpakOptions.productName,
-  })
-);
-await cp(resolve(projectRoot, "LICENSE"), resolve(fakeAppDir, "LICENSE"));
-console.log("Created fake app dir at", fakeAppDir);
-// Create a dummy chrome-sandbox so requiresSandboxWrapper() returns true.
-// This causes the installer to generate the electron-wrapper script (zypak-wrapper call)
-// and set the desktop Exec to it, matching how the real maker handles sandboxing.
-await writeFile(resolve(fakeAppDir, "chrome-sandbox"), "");
-
-const { Installer } = await import("@malept/electron-installer-flatpak");
-
-const installer = new Installer({
-  ...flatpakOptions,
-  icon: flatpakOptions.icon
-    ? resolve(projectRoot, flatpakOptions.icon as string)
-    : undefined,
-  src: fakeAppDir,
-  dest: outDir,
-  arch: "noarch", // builder is arch-independent
-  logger: () => {},
-});
-
-await installer.generateDefaults();
-await installer.generateOptions();
-
-// We copied icon by ourself, so remove the installer-generated icon
-installer.options.icon = undefined;
-
-await installer.createStagingDir();
-
-// We need to execute content functions to get correct `desktopExec`
-for (const fn of installer.contentFunctions) {
-  if (fn === "copyApplication") continue;
-  await (installer[fn] as () => Promise<void>)();
-}
 
 await mkdir(outDir, { recursive: true });
 
@@ -272,36 +220,14 @@ if (flatpakSourceMatch) {
 } else {
   const sourceTarballPath = resolve(outDir, sourceTarball);
   console.log(`Creating project source tarball: ${sourceTarball}`);
-  // Use git ls-files to get all tracked + untracked-but-not-ignored files
-  // (reads current disk state, so uncommitted edits are included)
-  const { stdout: nullSeparatedFiles } = await execFile(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-    { cwd: projectRoot, maxBuffer: 10 * 1024 * 1024 }
+  // git-derived file list (tracked + untracked-but-not-ignored), so uncommitted
+  // edits are included — same wheel used by the RPM/deb source staging.
+  await createProjectTarball(
+    projectRoot,
+    sourceTarballPath,
+    pkgName,
+    pkgVersion
   );
-  await new Promise<void>((res, rej) => {
-    const tar = spawn(
-      "tar",
-      [
-        "czf",
-        sourceTarballPath,
-        "--null",
-        "--no-recursion",
-        "--transform",
-        `s,^,${pkgName}-${pkgVersion}/,`,
-        "-C",
-        projectRoot,
-        "-T",
-        "-",
-      ],
-      { cwd: projectRoot }
-    );
-    tar.on("error", rej);
-    tar.on("close", (code) =>
-      code === 0 ? res() : rej(new Error(`tar exited with code ${code}`))
-    );
-    tar.stdin.end(nullSeparatedFiles);
-  });
   projectSource = {
     type: "archive",
     path: sourceTarball,
@@ -309,22 +235,15 @@ if (flatpakSourceMatch) {
 }
 
 // --- Step 6: Generate Flatpak builder YAML manifest ---
-type InstallerOptions = {
-  id: string;
-  bin: string;
-  base: string;
-  baseVersion: string | number;
-  runtime: string;
-  runtimeVersion: string | number;
-  sdk: string;
-  branch: string;
-  finishArgs: string[];
-  modules: Record<string, unknown>[];
-  name: string;
-};
-const opts = installer.options as InstallerOptions;
-const appIdentifier = (installer as unknown as { appIdentifier: string })
-  .appIdentifier;
+// Resolved manifest options. These used to come from the
+// @malept/electron-installer-flatpak Installer (fed by a fake app dir); since
+// the sandbox scaffolding is generated by our own build-scaffold.ts, they are
+// computed directly here.
+const appId = flatpakOptions.id ?? "";
+const appIdentifier = pkg.name;
+const runtimeVersion = String(flatpakOptions.runtimeVersion ?? "25.08");
+const baseVersion = String(flatpakOptions.baseVersion ?? "25.08");
+const finishArgs = flatpakOptions.finishArgs ?? [];
 
 const appModule = {
   name: appIdentifier,
@@ -370,20 +289,16 @@ const appModule = {
     // Package the Electron app
     `pnpm run package`,
 
-    // Generate installer-managed Flatpak scaffolding inside the sandbox,
-    // using the actual packaged Electron app as source.
-    `node scripts/install-flatpak-scaffolding.ts out/${pkg.name}-linux-*`,
+    // Generate the desktop entry, icons, and /app/bin symlink with our
+    // scaffold, using the actual packaged Electron app as source.
+    `node scripts/build-scaffold.ts /app --name ${appIdentifier} --desktop-name ${appId} --icon-app-name ${appId} --app-path /lib/${appIdentifier} --icons-path /share/icons/hicolor --desktop-path /share/applications --symlink-path /bin/${appIdentifier} --with-zypak-wrapper`,
 
     // Install the built Electron app into /app/lib/{name}
     `install -d /app/lib/${appIdentifier}`,
     `cp -r out/${pkg.name}-linux-*/. /app/lib/${appIdentifier}/`,
 
-    // Create the /app/bin symlink
-    "install -d /app/bin",
-    `ln -sf /app/lib/${appIdentifier}/${opts.bin} /app/bin/${opts.bin}`,
-
     // Install AppStream metainfo
-    `install -Dm644 packaging/flatpak/metainfo.xml /app/share/metainfo/${opts.id}.metainfo.xml`,
+    `install -Dm644 packaging/flatpak/metainfo.xml /app/share/metainfo/${appId}.metainfo.xml`,
   ],
   sources: [
     "generated-node-sources.json",
@@ -400,30 +315,20 @@ const appModule = {
   ],
 };
 
-const manifest = {
-  "app-id": opts.id,
-  runtime: opts.runtime,
-  "runtime-version": String(opts.runtimeVersion),
-  sdk: opts.sdk,
-  base: opts.base,
-  "base-version": String(opts.baseVersion),
-  "sdk-extensions": ["org.freedesktop.Sdk.Extension.node24"],
-  // When sandbox wrapper is needed, the installer sets desktopExec to 'electron-wrapper'
-  // and generates that script in staging. Use it as the manifest command too.
-  command: installer.options.desktopExec ?? opts.bin,
-  "separate-locales": false,
-  "finish-args": opts.finishArgs,
-  modules: [...opts.modules, appModule],
-};
+// Top-level manifest is shared with plugins/MakerFlatpak.ts (prebuilt mode).
+const manifest = baseManifest(
+  {
+    appId,
+    appIdentifier,
+    runtimeVersion,
+    baseVersion,
+    finishArgs,
+    extraModules: flatpakOptions.modules,
+  },
+  appModule
+);
 
-const doc = yaml.parseDocument(yaml.stringify(manifest));
-
-// The project source follows nodeSources + pnpm tarball + cargoSources.
-const manifestPath = resolve(outDir, `${opts.id}.yaml`);
-await writeFile(manifestPath, doc.toString());
-
-// --- Step 7: Clean up fake app dir ---
-await rm(fakeAppDir, { recursive: true, force: true });
+const manifestPath = await writeManifest(outDir, manifest);
 
 console.log("Flatpak builder manifest written to:");
 console.log(`  ${manifestPath}`);

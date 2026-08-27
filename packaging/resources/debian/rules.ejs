@@ -37,7 +37,7 @@ override_dh_auto_build:
 	pnpm run build:modules
 	pnpm run package
 	# Generate the install scaffolding (desktop, icons, /usr/bin symlink).
-	node scripts/build-scaffold.ts rpm-scaffold
+	node scripts/build-scaffold.ts rpm-scaffold --name <%- name %>
 <% } %>
 
 override_dh_auto_install:

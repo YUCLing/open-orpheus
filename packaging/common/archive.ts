@@ -75,3 +75,18 @@ export async function createProjectTarball(
     tar.stdin.end(filtered);
   });
 }
+
+/**
+ * Tar the contents of `srcDir` into `dest` at the archive root (no wrapping
+ * directory). Used to bundle the prebuilt Flatpak payload (app/, scaffold/,
+ * metainfo) from a staging dir.
+ */
+export async function createDirectoryTarball(srcDir: string, dest: string) {
+  await new Promise<void>((res, rej) => {
+    const tar = spawn("tar", ["czf", dest, "-C", srcDir, "."]);
+    tar.on("error", rej);
+    tar.on("close", (code) =>
+      code === 0 ? res() : rej(new Error(`tar exited with code ${code}`))
+    );
+  });
+}

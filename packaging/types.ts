@@ -33,3 +33,25 @@ export interface MakerRpmOptions {
   /** Homepage URL, used in the spec `URL` field. */
   homepage?: string;
 }
+
+/**
+ * Configuration for the custom Flatpak maker
+ * (`plugins/MakerFlatpak.ts`), which reuses the packaged Electron app through
+ * a prebuilt-aware Flathub builder manifest and bundles it into a `.flatpak`.
+ */
+export interface MakerFlatpakOptions {
+  /** Flatpak app ID (reverse-DNS, e.g. `io.github.yucling.open-orpheus`). */
+  id?: string;
+  /** Executable/app name (e.g. `open-orpheus`). Defaults to package.json `name`. */
+  name?: string;
+  /** Path (relative to the project) to the AppStream metainfo. Defaults to `packaging/flatpak/metainfo.xml`. */
+  metainfo?: string;
+  /** Runtime version (e.g. `25.08`). Defaults to `"25.08"`. */
+  runtimeVersion?: string;
+  /** Base-app version (e.g. `25.08`). Defaults to `"25.08"`. */
+  baseVersion?: string;
+  /** Extra `--finish-args`. */
+  finishArgs?: string[];
+  /** Extra manifest modules appended before the app module. */
+  modules?: unknown[];
+}

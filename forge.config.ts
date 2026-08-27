@@ -4,7 +4,6 @@ import { dirname, resolve } from "node:path";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
-import { MakerFlatpak } from "@electron-forge/maker-flatpak";
 import { MakerAppImage } from "@reforged/maker-appimage";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
@@ -15,6 +14,7 @@ import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-nati
 import * as options from "./packaging/options";
 
 import MakerDeb from "./plugins/MakerDeb";
+import MakerFlatpak from "./plugins/MakerFlatpak";
 import MakerRpm from "./plugins/MakerRpm";
 
 const LOCALES = ["en", "en-US", "zh-CN"];
@@ -128,9 +128,7 @@ const config: ForgeConfig = {
   makers: [
     new MakerSquirrel(options.squirrel),
     new MakerZIP({}, ["darwin"]),
-    new MakerFlatpak({
-      options: options.flatpak,
-    }),
+    new MakerFlatpak(options.flatpak),
     new MakerAppImage({
       options: options.AppImage,
     }),

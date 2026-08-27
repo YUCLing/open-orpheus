@@ -68,7 +68,7 @@ export RUSTFLAGS="$ORIGINAL_RUSTFLAGS"
 pnpm run package
 
 # Generate the install scaffolding (desktop file, icons, symlink) with our scaffolder
-node scripts/build-scaffold.ts %{_builddir}/%{name}-%{version}/rpm-scaffold
+node scripts/build-scaffold.ts %{_builddir}/%{name}-%{version}/rpm-scaffold --name %{name}
 <% } %>
 
 %install
@@ -96,6 +96,5 @@ install -Dm0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
 /usr/share/applications/%{name}.desktop
 /usr/share/icons/hicolor/256x256/apps/%{name}.png
 /usr/share/icons/hicolor/512x512/apps/%{name}.png
-/usr/share/icons/hicolor/1024x1024/apps/%{name}.png
 /usr/share/icons/hicolor/scalable/apps/%{name}.svg
 %license %{_licensedir}/%{name}/LICENSE

@@ -5,6 +5,7 @@ import type { ForgePlatform } from "@electron-forge/shared-types";
 import type { MakerDebOptions } from "../packaging/types.ts";
 
 import { buildDeb } from "../packaging/deb/source.ts";
+import { makeInStaging } from "../packaging/common/maker.ts";
 
 /**
  * Custom Debian (.deb) maker that reuses the already-packaged Electron app
@@ -22,10 +23,13 @@ export default class MakerDeb extends MakerBase<MakerDebOptions> {
 
   async make(opts: MakerOptions): Promise<string[]> {
     const { dir, makeDir } = opts;
-    return buildDeb({
-      outDir: resolve(makeDir, "deb"),
-      prebuilt: dir,
-      nodeps: this.config.nodeps ?? true,
-    });
+    // Build everything in a temp staging dir; only the .deb is moved out.
+    return makeInStaging(resolve(makeDir, "deb"), (staging) =>
+      buildDeb({
+        outDir: staging,
+        prebuilt: dir,
+        nodeps: this.config.nodeps ?? true,
+      })
+    );
   }
 }

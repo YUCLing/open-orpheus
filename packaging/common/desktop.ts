@@ -10,6 +10,7 @@ const template = resolve(
 
 export interface DesktopFileOptions {
   executable?: string;
+  icon?: string;
 }
 
 export async function generateDesktop(options: DesktopFileOptions = {}) {
@@ -18,6 +19,7 @@ export async function generateDesktop(options: DesktopFileOptions = {}) {
       template,
       {
         executable: options.executable,
+        icon: options.icon,
       },
       (err, result) => {
         if (err) reject(err);

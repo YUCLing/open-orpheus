@@ -99,6 +99,7 @@ async function stageSource(
   );
   await rm(resolve(srcDir, "debian", "rules.ejs"));
   await createRulesFile(resolve(srcDir, "debian", "rules"), {
+    name,
     installTools: options.installTools,
     prebuilt: !!options.prebuilt,
   });
