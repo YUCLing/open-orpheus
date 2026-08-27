@@ -49,11 +49,11 @@ jobs:
       - name: Build native modules
         run: pnpm build:modules
 
-      - name: Install Flatpak dependencies
+      - name: Install packaging dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y flatpak flatpak-builder elfutils
+          sudo apt-get install -y flatpak flatpak-builder elfutils debhelper-compat
 
       - name: Set up Flatpak runtimes
         if: runner.os == 'Linux'
@@ -68,7 +68,7 @@ jobs:
           appstreamcli validate packaging/flatpak/metainfo.xml
 
       - name: Build application bundles
-        run: pnpm make
+        run: pnpm make:deb --nodeps && pnpm make:rpm --nodeps
         env:
           EXTRACT_LICENSES_TO: out/license
 

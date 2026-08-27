@@ -45,9 +45,11 @@ corepack install
 
 # Install dependencies and build native modules
 pnpm install --frozen-lockfile
-# Copr adds a flag that is not supported by WASM rust-lld
+# Copr adds a flag that is not supported by WASM rust-lld; strip it. Use sed
+# (POSIX) rather than ${var//.../} (a bashism) so %build also works when
+# rpmbuild runs it under dash (e.g. GitHub Actions' ubuntu runners).
 ORIGINAL_RUSTFLAGS="$RUSTFLAGS"
-export RUSTFLAGS="${RUSTFLAGS//-Clink-arg=-specs=\/usr\/lib\/rpm\/redhat\/redhat-package-notes/}"
+export RUSTFLAGS="$(printf '%s' "$RUSTFLAGS" | sed 's|-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes||g')"
 pnpm run build:modules
 export RUSTFLAGS="$ORIGINAL_RUSTFLAGS"
 

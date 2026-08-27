@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+# Generated from packaging/resources/debian/rules.ejs — do not edit by hand.
 
 .ONESHELL:
 SHELL := /bin/bash
@@ -9,24 +10,24 @@ export DH_VERBOSE := 1
 
 override_dh_auto_build:
 	set -e
-	# Install the build toolchain (rust/node/pnpm) unless INSTALL_TOOLS=0/false.
-	if [ "$${INSTALL_TOOLS:-1}" != "0" ] && [ "$${INSTALL_TOOLS:-1}" != "false" ]; then
-		export HOME="$$(mktemp -d)"
-		export CARGO_HOME="$$HOME/.cargo"
-		export RUSTUP_HOME="$$HOME/.rustup"
-		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-		. "$$HOME/.cargo/env"
-		rustup target add wasm32-unknown-unknown
-		WASM_BINDGEN="$$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $$3); print $$3; exit }' Cargo.toml)"
-		cargo install "wasm-bindgen-cli@$${WASM_BINDGEN}"
-		export NVM_DIR="$$HOME/.nvm"
-		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
-		. "$$HOME/.nvm/nvm.sh"
-		NODE_VERSION="$$(sed -n 's/.*"node"[[:space:]]*:[[:space:]]*">=\([0-9][0-9]*\).*/\1/p' package.json | head -n1)"
-		nvm install "$${NODE_VERSION:-24}"
-		corepack enable pnpm
-		corepack install
-	fi
+<% if (installTools !== false) { %>
+	# Install the build toolchain (rust/node/pnpm) in a temp HOME.
+	export HOME="$$(mktemp -d)"
+	export CARGO_HOME="$$HOME/.cargo"
+	export RUSTUP_HOME="$$HOME/.rustup"
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	. "$$HOME/.cargo/env"
+	rustup target add wasm32-unknown-unknown
+	WASM_BINDGEN="$$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $$3); print $$3; exit }' Cargo.toml)"
+	cargo install "wasm-bindgen-cli@$${WASM_BINDGEN}"
+	export NVM_DIR="$$HOME/.nvm"
+	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+	. "$$HOME/.nvm/nvm.sh"
+	NODE_VERSION="$$(sed -n 's/.*"node"[[:space:]]*:[[:space:]]*">=\([0-9][0-9]*\).*/\1/p' package.json | head -n1)"
+	nvm install "$${NODE_VERSION:-24}"
+	corepack enable pnpm
+	corepack install
+<% } %>
 	# Install dependencies, build native modules, and package the Electron app.
 	pnpm install --frozen-lockfile
 	pnpm run build:modules

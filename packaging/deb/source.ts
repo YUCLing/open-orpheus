@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { createProjectTarball } from "../common/archive.ts";
+import { createRulesFile } from "./rules.ts";
 
 const execFile = promisify(execFileCb);
 
@@ -25,8 +26,10 @@ function runStreaming(
 export interface DebOptions {
   projectRoot?: string;
   outDir?: string;
-  /** Install the build toolchain (rust/node/pnpm) inside `debian/rules`. Defaults to true. */
+  /** Bake the toolchain install (rust/node/pnpm) into the rendered `debian/rules`. Defaults to true. */
   installTools?: boolean;
+  /** Pass `-d` to dpkg-buildpackage to skip the build-dependency check. Defaults to false. */
+  nodeps?: boolean;
 }
 
 async function resolveMeta(projectRoot: string) {
@@ -47,7 +50,8 @@ async function stageSource(
   projectRoot: string,
   outDir: string,
   name: string,
-  version: string
+  version: string,
+  installTools?: boolean
 ) {
   await mkdir(outDir, { recursive: true });
 
@@ -61,12 +65,16 @@ async function stageSource(
   const srcDir = resolve(outDir, `${name}-${version}`);
   // The Debian packaging lives in packaging/resources/debian; it is copied
   // into the staged tree as `debian/` (where dpkg-buildpackage expects it)
-  // and is excluded from the orig tarball.
+  // and is excluded from the orig tarball. `debian/rules` is rendered from
+  // rules.ejs so the toolchain decision is baked in at source-package
+  // creation time — mirroring how the SRPM bakes `installTools` into the spec.
   await cp(
     resolve(projectRoot, "packaging/resources/debian"),
     resolve(srcDir, "debian"),
     { recursive: true }
   );
+  await rm(resolve(srcDir, "debian", "rules.ejs"));
+  await createRulesFile(resolve(srcDir, "debian", "rules"), { installTools });
   return srcDir;
 }
 
@@ -79,12 +87,20 @@ export async function buildDeb(options: DebOptions = {}): Promise<string[]> {
 
   const name = debOptions.name;
   const version: string = pkg.version;
-  const srcDir = await stageSource(projectRoot, outDir, name, version);
+  const srcDir = await stageSource(
+    projectRoot,
+    outDir,
+    name,
+    version,
+    options.installTools
+  );
 
-  const installTools = options.installTools ?? true;
-  await runStreaming("dpkg-buildpackage", ["-b", "-us", "-uc"], {
+  // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit
+  // build-essential:native check — debian/rules provisions its own toolchain.
+  const buildArgs = ["-b", "-us", "-uc"];
+  if (options.nodeps) buildArgs.unshift("-d");
+  await runStreaming("dpkg-buildpackage", buildArgs, {
     cwd: srcDir,
-    env: { ...process.env, INSTALL_TOOLS: installTools ? "1" : "0" },
   });
 
   const debs = (await readdir(outDir))
@@ -113,10 +129,21 @@ export async function buildDebSource(
 
   const name = debOptions.name;
   const version: string = pkg.version;
-  const srcDir = await stageSource(projectRoot, outDir, name, version);
+  const srcDir = await stageSource(
+    projectRoot,
+    outDir,
+    name,
+    version,
+    options.installTools
+  );
 
+  // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit
+  // build-essential:native check (we only produce the source package here;
+  // the PPA builder installs Build-Depends).
   // -S: source only, -sa: include the orig tarball, -us -uc: no signing.
-  await runStreaming("dpkg-buildpackage", ["-S", "-sa", "-us", "-uc"], {
+  const buildArgs = ["-S", "-sa", "-us", "-uc"];
+  if (options.nodeps) buildArgs.unshift("-d");
+  await runStreaming("dpkg-buildpackage", buildArgs, {
     cwd: srcDir,
   });
 

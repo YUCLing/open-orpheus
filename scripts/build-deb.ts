@@ -1,10 +1,11 @@
 import { buildDeb } from "../packaging/deb/source.ts";
 
-// Install the build toolchain (rust/node/pnpm) inside debian/rules unless
-// explicitly disabled, e.g. INSTALL_TOOLS=0 node scripts/build-deb.ts
+// Bake the toolchain install (rust/node/pnpm) into debian/rules. Opt-in via
+// `--install-tools`; defaults to off (assumes a preinstalled toolchain).
 const installTools = process.argv.includes("--install-tools");
+const nodeps = process.argv.includes("--nodeps");
 
-const debs = await buildDeb({ installTools });
+const debs = await buildDeb({ installTools, nodeps });
 
 console.log("DEB(s) created:");
 for (const f of debs) {

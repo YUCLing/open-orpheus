@@ -20,6 +20,7 @@ const projectRoot = resolve(import.meta.dirname, "..");
 const outDir = resolve(projectRoot, "out/make/rpm");
 
 const installTools = process.argv.includes("--install-tools");
+const nodeps = process.argv.includes("--nodeps");
 
 // 1. Build the SRPM (the single source of truth), then rebuild it into a
 //    binary RPM. `rpmbuild --rebuild` runs the full %prep/%build/%install
@@ -32,12 +33,10 @@ await mkdir(topdir, { recursive: true });
 
 const rpms: string[] = [];
 for (const srpm of srpms) {
-  await runStreaming("rpmbuild", [
-    "--define",
-    `_topdir ${topdir}`,
-    "--rebuild",
-    srpm,
-  ]);
+  const rebuildArgs = ["--define", `_topdir ${topdir}`, "--rebuild"];
+  if (nodeps) rebuildArgs.push("--nodeps");
+  rebuildArgs.push(srpm);
+  await runStreaming("rpmbuild", rebuildArgs);
 
   // Collect the produced binary RPM(s) from RPMS/<arch>/.
   const rpmsRoot = resolve(topdir, "RPMS");

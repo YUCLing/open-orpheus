@@ -15,6 +15,8 @@ export interface BuildSrpmOptions {
   outDir?: string;
   /** Install the build toolchain (rust/node/pnpm) inside `%build`. Defaults to true. */
   installTools?: boolean;
+  /** Pass `--nodeps` to rpmbuild to skip the build-dependency check. Defaults to false. */
+  nodeps?: boolean;
 }
 
 /**
@@ -95,12 +97,10 @@ export async function buildSrpm(
   });
 
   // --- Step 5: Build the SRPM ---
-  await execFile("rpmbuild", [
-    "--define",
-    `_topdir ${outDir}`,
-    "-bs",
-    specPath,
-  ]);
+  const rpmbuildArgs = ["--define", `_topdir ${outDir}`, "-bs"];
+  if (options.nodeps) rpmbuildArgs.push("--nodeps");
+  rpmbuildArgs.push(specPath);
+  await execFile("rpmbuild", rpmbuildArgs);
 
   // --- Step 6: Collect the SRPM and clean up ---
   const srpms = await readdir(srpmsDir);
