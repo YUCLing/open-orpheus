@@ -1,8 +1,8 @@
 import type { MakerSquirrelConfig } from "@electron-forge/maker-squirrel";
-import type { MakerRpmConfig } from "@electron-forge/maker-rpm";
-import type { MakerDebConfig } from "@electron-forge/maker-deb";
 import type { MakerFlatpakConfig } from "@electron-forge/maker-flatpak";
 import type { MakerAppImageConfigOptions } from "@reforged/maker-appimage";
+
+import type { MakerDebOptions, MakerRpmOptions } from "./types.ts";
 
 export const squirrel: MakerSquirrelConfig = {
   name: "OpenOrpheus",
@@ -11,23 +11,23 @@ export const squirrel: MakerSquirrelConfig = {
   authors: "YUCLing",
 };
 
-export const rpm: MakerRpmConfig["options"] = {
-  icon: "assets/icon_256.png",
+export const rpm: MakerRpmOptions = {
   name: "open-orpheus",
-  productName: "Open Orpheus",
   description: "An open-source Netease Cloud Music client",
   license: "MIT",
   homepage: "https://github.com/YUCLing/open-orpheus",
-  categories: ["Audio", "AudioVideo", "Network"],
+  nodeps: true,
 };
 
-export const deb: MakerDebConfig["options"] = {
-  icon: "assets/icon_256.png",
+export const deb: MakerDebOptions = {
   name: "open-orpheus",
-  productName: "Open Orpheus",
-  description: "An open-source Netease Cloud Music client",
+  nodeps: true,
+  section: "sound",
+  maintainer: "YUCLing <luotianyi@luotianyi.me>",
   homepage: "https://github.com/YUCLing/open-orpheus",
-  categories: ["Audio", "AudioVideo", "Network"],
+  description:
+    "An open-source Netease Cloud Music client\n" +
+    "An open-source implementation of Netease Cloud Music's Orpheus browser host.",
 };
 
 export const flatpak: MakerFlatpakConfig["options"] = {

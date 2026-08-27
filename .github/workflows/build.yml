@@ -68,7 +68,7 @@ jobs:
           appstreamcli validate packaging/flatpak/metainfo.xml
 
       - name: Build application bundles
-        run: pnpm make:deb --nodeps && pnpm make:rpm --nodeps
+        run: pnpm make
         env:
           EXTRACT_LICENSES_TO: out/license
 

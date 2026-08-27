@@ -4,6 +4,7 @@ import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import { createProjectTarball } from "../common/archive.ts";
+import { createPrebuiltBundle } from "../common/prebuilt.ts";
 import { createSpecFile } from "./spec.ts";
 
 const execFile = promisify(execFileCb);
@@ -17,6 +18,8 @@ export interface BuildSrpmOptions {
   installTools?: boolean;
   /** Pass `--nodeps` to rpmbuild to skip the build-dependency check. Defaults to false. */
   nodeps?: boolean;
+  /** Path to a prebuilt packaged app dir (out/<name>-linux-<arch>) to bundle as Source1. */
+  prebuilt?: string;
 }
 
 /**
@@ -80,6 +83,24 @@ export async function buildSrpm(
     version
   );
 
+  // --- Step 3b: Optional prebuilt artifact (Source1) ---
+  let prebuiltTarballName: string | undefined;
+  if (options.prebuilt) {
+    prebuiltTarballName = `${name}-${version}-prebuilt.tar.gz`;
+    // Bundle dir named after the tarball's top-level directory so no
+    // --transform is needed (prepending a prefix would double-prefix it).
+    const bundleDir = resolve(sourcesDir, `${name}-${version}-prebuilt`);
+    await createPrebuiltBundle(projectRoot, options.prebuilt, name, bundleDir);
+    await execFile("tar", [
+      "czf",
+      resolve(sourcesDir, prebuiltTarballName),
+      "-C",
+      sourcesDir,
+      `${name}-${version}-prebuilt`,
+    ]);
+    await rm(bundleDir, { recursive: true, force: true });
+  }
+
   // --- Step 4: Generate the spec ---
   const specPath = resolve(specsDir, `${name}.spec`);
   await createSpecFile(specPath, {
@@ -94,6 +115,7 @@ export async function buildSrpm(
     wasmBindgen,
     changelog,
     installTools: options.installTools,
+    prebuilt: !!options.prebuilt,
   });
 
   // --- Step 5: Build the SRPM ---

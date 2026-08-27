@@ -1,0 +1,13 @@
+Source: <%- name %>
+Section: <%- section %>
+Priority: optional
+Maintainer: <%- maintainer %>
+Build-Depends: debhelper-compat (= 13), curl, git, tar
+Standards-Version: 4.6.2
+Homepage: <%- homepage %>
+Rules-Requires-Root: no
+
+Package: <%- name %>
+Architecture: any
+Depends: ${misc:Depends}, gtk3, libnss3
+Description: <%- description %>

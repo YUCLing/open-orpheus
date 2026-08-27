@@ -18,6 +18,8 @@ export interface SpecOptions {
   changelog: string;
   /** Install the build toolchain (rust/node/pnpm) inside `%build`. Defaults to true. */
   installTools?: boolean;
+  /** Bundle a prebuilt Electron app (Source1) and skip building. Defaults to false. */
+  prebuilt?: boolean;
 }
 
 export async function generateSpec(options: SpecOptions) {

@@ -8,6 +8,8 @@ const template = resolve(import.meta.dirname, "../resources/debian/rules.ejs");
 export interface RulesOptions {
   /** Install the build toolchain (rust/node/pnpm) inside `override_dh_auto_build`. Defaults to true. */
   installTools?: boolean;
+  /** Install a bundled prebuilt app (prebuilt/) instead of compiling. Defaults to false. */
+  prebuilt?: boolean;
 }
 
 export async function generateRules(options: RulesOptions) {

@@ -14,6 +14,9 @@ import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-nati
 
 import * as options from "./packaging/options";
 
+import MakerDeb from "./plugins/MakerDeb";
+import MakerRpm from "./plugins/MakerRpm";
+
 const LOCALES = ["en", "en-US", "zh-CN"];
 
 const config: ForgeConfig = {
@@ -131,6 +134,8 @@ const config: ForgeConfig = {
     new MakerAppImage({
       options: options.AppImage,
     }),
+    new MakerDeb(options.deb),
+    new MakerRpm(options.rpm),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

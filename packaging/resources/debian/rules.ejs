@@ -9,6 +9,10 @@ export DH_VERBOSE := 1
 	dh $@
 
 override_dh_auto_build:
+<% if (prebuilt) { %>
+	# The prebuilt Electron app is bundled in the source tree (prebuilt/) —
+	# nothing to build.
+<% } else { %>
 	set -e
 <% if (installTools !== false) { %>
 	# Install the build toolchain (rust/node/pnpm) in a temp HOME.
@@ -34,13 +38,20 @@ override_dh_auto_build:
 	pnpm run package
 	# Generate the install scaffolding (desktop, icons, /usr/bin symlink).
 	node scripts/build-scaffold.ts rpm-scaffold
+<% } %>
 
 override_dh_auto_install:
 	set -e
 	mkdir -p debian/open-orpheus/usr
+<% if (prebuilt) { %>
+	cp -r prebuilt/scaffold/usr debian/open-orpheus/
+	mkdir -p debian/open-orpheus/usr/lib/open-orpheus
+	cp -r prebuilt/app/. debian/open-orpheus/usr/lib/open-orpheus/
+<% } else { %>
 	cp -r rpm-scaffold/usr debian/open-orpheus/
 	mkdir -p debian/open-orpheus/usr/lib/open-orpheus
 	cp -r out/open-orpheus-linux-*/. debian/open-orpheus/usr/lib/open-orpheus/
+<% } %>
 
 # Don't strip the bundled Electron binaries — that can break them.
 override_dh_strip:

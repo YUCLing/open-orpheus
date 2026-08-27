@@ -1,27 +1,19 @@
-import { execFile as execFileCb, spawn } from "node:child_process";
+import { execFile as execFileCb } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { createProjectTarball } from "../common/archive.ts";
+import { createPrebuiltBundle } from "../common/prebuilt.ts";
+import { runStreaming } from "../common/process.ts";
+import {
+  createControlFile,
+  resolveControlOptions,
+  type ControlOptions,
+} from "./control.ts";
 import { createRulesFile } from "./rules.ts";
 
 const execFile = promisify(execFileCb);
-
-function runStreaming(
-  command: string,
-  args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}
-) {
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit", ...opts });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} exited with code ${code}`));
-    });
-  });
-}
 
 export interface DebOptions {
   projectRoot?: string;
@@ -30,6 +22,8 @@ export interface DebOptions {
   installTools?: boolean;
   /** Pass `-d` to dpkg-buildpackage to skip the build-dependency check. Defaults to false. */
   nodeps?: boolean;
+  /** Path to a prebuilt packaged app dir (out/<name>-linux-<arch>) to bundle instead of compiling. */
+  prebuilt?: string;
 }
 
 async function resolveMeta(projectRoot: string) {
@@ -51,30 +45,68 @@ async function stageSource(
   outDir: string,
   name: string,
   version: string,
-  installTools?: boolean
+  options: {
+    installTools?: boolean;
+    prebuilt?: string;
+    control: ControlOptions;
+  }
 ) {
   await mkdir(outDir, { recursive: true });
 
   const origTarball = resolve(outDir, `${name}_${version}.orig.tar.gz`);
-  await createProjectTarball(projectRoot, origTarball, name, version, [
+
+  // 1. Extract the git-derived project source (debian/ excluded) into the
+  //    staged tree.
+  const baseOrig = resolve(outDir, `${name}_${version}.orig.base.tar.gz`);
+  await createProjectTarball(projectRoot, baseOrig, name, version, [
     "packaging/resources/debian",
   ]);
-
-  await execFile("tar", ["xzf", origTarball, "-C", outDir]);
+  await execFile("tar", ["xzf", baseOrig, "-C", outDir]);
 
   const srcDir = resolve(outDir, `${name}-${version}`);
-  // The Debian packaging lives in packaging/resources/debian; it is copied
-  // into the staged tree as `debian/` (where dpkg-buildpackage expects it)
-  // and is excluded from the orig tarball. `debian/rules` is rendered from
-  // rules.ejs so the toolchain decision is baked in at source-package
-  // creation time — mirroring how the SRPM bakes `installTools` into the spec.
+
+  // 2. Bundle the prebuilt app + scaffold into the staged tree so the build
+  //    can install it without compiling.
+  if (options.prebuilt) {
+    await createPrebuiltBundle(
+      projectRoot,
+      options.prebuilt,
+      name,
+      resolve(srcDir, "prebuilt")
+    );
+  }
+
+  // 3. Recreate the orig tarball from the staged tree so the prebuilt bundle
+  //    is part of the source package (needed for PPA rebuilds).
+  await rm(baseOrig, { force: true });
+  await execFile("tar", [
+    "czf",
+    origTarball,
+    "-C",
+    outDir,
+    `${name}-${version}`,
+  ]);
+
+  // 4. The Debian packaging lives in packaging/resources/debian; it is copied
+  //    into the staged tree as `debian/` (where dpkg-buildpackage expects it)
+  //    and is excluded from the orig tarball. `debian/rules` is rendered from
+  //    rules.ejs so the toolchain/prebuilt decisions are baked in at
+  //    source-package creation time — mirroring the SRPM spec.
   await cp(
     resolve(projectRoot, "packaging/resources/debian"),
     resolve(srcDir, "debian"),
     { recursive: true }
   );
   await rm(resolve(srcDir, "debian", "rules.ejs"));
-  await createRulesFile(resolve(srcDir, "debian", "rules"), { installTools });
+  await createRulesFile(resolve(srcDir, "debian", "rules"), {
+    installTools: options.installTools,
+    prebuilt: !!options.prebuilt,
+  });
+  await rm(resolve(srcDir, "debian", "control.ejs"));
+  await createControlFile(
+    resolve(srcDir, "debian", "control"),
+    options.control
+  );
   return srcDir;
 }
 
@@ -87,13 +119,11 @@ export async function buildDeb(options: DebOptions = {}): Promise<string[]> {
 
   const name = debOptions.name;
   const version: string = pkg.version;
-  const srcDir = await stageSource(
-    projectRoot,
-    outDir,
-    name,
-    version,
-    options.installTools
-  );
+  const srcDir = await stageSource(projectRoot, outDir, name, version, {
+    installTools: options.installTools,
+    prebuilt: options.prebuilt,
+    control: resolveControlOptions(debOptions, pkg),
+  });
 
   // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit
   // build-essential:native check — debian/rules provisions its own toolchain.
@@ -103,11 +133,16 @@ export async function buildDeb(options: DebOptions = {}): Promise<string[]> {
     cwd: srcDir,
   });
 
-  const debs = (await readdir(outDir))
-    .filter((f) => f.endsWith(".deb"))
-    .map((f) => resolve(outDir, f));
-
-  await rm(srcDir, { recursive: true, force: true });
+  // Collect the produced .deb and remove every other artifact (staged source
+  // tree, .orig.tar.gz, .buildinfo, .changes) so only the .deb remains.
+  const debs: string[] = [];
+  for (const f of await readdir(outDir)) {
+    if (f.endsWith(".deb")) {
+      debs.push(resolve(outDir, f));
+    } else {
+      await rm(resolve(outDir, f), { recursive: true, force: true });
+    }
+  }
 
   if (debs.length === 0) {
     throw new Error("dpkg-buildpackage produced no .deb files.");
@@ -129,13 +164,11 @@ export async function buildDebSource(
 
   const name = debOptions.name;
   const version: string = pkg.version;
-  const srcDir = await stageSource(
-    projectRoot,
-    outDir,
-    name,
-    version,
-    options.installTools
-  );
+  const srcDir = await stageSource(projectRoot, outDir, name, version, {
+    installTools: options.installTools,
+    prebuilt: options.prebuilt,
+    control: resolveControlOptions(debOptions, pkg),
+  });
 
   // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit
   // build-essential:native check (we only produce the source package here;
