@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 
-import { buildSrpm } from "../packaging/rpm/srpm";
+import { buildSrpm } from "../packaging/rpm/srpm.ts";
 
 /** Run a long-running command, streaming its output to the parent process. */
 function runStreaming(command: string, args: string[]) {

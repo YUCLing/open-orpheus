@@ -62,7 +62,6 @@ jobs:
               - "packaging/**/*.ts"
               - "packaging/**/*.d.ts"
               - "scripts/**/*.ts"
-              - "scripts/**/*.mts"
               - "patches/**"
             rust:
               - ".github/workflows/changes.yml"

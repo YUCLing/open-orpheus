@@ -55,7 +55,7 @@ export RUSTFLAGS="$ORIGINAL_RUSTFLAGS"
 pnpm run package
 
 # Generate the install scaffolding (desktop file, icons, symlink) with our scaffolder
-node scripts/build-rpm-scaffold.mts %{_builddir}/%{name}-%{version}/rpm-scaffold
+node scripts/build-scaffold.ts %{_builddir}/%{name}-%{version}/rpm-scaffold
 
 %install
 mkdir -p %{buildroot}

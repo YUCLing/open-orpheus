@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 
-import { createSpecFile } from "./spec";
+import { createProjectTarball } from "../common/archive.ts";
+import { createSpecFile } from "./spec.ts";
 
 const execFile = promisify(execFileCb);
 
@@ -70,23 +71,11 @@ export async function buildSrpm(
   const projectTarball = `${name}-${version}.tar.gz`;
 
   // --- Step 3: Project source tarball (Source0) ---
-  await execFile(
-    "tar",
-    [
-      "czf",
-      resolve(sourcesDir, projectTarball),
-      "--transform",
-      `s,^.,${name}-${version},`,
-      "--exclude=./node_modules",
-      "--exclude=./out",
-      "--exclude=./target",
-      "--exclude=./data",
-      "--exclude=./.git",
-      "-C",
-      projectRoot,
-      ".",
-    ],
-    { maxBuffer: 10 * 1024 * 1024 }
+  await createProjectTarball(
+    projectRoot,
+    resolve(sourcesDir, projectTarball),
+    name,
+    version
   );
 
   // --- Step 4: Generate the spec ---

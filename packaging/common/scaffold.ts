@@ -3,8 +3,8 @@ import { cp, mkdir } from "node:fs/promises";
 
 import _ from "lodash";
 
-import { type Icons, writeIcons } from "./icons";
-import { createSymlink } from "./util";
+import { type Icons, writeIcons } from "./icons.ts";
+import { createSymlink } from "./util.ts";
 
 export interface ScaffoldOptions {
   id: string;

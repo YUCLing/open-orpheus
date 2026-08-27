@@ -1,0 +1,14 @@
+Source: open-orpheus
+Section: sound
+Priority: optional
+Maintainer: YUCLing <luotianyi@luotianyi.me>
+Build-Depends: debhelper-compat (= 13), curl, git, tar
+Standards-Version: 4.6.2
+Homepage: https://github.com/YUCLing/open-orpheus
+Rules-Requires-Root: no
+
+Package: open-orpheus
+Architecture: any
+Depends: ${misc:Depends}, gtk3, libnss3
+Description: An open-source Netease Cloud Music client
+ An open-source implementation of Netease Cloud Music's Orpheus browser host.

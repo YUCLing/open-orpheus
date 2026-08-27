@@ -1,4 +1,4 @@
-import { buildSrpm } from "../packaging/rpm/srpm";
+import { buildSrpm } from "../packaging/rpm/srpm.ts";
 
 const installTools = process.argv.includes("--install-tools");
 

@@ -1,11 +1,12 @@
-// Generates the RPM install scaffolding (desktop file, icons, /usr/bin symlink)
-// into a target directory. Run from the RPM build after `pnpm install`, e.g.:
-//   node scripts/build-rpm-scaffold.mts <out-dir>
+// Generates the install scaffolding (desktop file, icons, /usr/bin symlink)
+// into a target directory. Used by both the RPM and Debian builds after
+// `pnpm install`, e.g.:
+//   node scripts/build-scaffold.ts <out-dir>
 import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 
-import { createDesktopFile } from "../packaging/common/desktop.js";
-import { writeScaffold } from "../packaging/common/scaffold.js";
+import { createDesktopFile } from "../packaging/common/desktop.ts";
+import { writeScaffold } from "../packaging/common/scaffold.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
@@ -39,4 +40,4 @@ await writeScaffold(outDir, {
   paths: { symlink: true },
 });
 
-console.log(`RPM scaffolding written to ${outDir}`);
+console.log(`Install scaffolding written to ${outDir}`);
