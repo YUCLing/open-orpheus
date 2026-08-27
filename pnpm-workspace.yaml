@@ -16,8 +16,6 @@ patchedDependencies:
   "@electron-forge/plugin-vite": patches/@electron-forge__plugin-vite.patch
   # Drop other adapter support, as we always use node:sqlite
   "@keyv/sqlite": patches/@keyv__sqlite.patch
-  # Fixes compatibility with latest rpmbuild
-  electron-installer-redhat@3.4.0: patches/electron-installer-redhat@3.4.0.patch
 blockExoticSubdeps: false
 nodeLinker: hoisted
 overrides:

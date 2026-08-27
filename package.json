@@ -34,9 +34,6 @@
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",
-    "@electron-forge/maker-deb": "^7.11.2",
-    "@electron-forge/maker-flatpak": "^7.11.2",
-    "@electron-forge/maker-rpm": "^7.11.2",
     "@electron-forge/maker-squirrel": "^7.11.2",
     "@electron-forge/maker-zip": "^7.11.2",
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
@@ -102,11 +99,9 @@
     "music-tag-native": "^1.0.0"
   },
   "optionalDependencies": {
-    "@malept/electron-installer-flatpak": "^0.11.4",
     "@open-orpheus/dbus": "workspace:*",
     "@open-orpheus/nowplaying": "workspace:*",
-    "@open-orpheus/smtc": "workspace:*",
-    "electron-installer-redhat": "^3.4.0"
+    "@open-orpheus/smtc": "workspace:*"
   },
   "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"
 }
