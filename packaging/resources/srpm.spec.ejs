@@ -87,6 +87,10 @@ mkdir -p %{buildroot}/usr/lib/%{name}
 cp -r %{_builddir}/%{name}-%{version}/out/%{name}-linux-*/. %{buildroot}/usr/lib/%{name}/
 <% } %>
 
+# Electron's SUID sandbox helper must be root-owned with mode 4755 (setuid) or
+# the app crashes at launch.
+chmod 4755 %{buildroot}/usr/lib/%{name}/chrome-sandbox
+
 # Install the license
 install -Dm0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
 

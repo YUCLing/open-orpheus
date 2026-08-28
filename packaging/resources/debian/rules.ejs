@@ -53,6 +53,13 @@ override_dh_auto_install:
 	cp -r out/open-orpheus-linux-*/. debian/open-orpheus/usr/lib/open-orpheus/
 <% } %>
 
+# Electron's SUID sandbox helper must be root:root 4755 or the app crashes at
+# launch. dh_fixperms strips setuid bits by default, so re-apply it afterwards
+override_dh_fixperms:
+	set -e
+	dh_fixperms
+	chmod 4755 debian/open-orpheus/usr/lib/open-orpheus/chrome-sandbox
+
 # Don't strip the bundled Electron binaries — that can break them.
 override_dh_strip:
 
