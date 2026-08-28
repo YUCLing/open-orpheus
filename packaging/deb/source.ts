@@ -37,6 +37,17 @@ async function resolveMeta(projectRoot: string) {
 }
 
 /**
+ * Parse the upstream version of the top `debian/changelog` entry, e.g.
+ * `open-orpheus (0.16.2-1) unstable; urgency=medium` → `0.16.2` (revision
+ * stripped). Returns undefined if no entry can be parsed.
+ */
+function parseChangelogVersion(changelog: string): string | undefined {
+  const match = changelog.match(/^\S+ \(([^)]+)\) /m);
+  if (!match) return undefined;
+  return match[1].replace(/-\d+$/, "");
+}
+
+/**
  * Create `name_version.orig.tar.gz` and stage a source tree with `debian/`
  * into `outDir`. Returns the staged source directory.
  */
@@ -108,6 +119,23 @@ async function stageSource(
     resolve(srcDir, "debian", "control"),
     options.control
   );
+
+  // 5. dpkg-source derives the source version from the changelog and uses it
+  //    to locate `name_<version>.orig.tar.gz`, so the top entry MUST match the
+  //    package version. Fail early instead of producing an unbuildable source
+  //    package (the release workflow keeps these in sync via generate-changelog.ts).
+  const changelog = await readFile(
+    resolve(srcDir, "debian", "changelog"),
+    "utf-8"
+  );
+  const changelogVersion = parseChangelogVersion(changelog);
+  if (changelogVersion !== version) {
+    throw new Error(
+      `debian/changelog top version (${changelogVersion ?? "missing"}) does not ` +
+        `match package version (${version}). Run the release workflow or update ` +
+        `packaging/resources/debian/changelog before building a source package.`
+    );
+  }
   return srcDir;
 }
 
