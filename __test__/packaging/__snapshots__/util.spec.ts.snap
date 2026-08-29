@@ -1,0 +1,82 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`createSymlink > creates a relocatable relative symlink 1`] = `
+[
+  0,
+  {},
+  {
+    "usr": [
+      0,
+      {},
+      {
+        "bin": [
+          0,
+          {},
+          {
+            "open-orpheus": [
+              2,
+              {
+                "target": "..\\lib\\open-orpheus\\open-orpheus",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]
+`;
+
+exports[`createSymlink > creates parent directories for the link 1`] = `
+[
+  0,
+  {},
+  {
+    "opt": [
+      0,
+      {},
+      {
+        "bin": [
+          0,
+          {},
+          {
+            "foo": [
+              2,
+              {
+                "target": "..\\lib\\foo\\foo",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]
+`;
+
+exports[`createSymlink > replaces an existing entry at the link path 1`] = `
+[
+  0,
+  {},
+  {
+    "usr": [
+      0,
+      {},
+      {
+        "bin": [
+          0,
+          {},
+          {
+            "open-orpheus": [
+              2,
+              {
+                "target": "..\\lib\\open-orpheus\\open-orpheus",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]
+`;

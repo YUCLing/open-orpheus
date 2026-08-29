@@ -49,11 +49,11 @@ jobs:
       - name: Build native modules
         run: pnpm build:modules
 
-      - name: Install Flatpak dependencies
+      - name: Install packaging dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y flatpak flatpak-builder elfutils
+          sudo apt-get install -y flatpak flatpak-builder appstream elfutils debhelper-compat
 
       - name: Set up Flatpak runtimes
         if: runner.os == 'Linux'
@@ -63,9 +63,7 @@ jobs:
 
       - name: Validate metainfo
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get install -y appstream
-          appstreamcli validate packaging/flatpak/metainfo.xml
+        run: appstreamcli validate packaging/flatpak/metainfo.xml
 
       - name: Build application bundles
         run: pnpm make

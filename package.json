@@ -10,6 +10,10 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "make:srpm": "node scripts/build-srpm.ts",
+    "make:rpm": "node scripts/build-rpm.ts",
+    "make:deb-src": "node scripts/build-deb-src.ts",
+    "make:deb": "node scripts/build-deb.ts",
     "publish": "electron-forge publish",
     "lint": "pnpm lint:eslint && pnpm lint:types",
     "lint:eslint": "eslint .",
@@ -30,9 +34,6 @@
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.2",
-    "@electron-forge/maker-deb": "^7.11.2",
-    "@electron-forge/maker-flatpak": "^7.11.2",
-    "@electron-forge/maker-rpm": "^7.11.2",
     "@electron-forge/maker-squirrel": "^7.11.2",
     "@electron-forge/maker-zip": "^7.11.2",
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
@@ -45,7 +46,9 @@
     "@open-orpheus/lifecycle": "workspace:*",
     "@reforged/maker-appimage": "^5.2.0",
     "@types/audioworklet": "^0.0.100",
+    "@types/ejs": "^3.1.5",
     "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/lodash": "^4.17.25",
     "@types/node": "^25.9.5",
     "@types/semver": "^7.7.1",
     "@types/unzipper": "^0.10.11",
@@ -55,6 +58,7 @@
     "@xmldom/xmldom": "^0.9.10",
     "@yxim/nim-web-sdk": "^9.21.14",
     "cookie": "^2.0.1",
+    "ejs": "^6.0.1",
     "electron": "43.3.0",
     "emittery": "^2.0.0",
     "eslint": "^10.7.0",
@@ -68,7 +72,9 @@
     "http-proxy-agent": "^9.1.0",
     "https-proxy-agent": "^9.1.0",
     "keyv": "catalog:",
+    "lodash": "^4.18.1",
     "magic-string": "^1.1.0",
+    "memfs": "^4.68.1",
     "mime": "^4.1.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
@@ -80,7 +86,8 @@
     "socks-proxy-agent": "^10.1.0",
     "typescript": "catalog:",
     "unzipper": "^0.12.5",
-    "vite": "^8.1.4"
+    "vite": "^8.1.4",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "7z-wasm": "^1.2.0",
@@ -92,11 +99,9 @@
     "music-tag-native": "^1.0.0"
   },
   "optionalDependencies": {
-    "@malept/electron-installer-flatpak": "^0.11.4",
     "@open-orpheus/dbus": "workspace:*",
-    "@open-orpheus/smtc": "workspace:*",
     "@open-orpheus/nowplaying": "workspace:*",
-    "electron-installer-redhat": "^3.4.0"
+    "@open-orpheus/smtc": "workspace:*"
   },
   "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"
 }

@@ -1,0 +1,73 @@
+#!/usr/bin/make -f
+# Generated from packaging/resources/debian/rules.ejs — do not edit by hand.
+
+.ONESHELL:
+SHELL := /bin/bash
+export DH_VERBOSE := 1
+
+%:
+	dh $@
+
+override_dh_auto_build:
+<% if (prebuilt) { %>
+	# The prebuilt Electron app is bundled in the source tree (prebuilt/) —
+	# nothing to build.
+<% } else { %>
+	set -e
+<% if (installTools !== false) { %>
+	# Install the build toolchain (rust/node/pnpm) in a temp HOME.
+	export HOME="$$(mktemp -d)"
+	export CARGO_HOME="$$HOME/.cargo"
+	export RUSTUP_HOME="$$HOME/.rustup"
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	. "$$HOME/.cargo/env"
+	rustup target add wasm32-unknown-unknown
+	WASM_BINDGEN="$$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $$3); print $$3; exit }' Cargo.toml)"
+	cargo install "wasm-bindgen-cli@$${WASM_BINDGEN}"
+	export NVM_DIR="$$HOME/.nvm"
+	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+	. "$$HOME/.nvm/nvm.sh"
+	NODE_VERSION="$$(sed -n 's/.*"node"[[:space:]]*:[[:space:]]*">=\([0-9][0-9]*\).*/\1/p' package.json | head -n1)"
+	nvm install "$${NODE_VERSION:-24}"
+	corepack enable pnpm
+	corepack install
+<% } %>
+	# Install dependencies, build native modules, and package the Electron app.
+	pnpm install --frozen-lockfile
+	pnpm run build:modules
+	pnpm run package
+	# Generate the install scaffolding (desktop, icons, /usr/bin symlink).
+	node scripts/build-scaffold.ts rpm-scaffold --name <%- name %>
+<% } %>
+
+override_dh_auto_install:
+	set -e
+	mkdir -p debian/open-orpheus/usr
+<% if (prebuilt) { %>
+	cp -r prebuilt/scaffold/usr debian/open-orpheus/
+	mkdir -p debian/open-orpheus/usr/lib/open-orpheus
+	cp -r prebuilt/app/. debian/open-orpheus/usr/lib/open-orpheus/
+<% } else { %>
+	cp -r rpm-scaffold/usr debian/open-orpheus/
+	mkdir -p debian/open-orpheus/usr/lib/open-orpheus
+	cp -r out/open-orpheus-linux-*/. debian/open-orpheus/usr/lib/open-orpheus/
+<% } %>
+
+# Electron's SUID sandbox helper must be root:root 4755 or the app crashes at
+# launch. dh_fixperms strips setuid bits by default, so re-apply it afterwards
+override_dh_fixperms:
+	set -e
+	dh_fixperms
+	chmod 4755 debian/open-orpheus/usr/lib/open-orpheus/chrome-sandbox
+
+# Don't strip the bundled Electron binaries — that can break them.
+override_dh_strip:
+
+# Don't DWARF-compress them either — dh_dwz aborts on Electron's debug
+# sections (missing .debug_info, unknown .debug_addr, multifile failure).
+override_dh_dwz:
+
+# Don't run dpkg-shlibdeps on the bundled Electron ELFs — it hard-fails on
+# missing dev packages (e.g. libasound.so.2) on the build host. Runtime deps
+# are declared explicitly in debian/control instead.
+override_dh_shlibdeps:

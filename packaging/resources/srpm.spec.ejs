@@ -1,0 +1,107 @@
+# Open Orpheus RPM spec
+# Generated from packaging/resources/srpm.spec.ejs — do not edit by hand.
+%global debug_package %{nil}
+%define _binary_payload w2.xzdio
+
+Name:           <%- name %>
+Version:        <%- version %>
+Release:        <%- release %>
+Summary:        <%- summary %>
+
+License:        <%- license %>
+URL:            <%- homepage %>
+Source0:        %{name}-%{version}.tar.gz
+<% if (prebuilt) { %>
+Source1:        %{name}-%{version}-prebuilt.tar.gz
+<% } %>
+
+AutoReqProv:    no
+Requires:       (nss or mozilla-nss), gtk3
+BuildRequires:  gcc, gcc-c++, make, git, curl
+
+%description
+<%- description %>
+
+%prep
+%setup -q
+<% if (prebuilt) { %>
+# Unpack the prebuilt artifact (Source1) beside the extracted source.
+tar xzf %{_sourcedir}/%{name}-%{version}-prebuilt.tar.gz -C %{_builddir}/%{name}-%{version}
+<% } %>
+
+%build
+<% if (prebuilt) { %>
+# The prebuilt Electron app is bundled in Source1 — nothing to build.
+<% } else { %>
+<% if (installTools !== false) { %>
+# Use a writable HOME for toolchain installs
+export HOME="$(mktemp -d)"
+
+# Install Rust toolchain for native modules
+export CARGO_HOME="$HOME/.cargo"
+export RUSTUP_HOME="$HOME/.rustup"
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+. "$HOME/.cargo/env"
+rustup target add wasm32-unknown-unknown
+cargo install "wasm-bindgen-cli@<%- wasmBindgen %>"
+
+# Install nvm and Node.js
+export NVM_DIR="$HOME/.nvm"
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+. "$HOME/.nvm/nvm.sh"
+nvm install <%- nodeVersion %>
+corepack enable pnpm
+corepack install
+<% } %>
+
+# Install dependencies and build native modules
+pnpm install --frozen-lockfile
+# Copr adds a flag that is not supported by WASM rust-lld; strip it. Use sed
+# (POSIX) rather than ${var//.../} (a bashism) so %build also works when
+# rpmbuild runs it under dash (e.g. GitHub Actions' ubuntu runners).
+ORIGINAL_RUSTFLAGS="$RUSTFLAGS"
+export RUSTFLAGS="$(printf '%s' "$RUSTFLAGS" | sed 's|-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes||g')"
+pnpm run build:modules
+export RUSTFLAGS="$ORIGINAL_RUSTFLAGS"
+
+# Package the Electron app (produces out/<%- name %>-linux-*)
+pnpm run package
+
+# Generate the install scaffolding (desktop file, icons, symlink) with our scaffolder
+node scripts/build-scaffold.ts %{_builddir}/%{name}-%{version}/rpm-scaffold --name %{name}
+<% } %>
+
+%install
+mkdir -p %{buildroot}
+<% if (prebuilt) { %>
+# Install the scaffold and prebuilt app unpacked in %prep.
+cp -r %{_builddir}/%{name}-%{version}/%{name}-%{version}-prebuilt/scaffold/usr %{buildroot}/
+mkdir -p %{buildroot}/usr/lib/%{name}
+cp -r %{_builddir}/%{name}-%{version}/%{name}-%{version}-prebuilt/app/. %{buildroot}/usr/lib/%{name}/
+<% } else { %>
+# Install the scaffolding generated in %build
+cp -r %{_builddir}/%{name}-%{version}/rpm-scaffold/usr %{buildroot}/
+
+# Install the freshly-built Electron app
+mkdir -p %{buildroot}/usr/lib/%{name}
+cp -r %{_builddir}/%{name}-%{version}/out/%{name}-linux-*/. %{buildroot}/usr/lib/%{name}/
+<% } %>
+
+# Electron's SUID sandbox helper must be root-owned with mode 4755 (setuid) or
+# the app crashes at launch.
+chmod 4755 %{buildroot}/usr/lib/%{name}/chrome-sandbox
+
+# Install the license
+install -Dm0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
+
+%files
+/usr/bin/%{name}
+/usr/lib/%{name}/
+/usr/share/applications/%{name}.desktop
+/usr/share/icons/hicolor/256x256/apps/%{name}.png
+/usr/share/icons/hicolor/512x512/apps/%{name}.png
+/usr/share/icons/hicolor/scalable/apps/%{name}.svg
+%license %{_licensedir}/%{name}/LICENSE
+
+%changelog
+<%- changelog %>

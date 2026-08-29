@@ -15,6 +15,6 @@ srpm:
 	# Install project dependencies (only JS, no native build needed)
 	pnpm install --frozen-lockfile --ignore-scripts
 	# Generate arch-independent SRPM
-	node scripts/build-srpm.ts
+	pnpm make:srpm --install-tools
 	# Copy resulting SRPM to the Copr output directory
 	find out/make/srpm -name '*.src.rpm' -exec cp {} $(outdir)/ \;
