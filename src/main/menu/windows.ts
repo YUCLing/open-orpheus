@@ -51,9 +51,9 @@ function unwrap(managed: ManagedWindow): BrowserWindow {
 }
 
 class MenuWindow extends ManagedWindow {
-  constructor() {
+  constructor(width = 300, height = 400) {
     super();
-    this.createBrowserWindow(menuWindowOptions);
+    this.createBrowserWindow({ ...menuWindowOptions, width, height });
     this.loadGuiRoute("/menu");
   }
 }
@@ -102,17 +102,21 @@ const submenuWindowOptions = {
 export class SubmenuWindow extends ManagedWindow {
   readonly browserWindow: BrowserWindow;
 
-  constructor() {
+  constructor(width = 300, height = 400) {
     super();
-    this.browserWindow = this.createBrowserWindow(submenuWindowOptions);
+    this.browserWindow = this.createBrowserWindow({ ...submenuWindowOptions, width, height });
     this.loadGuiRoute("/menu");
   }
 }
 
-export function createMenuWindow(): BrowserWindow {
+export function createMenuWindow(width = 300, height = 400): BrowserWindow {
   menuWindow?.window?.destroy();
-  menuWindow = new MenuWindow();
+  menuWindow = new MenuWindow(width, height);
   return unwrap(menuWindow);
+}
+
+export function createSubmenuWindow(width = 300, height = 400): BrowserWindow {
+  return new SubmenuWindow(width, height).browserWindow;
 }
 
 export function createOverlayWindow(): BrowserWindow {

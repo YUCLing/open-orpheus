@@ -28,17 +28,20 @@ pub(crate) enum Action {
     Suppress,
     /// Emit these messages in the original's place, in order.
     Replace(Vec<Vec<u8>>),
+    /// Replace the message with protocol-compatible synthesized bytes.
+    Replace(Vec<u8>),
 }
 
 /// Side effects a handler wants applied *after* the connection lock is
 /// released (global state updates / user callbacks).
 #[derive(Default)]
 pub(crate) struct Effects {
-    pub(crate) button: Option<(u32, u32, u32)>,
+    pub(crate) button: Option<(u32, u32, u32, i32, i32)>,
     pub(crate) entered: Option<(u32, i32, i32)>,
     pub(crate) arm_watchers_for: Option<u32>,
     /// A window whose surface could not take the layer role, by custom id.
     pub(crate) layer_shell_refused: Option<String>,
+    pub(crate) pointer_axis: bool,
 }
 
 pub(crate) fn dispatch_request(
@@ -78,7 +81,14 @@ pub(crate) fn dispatch_request(
         // The role is assigned here, so this is also where a layer-shell
         // declaration is consumed.
         (Iface::XdgSurface, REQ_GET_TOPLEVEL) => layer_shell::on_get_toplevel(fd, conn, msg, fx),
+        (Iface::XdgSurface, REQ_GET_TOPLEVEL) => objects::on_get_toplevel(fd, conn, msg, fx),
         (Iface::XdgToplevel, REQ_SET_TITLE) => title::on_set_title(fd, conn, msg),
+        (Iface::XdgPopupShim, REQ_SET_TITLE) => {
+            let _ = title::on_set_title(fd, conn, msg);
+            Action::Suppress
+        }
+        (Iface::XdgPopupShim, REQ_DESTROY) => objects::on_destroy(fd, conn, msg),
+        (Iface::XdgPopupShim, _) => Action::Suppress,
         (Iface::WlSurface | Iface::XdgSurface | Iface::XdgToplevel, REQ_DESTROY) => {
             objects::on_destroy(fd, conn, msg)
         }
@@ -117,6 +127,8 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
 
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlTouch) {
         return touch::on_touch_event(conn, msg, fx);
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::XdgPopupShim) {
+        return objects::on_popup_event(msg);
     }
 
     Action::Forward

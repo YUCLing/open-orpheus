@@ -4,6 +4,12 @@
 export declare function cancelLayerShellForNextWindow(): boolean
 
 /**
+ * Make the next Electron window on this Wayland connection an xdg_popup.
+ * Omit anchor coordinates to use the last pointer-button position on parent.
+ */
+export declare function armNextWindowAsPopup(parentWindowId: string, width: number, height: number, anchorX?: number | undefined | null, anchorY?: number | undefined | null): boolean
+
+/**
  * Listen for first CursorEnter event of the next created window.
  *
  * Only for Wayland on Linux.
@@ -19,6 +25,8 @@ export declare function captureNextWindowFirstCursorEnter(callback: (x: number, 
  * this and nothing else writes them at all.
  */
 export declare function decorateWindowTitle(id: string, title: string): string
+/** Invoke once when a Wayland pointer-axis event reaches this window's client. */
+export declare function captureWindowNextPointerAxis(windowId: string, callback: (axis: number) => void): void
 
 export declare const enum DesktopEnvironment {
   Wayland = 0,

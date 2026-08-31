@@ -393,7 +393,7 @@ registerCallHandler<MenuRequest, void>("winhelper.popupMenu", async (event, data
   const menu = new AppMenu(parsedMenuData.content);
   managed.setData("menu", menu);
   menu.setClickHandler(onClick);
-  void menu.show();
+  void menu.show(wnd);
 });
 
 registerCallHandler<[string], void>("winhelper.setClipBoardData", (event, data) => {
