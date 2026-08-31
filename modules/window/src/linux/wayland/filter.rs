@@ -87,22 +87,33 @@ pub(crate) fn filter(
             match action {
                 Action::Forward => out.extend_from_slice(msg.raw()),
                 Action::Suppress => {}
+                Action::Replace(bytes) => out.extend_from_slice(&bytes),
             }
         }
     }
 
     // Apply side effects after releasing the connection lock.
-    if let Some((seat_id, serial, surf_id)) = fx.button
+    if let Some((seat_id, serial, surf_id, x, y)) = fx.button
         && let Some(m) = LAST_BUTTON.get()
         && let Ok(mut opt) = m.lock()
     {
-        *opt = Some((fd, seat_id, serial, surf_id));
+        *opt = Some(LastButton {
+            fd,
+            seat_id,
+            serial,
+            wl_surface_id: surf_id,
+            x,
+            y,
+        });
     }
     if let Some((wl_surface_id, x, y)) = fx.entered {
         fire_first_cursor_enter_watchers(fd, wl_surface_id, x, y);
     }
     if let Some(wl_surface_id) = fx.arm_watchers_for {
         arm_first_cursor_enter_watchers(fd, wl_surface_id);
+    }
+    if fx.pointer_axis {
+        fire_next_pointer_axis(fd);
     }
 
     // ── Ancillary data + output assembly (unchanged semantics) ──

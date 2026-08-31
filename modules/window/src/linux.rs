@@ -25,6 +25,24 @@ fn disable_display_server_hooks() -> bool {
     })
 }
 
+fn desktop_name_is_gnome(value: &str) -> bool {
+    value.split(':').any(|desktop| {
+        let desktop = desktop.trim().to_ascii_lowercase();
+        desktop == "gnome" || desktop.starts_with("gnome-")
+    })
+}
+
+fn is_gnome_desktop() -> bool {
+    [
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_DESKTOP",
+        "DESKTOP_SESSION",
+    ]
+    .into_iter()
+    .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+    .is_some_and(|value| desktop_name_is_gnome(&value))
+}
+
 #[derive(Clone, Copy)]
 pub struct Rect {
     pub x: i32,
@@ -156,6 +174,48 @@ pub fn capture_next_window_first_cursor_enter(
     Ok(())
 }
 
+pub fn arm_next_window_as_popup(
+    parent_window_id: String,
+    width: i32,
+    height: i32,
+    anchor_x: Option<i32>,
+    anchor_y: Option<i32>,
+) -> bool {
+    if disable_display_server_hooks() || !wayland::is_wayland() || !is_gnome_desktop() {
+        return false;
+    }
+    let anchor = anchor_x.zip(anchor_y);
+    wayland::arm_next_window_as_popup(&parent_window_id, width, height, anchor)
+}
+
+pub fn capture_window_next_pointer_axis(
+    env: Env,
+    window_id: String,
+    callback: Function<FnArgs<(u32,)>, ()>,
+) -> Result<()> {
+    if disable_display_server_hooks() {
+        return env
+            .throw("captureWindowNextPointerAxis is unavailable when Wayland hooks are disabled");
+    }
+    let mut callback = Some(ManuallyDrop::new(
+        callback.build_threadsafe_function().build_callback(
+            |ctx: ThreadsafeCallContext<u32>| {
+                Ok(std::convert::Into::<FnArgs<(u32,)>>::into((ctx.value,)))
+            },
+        )?,
+    ));
+    if !wayland::on_next_pointer_axis(&window_id, move || {
+        let Some(cb) = callback.take() else {
+            return;
+        };
+        cb.call(0, ThreadsafeFunctionCallMode::NonBlocking);
+        ManuallyDrop::into_inner(cb);
+    }) {
+        return env.throw("Unable to watch pointer axis for this Wayland window");
+    }
+    Ok(())
+}
+
 #[napi_derive::module_init]
 fn main() {
     if !disable_display_server_hooks() {
@@ -173,3 +233,18 @@ pub extern "C" fn on_unload() {
 #[used]
 #[unsafe(link_section = ".fini_array")]
 static DESTRUCTOR: extern "C" fn() = on_unload;
+
+#[cfg(test)]
+mod tests {
+    use super::desktop_name_is_gnome;
+
+    #[test]
+    fn recognizes_only_gnome_desktop_names() {
+        assert!(desktop_name_is_gnome("GNOME"));
+        assert!(desktop_name_is_gnome("ubuntu:GNOME"));
+        assert!(desktop_name_is_gnome("GNOME-Classic"));
+        assert!(!desktop_name_is_gnome("KDE"));
+        assert!(!desktop_name_is_gnome("plasma"));
+        assert!(!desktop_name_is_gnome("niri"));
+    }
+}
