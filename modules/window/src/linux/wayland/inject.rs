@@ -120,13 +120,19 @@ pub(super) fn set_input_region_rects(window_id: &str, rects: Option<&[Rect]>) ->
 }
 
 pub(super) fn send_xdg_toplevel_move() -> bool {
-    let Some((fd, seat_id, serial, wl_surf_id)) = LAST_BUTTON
+    let Some(button) = LAST_BUTTON
         .get()
         .and_then(|m| m.lock().ok())
         .and_then(|g| *g)
     else {
         return false;
     };
+    let (fd, seat_id, serial, wl_surf_id) = (
+        button.fd,
+        button.seat_id,
+        button.serial,
+        button.wl_surface_id,
+    );
 
     let top_id = {
         let Some(conns) = CONNS.get() else {

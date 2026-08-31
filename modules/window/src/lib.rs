@@ -98,6 +98,47 @@ pub fn capture_next_window_first_cursor_enter(
     }
 }
 
+/// Make the next Electron window on this Wayland connection an xdg_popup.
+/// Omit anchor coordinates to use the last pointer-button position on parent.
+#[napi]
+pub fn arm_next_window_as_popup(
+    parent_window_id: String,
+    width: i32,
+    height: i32,
+    anchor_x: Option<i32>,
+    anchor_y: Option<i32>,
+) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::arm_next_window_as_popup(parent_window_id, width, height, anchor_x, anchor_y)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (parent_window_id, width, height, anchor_x, anchor_y);
+        false
+    }
+}
+
+/// Invoke once when a Wayland pointer-axis event reaches this window's client.
+#[napi]
+pub fn capture_window_next_pointer_axis(
+    env: Env,
+    window_id: String,
+    #[napi(ts_arg_type = "(axis: number) => void")] callback: Function<FnArgs<(u32,)>, ()>,
+) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::capture_window_next_pointer_axis(env, window_id, callback)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window_id, callback);
+        env.throw("Only supports Linux")
+    }
+}
+
 /// Gets the position of the cursor
 ///
 /// Only for X11 on Linux.

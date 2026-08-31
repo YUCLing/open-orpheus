@@ -7,7 +7,7 @@ import { workaroundEnabled, WorkaroundFlags } from "./workaround";
 let menuWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 
-export function createMenuWindow(): BrowserWindow {
+export function createMenuWindow(width = 300, height = 400): BrowserWindow {
   if (menuWindow && !menuWindow.isDestroyed()) {
     menuWindow.destroy();
     menuWindow = null;
@@ -15,8 +15,8 @@ export function createMenuWindow(): BrowserWindow {
 
   menuWindow = new BrowserWindow({
     title: "Open Orpheus Menu",
-    width: 300,
-    height: 400,
+    width,
+    height,
     show: false,
     frame: false,
     transparent: true,
@@ -42,6 +42,35 @@ export function createMenuWindow(): BrowserWindow {
   });
 
   return menuWindow;
+}
+
+export function createSubmenuWindow(width = 300, height = 400): BrowserWindow {
+  const wnd = new BrowserWindow({
+    title: "Open Orpheus Menu",
+    width,
+    height,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: true,
+    skipTaskbar: true,
+    resizable: false,
+    alwaysOnTop: true,
+    focusable: true,
+    webPreferences: {
+      partition: "open-orpheus",
+      preload: join(import.meta.dirname, "menu.js"),
+      additionalArguments: ["--submenu"],
+    },
+  });
+
+  if (GUI_VITE_DEV_SERVER_URL) {
+    wnd.loadURL(`${GUI_VITE_DEV_SERVER_URL}/menu`);
+  } else {
+    wnd.loadURL("gui://frontend/menu");
+  }
+  return wnd;
 }
 
 export function createOverlayWindow(): BrowserWindow {
