@@ -1,0 +1,17 @@
+
+[package]
+authors = ["YUCLing <luotianyi@luotianyi.me>"]
+edition = "2021"
+name    = "av3a"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi.workspace = true
+napi-derive.workspace = true
+avs3a = { git = "https://github.com/1254qwer/avs3a-rust.git", rev = "59213e47a27ffa6ba9211bac1f5a6c6fd182e9d8" }
+
+[build-dependencies]
+napi-build = "2"

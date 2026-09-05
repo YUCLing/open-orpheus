@@ -84,6 +84,7 @@
   },
   "dependencies": {
     "7z-wasm": "^1.2.0",
+    "@open-orpheus/av3a": "workspace:*",
     "@open-orpheus/database": "workspace:*",
     "@open-orpheus/ui": "workspace:*",
     "@open-orpheus/window": "workspace:*",
@@ -94,8 +95,8 @@
   "optionalDependencies": {
     "@malept/electron-installer-flatpak": "^0.11.4",
     "@open-orpheus/dbus": "workspace:*",
-    "@open-orpheus/smtc": "workspace:*",
     "@open-orpheus/nowplaying": "workspace:*",
+    "@open-orpheus/smtc": "workspace:*",
     "electron-installer-redhat": "^3.4.0"
   },
   "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"

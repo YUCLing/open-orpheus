@@ -16,6 +16,10 @@ import { events as lifecycleEvents } from "./lifecycle";
 import { kv as settings } from "./settings";
 import { toError } from "../util";
 import { decodeNcae } from "./ncae";
+import { registerIpcHandlers } from "../bridge/register";
+import type { Av3aContract } from "../bridge/contracts/av3a-api";
+import { Av3aPlaybackProcess } from "./av3a/Av3aPlaybackProcess";
+import { onlineStreamerToAv3aSource } from "./av3a/onlineStreamerSource";
 
 enum AudioType {
   Local,
@@ -39,6 +43,145 @@ let state: CurrentAudioState | null = null;
 function sendProgress(prog: number) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send("audio.onProgress", prog);
+}
+
+type Av3aPlaybackState = {
+  playId: string;
+  streamer: OnlineStreamer;
+  process: Av3aPlaybackProcess;
+};
+
+let av3aState: Av3aPlaybackState | null = null;
+/** Monotonic sequence for AV3A start requests (only the newest may win). */
+let av3aRequestSeq = 0;
+
+function sendAv3aEvent(event: string, ...args: unknown[]) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(`av3a.${event}`, ...args);
+}
+
+async function stopAv3aPlayback() {
+  const current = av3aState;
+  if (!current) return;
+  av3aState = null;
+  await current.process.stop().catch((error: unknown) => {
+    LOGGER.error({ err: toError(error) }, `Failed to stop av3a decode process`);
+  });
+  await current.streamer.destroy().catch((error: unknown) => {
+    LOGGER.error(
+      { err: toError(error) },
+      `Failed to destroy av3a OnlineStreamer`
+    );
+  });
+}
+
+async function startAv3aPlayback(playInfo: AudioPlayInfo) {
+  // Guard against "old request wins": only the most recently requested song
+  // may start. Each call claims a new sequence number; a stale request tears
+  // itself down quietly once its async preparation finishes.
+  const requestSeq = ++av3aRequestSeq;
+  const isStale = () => requestSeq !== av3aRequestSeq;
+
+  await stopAv3aPlayback();
+
+  if (playInfo.type !== 4 || playInfo.audioFormat !== "av3a") {
+    sendAv3aEvent(
+      "error",
+      "AV3A decode currently supports URL (type 4, av3a) playback only"
+    );
+    return;
+  }
+
+  const songId = playInfo.songId;
+  const streamer = new OnlineStreamer(playInfo.musicurl);
+
+  streamer.on("progress", (e) => {
+    if (av3aState?.streamer !== streamer) return;
+    sendAv3aEvent("progress", e.data.loaded, e.data.total);
+  });
+
+  streamer.on("complete", async () => {
+    if (av3aState?.streamer !== streamer) return;
+    try {
+      const buf = await streamer.readBuffer();
+      await playCacheManager?.cacheTrack(songId, buf, {
+        md5: playInfo.md5,
+        bitrate: playInfo.bitrate,
+        playInfoStr: playInfo.playInfoStr,
+        volumeGain: 0,
+        fileSize: buf.length,
+      });
+    } catch (error) {
+      LOGGER.error(
+        { err: toError(error), songId },
+        `Failed to cache av3a track`
+      );
+    }
+  });
+
+  streamer.on("error", (e) => {
+    LOGGER.error({ err: e.data }, `Av3a OnlineStreamer errored`);
+  });
+
+  try {
+    await streamer.whenReady();
+  } catch (error) {
+    // Only the newest request reports its own preparation failure.
+    if (!isStale()) {
+      sendAv3aEvent("error", toError(error).message);
+    }
+    await streamer.destroy().catch(() => {});
+    return;
+  }
+
+  // A newer request superseded this one while it was preparing.
+  if (isStale()) {
+    await streamer.destroy().catch(() => {});
+    return;
+  }
+  // We are the newest request. An older request that slipped through and
+  // already started (before we finished preparing) must yield to us.
+  await stopAv3aPlayback();
+  if (isStale()) {
+    // Superseded again while stopping the older session.
+    await streamer.destroy().catch(() => {});
+    return;
+  }
+
+  const rendererWebContents = mainWindow?.webContents;
+  if (!rendererWebContents || mainWindow?.isDestroyed()) {
+    sendAv3aEvent("error", "Player window is not available");
+    await streamer.destroy().catch(() => {});
+    return;
+  }
+
+  // Decode + pacing run in a dedicated utility process. PCM and renderer flow
+  // control travel on a direct renderer<->utility channel, so playback keeps
+  // going even while this (main) process is blocked, e.g. by a window drag.
+  const process = new Av3aPlaybackProcess({
+    source: onlineStreamerToAv3aSource(streamer),
+    rendererWebContents,
+    sendEvent: sendAv3aEvent,
+  });
+
+  av3aState = { playId: playInfo.playId, streamer, process };
+  try {
+    await process.start();
+  } catch (error) {
+    if (av3aState?.process === process) av3aState = null;
+    await process.stop().catch(() => {});
+    await streamer.destroy().catch(() => {});
+    if (!isStale()) {
+      sendAv3aEvent("error", toError(error).message);
+    }
+    return;
+  }
+  if (isStale()) {
+    // Superseded while starting; tear down quietly (the newer request owns it).
+    if (av3aState?.process === process) av3aState = null;
+    await process.stop().catch(() => {});
+    await streamer.destroy().catch(() => {});
+  }
 }
 
 export async function readEffect(pathInfo: { path: string; pathtype: number }) {
@@ -221,6 +364,7 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
   mainWindow.webContents.ipc.handle(
     "audio.updatePlayInfo",
     (event, playInfo: AudioPlayInfo | null) => {
+      void stopAv3aPlayback();
       if (state?.type === AudioType.URL) {
         // We don't await this, let it destroy in background
         state.streamer.destroy().catch((e) => {
@@ -232,6 +376,13 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
       }
       state = null;
       if (!playInfo) return;
+
+      if (playInfo.type === 4 && playInfo.audioFormat === "av3a") {
+        // AV3A is decoded by a dedicated decode utility process (forked and
+        // managed here), not by Chromium. The player window starts that
+        // process through the `av3a` bridge.
+        return;
+      }
 
       if (playInfo.type === 0) {
         // Local File Play
@@ -282,4 +433,13 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
       }
     }
   );
+
+  registerIpcHandlers<Av3aContract>(mainWindow.webContents, "av3a", {
+    start: async (_event, playInfo: AudioPlayInfo) => {
+      await startAv3aPlayback(playInfo);
+    },
+    stop: async () => {
+      await stopAv3aPlayback();
+    },
+  });
 });
