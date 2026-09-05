@@ -1,5 +1,5 @@
 [workspace]
-members = ["modules/database", "modules/window", "modules/ui", "modules/audio-effect", "modules/dbus", "modules/smtc", "modules/nowplaying"]
+members = ["modules/database", "modules/window", "modules/ui", "modules/audio-effect", "modules/dbus", "modules/smtc", "modules/nowplaying", "modules/av3a"]
 resolver = "3"
 
 [workspace.dependencies]

@@ -3,8 +3,8 @@ import { fireNativeCall } from "./channel";
 import Player, { AudioPlayerState } from "./Player";
 import { toError } from "../util";
 
-export const PLAYING_EVENTS = ["play", "playing"];
-export const HALTED_EVENTS = ["pause", "stalled", "ended", "error"];
+export const PLAYING_EVENTS = ["play", "playing"] as const;
+export const HALTED_EVENTS = ["pause", "stalled", "ended", "error"] as const;
 
 export const player = new Player();
 
@@ -46,7 +46,7 @@ player.on("load", (event) => {
   fireNativeCall("audioplayer.onLoad", id, {
     activeCode: 0,
     code: 0,
-    duration: player.audio.duration || 0,
+    duration: player.duration || 0,
     errorCode: 0,
     errorString: "",
     openWholeCached: true,
@@ -54,7 +54,7 @@ player.on("load", (event) => {
   });
 });
 
-player.audio.addEventListener("play", () => {
+player.on("play", () => {
   // 1806160891_1B5MK7|resume|XEDKE2
   // 1806160891|pause|4RB6IY
   fireNativeCall(
@@ -65,7 +65,7 @@ player.audio.addEventListener("play", () => {
   );
 });
 
-player.audio.addEventListener("pause", () => {
+player.on("pause", () => {
   fireNativeCall(
     "audioplayer.onPlayState",
     player.currentId,
@@ -74,21 +74,25 @@ player.audio.addEventListener("pause", () => {
   );
 });
 
-player.audio.addEventListener("ended", () => {
+player.on("ended", () => {
   fireNativeCall("audioplayer.onEnd", player.currentId, {
     activeCode: 0,
     code: 0,
     errorCode: 0,
     errorString: "",
-    playedAudioTime: player.audio.duration * 1000 || 0,
-    playedTime: player.audio.duration * 1000 || 0,
+    playedAudioTime: player.duration * 1000 || 0,
+    playedTime: player.duration * 1000 || 0,
   });
 });
 
-player.audio.addEventListener("error", async (e) => {
+player.on("error", async ({ data }) => {
   const id = player.currentId;
   const playInfo = player.currentPlayInfo;
   try {
+    if (data instanceof Error) {
+      // Decode error from the AV3A path.
+      throw data;
+    }
     if (playInfo?.type === 4) {
       const [res] = await ipcRenderer.invoke("channel.call", "network.fetch", {
         url: playInfo.musicurl,
@@ -100,7 +104,7 @@ player.audio.addEventListener("error", async (e) => {
         fireNativeCall("audioplayer.onrequestrefreshsongurl", playInfo);
       } else {
         // Not because of the expired link
-        throw e.error;
+        throw new Error("Audio playback failed");
       }
     }
   } catch {
@@ -110,28 +114,28 @@ player.audio.addEventListener("error", async (e) => {
       code: 2,
       errorCode: 3,
       errorString: "",
-      playedAudioTime: player.audio.currentTime * 1000 || 0,
-      playedTime: player.audio.currentTime * 1000 || 0,
+      playedAudioTime: player.currentTime * 1000 || 0,
+      playedTime: player.currentTime * 1000 || 0,
     });
   }
 });
 
-player.audio.addEventListener("seeked", () => {
+player.on("seeked", () => {
   fireNativeCall(
     "audioplayer.onSeek",
     player.currentId,
     "",
     0,
-    player.audio.currentTime
+    player.currentTime
   );
   notifyBuffering(true);
 });
 
-player.audio.addEventListener("stalled", () => {
+player.on("stalled", () => {
   notifyBuffering(true);
 });
 
-player.audio.addEventListener("playing", () => {
+player.on("playing", () => {
   notifyBuffering(false);
 });
 
@@ -139,7 +143,7 @@ const onPlayProgress = () => {
   fireNativeCall(
     "audioplayer.onPlayProgress",
     player.currentId,
-    player.audio.currentTime,
+    player.currentTime,
     bufferProgress
   );
 };
@@ -158,10 +162,8 @@ function stopProgressRaf() {
   cancelAnimationFrame(rafId);
   rafId = null;
 }
-PLAYING_EVENTS.forEach((e) =>
-  player.audio.addEventListener(e, startProgressRaf)
-);
-HALTED_EVENTS.forEach((e) => player.audio.addEventListener(e, stopProgressRaf));
+PLAYING_EVENTS.forEach((e) => player.on(e, startProgressRaf));
+HALTED_EVENTS.forEach((e) => player.on(e, stopProgressRaf));
 ipcRenderer.on("audio.onProgress", (event, progress) => {
   bufferProgress = progress;
   onPlayProgress();
@@ -177,8 +179,8 @@ player.on("audiodata", (event) => {
   fireNativeCall("audioplayer.onAudioData", { data, pts });
 });
 
-player.audio.addEventListener("ratechange", () => {
-  ipcRenderer.send("player.playbackratechange", player.audio.playbackRate);
+player.on("ratechange", () => {
+  ipcRenderer.send("player.playbackratechange", player.playbackRate);
 });
 
 const PLAYBACK_CHANGE = {
@@ -193,52 +195,47 @@ const PLAYBACK_CHANGE = {
 // `seeking` are transient: media-session status keeps its previous value, while
 // lyrics still learns progress stopped via the controller's derived boolean.
 PLAYING_EVENTS.forEach((e) =>
-  player.audio.addEventListener(e, () => {
+  player.on(e, () => {
     ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.PLAYING);
   })
 );
-["pause"].forEach((e) =>
-  player.audio.addEventListener(e, () => {
-    ipcRenderer.send(
-      "player.playbackchange",
-      player.currentPlayInfo ? PLAYBACK_CHANGE.PAUSED : PLAYBACK_CHANGE.STOPPED
-    );
-  })
-);
-["ended", "error"].forEach((e) =>
-  player.audio.addEventListener(e, () => {
-    ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.STOPPED);
-  })
-);
-["stalled"].forEach((e) =>
-  player.audio.addEventListener(e, () => {
-    ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.STALLED);
-  })
-);
-["seeking"].forEach((e) =>
-  player.audio.addEventListener(e, () => {
-    ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.SEEKING);
-  })
-);
+player.on("pause", () => {
+  ipcRenderer.send(
+    "player.playbackchange",
+    player.currentPlayInfo ? PLAYBACK_CHANGE.PAUSED : PLAYBACK_CHANGE.STOPPED
+  );
+});
+player.on("ended", () => {
+  ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.STOPPED);
+});
+player.on("error", () => {
+  ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.STOPPED);
+});
+player.on("stalled", () => {
+  ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.STALLED);
+});
+player.on("seeking", () => {
+  ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.SEEKING);
+});
 
-player.audio.addEventListener("seeked", () =>
-  ipcRenderer.send("player.seeked", player.audio.currentTime)
+player.on("seeked", () =>
+  ipcRenderer.send("player.seeked", player.currentTime)
 );
-player.audio.addEventListener("timeupdate", () =>
-  ipcRenderer.send("player.timeupdate", player.audio.currentTime)
+player.on("timeupdate", () =>
+  ipcRenderer.send("player.timeupdate", player.currentTime)
 );
-player.audio.addEventListener("durationchange", () => {
-  let duration: number | null = player.audio.duration;
+player.on("durationchange", () => {
+  let duration: number | null = player.duration;
   if (!isFinite(duration) || duration < 0) duration = null;
   ipcRenderer.send("player.durationchange", duration);
 });
 
 ipcRenderer.on("player.seek", (e, delta) => {
-  player.audio.currentTime += delta;
+  player.currentTime += delta;
 });
 
 ipcRenderer.on("player.seekto", (e, position) => {
-  player.audio.currentTime = position;
+  player.currentTime = position;
 });
 
 ipcRenderer.on("player.volume", (e, volume) => {

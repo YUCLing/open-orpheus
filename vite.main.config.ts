@@ -10,6 +10,7 @@ import ForceESPlugin from "./plugins/ForceESPlugin.js";
 
 // https://vitejs.dev/config
 export default defineConfig({
+  base: "",
   resolve: {
     alias: {
       $sharedTypes: path.resolve(
@@ -20,7 +21,7 @@ export default defineConfig({
   },
   build: {
     sourcemap: process.env.INLINE_SOURCEMAP ? "inline" : false,
-    rollupOptions: {
+    rolldownOptions: {
       external: [
         // Node built-ins
         "sqlite",
@@ -37,6 +38,12 @@ export default defineConfig({
         "@open-orpheus/smtc",
         "@open-orpheus/nowplaying",
       ],
+    },
+  },
+  worker: {
+    format: "es",
+    rolldownOptions: {
+      external: [/^node:/, "@open-orpheus/av3a"],
     },
   },
   // unzipper has a dependency on @aws-sdk/client-s3, which is not needed in

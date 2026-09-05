@@ -81,6 +81,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_fdnreverb_free: (a: number, b: number) => void;
+    readonly __wbg_spatialenhancer_free: (a: number, b: number) => void;
     readonly fdnreverb_new: (a: number) => number;
     readonly fdnreverb_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
     readonly fdnreverb_set_decay: (a: number, b: number) => void;
@@ -91,18 +92,17 @@ export interface InitOutput {
     readonly fdnreverb_set_q: (a: number, b: number) => void;
     readonly fdnreverb_set_rshape: (a: number, b: number) => void;
     readonly fdnreverb_set_swidth: (a: number, b: number) => void;
-    readonly __wbg_earlyreflections_free: (a: number, b: number) => void;
-    readonly earlyreflections_new: (a: number) => number;
-    readonly earlyreflections_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
-    readonly earlyreflections_set_pattern: (a: number, b: number, c: number) => void;
-    readonly earlyreflections_set_sdelay: (a: number, b: number) => void;
-    readonly __wbg_spatialenhancer_free: (a: number, b: number) => void;
     readonly spatialenhancer_new: (a: number) => number;
     readonly spatialenhancer_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly spatialenhancer_set_ambience: (a: number, b: number) => void;
     readonly spatialenhancer_set_presence: (a: number, b: number) => void;
     readonly spatialenhancer_set_sshaper: (a: number, b: number, c: number) => void;
     readonly spatialenhancer_set_stereoizer: (a: number, b: number) => void;
+    readonly __wbg_earlyreflections_free: (a: number, b: number) => void;
+    readonly earlyreflections_new: (a: number) => number;
+    readonly earlyreflections_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
+    readonly earlyreflections_set_pattern: (a: number, b: number, c: number) => void;
+    readonly earlyreflections_set_sdelay: (a: number, b: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
 }
 

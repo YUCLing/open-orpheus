@@ -164,6 +164,57 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
     return this.tracker.getIntervals();
   }
 
+  /**
+   * Length of the contiguous downloaded prefix starting at byte 0.
+   *
+   * A decoder that reads the sparse temp file directly must not read past
+   * this point: bytes beyond it are still zeros until the background worker
+   * persists them.
+   */
+  downloadedPrefixEnd() {
+    return this.tracker.getDownloadedEnd(0, this.totalLength);
+  }
+
+  /** Resolves once the source metadata (total length) is known. */
+  async whenReady(): Promise<void> {
+    await this.metaReadyPromise;
+    this.assertNotDestroyed();
+  }
+
+  /**
+   * Download `[start, end)` with urgent priority and resolve once the bytes
+   * are persisted in the temp file (so a decoder can read them). Aborts when
+   * `signal` is aborted or the streamer is destroyed.
+   */
+  async ensureRangeDownloaded(
+    start: number,
+    end: number,
+    signal?: AbortSignal
+  ) {
+    this.assertNotDestroyed();
+    await this.metaReadyPromise;
+    this.assertNotDestroyed();
+
+    const clampedStart = Math.min(Math.max(0, start), this.totalLength);
+    const clampedEnd = Math.min(Math.max(0, end), this.totalLength);
+    if (clampedEnd <= clampedStart) return;
+
+    const session = this.scheduler.createUrgentSession(signal);
+    try {
+      const iterator = this.scheduler.streamUrgent(
+        clampedStart,
+        clampedEnd,
+        session.signal
+      );
+      // Draining the iterator persists + tracks every chunk (urgent priority).
+      while (!(await iterator.next()).done) {
+        // no-op
+      }
+    } finally {
+      session.close();
+    }
+  }
+
   async readBuffer(start?: number, end?: number) {
     this.assertNotDestroyed();
     await this.metaReadyPromise;

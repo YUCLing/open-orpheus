@@ -39,7 +39,7 @@ registerCallHandler<[string, string, number], void>(
   "audioplayer.seek",
   (id, opId, time) => {
     if (player.currentId !== id) return;
-    player.audio.currentTime = time;
+    player.currentTime = time;
   }
 );
 
@@ -51,7 +51,7 @@ registerCallHandler<[string, string, number], void>(
 );
 
 registerCallHandler<[number], void>("audioplayer.setPlaybackRate", (rate) => {
-  player.audio.playbackRate = rate;
+  player.playbackRate = rate;
 });
 
 // TODO: What's this?
@@ -73,8 +73,8 @@ registerCallHandler<
 >("audioplayer.getPlayedTime", () => {
   return [
     {
-      playedAudioTime: player.audio.currentTime,
-      playedTime: player.audio.currentTime,
+      playedAudioTime: player.currentTime,
+      playedTime: player.currentTime,
       result: true,
     },
   ];

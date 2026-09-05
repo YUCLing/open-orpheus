@@ -54,6 +54,6 @@ pub fn value_to_js_value<'a>(env: &'a Env, val: &Value) -> Result<Unknown<'a>> {
         Value::Integer(i) => env.create_int64(*i).and_then(|x| x.into_unknown(env)),
         Value::Real(f) => f.into_unknown(env),
         Value::Text(t) => env.create_string(t).and_then(|x| x.into_unknown(env)),
-        Value::Blob(b) => ArrayBuffer::copy_from(env, b).and_then(|x| x.into_unknown(env)),
+        Value::Blob(b) => ArrayBuffer::from_data(env, b.clone()).and_then(|x| x.into_unknown(env)),
     }
 }

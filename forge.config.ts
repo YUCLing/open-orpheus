@@ -202,6 +202,11 @@ const config: ForgeConfig = {
           config: "vite.worklets.config.ts",
           target: "preload",
         },
+        {
+          entry: "src/worklets/av3a-player.ts",
+          config: "vite.worklets.config.ts",
+          target: "preload",
+        },
       ],
       renderer: [
         {

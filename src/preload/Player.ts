@@ -1,7 +1,10 @@
 import Emittery from "emittery";
 
 import AudioEffectManager from "./AudioEffectManager";
+import { Av3aPlaybackBackend } from "./backends/Av3aPlaybackBackend";
+import { MediaPlaybackBackend } from "./backends/MediaPlaybackBackend";
 import { dbToGain } from "../util";
+import type { PlaybackBackend, PlaybackEventName } from "./PlaybackBackend";
 
 export enum AudioPlayerState {
   Null = 0,
@@ -54,19 +57,27 @@ export type AudioPlayInfo = {
   aiprocessorRatio: number;
   destLevel: string;
   songId: string;
-  songQuality: "exhigh" | string;
+  songQuality:
+    | "standard"
+    | "exhigh"
+    | "hires"
+    | "jyeffect"
+    | "vivid"
+    | "sky"
+    | "jymaster"
+    | string;
 } & (
   | {
       type: 0;
-      bitrage: "exhigh" | string;
+      bitrate: "exhigh" | "hires" | string;
       path: string;
       playbrt: number;
     }
   | {
       type: 4;
       songId: string;
-      audioFormat: string;
-      audioType: string;
+      audioFormat: "m4a" | "flac" | "av3a" | string;
+      audioType: "track" | string;
       bitrate: number;
       br: string;
       expireTime: number;
@@ -99,7 +110,25 @@ export type PlayerEvents = {
   lyricstyleupdate: { key: string | symbol; value: unknown };
   playinfoupdate: AudioPlayInfo;
   load: { id: string };
+  // Media-surface events. Emitted by the active playback backend (media
+  // element or AV3A) and re-emitted here with these types.
+  play: undefined;
+  playing: undefined;
+  pause: undefined;
+  ended: undefined;
+  /** Decode error (Error, AV3A) or a media-element error event. */
+  error: Error | Event;
+  stalled: undefined;
+  seeking: undefined;
+  seeked: undefined;
+  timeupdate: undefined;
+  durationchange: undefined;
+  ratechange: undefined;
 };
+
+export function isAv3aPlayInfo(playInfo: AudioPlayInfo | null): boolean {
+  return playInfo?.type === 4 && playInfo.audioFormat === "av3a";
+}
 
 /**
  * Convert volume (0-1) to linear gain, logarithmic mapping.
@@ -118,19 +147,16 @@ function volumeToGain(input: number, minDb = 40) {
 
 export default class Player extends Emittery<PlayerEvents> {
   private _audioCtx: AudioContext = new AudioContext();
-  private _audio = new Audio();
-
   private _audioEffectManager = new AudioEffectManager(this._audioCtx);
-
-  private _audioSourceNode = this._audioCtx.createMediaElementSource(
-    this._audio
-  );
-
   private _honeyPotPromise: Promise<AudioWorkletNode>;
+
+  // Backends (each owns its engine); `_backend` is whichever is active.
+  private _media: MediaPlaybackBackend;
+  private _av3a: Av3aPlaybackBackend;
+  private _backend: PlaybackBackend;
 
   private _playInfo: AudioPlayInfo | null = null;
   private _lyricContent: LyricContent | null = null;
-
   private _volume = 1;
 
   songInfo: SongInfo | null = null;
@@ -143,15 +169,41 @@ export default class Player extends Emittery<PlayerEvents> {
 
   set lyricContent(value: LyricContent | null) {
     this._lyricContent = value;
-    this.emit("lyriccontentupdate", value);
+    void this.emit("lyriccontentupdate", value);
   }
 
   get audioContext() {
     return this._audioCtx;
   }
 
-  get audio() {
-    return this._audio;
+  get currentTime(): number {
+    return this._backend.currentTime;
+  }
+  set currentTime(value: number) {
+    this._backend.seek(value);
+  }
+
+  get duration(): number {
+    return this._backend.duration;
+  }
+
+  get paused(): boolean {
+    return this._backend.paused;
+  }
+
+  get ended(): boolean {
+    return this._backend.ended;
+  }
+
+  get playbackRate(): number {
+    return this._backend.playbackRate;
+  }
+  set playbackRate(value: number) {
+    this._backend.setPlaybackRate(value);
+  }
+
+  get isAv3aActive(): boolean {
+    return this._backend === this._av3a;
   }
 
   get gainNode() {
@@ -173,7 +225,7 @@ export default class Player extends Emittery<PlayerEvents> {
     this._volume = value;
     // TODO: Maybe allow user to custom minimal dB value in the future
     this.gainNode.gain.value = volumeToGain(value);
-    this.emit("volumechange", value);
+    void this.emit("volumechange", value);
   }
 
   get replayGain() {
@@ -194,22 +246,30 @@ export default class Player extends Emittery<PlayerEvents> {
   constructor() {
     super();
 
+    this._media = new MediaPlaybackBackend(this._audioCtx, (name, data) =>
+      this.onBackendEvent(this._media, name, data)
+    );
+    this._av3a = new Av3aPlaybackBackend(
+      this._audioCtx,
+      this._audioEffectManager.input,
+      (name, data) => this.onBackendEvent(this._av3a, name, data)
+    );
+    this._backend = this._media;
+
+    // Both backends feed the shared effect chain; the chain feeds the speakers.
+    this._media.sourceNode.connect(this._audioEffectManager.input);
+    this._audioEffectManager.output.connect(this._audioCtx.destination);
+
+    // If the context stops on its own, only the media element needs pausing
+    // (the AV3A backend already suspends the context as its pause).
     this._audioCtx.addEventListener("statechange", () => {
-      if (this._audioCtx.state !== "running") {
-        // Audio context somehow stopped, ensure we handle this cleanly by
-        // firing pause event of audio
-        this._audio.pause();
+      if (this._audioCtx.state !== "running" && this._backend === this._media) {
+        this._media.pause();
       }
     });
 
-    this._audio.crossOrigin = "anonymous";
-    this._audio.volume = 1;
-
-    // Ensure they are consistent
+    // Ensure gain stays consistent with volume.
     this.volume = this._volume;
-
-    this._audioSourceNode.connect(this._audioEffectManager.input);
-    this._audioEffectManager.output.connect(this._audioCtx.destination);
 
     this._honeyPotPromise = new Promise((resolve, reject) => {
       let attempts = 0;
@@ -226,7 +286,7 @@ export default class Player extends Emittery<PlayerEvents> {
             });
 
             node.port.onmessage = (ev) => {
-              this.emit("audiodata", ev.data);
+              void this.emit("audiodata", ev.data);
             };
 
             resolve(node);
@@ -254,29 +314,53 @@ export default class Player extends Emittery<PlayerEvents> {
     }
   }
 
-  async load(playInfo: AudioPlayInfo): Promise<HTMLAudioElement> {
+  async load(playInfo: AudioPlayInfo): Promise<void> {
+    const isAv3a = isAv3aPlayInfo(playInfo);
+    const next: PlaybackBackend = isAv3a ? this._av3a : this._media;
+
+    // Switching engines: retire the old one first (stops the decode session or
+    // clears a stale media-element source), then delegate to the new one.
+    if (next !== this._backend) {
+      const previous = this._backend;
+      this._backend = next;
+      await previous.dispose();
+    }
+
     this._playInfo = playInfo;
     await this.emit("playinfoupdate", playInfo);
-    this._audio.addEventListener(
-      "canplay",
-      () => {
-        this.emit("load", { id: this.currentId });
-      },
-      { once: true }
-    );
-    this._audio.src = `audio://audio?t=${Date.now()}`;
-    this._audio.load();
-    return this._audio;
+    await next.load(playInfo);
+  }
+
+  async play() {
+    await this.ensureAudioContextState();
+    await this._backend.play();
+  }
+
+  pause() {
+    this._backend.pause();
+  }
+
+  stop() {
+    this._playInfo = null;
+    this._backend.stop();
+    // Simply try, does nothing if failed.
+    this._honeyPotPromise
+      .then((node) => {
+        node.port.postMessage("reset");
+      })
+      .catch(() => {});
   }
 
   async setAudioDataEnabled(enabled: boolean) {
     const node = await this._honeyPotPromise;
+    const source = this._backend.sourceNode;
+    if (!source) return;
     if (enabled) {
-      this._audioSourceNode.connect(node);
+      source.connect(node);
     } else {
       node.port.postMessage("reset");
       try {
-        this._audioSourceNode.disconnect(node);
+        source.disconnect(node);
       } catch (err) {
         if (err instanceof DOMException && err.name === "InvalidAccessError")
           return;
@@ -285,25 +369,32 @@ export default class Player extends Emittery<PlayerEvents> {
     }
   }
 
-  async play() {
-    await this.ensureAudioContextState();
-    return await this._audio.play();
-  }
-
-  pause() {
-    this._audio.pause();
-  }
-
-  stop() {
-    this._audio.pause();
-    this._audio.currentTime = 0;
-    this._audio.src = "";
-    this._playInfo = null;
-    // Simply try, does nothing if failed.
-    this._honeyPotPromise
-      .then((node) => {
-        node.port.postMessage("reset");
-      })
-      .catch(() => {});
+  /**
+   * Route a media event from `source` into the typed Player event stream, but
+   * only when `source` is the currently active backend (so a retired backend's
+   * late events never leak through).
+   */
+  private onBackendEvent(
+    source: PlaybackBackend,
+    name: PlaybackEventName,
+    data?: unknown
+  ): void {
+    if (source !== this._backend) return;
+    switch (name) {
+      case "load":
+        void this.emit("load", { id: this.currentId });
+        break;
+      case "error":
+        void this.emit("error", data as Error | Event);
+        break;
+      default: {
+        // The remaining events carry no payload.
+        const emit = this.emit as (
+          eventName: PlaybackEventName
+        ) => Promise<void>;
+        void emit(name);
+        break;
+      }
+    }
   }
 }
