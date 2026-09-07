@@ -421,7 +421,7 @@ registerCallHandler<MenuRequest, void>(
     const menu = new AppMenu(parsedMenuData.content);
     managed.setData("menu", menu);
     menu.setClickHandler(onClick);
-    menu.show();
+    menu.show(wnd);
   }
 );
 

@@ -700,7 +700,9 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.armNextWindowAsPopup = nativeBinding.armNextWindowAsPopup
 module.exports.captureNextWindowFirstCursorEnter = nativeBinding.captureNextWindowFirstCursorEnter
+module.exports.captureWindowNextPointerAxis = nativeBinding.captureWindowNextPointerAxis
 module.exports.DesktopEnvironment = nativeBinding.DesktopEnvironment
 module.exports.dragWindow = nativeBinding.dragWindow
 module.exports.getCursorPosition = nativeBinding.getCursorPosition

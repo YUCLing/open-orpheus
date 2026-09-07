@@ -3,7 +3,9 @@ import { join, normalize } from "node:path";
 
 import Emittery from "emittery";
 import {
+  armNextWindowAsPopup,
   captureNextWindowFirstCursorEnter,
+  captureWindowNextPointerAxis,
   DesktopEnvironment,
   getCursorPosition,
   getDesktopEnvironment,
@@ -15,6 +17,7 @@ import { patchById } from "./menu/types";
 import {
   createMenuWindow,
   createOverlayWindow,
+  createSubmenuWindow,
   destroyMenuWindow,
   destroyOverlayWindow,
   getMenuWindow,
@@ -29,10 +32,50 @@ import type { ElementTemplate } from "./skin/dui";
 import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
 import type { AppMenuItem } from "$sharedTypes/menu";
 import { font } from "./gui";
+import { isGnomeDesktop } from "./menu/workaround";
 
 registerMenuSkinUpdater();
 
 const WAYLAND_CURSOR_CAPTURE_DEADLINE_MS = 200;
+const WAYLAND_POPUP_ID_WAIT_MS = 200;
+const WAYLAND_POPUP_ID_RETRY_MS = 5;
+const waylandMenuSizeCache = new Map<
+  string,
+  { width: number; height: number }
+>();
+const WAYLAND_MENU_SIZE_CACHE_LIMIT = 32;
+
+function shouldUseGnomeWaylandPopup() {
+  return (
+    getDesktopEnvironment() === DesktopEnvironment.Wayland && isGnomeDesktop()
+  );
+}
+
+function armGnomeWaylandPopupWhenReady(
+  parentWindowId: string,
+  width: number,
+  height: number,
+  anchor: { x: number; y: number } | undefined,
+  isCancelled: () => boolean,
+  onArmed: () => void,
+  onUnavailable: () => void
+) {
+  const deadline = Date.now() + WAYLAND_POPUP_ID_WAIT_MS;
+  const attempt = () => {
+    if (isCancelled()) return;
+    const armed = anchor
+      ? armNextWindowAsPopup(parentWindowId, width, height, anchor.x, anchor.y)
+      : armNextWindowAsPopup(parentWindowId, width, height);
+    if (armed) {
+      onArmed();
+    } else if (Date.now() < deadline) {
+      setTimeout(attempt, WAYLAND_POPUP_ID_RETRY_MS);
+    } else {
+      onUnavailable();
+    }
+  };
+  attempt();
+}
 
 /** Recursively parse btn.url → btn.images for every menu item. */
 function parseButtonUrls(items: AppMenuItem[]) {
@@ -54,6 +97,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   private onClick: MenuClickHandler | null = null;
   private closed = false;
   private submenuWindow: BrowserWindow | null = null;
+  private dismissCleanups: Array<() => void> = [];
   /** style path → parsed template, preloaded from skin pack */
   templates: Record<string, ElementTemplate> = {};
 
@@ -100,19 +144,27 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     }
   }
 
-  async show() {
+  async show(parentWindow?: BrowserWindow) {
     this.closed = false;
     await this.loadTemplates();
 
+    if (this.closed) return;
+
     if (getDesktopEnvironment() === DesktopEnvironment.Wayland) {
-      this.showOverlay();
+      if (parentWindow && shouldUseGnomeWaylandPopup()) {
+        this.showWaylandPopup(parentWindow);
+      } else {
+        this.showOverlay();
+      }
     } else {
       this.showWindow();
     }
   }
 
   close() {
+    if (this.closed) return;
     this.closed = true;
+    for (const cleanup of this.dismissCleanups.splice(0)) cleanup();
 
     if (this.submenuWindow && !this.submenuWindow.isDestroyed()) {
       this.submenuWindow.destroy();
@@ -120,6 +172,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     }
 
     if (getDesktopEnvironment() === DesktopEnvironment.Wayland) {
+      destroyMenuWindow();
       destroyOverlayWindow();
     } else {
       destroyMenuWindow();
@@ -135,6 +188,10 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     }
 
     if (getDesktopEnvironment() === DesktopEnvironment.Wayland) {
+      const menuWindow = getMenuWindow();
+      if (menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible()) {
+        menuWindow.webContents.send("menu.update", this.items);
+      }
       const overlayWindow = getOverlayWindow();
       if (
         overlayWindow &&
@@ -150,6 +207,250 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     if (menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible()) {
       menuWindow.webContents.send("menu.update", this.items);
     }
+  }
+
+  /**
+   * Measure the existing Svelte menu in an unmapped window, then create the
+   * visible BrowserWindow as a real xdg_popup through the Wayland proxy.
+   */
+  private showWaylandPopup(parentWindow: BrowserWindow) {
+    let measurementHandled = false;
+    let activePopup: BrowserWindow | null = null;
+    const sizeKey = JSON.stringify([
+      this.items,
+      this.templates,
+      menuSkin,
+      font,
+    ]);
+
+    const dismiss = () => {
+      if (!this.closed) this.close();
+    };
+    try {
+      captureWindowNextPointerAxis(parentWindow.id.toString(), () => dismiss());
+    } catch {
+      // Keep the Electron event fallback below when the native hook is absent.
+    }
+
+    const dismissOnWheel = (
+      _event: Electron.Event,
+      input: Electron.MouseInputEvent
+    ) => {
+      if (input.type === "mouseWheel") dismiss();
+    };
+    const dismissOnParentInput = (
+      _event: Electron.Event,
+      input: Electron.MouseInputEvent
+    ) => {
+      if (input.type === "mouseDown" || input.type === "mouseWheel") {
+        dismiss();
+      }
+    };
+    const dismissOnParentBlur = () => {
+      setTimeout(() => {
+        if (
+          activePopup &&
+          !activePopup.isDestroyed() &&
+          activePopup.isFocused()
+        )
+          return;
+        if (this.submenuWindow?.isFocused()) return;
+        dismiss();
+      }, 50);
+    };
+    parentWindow.webContents.on("before-mouse-event", dismissOnParentInput);
+    parentWindow.on("blur", dismissOnParentBlur);
+    this.dismissCleanups.push(() => {
+      if (!parentWindow.isDestroyed()) {
+        parentWindow.webContents.off(
+          "before-mouse-event",
+          dismissOnParentInput
+        );
+        parentWindow.off("blur", dismissOnParentBlur);
+      }
+    });
+
+    const openPopup = (width: number, height: number) => {
+      if (this.closed) return;
+      armGnomeWaylandPopupWhenReady(
+        parentWindow.id.toString(),
+        width,
+        height,
+        undefined,
+        () => this.closed,
+        () => {
+          if (this.closed) return;
+          const popup = createMenuWindow(width, height);
+          activePopup = popup;
+          bindWindow(popup, false);
+          popup.webContents.on("before-mouse-event", dismissOnWheel);
+          this.dismissCleanups.push(() => {
+            if (!popup.isDestroyed()) {
+              popup.webContents.off("before-mouse-event", dismissOnWheel);
+            }
+          });
+          popup.on("blur", () => {
+            setTimeout(() => {
+              if (this.submenuWindow?.isFocused()) return;
+              dismiss();
+            }, 100);
+          });
+          popup.on("closed", () => {
+            if (!this.closed) dismiss();
+          });
+        },
+        () => {
+          if (!this.closed) this.showOverlay();
+        }
+      );
+    };
+
+    const bindWindow = (wnd: BrowserWindow, measuring: boolean) => {
+      registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+        getFont: async () => font,
+        pull: async () => ({
+          items: this.items,
+          templates: this.templates,
+          colors: menuSkin,
+        }),
+        itemClick: async (_event, menuId) => {
+          this.onClick?.(menuId);
+          dismiss();
+        },
+        btnClick: async (_event, btnId) => {
+          this.onClick?.(btnId);
+        },
+        close: async () => dismiss(),
+        reportSize: async (_event, rawWidth, rawHeight) => {
+          if (this.closed || wnd.isDestroyed()) return;
+          const width = Math.max(1, Math.ceil(rawWidth));
+          const height = Math.max(1, Math.ceil(rawHeight));
+
+          if (!measuring) {
+            wnd.showInactive();
+            wnd.focus();
+            return;
+          }
+          if (measurementHandled) return;
+          measurementHandled = true;
+          wnd.destroy();
+          if (waylandMenuSizeCache.size >= WAYLAND_MENU_SIZE_CACHE_LIMIT) {
+            const oldest = waylandMenuSizeCache.keys().next().value;
+            if (oldest !== undefined) waylandMenuSizeCache.delete(oldest);
+          }
+          waylandMenuSizeCache.set(sizeKey, { width, height });
+          openPopup(width, height);
+        },
+        openSubmenu: async (_event, items, templates, x, y) => {
+          if (!measuring) {
+            this.openWaylandSubmenu(wnd, items, templates, x, y);
+          }
+        },
+        closeSubmenu: async () => {
+          if (!measuring) this.closeSubmenuWindow();
+        },
+      });
+      registerInputRegionHandlers(wnd);
+    };
+
+    const cachedSize = waylandMenuSizeCache.get(sizeKey);
+    if (cachedSize) {
+      openPopup(cachedSize.width, cachedSize.height);
+      return;
+    }
+
+    const measureWindow = createMenuWindow();
+    bindWindow(measureWindow, true);
+  }
+
+  private closeSubmenuWindow() {
+    if (this.submenuWindow && !this.submenuWindow.isDestroyed()) {
+      this.submenuWindow.destroy();
+    }
+    this.submenuWindow = null;
+  }
+
+  private openWaylandSubmenu(
+    parent: BrowserWindow,
+    items: unknown[],
+    templates: Record<string, ElementTemplate>,
+    relX: number,
+    relY: number
+  ) {
+    this.closeSubmenuWindow();
+    const measure = createSubmenuWindow();
+    let measurementHandled = false;
+
+    const bind = (wnd: BrowserWindow, measuring: boolean) => {
+      registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+        getFont: async () => font,
+        pull: async () => ({ items, templates, colors: menuSkin }),
+        itemClick: async (_event, menuId) => {
+          this.onClick?.(menuId);
+          this.close();
+        },
+        btnClick: async (_event, btnId) => this.onClick?.(btnId),
+        close: async () => {},
+        reportSize: async (_event, rawWidth, rawHeight) => {
+          if (this.closed || wnd.isDestroyed()) return;
+          const width = Math.max(1, Math.ceil(rawWidth));
+          const height = Math.max(1, Math.ceil(rawHeight));
+          if (!measuring) {
+            wnd.showInactive();
+            wnd.focus();
+            return;
+          }
+          if (measurementHandled) return;
+          measurementHandled = true;
+          wnd.destroy();
+
+          const anchorX = Math.max(0, Math.round(relX) - 1);
+          const anchorY = Math.max(0, Math.round(relY));
+          armGnomeWaylandPopupWhenReady(
+            parent.id.toString(),
+            width,
+            height,
+            { x: anchorX, y: anchorY },
+            () => this.closed || parent.isDestroyed(),
+            () => {
+              if (this.closed || parent.isDestroyed()) return;
+              const popup = createSubmenuWindow(width, height);
+              this.submenuWindow = popup;
+              bind(popup, false);
+              const dismissOnSubmenuWheel = (
+                _event: Electron.Event,
+                input: Electron.MouseInputEvent
+              ) => {
+                if (input.type === "mouseWheel") this.close();
+              };
+              popup.webContents.on("before-mouse-event", dismissOnSubmenuWheel);
+              this.dismissCleanups.push(() => {
+                if (!popup.isDestroyed()) {
+                  popup.webContents.off(
+                    "before-mouse-event",
+                    dismissOnSubmenuWheel
+                  );
+                }
+              });
+              popup.on("closed", () => {
+                if (this.submenuWindow === popup) this.submenuWindow = null;
+              });
+              popup.on("blur", () => {
+                setTimeout(() => {
+                  if (!parent.isDestroyed() && parent.isFocused()) return;
+                  if (!this.closed) this.close();
+                }, 100);
+              });
+            },
+            () => {}
+          );
+        },
+        openSubmenu: async () => {},
+        closeSubmenu: async () => {},
+      });
+    };
+
+    bind(measure, true);
   }
 
   // --- Wayland: fullscreen transparent overlay ---

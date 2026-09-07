@@ -11,11 +11,13 @@ use super::codec::Iface;
 pub(crate) struct WaylandConn {
     pub(crate) ifaces: HashMap<u32, Iface>,
     pub(crate) pointer_focus: HashMap<u32, u32>,
+    pub(crate) pointer_position: HashMap<u32, (i32, i32)>,
     pub(crate) pointer_seat: HashMap<u32, u32>,
     pub(crate) xdg_to_wl: HashMap<u32, u32>,
     pub(crate) wl_to_top: HashMap<u32, u32>,
     pub(crate) top_to_xdg: HashMap<u32, u32>,
     pub(crate) compositor_id: Option<u32>,
+    pub(crate) xdg_wm_base_id: Option<u32>,
     pub(crate) injected_ids: HashSet<u32>,
     pub(crate) stolen_ids: Vec<u32>,
 }
@@ -27,11 +29,13 @@ impl WaylandConn {
         Self {
             ifaces,
             pointer_focus: HashMap::new(),
+            pointer_position: HashMap::new(),
             pointer_seat: HashMap::new(),
             xdg_to_wl: HashMap::new(),
             wl_to_top: HashMap::new(),
             top_to_xdg: HashMap::new(),
             compositor_id: None,
+            xdg_wm_base_id: None,
             injected_ids: HashSet::new(),
             stolen_ids: Vec::new(),
         }
@@ -41,11 +45,13 @@ impl WaylandConn {
         self.ifaces.clear();
         self.ifaces.insert(1u32, Iface::WlDisplay);
         self.pointer_focus.clear();
+        self.pointer_position.clear();
         self.pointer_seat.clear();
         self.xdg_to_wl.clear();
         self.wl_to_top.clear();
         self.top_to_xdg.clear();
         self.compositor_id = None;
+        self.xdg_wm_base_id = None;
         self.injected_ids.clear();
         self.stolen_ids.clear();
     }
@@ -60,6 +66,7 @@ impl WaylandConn {
         match self.ifaces.get(&id).copied() {
             Some(Iface::WlPointer) => {
                 self.pointer_focus.remove(&id);
+                self.pointer_position.remove(&id);
                 self.pointer_seat.remove(&id);
             }
             Some(Iface::WlSurface) => {
@@ -78,7 +85,7 @@ impl WaylandConn {
                 }
                 self.xdg_to_wl.remove(&id);
             }
-            Some(Iface::XdgToplevel) => {
+            Some(Iface::XdgToplevel | Iface::XdgPopupShim) => {
                 self.top_to_xdg.remove(&id);
                 self.wl_to_top.retain(|_, v| *v != id);
             }
@@ -94,7 +101,7 @@ impl WaylandConn {
         match iface {
             Iface::WlSurface => Some(id),
             Iface::XdgSurface => self.xdg_to_wl.get(&id).copied(),
-            Iface::XdgToplevel => self
+            Iface::XdgToplevel | Iface::XdgPopupShim => self
                 .top_to_xdg
                 .get(&id)
                 .and_then(|xdg_id| self.xdg_to_wl.get(xdg_id))
@@ -109,7 +116,31 @@ impl WaylandConn {
 pub(crate) static IS_WAYLAND: OnceLock<bool> = OnceLock::new();
 pub(crate) static CONNS: OnceLock<Mutex<HashMap<RawFd, WaylandConn>>> = OnceLock::new();
 #[allow(clippy::type_complexity)]
-pub(crate) static LAST_BUTTON: OnceLock<Mutex<Option<(RawFd, u32, u32, u32)>>> = OnceLock::new();
+#[derive(Clone, Copy)]
+pub(crate) struct LastButton {
+    pub(crate) fd: RawFd,
+    pub(crate) seat_id: u32,
+    pub(crate) serial: u32,
+    pub(crate) wl_surface_id: u32,
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+}
+
+pub(crate) struct PendingPopup {
+    pub(crate) fd: RawFd,
+    pub(crate) parent_xdg_surface_id: u32,
+    pub(crate) width: i32,
+    pub(crate) height: i32,
+    pub(crate) anchor_x: i32,
+    pub(crate) anchor_y: i32,
+    pub(crate) positioner_id: u32,
+}
+
+pub(crate) static LAST_BUTTON: OnceLock<Mutex<Option<LastButton>>> = OnceLock::new();
+pub(crate) static PENDING_POPUPS: OnceLock<Mutex<Vec<PendingPopup>>> = OnceLock::new();
+pub(crate) type PointerAxisCb = Box<dyn FnOnce() + Send>;
+pub(crate) static NEXT_POINTER_AXIS: OnceLock<Mutex<HashMap<RawFd, Vec<PointerAxisCb>>>> =
+    OnceLock::new();
 pub(crate) static RX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
 pub(crate) static TX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
 
@@ -191,6 +222,119 @@ pub(crate) fn clear_first_cursor_enter_watchers_for_fd(fd: RawFd) {
     }
 }
 
+pub(crate) fn arm_next_popup(
+    parent_window_id: &str,
+    width: i32,
+    height: i32,
+    anchor: Option<(i32, i32)>,
+) -> bool {
+    if width <= 0 || height <= 0 {
+        return false;
+    }
+    let Some((fd, parent_wl_surface_id)) = CUSTOM_ID_MAP
+        .get()
+        .and_then(|map| map.lock().ok()?.get(parent_window_id).copied())
+    else {
+        return false;
+    };
+    let parent_xdg_surface_id = CONNS
+        .get()
+        .and_then(|conns| conns.lock().ok())
+        .and_then(|conns| {
+            conns
+                .get(&fd)?
+                .xdg_to_wl
+                .iter()
+                .find_map(|(xdg, wl)| (*wl == parent_wl_surface_id).then_some(*xdg))
+        });
+    let Some(parent_xdg_surface_id) = parent_xdg_surface_id else {
+        return false;
+    };
+
+    let (anchor_x, anchor_y) = if let Some((x, y)) = anchor {
+        (x, y)
+    } else {
+        let Some(button) = LAST_BUTTON
+            .get()
+            .and_then(|v| v.lock().ok())
+            .and_then(|v| *v)
+        else {
+            return false;
+        };
+        if button.fd != fd || button.wl_surface_id != parent_wl_surface_id {
+            return false;
+        }
+        (button.x, button.y)
+    };
+
+    let Some(pending) = PENDING_POPUPS.get() else {
+        return false;
+    };
+
+    let positioner_id = CONNS
+        .get()
+        .and_then(|conns| conns.lock().ok())
+        .and_then(|mut conns| conns.get_mut(&fd)?.alloc_injected_id());
+    let Some(positioner_id) = positioner_id else {
+        return false;
+    };
+
+    let Ok(mut pending) = pending.lock() else {
+        if let Some(conns) = CONNS.get()
+            && let Ok(mut conns) = conns.lock()
+            && let Some(conn) = conns.get_mut(&fd)
+        {
+            conn.injected_ids.remove(&positioner_id);
+            conn.stolen_ids.push(positioner_id);
+        }
+        return false;
+    };
+    pending.push(PendingPopup {
+        fd,
+        parent_xdg_surface_id,
+        width,
+        height,
+        anchor_x,
+        anchor_y,
+        positioner_id,
+    });
+    true
+}
+
+pub(crate) fn take_pending_popup(fd: RawFd) -> Option<PendingPopup> {
+    let mut pending = PENDING_POPUPS.get()?.lock().ok()?;
+    let index = pending.iter().position(|popup| popup.fd == fd)?;
+    Some(pending.remove(index))
+}
+
+pub(crate) fn watch_next_pointer_axis(window_id: &str, callback: PointerAxisCb) -> bool {
+    let Some((fd, _)) = CUSTOM_ID_MAP
+        .get()
+        .and_then(|map| map.lock().ok()?.get(window_id).copied())
+    else {
+        return false;
+    };
+    let Some(watchers) = NEXT_POINTER_AXIS.get() else {
+        return false;
+    };
+    let Ok(mut watchers) = watchers.lock() else {
+        return false;
+    };
+    watchers.entry(fd).or_default().push(callback);
+    true
+}
+
+pub(crate) fn fire_next_pointer_axis(fd: RawFd) {
+    let callbacks = NEXT_POINTER_AXIS
+        .get()
+        .and_then(|watchers| watchers.lock().ok()?.remove(&fd));
+    if let Some(callbacks) = callbacks {
+        for callback in callbacks {
+            callback();
+        }
+    }
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 pub(crate) fn on_close(fd: RawFd) {
@@ -201,7 +345,7 @@ pub(crate) fn on_close(fd: RawFd) {
     }
     if let Some(m) = LAST_BUTTON.get()
         && let Ok(mut opt) = m.lock()
-        && opt.is_some_and(|(f, _, _, _)| f == fd)
+        && opt.is_some_and(|button| button.fd == fd)
     {
         *opt = None;
     }
@@ -228,6 +372,11 @@ pub(crate) fn on_close(fd: RawFd) {
     {
         map.retain(|_, v| v.0 != fd);
     }
+    if let Some(m) = NEXT_POINTER_AXIS.get()
+        && let Ok(mut watchers) = m.lock()
+    {
+        watchers.remove(&fd);
+    }
     clear_first_cursor_enter_watchers_for_fd(fd);
 }
 
@@ -238,6 +387,8 @@ pub(crate) fn is_wayland() -> bool {
 pub(crate) fn init_state() {
     CONNS.get_or_init(|| Mutex::new(HashMap::new()));
     LAST_BUTTON.get_or_init(|| Mutex::new(None));
+    PENDING_POPUPS.get_or_init(|| Mutex::new(Vec::new()));
+    NEXT_POINTER_AXIS.get_or_init(|| Mutex::new(HashMap::new()));
     CUSTOM_ID_MAP.get_or_init(|| Mutex::new(HashMap::new()));
     RX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
     TX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
@@ -257,6 +408,16 @@ pub(crate) fn clear_state() {
         && let Ok(mut opt) = m.lock()
     {
         *opt = None;
+    }
+    if let Some(m) = PENDING_POPUPS.get()
+        && let Ok(mut pending) = m.lock()
+    {
+        pending.clear();
+    }
+    if let Some(m) = NEXT_POINTER_AXIS.get()
+        && let Ok(mut watchers) = m.lock()
+    {
+        watchers.clear();
     }
     if let Some(m) = CUSTOM_ID_MAP.get()
         && let Ok(mut map) = m.lock()
