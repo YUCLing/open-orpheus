@@ -7,14 +7,23 @@ export declare function cancelLayerShellForNextWindow(): boolean
  * Make the next Electron window on this Wayland connection an xdg_popup.
  * Omit anchor coordinates to use the last pointer-button position on parent.
  */
-export declare function armNextWindowAsPopup(parentWindowId: string, width: number, height: number, anchorX?: number | undefined | null, anchorY?: number | undefined | null): boolean
+export declare function armNextWindowAsPopup(parentWindowId: string, width: number, height: number, anchorX?: number | undefined | null, anchorY?: number | undefined | null): number | null
+
+/** Cancel a pending first-cursor-enter capture. */
+export declare function cancelNextWindowFirstCursorEnter(token: number): boolean
+
+/** Cancel an armed popup that has not yet consumed a get_toplevel request. */
+export declare function cancelPendingPopup(token: number): boolean
+
+/** Cancel a pending pointer-axis capture. */
+export declare function cancelWindowPointerAxisCapture(token: number): boolean
 
 /**
  * Listen for first CursorEnter event of the next created window.
  *
  * Only for Wayland on Linux.
  */
-export declare function captureNextWindowFirstCursorEnter(callback: (x: number, y: number) => void): void
+export declare function captureNextWindowFirstCursorEnter(callback: (x: number, y: number) => void): number
 
 /**
  * Attach the managed window id to a title, the way the proxy expects it.
@@ -26,7 +35,7 @@ export declare function captureNextWindowFirstCursorEnter(callback: (x: number, 
  */
 export declare function decorateWindowTitle(id: string, title: string): string
 /** Invoke once when a Wayland pointer-axis event reaches this window's client. */
-export declare function captureWindowNextPointerAxis(windowId: string, callback: (axis: number) => void): void
+export declare function captureWindowNextPointerAxis(windowId: string, callback: (axis: number) => void): number
 
 export declare const enum DesktopEnvironment {
   Wayland = 0,
@@ -51,6 +60,9 @@ export declare function getCursorPosition(): [number, number] | null
  * Mostly for Linux to use, on Windows/macOS, returns hardcoded values.
  */
 export declare function getDesktopEnvironment(): DesktopEnvironment
+
+/** Whether this tracked BrowserWindow was actually converted to xdg_popup. */
+export declare function isWindowWaylandPopup(windowId: string): boolean
 
 /**
  * Whether the compositor advertises `zwlr_layer_shell_v1`.
@@ -142,3 +154,5 @@ export declare function useLayerShellForNextWindow(options: LayerShellOptions): 
  * needs both asks both.
  */
 export declare function validateLayerShellOptions(options: LayerShellOptions): boolean
+/** Whether native GNOME Wayland popup conversion is available. */
+export declare function supportsGnomeWaylandPopup(): boolean

@@ -21,12 +21,6 @@ const desktopTokens = desktopName
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
 
-export function isGnomeDesktop() {
-  return desktopTokens.some(
-    (desktop) => desktop === "gnome" || desktop.startsWith("gnome-")
-  );
-}
-
 // Only KDE allows fullscreen transparent windows, see https://gitlab.freedesktop.org/wayland/wayland-protocols/-/issues/116
 if (
   (!desktopTokens.includes("kde") ||

@@ -18,7 +18,7 @@ pub(crate) fn on_pointer_event(
             {
                 conn.pointer_focus.insert(msg.object_id, surf_id);
                 conn.pointer_position.insert(msg.object_id, (x, y));
-                fx.entered = Some((surf_id, x, y));
+                fx.entered.push((surf_id, x, y));
             }
         }
         EVT_LEAVE => {
@@ -31,7 +31,12 @@ pub(crate) fn on_pointer_event(
             }
         }
         EVT_AXIS => {
-            fx.pointer_axis = true;
+            if let (Some(wl_surface_id), Some(axis)) = (
+                conn.pointer_focus.get(&msg.object_id).copied(),
+                msg.u32_arg(12),
+            ) {
+                fx.pointer_axes.push((wl_surface_id, axis));
+            }
         }
         EVT_BUTTON => {
             let serial = msg.u32_arg(8);

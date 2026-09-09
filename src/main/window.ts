@@ -95,7 +95,7 @@ export type WindowData = {
   maximumSize: { x: number; y: number };
   minimumSize: { x: number; y: number };
   alwaysOnTop: boolean;
-  menu: AppMenu;
+  menu: AppMenu | undefined;
 };
 
 function shouldRespectSizeConstraints(wnd: BrowserWindow) {
@@ -172,6 +172,7 @@ export abstract class ManagedWindow<
 
   private _lastOnClosedListener: (() => void) | null = null;
   private _closeNotifier: (() => void) | null = null;
+  private _menuCloseUnsubscribe: (() => void) | null = null;
 
   private readonly _nativeState: NativeWindowState = {
     postShow: { inputRegions: null },
@@ -204,6 +205,7 @@ export abstract class ManagedWindow<
     if (this._window === value) return;
     const previous = this._window;
     if (previous) {
+      this.setMenu(undefined);
       managedBrowserWindows.delete(previous);
       browserManagedWindowMap.delete(previous);
       this.detachWindowListeners(previous);
@@ -312,6 +314,8 @@ export abstract class ManagedWindow<
 
   constructor() {
     super();
+
+    const waylandShowListeners = new WeakMap<BrowserWindow, () => void>();
 
     const ref = new WeakRef(this);
     finalizationRegistry.register(this, ref);
@@ -641,6 +645,26 @@ export abstract class ManagedWindow<
   getData<T = unknown>(key: string): T | undefined;
   getData(key: string): unknown | undefined {
     return this._data[key];
+  }
+
+  /** Replace the menu owned by this window and dispose the previous one. */
+  setMenu(menu: AppMenu | undefined) {
+    const previous = this.getData("menu");
+    if (previous === menu) return;
+
+    this._menuCloseUnsubscribe?.();
+    this._menuCloseUnsubscribe = null;
+    this.setData("menu", menu);
+    previous?.close();
+
+    if (menu) {
+      this._menuCloseUnsubscribe = menu.on("close", () => {
+        if (this.getData("menu") !== menu) return;
+        this._menuCloseUnsubscribe?.();
+        this._menuCloseUnsubscribe = null;
+        this.setData("menu", undefined);
+      });
+    }
   }
 
   private enableSizeConstraints() {
