@@ -419,9 +419,9 @@ registerCallHandler<MenuRequest, void>(
       event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
     };
     const menu = new AppMenu(parsedMenuData.content);
-    managed.setData("menu", menu);
+    managed.setMenu(menu);
     menu.setClickHandler(onClick);
-    menu.show(wnd);
+    await menu.show(wnd);
   }
 );
 

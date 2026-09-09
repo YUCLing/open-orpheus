@@ -3,9 +3,27 @@ import { join } from "node:path";
 import { BrowserWindow } from "electron";
 
 import { workaroundEnabled, WorkaroundFlags } from "./workaround";
+import { registerWaylandWindowId } from "../registerWaylandWindowId";
 
 let menuWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
+
+function loadMenuPage(wnd: BrowserWindow, path: string) {
+  const load = GUI_VITE_DEV_SERVER_URL
+    ? wnd.loadURL(`${GUI_VITE_DEV_SERVER_URL}${path}`)
+    : wnd.loadURL(`gui://frontend${path}`);
+  void load.catch(() => {
+    if (!wnd.isDestroyed()) wnd.destroy();
+  });
+}
+
+function registerWindowOnWaylandMap(wnd: BrowserWindow) {
+  // A show:false BrowserWindow has no xdg surface yet. Registering immediately
+  // is still useful for eagerly-created surfaces, while the show hook covers
+  // Chromium's lazy Wayland surface creation path.
+  registerWaylandWindowId(wnd);
+  wnd.on("show", () => registerWaylandWindowId(wnd));
+}
 
 export function createMenuWindow(width = 300, height = 400): BrowserWindow {
   if (menuWindow && !menuWindow.isDestroyed()) {
@@ -13,7 +31,7 @@ export function createMenuWindow(width = 300, height = 400): BrowserWindow {
     menuWindow = null;
   }
 
-  menuWindow = new BrowserWindow({
+  const wnd = new BrowserWindow({
     title: "Open Orpheus Menu",
     width,
     height,
@@ -30,18 +48,16 @@ export function createMenuWindow(width = 300, height = 400): BrowserWindow {
       preload: join(import.meta.dirname, "menu.js"),
     },
   });
+  menuWindow = wnd;
+  registerWindowOnWaylandMap(wnd);
 
-  if (GUI_VITE_DEV_SERVER_URL) {
-    menuWindow.loadURL(`${GUI_VITE_DEV_SERVER_URL}/menu`);
-  } else {
-    menuWindow.loadURL("gui://frontend/menu");
-  }
+  loadMenuPage(wnd, "/menu");
 
-  menuWindow.on("closed", () => {
-    menuWindow = null;
+  wnd.on("closed", () => {
+    if (menuWindow === wnd) menuWindow = null;
   });
 
-  return menuWindow;
+  return wnd;
 }
 
 export function createSubmenuWindow(width = 300, height = 400): BrowserWindow {
@@ -64,12 +80,9 @@ export function createSubmenuWindow(width = 300, height = 400): BrowserWindow {
       additionalArguments: ["--submenu"],
     },
   });
+  registerWindowOnWaylandMap(wnd);
 
-  if (GUI_VITE_DEV_SERVER_URL) {
-    wnd.loadURL(`${GUI_VITE_DEV_SERVER_URL}/menu`);
-  } else {
-    wnd.loadURL("gui://frontend/menu");
-  }
+  loadMenuPage(wnd, "/menu");
   return wnd;
 }
 
@@ -79,7 +92,7 @@ export function createOverlayWindow(): BrowserWindow {
     overlayWindow = null;
   }
 
-  overlayWindow = new BrowserWindow({
+  const wnd = new BrowserWindow({
     title: "Open Orpheus Menu",
     x: 0,
     y: 0,
@@ -97,15 +110,13 @@ export function createOverlayWindow(): BrowserWindow {
       additionalArguments: ["--wayland"],
     },
   });
+  overlayWindow = wnd;
+  registerWindowOnWaylandMap(wnd);
 
-  if (GUI_VITE_DEV_SERVER_URL) {
-    overlayWindow.loadURL(`${GUI_VITE_DEV_SERVER_URL}/menu`);
-  } else {
-    overlayWindow.loadURL("gui://frontend/menu");
-  }
+  loadMenuPage(wnd, "/menu");
 
-  overlayWindow.on("closed", () => {
-    overlayWindow = null;
+  wnd.on("closed", () => {
+    if (overlayWindow === wnd) overlayWindow = null;
   });
 
   // A maximized window can still provides a great coverage of the screen, but is not able to cover
@@ -114,26 +125,24 @@ export function createOverlayWindow(): BrowserWindow {
     workaroundEnabled(WorkaroundFlags.OverlayNoFullscreen) &&
     !workaroundEnabled(WorkaroundFlags.OverlayNoMaximize)
   ) {
-    overlayWindow.once("show", () => {
-      overlayWindow?.maximize();
+    wnd.once("show", () => {
+      if (!wnd.isDestroyed()) wnd.maximize();
     });
   }
 
-  return overlayWindow;
+  return wnd;
 }
 
 export function destroyMenuWindow() {
-  if (menuWindow && !menuWindow.isDestroyed()) {
-    menuWindow.destroy();
-    menuWindow = null;
-  }
+  const wnd = menuWindow;
+  menuWindow = null;
+  if (wnd && !wnd.isDestroyed()) wnd.destroy();
 }
 
 export function destroyOverlayWindow() {
-  if (overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.destroy();
-    overlayWindow = null;
-  }
+  const wnd = overlayWindow;
+  overlayWindow = null;
+  if (wnd && !wnd.isDestroyed()) wnd.destroy();
 }
 
 export function getMenuWindow() {

@@ -123,7 +123,11 @@ pub(super) fn send_xdg_toplevel_move() -> bool {
     let Some(button) = LAST_BUTTON
         .get()
         .and_then(|m| m.lock().ok())
-        .and_then(|g| *g)
+        .and_then(|buttons| {
+            buttons
+                .latest
+                .and_then(|key| buttons.by_surface.get(&key).copied())
+        })
     else {
         return false;
     };

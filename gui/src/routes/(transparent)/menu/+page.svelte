@@ -46,7 +46,9 @@
   /** Once we know the cursor position, clamp the menu and make it visible. */
   function commitMenuPosition() {
     tick().then(() => {
-      if (!menuEl) return;
+      if (!menuEl) {
+        return;
+      }
       if (waylandMode) {
         const rect = menuEl.getBoundingClientRect();
         const vw = window.innerWidth;
@@ -157,9 +159,9 @@
 
   function handleItemHover(index: number, item: MenuItem, event: MouseEvent) {
     hoveredIndex = index;
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
     if (item.menu && item.children?.length) {
-      const target = event.currentTarget as HTMLElement;
-      const rect = target.getBoundingClientRect();
       if (waylandMode && menuEl) {
         submenuX = rect.right;
         submenuY = rect.top;

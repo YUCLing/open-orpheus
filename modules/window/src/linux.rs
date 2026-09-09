@@ -43,6 +43,10 @@ fn is_gnome_desktop() -> bool {
     .is_some_and(|value| desktop_name_is_gnome(&value))
 }
 
+pub fn supports_gnome_wayland_popup() -> bool {
+    !disable_display_server_hooks() && wayland::is_wayland() && is_gnome_desktop()
+}
+
 #[derive(Clone, Copy)]
 pub struct Rect {
     pub x: i32,
@@ -135,13 +139,13 @@ pub fn get_cursor_position() -> Option<(i32, i32)> {
 }
 
 pub fn capture_next_window_first_cursor_enter(
-    env: Env,
+    _env: Env,
     callback: Function<FnArgs<(i32, i32)>, ()>,
-) -> Result<()> {
-    if disable_display_server_hooks() {
-        return env.throw(
-            "captureNextWindowFirstCursorEnter is unavailable when Wayland hooks are disabled",
-        );
+) -> Result<u32> {
+    if disable_display_server_hooks() || !wayland::is_wayland() {
+        return Err(Error::from_reason(
+            "captureNextWindowFirstCursorEnter requires active Wayland hooks",
+        ));
     }
 
     // Give only one undroppable reference to the callback closure below, to avoid double drop
@@ -154,24 +158,31 @@ pub fn capture_next_window_first_cursor_enter(
         )?,
     ));
 
-    if !wayland::on_next_new_window_first_cursor_enter(move |x, y| {
-        if x < 0 || y < 0 {
-            return;
-        }
+    let token = wayland::on_next_new_window_first_cursor_enter(move |position| {
         let Some(cb) = callback.take() else {
             return;
         };
-        cb.call(
-            (x as u32, y as u32),
-            ThreadsafeFunctionCallMode::NonBlocking,
-        );
+        if let Some((x, y)) = position
+            && x >= 0
+            && y >= 0
+        {
+            cb.call(
+                (x as u32, y as u32),
+                ThreadsafeFunctionCallMode::NonBlocking,
+            );
+        }
         // Now we can safely drop it only once
         ManuallyDrop::into_inner(cb);
-    }) {
-        return env.throw("captureNextWindowFirstCursorEnter is unavailable because Wayland hooks are not initialized");
-    }
+    });
+    token.ok_or_else(|| {
+        Error::from_reason(
+            "captureNextWindowFirstCursorEnter is unavailable because Wayland hooks are not initialized",
+        )
+    })
+}
 
-    Ok(())
+pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
+    wayland::cancel_cursor_enter_watcher(token)
 }
 
 pub fn arm_next_window_as_popup(
@@ -180,22 +191,31 @@ pub fn arm_next_window_as_popup(
     height: i32,
     anchor_x: Option<i32>,
     anchor_y: Option<i32>,
-) -> bool {
-    if disable_display_server_hooks() || !wayland::is_wayland() || !is_gnome_desktop() {
-        return false;
+) -> Option<u32> {
+    if !supports_gnome_wayland_popup() {
+        return None;
     }
     let anchor = anchor_x.zip(anchor_y);
     wayland::arm_next_window_as_popup(&parent_window_id, width, height, anchor)
 }
 
+pub fn cancel_pending_popup(token: u32) -> bool {
+    wayland::cancel_pending_popup(token)
+}
+
+pub fn is_window_wayland_popup(window_id: String) -> bool {
+    wayland::window_is_popup(&window_id)
+}
+
 pub fn capture_window_next_pointer_axis(
-    env: Env,
+    _env: Env,
     window_id: String,
     callback: Function<FnArgs<(u32,)>, ()>,
-) -> Result<()> {
-    if disable_display_server_hooks() {
-        return env
-            .throw("captureWindowNextPointerAxis is unavailable when Wayland hooks are disabled");
+) -> Result<u32> {
+    if disable_display_server_hooks() || !wayland::is_wayland() {
+        return Err(Error::from_reason(
+            "captureWindowNextPointerAxis requires active Wayland hooks",
+        ));
     }
     let mut callback = Some(ManuallyDrop::new(
         callback.build_threadsafe_function().build_callback(
@@ -204,16 +224,20 @@ pub fn capture_window_next_pointer_axis(
             },
         )?,
     ));
-    if !wayland::on_next_pointer_axis(&window_id, move || {
+    let token = wayland::on_next_pointer_axis(&window_id, move |axis| {
         let Some(cb) = callback.take() else {
             return;
         };
-        cb.call(0, ThreadsafeFunctionCallMode::NonBlocking);
+        if let Some(axis) = axis {
+            cb.call(axis, ThreadsafeFunctionCallMode::NonBlocking);
+        }
         ManuallyDrop::into_inner(cb);
-    }) {
-        return env.throw("Unable to watch pointer axis for this Wayland window");
-    }
-    Ok(())
+    });
+    token.ok_or_else(|| Error::from_reason("Unable to watch pointer axis for this Wayland window"))
+}
+
+pub fn cancel_window_pointer_axis_capture(token: u32) -> bool {
+    wayland::cancel_pointer_axis_watcher(token)
 }
 
 #[napi_derive::module_init]

@@ -110,6 +110,9 @@ static PROTOCOLS: OnceLock<Vec<Box<dyn Protocol>>> = OnceLock::new();
 static CONNECTIONS: OnceLock<Mutex<HashMap<RawFd, Box<dyn ConnectionHandler>>>> = OnceLock::new();
 /// Per-connection [`Sink`]s, so public protocol APIs can inject messages.
 static SINKS: OnceLock<Mutex<HashMap<RawFd, Sink>>> = OnceLock::new();
+/// Serializes installation/removal so an old proxy thread cannot delete state
+/// belonging to a newly-reused application fd.
+static CONNECTION_LIFECYCLE: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Look up the injection handle for an application fd.
 pub(crate) fn sink_for(fd: RawFd) -> Option<Sink> {
@@ -346,8 +349,49 @@ fn proxy_loop(app_fd: RawFd, proxy_fd: RawFd, real_fd: RawFd) {
         }
     }
 
+    remove_connection(app_fd, Some(real_fd));
     syscalls::call_close(proxy_fd);
     syscalls::call_close(real_fd);
+}
+
+/// Remove one connection and run its protocol cleanup. When `expected_real_fd`
+/// is supplied, the mapping is removed only if it still belongs to that proxy
+/// thread; this protects a newly-reused `app_fd` from an old thread's teardown.
+fn remove_connection(app_fd: RawFd, expected_real_fd: Option<RawFd>) {
+    let Some(lifecycle) = CONNECTION_LIFECYCLE.get() else {
+        return;
+    };
+    let Ok(_lifecycle_guard) = lifecycle.lock() else {
+        return;
+    };
+
+    if let Some(expected_real_fd) = expected_real_fd {
+        let matches = SINKS
+            .get()
+            .and_then(|m| m.lock().ok())
+            .and_then(|map| {
+                map.get(&app_fd)
+                    .map(|sink| sink.real_fd == expected_real_fd)
+            })
+            .unwrap_or(false);
+        if !matches {
+            return;
+        }
+    }
+
+    if let Some(m) = SINKS.get()
+        && let Ok(mut map) = m.lock()
+    {
+        map.remove(&app_fd);
+    }
+    let handler = CONNECTIONS
+        .get()
+        .and_then(|m| m.lock().ok())
+        .and_then(|mut map| map.remove(&app_fd));
+
+    if let Some(mut handler) = handler {
+        handler.on_close();
+    }
 }
 
 // ── Hook callbacks ─────────────────────────────────────────────────────────
@@ -413,15 +457,19 @@ extern "C" fn hook_connect(fd: c_int, addr: *const c_void, addrlen: u32) -> c_in
         write_lock: handler.write_lock(),
     };
 
-    if let Some(m) = CONNECTIONS.get()
-        && let Ok(mut map) = m.lock()
+    if let Some(lifecycle) = CONNECTION_LIFECYCLE.get()
+        && let Ok(_lifecycle_guard) = lifecycle.lock()
     {
-        map.insert(fd, handler);
-    }
-    if let Some(m) = SINKS.get()
-        && let Ok(mut map) = m.lock()
-    {
-        map.insert(fd, sink);
+        if let Some(m) = CONNECTIONS.get()
+            && let Ok(mut map) = m.lock()
+        {
+            map.insert(fd, handler);
+        }
+        if let Some(m) = SINKS.get()
+            && let Ok(mut map) = m.lock()
+        {
+            map.insert(fd, sink);
+        }
     }
 
     let proxy_fd = pair[1];
@@ -433,19 +481,7 @@ extern "C" fn hook_connect(fd: c_int, addr: *const c_void, addrlen: u32) -> c_in
 }
 
 extern "C" fn hook_close(fd: c_int) -> c_int {
-    let handler = CONNECTIONS
-        .get()
-        .and_then(|m| m.lock().ok())
-        .and_then(|mut map| map.remove(&fd));
-
-    if let Some(mut h) = handler {
-        h.on_close();
-    }
-    if let Some(m) = SINKS.get()
-        && let Ok(mut map) = m.lock()
-    {
-        map.remove(&fd);
-    }
+    remove_connection(fd, None);
     syscalls::call_close(fd)
 }
 
@@ -473,6 +509,7 @@ macro_rules! install_hook {
 pub(crate) fn init_hooks() {
     CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
     SINKS.get_or_init(|| Mutex::new(HashMap::new()));
+    CONNECTION_LIFECYCLE.get_or_init(|| Mutex::new(()));
 
     super::wayland::init_state();
     super::x11::init_state();
@@ -489,15 +526,19 @@ pub(crate) fn init_hooks() {
 }
 
 pub(crate) fn remove_hooks() {
-    if let Some(m) = CONNECTIONS.get()
-        && let Ok(mut map) = m.lock()
+    if let Some(lifecycle) = CONNECTION_LIFECYCLE.get()
+        && let Ok(_lifecycle_guard) = lifecycle.lock()
     {
-        map.clear();
-    }
-    if let Some(m) = SINKS.get()
-        && let Ok(mut map) = m.lock()
-    {
-        map.clear();
+        if let Some(m) = CONNECTIONS.get()
+            && let Ok(mut map) = m.lock()
+        {
+            map.clear();
+        }
+        if let Some(m) = SINKS.get()
+            && let Ok(mut map) = m.lock()
+        {
+            map.clear();
+        }
     }
 
     super::wayland::clear_state();
@@ -508,5 +549,80 @@ pub(crate) fn remove_hooks() {
     }
     if let Some(addr) = HOOK_CONNECT_ADDR.get() {
         let _ = unhook(*addr);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::*;
+
+    struct CleanupCounter(Arc<AtomicUsize>);
+
+    impl ConnectionHandler for CleanupCounter {
+        fn filter(
+            &mut self,
+            _dir: Direction,
+            _chunk: &[u8],
+            _cmsg: Option<Cmsg>,
+        ) -> Option<Filtered> {
+            unreachable!()
+        }
+
+        fn on_close(&mut self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn proxy_teardown_does_not_remove_a_reused_fd() {
+        CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()));
+        SINKS.get_or_init(|| Mutex::new(HashMap::new()));
+        CONNECTION_LIFECYCLE.get_or_init(|| Mutex::new(()));
+
+        let app_fd = 93_001;
+        let real_fd = 93_002;
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        CONNECTIONS
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert(app_fd, Box::new(CleanupCounter(Arc::clone(&cleanup_count))));
+        SINKS.get().unwrap().lock().unwrap().insert(
+            app_fd,
+            Sink {
+                real_fd,
+                app_fd,
+                write_lock: None,
+            },
+        );
+
+        remove_connection(app_fd, Some(real_fd + 1));
+        assert!(
+            CONNECTIONS
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .contains_key(&app_fd)
+        );
+        assert_eq!(cleanup_count.load(Ordering::Relaxed), 0);
+
+        remove_connection(app_fd, Some(real_fd));
+        assert!(
+            !CONNECTIONS
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .contains_key(&app_fd)
+        );
+        assert!(!SINKS.get().unwrap().lock().unwrap().contains_key(&app_fd));
+        assert_eq!(cleanup_count.load(Ordering::Relaxed), 1);
     }
 }

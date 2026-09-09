@@ -95,25 +95,34 @@ pub(crate) fn filter(
     // Apply side effects after releasing the connection lock.
     if let Some((seat_id, serial, surf_id, x, y)) = fx.button
         && let Some(m) = LAST_BUTTON.get()
-        && let Ok(mut opt) = m.lock()
+        && let Ok(mut buttons) = m.lock()
     {
-        *opt = Some(LastButton {
-            fd,
-            seat_id,
-            serial,
-            wl_surface_id: surf_id,
-            x,
-            y,
-        });
+        buttons.by_surface.insert(
+            (fd, surf_id),
+            LastButton {
+                fd,
+                seat_id,
+                serial,
+                wl_surface_id: surf_id,
+                x,
+                y,
+            },
+        );
+        buttons.latest = Some((fd, surf_id));
     }
-    if let Some((wl_surface_id, x, y)) = fx.entered {
+    for (wl_surface_id, x, y) in fx.entered {
         fire_first_cursor_enter_watchers(fd, wl_surface_id, x, y);
     }
-    if let Some(wl_surface_id) = fx.arm_watchers_for {
+    for wl_surface_id in fx.arm_watchers_for {
         arm_first_cursor_enter_watchers(fd, wl_surface_id);
     }
-    if fx.pointer_axis {
-        fire_next_pointer_axis(fd);
+    for (wl_surface_id, axis) in fx.pointer_axes {
+        fire_next_pointer_axis(fd, wl_surface_id, axis);
+    }
+    for wl_surface_id in fx.destroyed_surfaces {
+        clear_last_button_for_surface(fd, wl_surface_id);
+        clear_pointer_axis_watchers_for_surface(fd, wl_surface_id);
+        clear_first_cursor_enter_watchers_for_surface(fd, wl_surface_id);
     }
 
     // ── Ancillary data + output assembly (unchanged semantics) ──
@@ -121,7 +130,8 @@ pub(crate) fn filter(
     pending_ctrl.fds.extend(new_ctrl_fds);
 
     if sync_lost {
-        clear_first_cursor_enter_watchers_for_fd(fd);
+        clear_runtime_state_for_fd(fd);
+        clear_stream_state_for_fd(fd);
         if let Some(m) = CONNS.get()
             && let Ok(mut map) = m.lock()
             && let Some(conn) = map.get_mut(&fd)

@@ -84,7 +84,7 @@ pub fn capture_next_window_first_cursor_enter(
         FnArgs<(i32, i32)>,
         (),
     >,
-) -> Result<()> {
+) -> Result<u32> {
     #[cfg(target_os = "linux")]
     {
         use crate::linux::capture_next_window_first_cursor_enter as capture_next_window_first_cursor_enter_impl;
@@ -93,8 +93,23 @@ pub fn capture_next_window_first_cursor_enter(
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = callback;
-        env.throw("Only supports Linux")
+        let _ = (env, callback);
+        Err(napi::Error::from_reason("Only supports Linux"))
+    }
+}
+
+/// Cancel a pending first-cursor-enter capture.
+#[napi]
+pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::cancel_next_window_first_cursor_enter(token)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = token;
+        false
     }
 }
 
@@ -107,7 +122,7 @@ pub fn arm_next_window_as_popup(
     height: i32,
     anchor_x: Option<i32>,
     anchor_y: Option<i32>,
-) -> bool {
+) -> Option<u32> {
     #[cfg(target_os = "linux")]
     {
         linux::arm_next_window_as_popup(parent_window_id, width, height, anchor_x, anchor_y)
@@ -116,6 +131,50 @@ pub fn arm_next_window_as_popup(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (parent_window_id, width, height, anchor_x, anchor_y);
+        None
+    }
+}
+
+/// Cancel an armed popup that has not yet consumed a get_toplevel request.
+#[napi]
+pub fn cancel_pending_popup(token: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::cancel_pending_popup(token)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = token;
+        false
+    }
+}
+
+/// Whether this tracked BrowserWindow was actually converted to xdg_popup.
+#[napi]
+pub fn is_window_wayland_popup(window_id: String) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::is_window_wayland_popup(window_id)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window_id;
+        false
+    }
+}
+
+/// Whether native GNOME Wayland popup conversion is available.
+#[napi]
+pub fn supports_gnome_wayland_popup() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::supports_gnome_wayland_popup()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
         false
     }
 }
@@ -126,7 +185,7 @@ pub fn capture_window_next_pointer_axis(
     env: Env,
     window_id: String,
     #[napi(ts_arg_type = "(axis: number) => void")] callback: Function<FnArgs<(u32,)>, ()>,
-) -> Result<()> {
+) -> Result<u32> {
     #[cfg(target_os = "linux")]
     {
         linux::capture_window_next_pointer_axis(env, window_id, callback)
@@ -134,8 +193,23 @@ pub fn capture_window_next_pointer_axis(
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (window_id, callback);
-        env.throw("Only supports Linux")
+        let _ = (env, window_id, callback);
+        Err(napi::Error::from_reason("Only supports Linux"))
+    }
+}
+
+/// Cancel a pending pointer-axis capture.
+#[napi]
+pub fn cancel_window_pointer_axis_capture(token: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::cancel_window_pointer_axis_capture(token)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = token;
+        false
     }
 }
 

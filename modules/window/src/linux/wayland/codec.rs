@@ -42,6 +42,7 @@ pub(crate) const REQ_SET_TITLE: u16 = 2;
 pub(crate) const REQ_MOVE: u16 = 5;
 pub(crate) const REQ_SET_INPUT_REGION: u16 = 5;
 pub(crate) const WL_POINTER_RELEASE: u16 = 1;
+pub(crate) const WL_SEAT_RELEASE: u16 = 3;
 pub(crate) const REQ_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_ADD: u16 = 1;

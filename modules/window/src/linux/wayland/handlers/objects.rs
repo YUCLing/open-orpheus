@@ -4,7 +4,10 @@
 use std::os::fd::RawFd;
 
 use super::super::codec::{Iface, WlMessage};
-use super::super::state::{CUSTOM_ID_MAP, WaylandConn, take_pending_popup};
+use super::super::state::{
+    CUSTOM_ID_MAP, WaylandConn, cancel_pending_popup_for_connection,
+    cancel_pending_popup_for_parent, take_pending_popup,
+};
 use super::{Action, Effects};
 
 pub(crate) fn on_get_registry(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
@@ -76,8 +79,8 @@ pub(crate) fn on_get_toplevel(
     fx: &mut Effects,
 ) -> Action {
     if let Some(top_id) = msg.u32_arg(8) {
-        if let Some(popup) = take_pending_popup(fd)
-            && let Some(wm_base_id) = conn.xdg_wm_base_id
+        if let Some(wm_base_id) = conn.xdg_wm_base_id
+            && let Some(popup) = take_pending_popup(fd)
         {
             let positioner_id = popup.positioner_id;
             let mut replacement = Vec::with_capacity(128);
@@ -122,7 +125,7 @@ pub(crate) fn on_get_toplevel(
             conn.top_to_xdg.insert(top_id, msg.object_id);
             if let Some(wl_id) = conn.xdg_to_wl.get(&msg.object_id).copied() {
                 conn.wl_to_top.insert(wl_id, top_id);
-                fx.arm_watchers_for = Some(wl_id);
+                fx.arm_watchers_for.push(wl_id);
             }
             return Action::Replace(replacement);
         }
@@ -130,7 +133,7 @@ pub(crate) fn on_get_toplevel(
         conn.top_to_xdg.insert(top_id, msg.object_id);
         if let Some(wl_id) = conn.xdg_to_wl.get(&msg.object_id).copied() {
             conn.wl_to_top.insert(wl_id, top_id);
-            fx.arm_watchers_for = Some(wl_id);
+            fx.arm_watchers_for.push(wl_id);
         }
     }
     Action::Forward
@@ -153,18 +156,48 @@ pub(crate) fn on_popup_event(msg: &WlMessage) -> Action {
             );
             Action::Replace(replacement)
         }
-        1 => Action::Forward,  // popup_done has the same wire shape as close
-        _ => Action::Suppress, // repositioned has no toplevel equivalent
+        1 => Action::Forward,
+        _ => Action::Suppress,
     }
 }
 
-pub(crate) fn on_destroy(fd: RawFd, conn: &mut WaylandConn, msg: &WlMessage) -> Action {
-    if let Some(iface) = conn.ifaces.get(&msg.object_id).copied()
-        && let Some(wl_surface_id) = conn.wl_surface_for_window_object(msg.object_id, iface)
-        && let Some(m) = CUSTOM_ID_MAP.get()
-        && let Ok(mut map) = m.lock()
-    {
-        map.retain(|_, v| !(v.0 == fd && v.1 == wl_surface_id));
+pub(crate) fn on_destroy(
+    fd: RawFd,
+    conn: &mut WaylandConn,
+    msg: &WlMessage,
+    fx: &mut Effects,
+) -> Action {
+    if let Some(iface) = conn.ifaces.get(&msg.object_id).copied() {
+        if iface == Iface::XdgWmBase {
+            cancel_pending_popup_for_connection(fd, conn);
+        }
+        let wl_surface_id = conn.wl_surface_for_window_object(msg.object_id, iface);
+        let parent_xdg_surface_ids: Vec<u32> = match iface {
+            Iface::WlSurface => conn
+                .xdg_to_wl
+                .iter()
+                .filter_map(|(xdg, wl)| (*wl == msg.object_id).then_some(*xdg))
+                .collect(),
+            Iface::XdgSurface => vec![msg.object_id],
+            Iface::XdgToplevel | Iface::XdgPopupShim => conn
+                .top_to_xdg
+                .get(&msg.object_id)
+                .copied()
+                .into_iter()
+                .collect(),
+            _ => Vec::new(),
+        };
+        for parent_xdg_surface_id in parent_xdg_surface_ids {
+            cancel_pending_popup_for_parent(fd, parent_xdg_surface_id, conn);
+        }
+        if let Some(wl_surface_id) = wl_surface_id {
+            fx.destroyed_surfaces.push(wl_surface_id);
+            if let Some(m) = CUSTOM_ID_MAP.get()
+                && let Ok(mut map) = m.lock()
+            {
+                map.retain(|_, value| !(value.0 == fd && value.1 == wl_surface_id));
+            }
+        }
     }
     conn.purge(msg.object_id);
     Action::Forward

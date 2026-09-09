@@ -10,6 +10,7 @@ import {
 } from "@open-orpheus/window";
 
 import AppMenu from "./menu";
+import { registerWaylandWindowId } from "./registerWaylandWindowId";
 
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
 const managedBrowserWindows = new Set<BrowserWindow>();
@@ -47,7 +48,7 @@ export type WindowData = {
   maximumSize: { x: number; y: number };
   minimumSize: { x: number; y: number };
   alwaysOnTop: boolean;
-  menu: AppMenu;
+  menu: AppMenu | undefined;
 };
 
 function shouldRespectSizeConstraints(wnd: BrowserWindow) {
@@ -67,19 +68,30 @@ export abstract class ManagedWindow<
   private _window: BrowserWindow | null = null;
   private _data: Record<string, unknown> = Object.create(null);
 
-  private _lastOnClosedListener: (() => boolean) | null = null;
+  private _lastOnClosedListener: (() => void) | null = null;
+  private _menuCloseUnsubscribe: (() => void) | null = null;
 
   protected set window(value) {
     if (this._window === value) return;
     if (this._window) {
+      this.setMenu(undefined);
       managedBrowserWindows.delete(this._window);
       browserManagedWindowMap.delete(this._window);
-      if (this._lastOnClosedListener)
+      if (this._lastOnClosedListener) {
         this._window.off("closed", this._lastOnClosedListener);
+        this._lastOnClosedListener = null;
+      }
       this.emit("unbind", this._window);
     }
     if (value) {
-      this._lastOnClosedListener = () => managedBrowserWindows.delete(value);
+      this._lastOnClosedListener = () => {
+        if (this._window === value) {
+          this.window = null;
+        } else {
+          managedBrowserWindows.delete(value);
+          browserManagedWindowMap.delete(value);
+        }
+      };
       value.on("closed", this._lastOnClosedListener);
       managedBrowserWindows.add(value);
       browserManagedWindowMap.set(value, this);
@@ -94,6 +106,8 @@ export abstract class ManagedWindow<
 
   constructor() {
     super();
+
+    const waylandShowListeners = new WeakMap<BrowserWindow, () => void>();
 
     const ref = new WeakRef(this);
     finalizationRegistry.register(this, ref);
@@ -113,6 +127,7 @@ export abstract class ManagedWindow<
     };
 
     this.on("bind", ({ data: wnd }) => {
+      if (wnd.isDestroyed() || this.window !== wnd) return;
       wnd.on("maximize", maximizeListener);
       wnd.on("unmaximize", unmaximizeListener);
       wnd.on("enter-full-screen", enterFullScreenListener);
@@ -121,13 +136,12 @@ export abstract class ManagedWindow<
       if (getDesktopEnvironment() === DesktopEnvironment.Wayland) {
         // On Wayland, windows are actually not preserved across show / hide,
         // we will be setting their custom IDs each time they show
-        wnd.on("show", () => {
-          const originalTitle = wnd.title;
-          wnd.setTitle("\u200B\u200C" + wnd.id);
-          // Chromium/Electron store the title internally, we will be resetting the title,
-          // thus Electron can remember the correct title.
-          wnd.setTitle(originalTitle);
-        });
+        const showListener = () => {
+          registerWaylandWindowId(wnd);
+        };
+        waylandShowListeners.set(wnd, showListener);
+        wnd.on("show", showListener);
+        registerWaylandWindowId(wnd);
       }
 
       wnd.webContents.setWindowOpenHandler(({ url }) => {
@@ -155,6 +169,11 @@ export abstract class ManagedWindow<
       wnd.off("unmaximize", unmaximizeListener);
       wnd.off("enter-full-screen", enterFullScreenListener);
       wnd.off("leave-full-screen", leaveFullScreenListener);
+      const showListener = waylandShowListeners.get(wnd);
+      if (showListener) {
+        wnd.off("show", showListener);
+        waylandShowListeners.delete(wnd);
+      }
     });
   }
 
@@ -168,6 +187,26 @@ export abstract class ManagedWindow<
   getData<T = unknown>(key: string): T | undefined;
   getData(key: string): unknown | undefined {
     return this._data[key];
+  }
+
+  /** Replace the menu owned by this window and dispose the previous one. */
+  setMenu(menu: AppMenu | undefined) {
+    const previous = this.getData("menu");
+    if (previous === menu) return;
+
+    this._menuCloseUnsubscribe?.();
+    this._menuCloseUnsubscribe = null;
+    this.setData("menu", menu);
+    previous?.close();
+
+    if (menu) {
+      this._menuCloseUnsubscribe = menu.on("close", () => {
+        if (this.getData("menu") !== menu) return;
+        this._menuCloseUnsubscribe?.();
+        this._menuCloseUnsubscribe = null;
+        this.setData("menu", undefined);
+      });
+    }
   }
 
   private enableSizeConstraints() {

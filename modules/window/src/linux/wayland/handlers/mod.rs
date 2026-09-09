@@ -13,7 +13,7 @@ use std::os::fd::RawFd;
 use super::codec::{
     EVT_DELETE_ID, Iface, REQ_BIND, REQ_CREATE_SURFACE, REQ_DESTROY, REQ_GET_POINTER,
     REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_XDG_SURFACE, REQ_SET_TITLE, WL_POINTER_RELEASE,
-    WlMessage,
+    WL_SEAT_RELEASE, WlMessage,
 };
 use super::state::WaylandConn;
 
@@ -32,9 +32,10 @@ pub(crate) enum Action {
 #[derive(Default)]
 pub(crate) struct Effects {
     pub(crate) button: Option<(u32, u32, u32, i32, i32)>,
-    pub(crate) entered: Option<(u32, i32, i32)>,
-    pub(crate) arm_watchers_for: Option<u32>,
-    pub(crate) pointer_axis: bool,
+    pub(crate) entered: Vec<(u32, i32, i32)>,
+    pub(crate) arm_watchers_for: Vec<u32>,
+    pub(crate) pointer_axes: Vec<(u32, u32)>,
+    pub(crate) destroyed_surfaces: Vec<u32>,
 }
 
 pub(crate) fn dispatch_request(
@@ -52,17 +53,19 @@ pub(crate) fn dispatch_request(
         (Iface::WlRegistry, REQ_BIND) => objects::on_bind(conn, msg),
         (Iface::WlCompositor, REQ_CREATE_SURFACE) => objects::on_create_surface(conn, msg),
         (Iface::WlSeat, REQ_GET_POINTER) => objects::on_get_pointer(conn, msg),
+        (Iface::WlSeat, WL_SEAT_RELEASE) => objects::on_destroy(fd, conn, msg, fx),
         (Iface::XdgWmBase, REQ_GET_XDG_SURFACE) => objects::on_get_xdg_surface(conn, msg),
+        (Iface::XdgWmBase, REQ_DESTROY) => objects::on_destroy(fd, conn, msg, fx),
         (Iface::XdgSurface, REQ_GET_TOPLEVEL) => objects::on_get_toplevel(fd, conn, msg, fx),
         (Iface::XdgToplevel, REQ_SET_TITLE) => title::on_set_title(fd, conn, msg),
         (Iface::XdgPopupShim, REQ_SET_TITLE) => {
             let _ = title::on_set_title(fd, conn, msg);
             Action::Suppress
         }
-        (Iface::XdgPopupShim, REQ_DESTROY) => objects::on_destroy(fd, conn, msg),
+        (Iface::XdgPopupShim, REQ_DESTROY) => objects::on_destroy(fd, conn, msg, fx),
         (Iface::XdgPopupShim, _) => Action::Suppress,
         (Iface::WlSurface | Iface::XdgSurface | Iface::XdgToplevel, REQ_DESTROY) => {
-            objects::on_destroy(fd, conn, msg)
+            objects::on_destroy(fd, conn, msg, fx)
         }
         (Iface::WlPointer, WL_POINTER_RELEASE) => objects::on_pointer_release(conn, msg),
         _ => Action::Forward,

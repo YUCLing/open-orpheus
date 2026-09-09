@@ -4,17 +4,26 @@
  * Make the next Electron window on this Wayland connection an xdg_popup.
  * Omit anchor coordinates to use the last pointer-button position on parent.
  */
-export declare function armNextWindowAsPopup(parentWindowId: string, width: number, height: number, anchorX?: number | undefined | null, anchorY?: number | undefined | null): boolean
+export declare function armNextWindowAsPopup(parentWindowId: string, width: number, height: number, anchorX?: number | undefined | null, anchorY?: number | undefined | null): number | null
+
+/** Cancel a pending first-cursor-enter capture. */
+export declare function cancelNextWindowFirstCursorEnter(token: number): boolean
+
+/** Cancel an armed popup that has not yet consumed a get_toplevel request. */
+export declare function cancelPendingPopup(token: number): boolean
+
+/** Cancel a pending pointer-axis capture. */
+export declare function cancelWindowPointerAxisCapture(token: number): boolean
 
 /**
  * Listen for first CursorEnter event of the next created window.
  *
  * Only for Wayland on Linux.
  */
-export declare function captureNextWindowFirstCursorEnter(callback: (x: number, y: number) => void): void
+export declare function captureNextWindowFirstCursorEnter(callback: (x: number, y: number) => void): number
 
 /** Invoke once when a Wayland pointer-axis event reaches this window's client. */
-export declare function captureWindowNextPointerAxis(windowId: string, callback: (axis: number) => void): void
+export declare function captureWindowNextPointerAxis(windowId: string, callback: (axis: number) => void): number
 
 export declare const enum DesktopEnvironment {
   Wayland = 0,
@@ -40,9 +49,15 @@ export declare function getCursorPosition(): [number, number] | null
  */
 export declare function getDesktopEnvironment(): DesktopEnvironment
 
+/** Whether this tracked BrowserWindow was actually converted to xdg_popup. */
+export declare function isWindowWaylandPopup(windowId: string): boolean
+
 /**
  * Set regions that the window is used to receive inputs.
  *
  * Only for Linux.
  */
 export declare function setInputRegion(windowHandle: string | Buffer, rects?: { x: number, y: number, w: number, h: number }[] | null): boolean
+
+/** Whether native GNOME Wayland popup conversion is available. */
+export declare function supportsGnomeWaylandPopup(): boolean
