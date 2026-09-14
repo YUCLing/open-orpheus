@@ -1,3 +1,8 @@
+* Mon Sep 14 2026 YUCLing <luotianyi@luotianyi.me> - 0.17.1-1
+- Fixed play/pause from system media integration being incorrectly handled as a state toggle.
+- Lowered the required glibc version.
+- Improved the drag experience.
+
 * Thu Sep 10 2026 YUCLing <luotianyi@luotianyi.me> - 0.17.0-1
 - Added AVS3-P3 decoding support.
 - Added scheduled shutdown support.

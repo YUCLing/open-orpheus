@@ -62,6 +62,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.17.1" date="2026-09-14">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.17.1</url>
+      <description>
+        <ul>
+          <li>Fixed play/pause from system media integration being incorrectly handled as a state toggle.</li>
+          <li xml:lang="zh-CN">修复系统媒体集成的播放/暂停被误当作状态切换处理的问题。</li>
+          <li>Lowered the required glibc version.</li>
+          <li xml:lang="zh-CN">降低所需的 glibc 版本。</li>
+          <li>Improved the drag experience.</li>
+          <li xml:lang="zh-CN">改进拖动体验。</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.0" date="2026-09-10">
       <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.17.0</url>
       <description>

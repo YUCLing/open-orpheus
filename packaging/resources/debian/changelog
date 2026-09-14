@@ -1,3 +1,11 @@
+open-orpheus (0.17.1-1) unstable; urgency=medium
+
+  * Fixed play/pause from system media integration being incorrectly handled as a state toggle.
+  * Lowered the required glibc version.
+  * Improved the drag experience.
+
+ -- YUCLing <luotianyi@luotianyi.me>  Mon, 14 Sep 2026 00:00:00 +0000
+
 open-orpheus (0.17.0-1) unstable; urgency=medium
 
   * Added AVS3-P3 decoding support.
