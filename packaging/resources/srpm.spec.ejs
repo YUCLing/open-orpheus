@@ -71,13 +71,37 @@ corepack install
 
 # Install dependencies and build native modules
 pnpm install --frozen-lockfile
+
 # Copr adds a flag that is not supported by WASM rust-lld; strip it. Use sed
 # (POSIX) rather than ${var//.../} (a bashism) so %build also works when
 # rpmbuild runs it under dash (e.g. GitHub Actions' ubuntu runners).
 ORIGINAL_RUSTFLAGS="$RUSTFLAGS"
 export RUSTFLAGS="$(printf '%s' "$RUSTFLAGS" | sed 's|-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes||g')"
+
+# Strip CFLAGS/CXXFLAGS that zig cc / zig c++ cannot understand.
+# Remove -flto=auto, -ffat-lto-objects, -fno-omit-frame-pointer,
+# and -mno-omit-leaf-frame-pointer.
+strip_flags() {
+    printf '%s' "$1" | sed \
+        -e 's|-flto=auto||g' \
+        -e 's|-ffat-lto-objects||g' \
+        -e 's|-fno-omit-frame-pointer||g' \
+        -e 's|-mno-omit-leaf-frame-pointer||g' \
+        -e 's|-mtune=[^ ]*||g' \
+        -e 's|-march=[^ ]*||g'
+}
+
+ORIGINAL_CFLAGS="$CFLAGS"
+ORIGINAL_CXXFLAGS="$CXXFLAGS"
+
+export CFLAGS="$(strip_flags "$CFLAGS")"
+export CXXFLAGS="$(strip_flags "$CXXFLAGS")"
+
 pnpm run build:modules
+
 export RUSTFLAGS="$ORIGINAL_RUSTFLAGS"
+export CFLAGS="$ORIGINAL_CFLAGS"
+export CXXFLAGS="$ORIGINAL_CXXFLAGS"
 
 # Package the Electron app (produces out/<%- name %>-linux-*)
 pnpm run package
