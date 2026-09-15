@@ -13,20 +13,17 @@ describe("isAv3aLocalFile", () => {
     vi.mocked(ipcRenderer.invoke).mockReset();
   });
 
-  it("asks the main process to sniff the file", async () => {
+  it("returns whatever the main process answered", async () => {
     vi.mocked(ipcRenderer.invoke).mockResolvedValue(true);
-
     await expect(isAv3aLocalFile("/music/song.m4a")).resolves.toBe(true);
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith(
-      "audio.isAv3aFile",
-      "/music/song.m4a"
-    );
-  });
 
-  it("passes the main process answer through", async () => {
     vi.mocked(ipcRenderer.invoke).mockResolvedValue(false);
-
     await expect(isAv3aLocalFile("/music/song.mp3")).resolves.toBe(false);
+
+    expect(ipcRenderer.invoke).toHaveBeenLastCalledWith(
+      "audio.isAv3aFile",
+      "/music/song.mp3"
+    );
   });
 
   it("propagates main process failures", async () => {

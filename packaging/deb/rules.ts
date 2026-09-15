@@ -20,10 +20,18 @@ export interface RulesOptions {
 
 export async function generateRules(options: RulesOptions) {
   return new Promise<string>((resolve, reject) => {
-    ejs.renderFile(template, options, (err, result) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
+    ejs.renderFile(
+      template,
+      {
+        ...options,
+        installTools: options.installTools ?? true,
+        prebuilt: options.prebuilt ?? false,
+      },
+      (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      }
+    );
   });
 }
 

@@ -22,7 +22,8 @@
     "lint:types:gui": "pnpm --dir gui check",
     "format": "prettier --write .",
     "build:modules": "node scripts/build-modules.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": {
@@ -55,6 +56,7 @@
     "@types/unzipper": "^0.10.11",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
+    "@vitest/coverage-v8": "4.1.11",
     "@webtoon/psd": "^0.4.0",
     "@xmldom/xmldom": "^0.9.12",
     "@yxim/nim-web-sdk": "^9.21.14",

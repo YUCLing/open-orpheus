@@ -40,7 +40,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: pnpm test
+        run: pnpm coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-report.junit.xml
+
+      - name: Upload test results to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          report_type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # Generates the Flatpak manifest and actually builds it, so packaging
   # regressions are caught before a release is tagged.
@@ -107,7 +118,7 @@ jobs:
             org.freedesktop.Sdk.Extension.node24//25.08
 
       - name: Generate Flatpak builder manifest
-        run: node --experimental-strip-types scripts/build-flatpak-builder.ts
+        run: node scripts/build-flatpak-builder.ts
 
       - name: Download the linter seccomp profile
         run: curl -fsSL "$LINTER_SECCOMP_URL" -o flatpak.seccomp.json
