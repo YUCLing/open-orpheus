@@ -111,6 +111,151 @@ impl WaylandConn {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A connection that already knows one surface and one window object.
+    fn connected() -> WaylandConn {
+        let mut conn = WaylandConn::new();
+        conn.ifaces.insert(10, Iface::WlSurface);
+        conn.ifaces.insert(20, Iface::XdgSurface);
+        conn.ifaces.insert(30, Iface::XdgToplevel);
+        conn.xdg_to_wl.insert(20, 10);
+        conn.top_to_xdg.insert(30, 20);
+        conn.wl_to_top.insert(10, 30);
+        conn
+    }
+
+    #[test]
+    fn a_new_connection_only_knows_the_display() {
+        let conn = WaylandConn::new();
+
+        assert_eq!(conn.ifaces.len(), 1);
+        assert_eq!(conn.ifaces.get(&1), Some(&Iface::WlDisplay));
+        assert!(conn.stolen_ids.is_empty());
+        assert!(conn.injected_ids.is_empty());
+    }
+
+    #[test]
+    fn resets_keep_the_display_but_drop_everything_else() {
+        let mut conn = connected();
+        conn.stolen_ids.push(99);
+        conn.injected_ids.insert(99);
+
+        conn.reset_tracking();
+
+        assert_eq!(conn.ifaces.len(), 1);
+        assert!(conn.stolen_ids.is_empty());
+        assert!(conn.injected_ids.is_empty());
+        assert!(conn.top_to_xdg.is_empty());
+    }
+
+    #[test]
+    fn injected_ids_are_recycled_from_the_stolen_pool() {
+        let mut conn = WaylandConn::new();
+        conn.stolen_ids.extend([7, 8]);
+
+        assert_eq!(conn.alloc_injected_id(), Some(8), "last in, first out");
+        assert_eq!(conn.alloc_injected_id(), Some(7));
+        assert_eq!(conn.alloc_injected_id(), None, "the pool is empty");
+        assert!(conn.injected_ids.contains(&7) && conn.injected_ids.contains(&8));
+        assert!(conn.stolen_ids.is_empty());
+    }
+
+    #[test]
+    fn purging_a_toplevel_clears_its_mappings() {
+        let mut conn = connected();
+
+        conn.purge(30);
+
+        assert!(!conn.ifaces.contains_key(&30));
+        assert!(!conn.top_to_xdg.contains_key(&30));
+        assert!(!conn.wl_to_top.contains_key(&10));
+        // The xdg surface it belonged to is untouched.
+        assert!(conn.ifaces.contains_key(&20));
+    }
+
+    #[test]
+    fn purging_an_xdg_surface_takes_its_toplevel_with_it() {
+        let mut conn = connected();
+
+        conn.purge(20);
+
+        assert!(!conn.ifaces.contains_key(&20));
+        assert!(!conn.ifaces.contains_key(&30), "toplevel is purged too");
+        assert!(!conn.xdg_to_wl.contains_key(&20));
+        assert!(!conn.top_to_xdg.contains_key(&30));
+    }
+
+    #[test]
+    fn purging_a_surface_forgets_its_focus_and_toplevel() {
+        let mut conn = connected();
+        conn.pointer_focus.insert(40, 10);
+
+        conn.purge(10);
+
+        assert!(!conn.ifaces.contains_key(&10));
+        assert!(!conn.wl_to_top.contains_key(&10));
+        assert!(!conn.pointer_focus.contains_key(&40));
+        // Mappings that pointed at the dead surface are dropped, so the xdg
+        // surface no longer references it.
+        assert!(!conn.xdg_to_wl.contains_key(&20));
+        assert!(!conn.xdg_to_wl.values().any(|surface| *surface == 10));
+    }
+
+    #[test]
+    fn purging_a_seat_forgets_the_devices_it_owned() {
+        let mut conn = WaylandConn::new();
+        conn.ifaces.insert(5, Iface::WlSeat);
+        conn.pointer_seat.insert(6, 5);
+        conn.touch_seat.insert(7, 5);
+        conn.ifaces.insert(6, Iface::WlPointer);
+        conn.ifaces.insert(7, Iface::WlTouch);
+
+        conn.purge(5);
+
+        assert!(conn.pointer_seat.is_empty());
+        assert!(conn.touch_seat.is_empty());
+    }
+
+    #[test]
+    fn purging_a_pointer_forgets_its_focus() {
+        let mut conn = WaylandConn::new();
+        conn.ifaces.insert(6, Iface::WlPointer);
+        conn.pointer_focus.insert(6, 10);
+        conn.pointer_seat.insert(6, 5);
+
+        conn.purge(6);
+
+        assert!(conn.pointer_focus.is_empty());
+        assert!(conn.pointer_seat.is_empty());
+    }
+
+    #[test]
+    fn window_objects_resolve_to_their_wl_surface() {
+        let conn = connected();
+
+        assert_eq!(
+            conn.wl_surface_for_window_object(10, Iface::WlSurface),
+            Some(10)
+        );
+        assert_eq!(
+            conn.wl_surface_for_window_object(20, Iface::XdgSurface),
+            Some(10)
+        );
+        assert_eq!(
+            conn.wl_surface_for_window_object(30, Iface::XdgToplevel),
+            Some(10)
+        );
+        assert_eq!(conn.wl_surface_for_window_object(1, Iface::WlDisplay), None);
+        assert_eq!(
+            conn.wl_surface_for_window_object(99, Iface::WlSurface),
+            Some(99)
+        );
+    }
+}
+
 // ── Global state ───────────────────────────────────────────────────────────
 
 pub(crate) static IS_WAYLAND: OnceLock<bool> = OnceLock::new();

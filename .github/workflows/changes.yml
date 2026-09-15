@@ -74,6 +74,8 @@ jobs:
             rust:
               - ".github/workflows/changes.yml"
               - ".github/workflows/lint.yml"
+              - ".github/workflows/test.yml"
+              - ".config/nextest.toml"
               - "Cargo.toml"
               - "Cargo.lock"
               - "modules/**/Cargo.toml"

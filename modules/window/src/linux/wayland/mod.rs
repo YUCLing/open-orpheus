@@ -4,6 +4,9 @@ mod handlers;
 mod inject;
 mod state;
 
+#[cfg(test)]
+mod test_support;
+
 use std::os::fd::RawFd;
 
 use crate::linux::Rect;

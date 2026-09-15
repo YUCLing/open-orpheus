@@ -6,13 +6,13 @@ use std::{
 
 pub(crate) const X11_BUFFER_LIMIT: usize = 4 * 1024 * 1024;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum State {
     Setup,
     Connected,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub(crate) enum InjectedType {
     InternAtomNetWmMoveresize,
     QueryExtensionShape,
@@ -213,4 +213,20 @@ pub(crate) fn clear_state() {
     {
         *opt = None;
     }
+}
+
+/// Serialises every test that touches the registries above.
+///
+/// `X11_CONNS`, `SINKS` and `LAST_ACTIVE_FD` live for the whole process, and
+/// `filter::feed_inbound` / `feed_outbound` rewrite `LAST_ACTIVE_FD` on every
+/// call. A lock private to one test module is therefore not enough: a test in
+/// another module can still overwrite the "last active" connection underneath
+/// it, which makes the injector target the wrong descriptor (or none at all).
+#[cfg(test)]
+pub(crate) fn lock_globals() -> std::sync::MutexGuard<'static, ()> {
+    static GLOBAL_STATE: Mutex<()> = Mutex::new(());
+
+    GLOBAL_STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }

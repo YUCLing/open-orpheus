@@ -43,14 +43,72 @@ jobs:
         run: pnpm coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-report.junit.xml
 
       - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
           report_type: test_results
+          flags: node
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage reports to Codecov
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
+          flags: node
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Linux only: the Rust unit tests cover platform-independent logic plus the
+  # cfg(target_os = "linux") protocol codecs, which the macOS/Windows clippy
+  # runs never compile. nextest runs them under llvm-cov, so a single pass
+  # produces both the coverage data and the JUnit report Codecov ingests.
+  test-rust:
+    name: Cargo nextest
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ vars.RUST_VERSION || 'stable' }}
+          # cargo-llvm-cov needs llvm-cov/llvm-profdata from the toolchain.
+          components: llvm-tools-preview
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.144
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.9.1
+
+      # The `ci` nextest profile (`.config/nextest.toml`) writes the JUnit
+      # report to `target/nextest/ci/junit.xml`, which stays outside
+      # `target/llvm-cov-target` where llvm-cov keeps its build artifacts.
+      - name: Run tests
+        run: cargo llvm-cov nextest --workspace --locked --profile ci --lcov --output-path lcov.info
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          report_type: test_results
+          files: target/nextest/ci/junit.xml
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage reports to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          flags: rust
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # Generates the Flatpak manifest and actually builds it, so packaging
