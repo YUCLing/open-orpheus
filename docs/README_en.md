@@ -1,6 +1,7 @@
 # Open Orpheus
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/YUCLing/open-orpheus/release.yml)
+[![codecov](https://codecov.io/github/YUCLing/open-orpheus/graph/badge.svg?token=H00VYAIAWJ)](https://codecov.io/github/YUCLing/open-orpheus)
 ![GitHub License](https://img.shields.io/github/license/YUCLing/open-orpheus)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/YUCLing/open-orpheus/total)
 ![GitHub Repo stars](https://img.shields.io/github/stars/YUCLing/open-orpheus)
