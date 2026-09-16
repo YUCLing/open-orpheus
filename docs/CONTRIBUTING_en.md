@@ -149,7 +149,11 @@ Note that the core goal of this project is **interoperability**. Features intend
 2. Make your changes and verify the project builds and runs correctly.
 3. Write a clear PR description explaining what you changed and why.
 4. If your PR addresses an issue, reference it with `Closes #issue-number` in the description.
-5. Submit and wait for review. Maintainers may request changes — please be patient.
+5. Submit and wait for review. Both maintainers and the review AI may request changes — please be patient. If you believe a suggestion is wrong or unnecessary, feel free to push back and explain your reasoning.
+
+### Codecov
+
+Automated tests currently cover part of the project (`pnpm test`, with a coverage report via `pnpm coverage`). At this stage Codecov feedback is for reference only and is not enforced — but adding test cases for your changes is always appreciated!
 
 ### Code Style
 
