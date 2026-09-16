@@ -1,5 +1,6 @@
 import {
   existsSync,
+  mkdirSync,
   readdirSync,
   unlinkSync,
   statSync,
@@ -54,6 +55,28 @@ function parseLogTimestamp(value: string): Date | null {
 }
 
 const latestLog = resolve(logDir, "latest.ndjson");
+
+/**
+ * Make sure the log directory exists before any of the roll/retention logic
+ * below (or the pino transport) touches it.
+ *
+ * Everything else in this module that reads the directory runs synchronously
+ * at import time — earlier than the pino transport worker, which is the only
+ * other thing that could create the directory. On a fresh install
+ * `readdirSync` would therefore throw `ENOENT` and silently skip recovery and
+ * retention for that whole session.
+ *
+ * This is best-effort on purpose: logging is diagnostic, not a prerequisite
+ * for running, so an unwritable location (read-only home, full disk, directory
+ * owned by another user, ...) must never stop the app from starting. On
+ * failure the roll and retention work below degrades to logging errors, and
+ * the pino transport reports its own failure through the error listener.
+ */
+try {
+  mkdirSync(logDir, { recursive: true });
+} catch (err) {
+  console.error(`Failed to create log directory ${logDir}:`, err);
+}
 
 /**
  * Pick the timestamped archive name (appending a `-1`, `-2`, ... suffix if the
@@ -166,11 +189,18 @@ function pruneRotatedLogs(): void {
  * transport opens it. Doing the rename synchronously here guarantees pino
  * always writes to a brand-new file and never through a handle whose
  * underlying file is later renamed and unlinked by the background roll.
+ *
+ * Failing to rotate is housekeeping, not a startup error: pino opens the
+ * existing file instead, so this run just appends to it.
  */
 if (existsSync(latestLog)) {
-  const lastLogStat = statSync(latestLog);
-  const rollingName = `${nextArchiveName(lastLogStat.ctime)}.rolling`;
-  renameSync(latestLog, resolve(logDir, rollingName));
+  try {
+    const lastLogStat = statSync(latestLog);
+    const rollingName = `${nextArchiveName(lastLogStat.ctime)}.rolling`;
+    renameSync(latestLog, resolve(logDir, rollingName));
+  } catch (err) {
+    console.error("Failed to roll previous log at startup:", err);
+  }
 }
 
 /**
@@ -178,10 +208,12 @@ if (existsSync(latestLog)) {
  * previous runs and the one rolled above — by streaming each into its final
  * `.ndjson.gz` archive.
  *
- * Runs in the background after the transport is created, so it only touches
- * `.rolling` files and never races with pino writing to the fresh
- * `latest.ndjson`. Each entry is handled independently: a failure leaves that
- * staging file in place for a future run to retry without blocking the rest.
+ * Finishing runs in the background (started before the transport below, so
+ * the two overlap): it only touches `.rolling` files and never the fresh
+ * `latest.ndjson` pino is writing to. Each entry is handled independently: a
+ * failure leaves that staging file in place for a future run to retry without
+ * blocking the rest.
+ *
  * Because it always resolves after processing every entry, retention always
  * runs afterwards and can clean up failed staging files via the seat count.
  */
