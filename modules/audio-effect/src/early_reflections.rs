@@ -239,6 +239,7 @@ impl EarlyReflections {
 #[cfg(test)]
 mod tests {
     use super::EarlyReflections;
+    use crate::utils::ms_to_samples;
     use std::collections::HashSet;
 
     fn tap_signature(pattern: i32) -> Vec<usize> {
@@ -276,5 +277,162 @@ mod tests {
                 "pattern {pattern} reuses another known tap layout"
             );
         }
+    }
+
+    #[test]
+    fn an_unsanitised_rate_is_corrected() {
+        assert_eq!(EarlyReflections::new(0.0).sample_rate, 44_100.0);
+        assert_eq!(
+            EarlyReflections::new(48_000.0).max_delay_samples,
+            ms_to_samples(250.0, 48_000.0)
+        );
+    }
+
+    #[test]
+    fn taps_stay_inside_the_delay_line() {
+        let mut er = EarlyReflections::new(48_000.0);
+
+        for pattern in [0, 2, 4, 15, 17, 18, 21, 23, 24, 28] {
+            er.set_pattern(pattern, 75.0);
+            assert!(er.lpf_coeff > 0.0 && er.lpf_coeff < 1.0);
+
+            let mut previous = 0;
+            for tap in &er.taps {
+                assert!(
+                    tap.delay_samples >= 1 && tap.delay_samples < er.max_delay_samples,
+                    "pattern {pattern} tap delay {} out of range",
+                    tap.delay_samples
+                );
+                assert!(
+                    tap.delay_samples > previous,
+                    "pattern {pattern} taps must be ordered"
+                );
+                previous = tap.delay_samples;
+                assert!(tap.gain > 0.0 && tap.gain <= 1.0);
+                assert!(tap.pan >= -1.0 && tap.pan <= 1.0);
+            }
+        }
+    }
+
+    #[test]
+    fn an_unknown_pattern_falls_back_to_the_generic_layout() {
+        let mut generic = EarlyReflections::new(48_000.0);
+        generic.set_pattern(15, 75.0);
+        let expected: Vec<usize> = generic.taps.iter().map(|t| t.delay_samples).collect();
+
+        let mut unknown = EarlyReflections::new(48_000.0);
+        unknown.set_pattern(7_777, 75.0);
+
+        assert_eq!(
+            unknown
+                .taps
+                .iter()
+                .map(|t| t.delay_samples)
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    #[test]
+    fn room_size_and_start_delay_are_clamped_and_scale_the_taps() {
+        let mut er = EarlyReflections::new(48_000.0);
+
+        er.set_pattern(15, 1.0);
+        assert_eq!(er.rsize, 10.0);
+        let small: Vec<usize> = er.taps.iter().map(|t| t.delay_samples).collect();
+
+        er.set_pattern(15, 1_000.0);
+        assert_eq!(er.rsize, 140.0);
+        let large: Vec<usize> = er.taps.iter().map(|t| t.delay_samples).collect();
+        assert!(
+            large[0] > small[0],
+            "a bigger room should spread the taps out"
+        );
+
+        er.set_sdelay(-10.0);
+        assert_eq!(er.sdelay_ms, 0.0);
+        let no_offset: Vec<usize> = er.taps.iter().map(|t| t.delay_samples).collect();
+        er.set_sdelay(160.0);
+        let offset: Vec<usize> = er.taps.iter().map(|t| t.delay_samples).collect();
+        assert!(offset[0] > no_offset[0]);
+
+        er.set_sdelay(10_000.0);
+        assert_eq!(er.sdelay_ms, 160.0, "clamped to the documented maximum");
+    }
+
+    #[test]
+    fn silence_stays_silent() {
+        let mut er = EarlyReflections::new(48_000.0);
+        let (mut out_l, mut out_r) = (vec![0.0; 256], vec![0.0; 256]);
+
+        er.process_block(&[0.0; 256], &[0.0; 256], &mut out_l, &mut out_r);
+
+        assert!(out_l.iter().all(|s| *s == 0.0));
+        assert!(out_r.iter().all(|s| *s == 0.0));
+
+        // Silence in and silence out is also what a `process_block` that never
+        // enters its loop produces, so feed a single sample and then keep the
+        // input silent: the reflections can only arrive if the silent frames
+        // were actually pushed through the delay line.
+        let frames = 16_384;
+        let mut impulse_l = vec![0.0; frames];
+        let mut impulse_r = vec![0.0; frames];
+        impulse_l[0] = 1.0;
+        impulse_r[0] = 1.0;
+        let (mut tail_l, mut tail_r) = (vec![0.0; frames], vec![0.0; frames]);
+
+        er.process_block(&impulse_l, &impulse_r, &mut tail_l, &mut tail_r);
+
+        let onset = tail_l
+            .iter()
+            .position(|s| *s != 0.0)
+            .expect("the delayed reflections have to arrive");
+        assert_eq!(onset, er.taps[0].delay_samples, "delayed by the first tap");
+        assert!(tail_l.iter().chain(&tail_r).all(|s| s.is_finite()));
+    }
+
+    #[test]
+    fn an_impulse_returns_as_delayed_reflections() {
+        let mut er = EarlyReflections::new(48_000.0);
+        er.set_pattern(15, 75.0);
+        let frames = 16_384;
+        let mut input_l = vec![0.0; frames];
+        let mut input_r = vec![0.0; frames];
+        input_l[0] = 1.0;
+        input_r[0] = 1.0;
+        let (mut out_l, mut out_r) = (vec![0.0; frames], vec![0.0; frames]);
+
+        er.process_block(&input_l, &input_r, &mut out_l, &mut out_r);
+
+        let onset = out_l
+            .iter()
+            .position(|s| *s != 0.0)
+            .expect("no reflections were produced");
+        assert_eq!(
+            onset, er.taps[0].delay_samples,
+            "the first reflection should arrive at the first tap delay"
+        );
+        assert!(out_l.iter().all(|s| s.is_finite()));
+        assert!(out_l.iter().all(|s| s.abs() < 4.0));
+        // The taps are panned, so the two channels differ.
+        assert_ne!(out_l[onset], out_r[onset]);
+    }
+
+    #[test]
+    fn mismatched_block_lengths_only_write_the_common_part() {
+        let mut er = EarlyReflections::new(48_000.0);
+        // Long enough for the first reflection to land inside the shared part,
+        // so "processed" is distinguishable from "never wrote anything".
+        let shared = er.taps[0].delay_samples + 8;
+        let input = vec![1.0; shared];
+        let (mut out_l, mut out_r) = (vec![0.0; shared + 64], vec![0.0; shared]);
+
+        er.process_block(&input, &input, &mut out_l, &mut out_r);
+
+        assert!(
+            out_l[..shared].iter().any(|s| *s != 0.0),
+            "the shared frames were never processed"
+        );
+        assert!(out_l[shared..].iter().all(|s| *s == 0.0), "untouched tail");
     }
 }

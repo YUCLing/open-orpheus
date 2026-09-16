@@ -12,7 +12,13 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "modules/*"],
     coverage: {
       include: ["src/**/*.ts", "packaging/**/*.ts"],
-      exclude: ["src/{preload,worklets}/**/*.ts"],
+      exclude: [
+        "src/{preload,worklets}/**/*.ts",
+        // Constants
+        "packaging/options.ts",
+        "packaging/common/toolchain.ts",
+        "src/constants.ts",
+      ],
     },
   },
 });

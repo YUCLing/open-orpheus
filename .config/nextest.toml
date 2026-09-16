@@ -1,0 +1,9 @@
+# CI runs the Rust tests through `cargo llvm-cov nextest --profile ci`, which
+# needs a JUnit report for Codecov's Test Analytics.
+#
+# `path` is relative to the nextest store directory. That stays
+# `target/nextest/<profile>/` even while llvm-cov builds into
+# `target/llvm-cov-target/`, so the report lands at
+# `target/nextest/ci/junit.xml`.
+[profile.ci.junit]
+path = "junit.xml"

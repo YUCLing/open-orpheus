@@ -60,7 +60,8 @@ impl Sink {
     /// Direct server-bound write, bypassing the filters.
     ///
     /// The caller must hold [`Sink::write_lock`] (when present) to serialize
-    /// against the transport's forwarded writes.
+    /// against the transport's forwarded writes. Control messages only: a short
+    /// write is not retried and desyncs the stream.
     pub(crate) fn send_to_server(&self, bytes: &[u8]) -> bool {
         syscalls::send_raw_msg(self.real_fd, bytes)
     }
@@ -85,8 +86,12 @@ pub(crate) trait Protocol: Send + Sync {
 /// Per-connection protocol state. The transport hands raw chunks + ancillary
 /// data to it and forwards whatever it returns.
 pub(crate) trait ConnectionHandler: Send {
-    /// Filter one chunk. Returning `None` means the protocol stream is desynced
-    /// and the connection should be torn down.
+    /// Filter one chunk.
+    ///
+    /// Returning `None` means the protocol stream is desynced beyond recovery and
+    /// the connection should be torn down. An implementation may instead choose to
+    /// recover by dropping the backlog and carrying on (the Wayland handler does),
+    /// in which case the caller must expect the two ends to have diverged.
     fn filter(&mut self, dir: Direction, chunk: &[u8], cmsg: Option<Cmsg>) -> Option<Filtered>;
 
     /// Called when the application closes its fd.
@@ -109,7 +114,9 @@ static PROTOCOLS: OnceLock<Vec<Box<dyn Protocol>>> = OnceLock::new();
 /// Active connections keyed by the application fd.
 static CONNECTIONS: OnceLock<Mutex<HashMap<RawFd, Box<dyn ConnectionHandler>>>> = OnceLock::new();
 /// Per-connection [`Sink`]s, so public protocol APIs can inject messages.
-static SINKS: OnceLock<Mutex<HashMap<RawFd, Sink>>> = OnceLock::new();
+/// Injection handles keyed by the application fd. `pub(crate)` so the protocol
+/// modules (and their tests) can drive injection directly.
+pub(crate) static SINKS: OnceLock<Mutex<HashMap<RawFd, Sink>>> = OnceLock::new();
 
 /// Look up the injection handle for an application fd.
 pub(crate) fn sink_for(fd: RawFd) -> Option<Sink> {
