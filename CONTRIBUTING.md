@@ -25,7 +25,7 @@ Open Orpheus 是一个基于 Electron 打造的网易云音乐 Orpheus 浏览器
 | 层级     | 技术                                                      |
 | -------- | --------------------------------------------------------- |
 | 应用壳   | Electron + Node                                           |
-| 原生模块 | Rust（napi-rs），通过 Cargo workspace 管理                |
+| 原生模块 | Rust（napi-rs / WebAssembly），通过 Cargo workspace 管理  |
 | 渲染界面 | Svelte 5 + Tailwind CSS（`gui/`，包括设置页、右键菜单等） |
 | 构建工具 | Electron Forge + Vite                                     |
 | 包管理   | pnpm workspace                                            |
@@ -56,11 +56,17 @@ open-orpheus/
 │       │   └── ...         # 调试、打包管理、协议配置、桌面歌词设置等页面
 │       └── lib/            # 共享组件 & 工具
 │           └── ...         # Bridge Proxy、UI 组件、Svelte hooks 等
-├── modules/                # Rust 原生模块（napi-rs）
+├── modules/                # 原生模块（Rust + napi-rs，部分编译为 WebAssembly）
 │   ├── ui/                 # 系统字体枚举
 │   ├── database/           # SQLite 数据库绑定（含拼音排序）
 │   ├── window/             # 跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域、光标捕获）
+│   ├── audio-effect/       # 音效处理（WebAssembly，供 AudioWorklet 使用）
+│   ├── av3a/               # AV3A（Audio Vivid）解码器
+│   ├── dbus/               # Linux D-Bus 集成（MPRIS 媒体会话）
+│   ├── nowplaying/         # macOS 媒体会话（MPNowPlayingInfoCenter）
+│   ├── smtc/               # Windows 媒体会话（SMTC）
 │   └── lifecycle/          # 退出回调等生命周期工具
+├── plugins/                # Electron Forge 插件与 Maker（deb / rpm / flatpak、日志等）
 ├── scripts/                # 构建脚本（模块编译、Flatpak 等）
 ├── packaging/              # 各平台打包配置
 ├── data/                   # 开发用运行时数据（资源、缓存、日志）
@@ -78,7 +84,7 @@ flowchart TB
         bridge_ct[Bridge 契约<br/>contracts/*-api.ts]
         bridge_pl[Preload 侧<br/>exposeApi → _call / _on]
         bridge_rr[Renderer 侧<br/>getBridge → typed Proxy]
-        gui_windows["GUI 窗口<br/>gui://gui/...<br/>（菜单 / 设置 / 桌面歌词 / 迷你播放器）"]
+        gui_windows["GUI 窗口<br/>gui://frontend/...<br/>（菜单 / 设置 / 桌面歌词 / 迷你播放器）"]
     end
 
     subgraph Native["Rust 原生模块 (napi-rs)"]
@@ -108,7 +114,7 @@ flowchart TB
   3. **Renderer 侧**（`gui/src/lib/bridge.ts` → `getBridge<T>(name)`）—— 用 Proxy 将属性访问自动映射为 channel 路径：`api.cache.getStats()` → `_call("cache.getStats")`，`api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`，提供完整的类型推导和 IDE 自动补全。
   4. **Main 侧**（`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`）—— 遍历 handler 对象树，自动为每个叶子函数注册 `ipc.handle()`；`events` 子树被排除（纯 push-from-main）。
 - **GUI 界面**（`gui/`）是一个 Svelte 单页应用，负责设置页、桌面歌词、右键菜单、迷你播放器等所有辅助界面，通过 `gui://` 协议加载。菜单以透明无边框 BrowserWindow 形式呈现（Wayland 下使用全屏覆盖层方案）。
-- **原生模块**（`modules/`）通过 napi-rs 为 Electron 主进程提供底层能力：SQLite 数据库（含中文拼音排序）、跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域设置、窗口拖拽、光标捕获）、系统字体枚举等。
+- **原生模块**（`modules/`）通过 napi-rs 为 Electron 主进程提供底层能力：SQLite 数据库（含中文拼音排序）、跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域设置、窗口拖拽、光标捕获）、系统字体枚举、AV3A 音频解码，以及各平台媒体会话集成（`dbus/` MPRIS、`nowplaying/`、`smtc/`）等；`audio-effect/` 则编译为 WebAssembly，供 `src/worklets/` 中的 AudioWorklet 使用。
 
 ### 关键概念
 
@@ -168,6 +174,12 @@ Issue 是反馈 Bug、提出功能建议或讨论项目方向的主要渠道。�
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli
+```
+
+在 Linux 上，napi-rs 会以 `-x` 模式调用 `cargo-zigbuild` 构建原生模块，因此还需要安装 `cargo-zigbuild` 与 [zig](https://ziglang.org/download/)（CI 与打包脚本使用 zig 0.16.0）：
+
+```sh
+cargo install cargo-zigbuild
 ```
 
 根项目这边的工作流和普通的 Electron Forge 项目差不多，不过 Open Orpheus 自己有一些原生模块，所以还得多做几步配置。

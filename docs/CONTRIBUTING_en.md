@@ -25,7 +25,7 @@ Open Orpheus is an Electron-based host for Netease Cloud Music's Orpheus browser
 | Layer           | Technology                                                                |
 | --------------- | ------------------------------------------------------------------------- |
 | App Shell       | Electron + Node                                                           |
-| Native Modules  | Rust (napi-rs), managed via Cargo workspace                               |
+| Native Modules  | Rust (napi-rs / WebAssembly), managed via Cargo workspace                 |
 | Renderer UI     | Svelte 5 + Tailwind CSS (`gui/`, including settings, context menus, etc.) |
 | Build Tools     | Electron Forge + Vite                                                     |
 | Package Manager | pnpm workspace                                                            |
@@ -56,11 +56,17 @@ open-orpheus/
 │       │   └── ...         # Debug, package management, protocol config, desktop lyrics settings, etc.
 │       └── lib/            # Shared components & utilities
 │           └── ...         # Bridge Proxy, UI components, Svelte hooks, etc.
-├── modules/                # Rust native modules (napi-rs)
+├── modules/                # Native modules (Rust + napi-rs, some compiled to WebAssembly)
 │   ├── ui/                 # System font enumeration
 │   ├── database/           # SQLite database bindings (with pinyin collation)
 │   ├── window/             # Cross-platform window utilities (deep Linux integration: Wayland/X11 protocol interception, input regions, cursor capture)
+│   ├── audio-effect/       # Audio effect processing (WebAssembly, used by AudioWorklet)
+│   ├── av3a/               # AV3A (Audio Vivid) decoder
+│   ├── dbus/               # Linux D-Bus integration (MPRIS media session)
+│   ├── nowplaying/         # macOS media session (MPNowPlayingInfoCenter)
+│   ├── smtc/               # Windows media session (SMTC)
 │   └── lifecycle/          # Exit callbacks and lifecycle utilities
+├── plugins/                # Electron Forge plugins & Makers (deb / rpm / flatpak, logging, etc.)
 ├── scripts/                # Build scripts (module compilation, Flatpak, etc.)
 ├── packaging/              # Per-platform packaging configuration
 ├── data/                   # Development runtime data (resources, cache, logs)
@@ -78,7 +84,7 @@ flowchart TB
         bridge_ct[Bridge Contracts<br/>contracts/*-api.ts]
         bridge_pl[Preload Side<br/>exposeApi → _call / _on]
         bridge_rr[Renderer Side<br/>getBridge → typed Proxy]
-        gui_windows["GUI Windows<br/>gui://gui/...<br/>(menu / settings / desktop lyrics / mini player)"]
+        gui_windows["GUI Windows<br/>gui://frontend/...<br/>(menu / settings / desktop lyrics / mini player)"]
     end
 
     subgraph Native["Rust Native Modules (napi-rs)"]
@@ -108,7 +114,7 @@ flowchart TB
   3. **Renderer Side** (`gui/src/lib/bridge.ts` → `getBridge<T>(name)`) — uses a Proxy to map property access to channel paths: `api.cache.getStats()` → `_call("cache.getStats")`, `api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`, providing full type inference and IDE autocompletion.
   4. **Main Side** (`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`) — walks the handler object tree, automatically registering `ipc.handle()` for each leaf function; the `events` subtree is excluded (push-from-main only).
 - **GUI** (`gui/`) is a Svelte SPA responsible for settings, desktop lyrics, context menus, mini player, and all auxiliary UI, loaded via the `gui://` protocol. Menus are rendered as transparent frameless BrowserWindows (using a fullscreen overlay approach on Wayland due to protocol limitations).
-- **Native Modules** (`modules/`) provide low-level capabilities to the Electron main process via napi-rs: SQLite database (with Chinese pinyin collation), cross-platform window utilities (deep Linux integration for Wayland/X11 protocol interception, input region control, window dragging, cursor capture), system font enumeration, and more.
+- **Native Modules** (`modules/`) provide low-level capabilities to the Electron main process via napi-rs: SQLite database (with Chinese pinyin collation), cross-platform window utilities (deep Linux integration for Wayland/X11 protocol interception, input region control, window dragging, cursor capture), system font enumeration, AV3A audio decoding, and per-platform media session integrations (`dbus/` MPRIS, `nowplaying/`, `smtc/`); `audio-effect/` is compiled to WebAssembly and consumed by the AudioWorklet in `src/worklets/`.
 
 ### Key Concepts
 
@@ -168,6 +174,12 @@ You will need Node and Rust to work with this project (Node v24 and Rust 1.96 ar
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli
+```
+
+On Linux, napi-rs builds the native modules in `-x` mode through `cargo-zigbuild`, so you also need `cargo-zigbuild` and [zig](https://ziglang.org/download/) (CI and the packaging scripts use zig 0.16.0):
+
+```sh
+cargo install cargo-zigbuild
 ```
 
 For the root project, everything works just like any other Electron Forge project, but Open Orpheus has some native modules of its own, which require a few extra setup steps.
