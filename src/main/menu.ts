@@ -225,6 +225,44 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       reportSize: async () => {},
       openSubmenu: async () => {},
       closeSubmenu: async () => {},
+      // Crop the overlay window to the renderer-reported content rect.
+      // Coordinates are relative to the current window origin, so content
+      // stays pixel-identical on screen. Dismissal still works via blur
+      // (clicks outside land on other windows and move focus away).
+      placeOverlay: async (_event, x, y, width, height) => {
+        if (this.closed || wnd.isDestroyed() || !wnd.isVisible()) {
+          return { dx: 0, dy: 0 };
+        }
+        // Fullscreen/maximized overlays (e.g. KDE, GNOME) cover the screen
+        // by design and compositors ignore setBounds there; skip so those
+        // environments keep today's behavior byte-for-byte.
+        if (wnd.isFullScreen() || wnd.isMaximized()) {
+          return { dx: 0, dy: 0 };
+        }
+        width = Math.max(1, Math.round(width));
+        height = Math.max(1, Math.round(height));
+        const bounds = wnd.getBounds();
+        const nx = Math.round(bounds.x + x);
+        const ny = Math.round(bounds.y + y);
+        // Clamp to the work area of the display containing the target.
+        // No-op on compositors that ignore setBounds for floating windows.
+        const display = screen.getDisplayNearestPoint({ x: nx, y: ny });
+        const { x: dx, y: dy, width: dw, height: dh } = display.workArea;
+        const cw = Math.min(width, dw);
+        const ch = Math.min(height, dh);
+        const cx = Math.min(Math.max(nx, dx), Math.max(dx, dx + dw - cw));
+        const cy = Math.min(Math.max(ny, dy), Math.max(dy, dy + dh - ch));
+        if (
+          bounds.x === cx &&
+          bounds.y === cy &&
+          bounds.width === cw &&
+          bounds.height === ch
+        ) {
+          return { dx: 0, dy: 0 };
+        }
+        wnd.setBounds({ x: cx, y: cy, width: cw, height: ch });
+        return { dx: cx - bounds.x, dy: cy - bounds.y };
+      },
     });
     registerInputRegionHandlers(wnd);
   }
@@ -329,6 +367,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         close: async () => {},
         openSubmenu: async () => {},
         closeSubmenu: async () => {},
+        // Overlay-only API; submenus are separate windows sized via reportSize.
+        placeOverlay: async () => ({ dx: 0, dy: 0 }),
       });
 
       sub.on("blur", () => {
@@ -387,6 +427,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       closeSubmenu: async () => {
         closeSubmenuWindow();
       },
+      // Overlay-only API; this window is sized via reportSize.
+      placeOverlay: async () => ({ dx: 0, dy: 0 }),
     });
 
     const blurCheck = () => {

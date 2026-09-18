@@ -61,6 +61,7 @@
         if (top < 0) top = 0;
         cursorX = left;
         menuTop = top;
+        reportOverlay();
       } else {
         const rect = menuEl.getBoundingClientRect();
         api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
@@ -73,6 +74,13 @@
 
   onMount(() => {
     if (waylandMode) {
+      // Keep the native window cropped to content on every layout change
+      // (submenu open/close, content updates, window resizes).
+      tick().then(() => {
+        const ro = new ResizeObserver(() => reportOverlay());
+        ro.observe(document.documentElement);
+      });
+
       api.pull().then((data) => {
         applyColors(data.colors);
         loadTemplates(data.templates);
@@ -148,6 +156,48 @@
     if (!item.enable) return;
     if (item.menu && item.children?.length) return;
     api.itemClick(item.menu_id);
+  }
+
+  /**
+   * Wayland overlay only: ask main to crop the native window to the HTML
+   * content rect (menu + inline submenu union). Main returns the actually
+   * applied origin shift; rebase coordinates so the next report stays
+   * relative to the current window origin. A { dx: 0, dy: 0 } reply means
+   * nothing changed and no rebase happens, so this converges.
+   */
+  function reportOverlay() {
+    if (!waylandMode || !menuEl) return;
+    const rect = menuEl.getBoundingClientRect();
+    let x = cursorX;
+    let y = menuTop;
+    let w = rect.width;
+    let h = rect.height;
+    if (submenuEl) {
+      const subRect = submenuEl.getBoundingClientRect();
+      const x1 = Math.min(x, submenuX);
+      const y1 = Math.min(y, submenuY);
+      const x2 = Math.max(x + w, submenuX + subRect.width);
+      const y2 = Math.max(y + h, submenuY + subRect.height);
+      x = x1;
+      y = y1;
+      w = x2 - x1;
+      h = y2 - y1;
+    }
+    if (w <= 0 || h <= 0) return;
+    api
+      .placeOverlay(
+        Math.round(x),
+        Math.round(y),
+        Math.ceil(w),
+        Math.ceil(h)
+      )
+      .then(({ dx, dy }) => {
+        if (dx === 0 && dy === 0) return;
+        cursorX -= dx;
+        menuTop -= dy;
+        submenuX -= dx;
+        submenuY -= dy;
+      });
   }
 
   function handleBtnClick(btn: MenuItemBtn) {
