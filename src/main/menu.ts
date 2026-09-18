@@ -261,7 +261,11 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           return { dx: 0, dy: 0 };
         }
         wnd.setBounds({ x: cx, y: cy, width: cw, height: ch });
-        return { dx: cx - bounds.x, dy: cy - bounds.y };
+        // Report what the compositor actually applied, not what was
+        // requested: read the bounds back so the renderer never rebases
+        // by a displacement the window did not move.
+        const applied = wnd.getBounds();
+        return { dx: applied.x - bounds.x, dy: applied.y - bounds.y };
       },
     });
     registerInputRegionHandlers(wnd);
