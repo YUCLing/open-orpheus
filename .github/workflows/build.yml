@@ -60,6 +60,12 @@ jobs:
           # --break-system-packages: the Ubuntu images are PEP 668 managed.
           pip install --break-system-packages "ziglang==$zig_version"
 
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libfreetype-dev
+
       - name: Build native modules
         run: pnpm build:modules
 
