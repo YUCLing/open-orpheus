@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 [dependencies]
 napi.workspace = true
 napi-derive.workspace = true
-font-kit = { version = "0.14.3", features = ["source-fontconfig-dlopen"] }
+font-kit = { git = "https://github.com/YUCLing/font-kit.git", rev = "bf5afc70b5afbcfa3de1b7e43b0ecae7524318cd", features = ["source-fontconfig-dlopen"] }
 
 [build-dependencies]
 napi-build = "2"
