@@ -23,6 +23,18 @@ export interface MenuContract {
 
   pull(): Promise<MenuPullResult>;
   reportSize(width: number, height: number): Promise<void>;
+  /**
+   * Wayland overlay only: crop the native window to the given content rect
+   * (relative to the current window origin) and report back the actually
+   * applied origin shift so the renderer can rebase its coordinates.
+   * Returns { dx: 0, dy: 0 } when nothing changed.
+   */
+  placeOverlay(
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<{ dx: number; dy: number }>;
   itemClick(menuId: string | null): Promise<void>;
   btnClick(btnId: string): Promise<void>;
   close(): Promise<void>;

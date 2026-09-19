@@ -61,6 +61,7 @@
         if (top < 0) top = 0;
         cursorX = left;
         menuTop = top;
+        reportOverlay();
       } else {
         const rect = menuEl.getBoundingClientRect();
         api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
@@ -73,6 +74,16 @@
 
   onMount(() => {
     if (waylandMode) {
+      // Keep the native window cropped to content on every layout change
+      // (submenu open/close, content updates, window resizes). The document
+      // root observer alone is not enough: absolutely positioned panels do
+      // not resize it, so menu/submenu elements are observed directly and
+      // state transitions below report explicitly.
+      tick().then(() => {
+        const ro = new ResizeObserver(() => reportOverlay());
+        ro.observe(document.documentElement);
+      });
+
       api.pull().then((data) => {
         applyColors(data.colors);
         loadTemplates(data.templates);
@@ -90,6 +101,7 @@
 
       api.events.update((rawItems) => {
         items = rawItems as MenuItem[];
+        tick().then(() => reportOverlay());
       });
     } else if (isSubmenuMode) {
       api.pull().then((data) => {
@@ -150,6 +162,87 @@
     api.itemClick(item.menu_id);
   }
 
+  /**
+   * Wayland overlay only: ask main to crop the native window to the HTML
+   * content rect (menu + inline submenu union). Main returns the actually
+   * applied origin shift; rebase coordinates so the next report stays
+   * relative to the current window origin. A { dx: 0, dy: 0 } reply means
+   * nothing changed and no rebase happens, so this converges.
+   *
+   * Reports are serialized: at most one placeOverlay call is in flight.
+   * Extra triggers while busy only set a dirty flag, and the next report
+   * is recomputed from current state after the reply arrives, so stale
+   * replies can never be applied twice.
+   */
+  let overlayInflight = false;
+  let overlayDirty = false;
+
+  function reportOverlay() {
+    if (!waylandMode || !menuEl) return;
+    if (overlayInflight) {
+      overlayDirty = true;
+      return;
+    }
+    const rect = menuEl.getBoundingClientRect();
+    let x = cursorX;
+    let y = menuTop;
+    let w = rect.width;
+    let h = rect.height;
+    if (submenuEl) {
+      const subRect = submenuEl.getBoundingClientRect();
+      const x1 = Math.min(x, submenuX);
+      const y1 = Math.min(y, submenuY);
+      const x2 = Math.max(x + w, submenuX + subRect.width);
+      const y2 = Math.max(y + h, submenuY + subRect.height);
+      x = x1;
+      y = y1;
+      w = x2 - x1;
+      h = y2 - y1;
+    }
+    if (w <= 0 || h <= 0) return;
+    overlayInflight = true;
+    overlayDirty = false;
+    const settle = () => {
+      overlayInflight = false;
+      if (overlayDirty) {
+        overlayDirty = false;
+        reportOverlay();
+      }
+    };
+    api
+      .placeOverlay(Math.round(x), Math.round(y), Math.ceil(w), Math.ceil(h))
+      .then(
+        ({ dx, dy }) => {
+          if (dx !== 0 || dy !== 0) {
+            cursorX -= dx;
+            menuTop -= dy;
+            submenuX -= dx;
+            submenuY -= dy;
+          }
+          settle();
+        },
+        () => settle()
+      );
+  }
+
+  // Observe the panels directly: they are absolutely positioned and do
+  // not resize the document root, so the root observer above would miss
+  // submenu open/close/move. Position changes without resizing are still
+  // covered by the explicit reportOverlay() calls on state transitions.
+  $effect(() => {
+    if (!waylandMode || !menuEl) return;
+    const ro = new ResizeObserver(() => reportOverlay());
+    ro.observe(menuEl);
+    return () => ro.disconnect();
+  });
+
+  $effect(() => {
+    if (!waylandMode || !submenuEl) return;
+    const ro = new ResizeObserver(() => reportOverlay());
+    ro.observe(submenuEl);
+    return () => ro.disconnect();
+  });
+
   function handleBtnClick(btn: MenuItemBtn) {
     if (!btn.enable) return;
     api.btnClick(btn.id);
@@ -175,6 +268,7 @@
           if (submenuX + subRect.width > vw)
             submenuX = rect.left - subRect.width;
           if (submenuY + subRect.height > vh) submenuY = vh - subRect.height;
+          reportOverlay();
         });
       } else if (!isSubmenuMode && submenuParentIndex !== index) {
         api.openSubmenu(
@@ -191,6 +285,7 @@
         api.closeSubmenu();
       }
       submenuParentIndex = -1;
+      if (waylandMode) tick().then(() => reportOverlay());
     }
   }
 
