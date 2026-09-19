@@ -52,9 +52,9 @@ export interface MakerFlatpakOptions {
   clean?: boolean;
   /** Path (relative to the project) to the AppStream metainfo. Defaults to `packaging/flatpak/metainfo.xml`. */
   metainfo?: string;
-  /** Runtime version (e.g. `25.08`). Defaults to `"25.08"`. */
+  /** Runtime version (e.g. `26.08`). Defaults to `"26.08"`. */
   runtimeVersion?: string;
-  /** Base-app version (e.g. `25.08`). Defaults to `"25.08"`. */
+  /** Base-app version (e.g. `26.08`). Defaults to `"26.08"`. */
   baseVersion?: string;
   /** Extra `--finish-args`. */
   finishArgs?: string[];

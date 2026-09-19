@@ -19,8 +19,8 @@ import {
 const ctx: ManifestContext = {
   appId: "io.github.yucling.open-orpheus",
   appIdentifier: "open-orpheus",
-  runtimeVersion: "25.08",
-  baseVersion: "25.08",
+  runtimeVersion: "26.08",
+  baseVersion: "26.08",
   finishArgs: ["--socket=wayland", "--share=network"],
 };
 
@@ -31,10 +31,10 @@ describe("baseManifest", () => {
     expect(baseManifest(ctx, appModule)).toEqual({
       "app-id": "io.github.yucling.open-orpheus",
       runtime: "org.freedesktop.Platform",
-      "runtime-version": "25.08",
+      "runtime-version": "26.08",
       sdk: "org.freedesktop.Sdk",
       base: "org.electronjs.Electron2.BaseApp",
-      "base-version": "25.08",
+      "base-version": "26.08",
       command: DESKTOP_EXEC,
       "separate-locales": false,
       "finish-args": ["--socket=wayland", "--share=network"],

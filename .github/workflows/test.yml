@@ -171,9 +171,9 @@ jobs:
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub \
-            org.freedesktop.Platform//25.08 \
-            org.freedesktop.Sdk//25.08 \
-            org.freedesktop.Sdk.Extension.node24//25.08
+            org.freedesktop.Platform//26.08 \
+            org.freedesktop.Sdk//26.08 \
+            org.freedesktop.Sdk.Extension.node24//26.08
 
       - name: Generate Flatpak builder manifest
         run: node scripts/build-flatpak-builder.ts

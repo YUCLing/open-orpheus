@@ -35,8 +35,8 @@ export const deb: MakerDebOptions = {
 
 export const flatpak: MakerFlatpakOptions = {
   id: "io.github.yucling.open-orpheus",
-  runtimeVersion: "25.08",
-  baseVersion: "25.08",
+  runtimeVersion: "26.08",
+  baseVersion: "26.08",
   finishArgs: [
     "--socket=wayland",
     "--socket=fallback-x11",

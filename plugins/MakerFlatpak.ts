@@ -42,8 +42,8 @@ export default class MakerFlatpak extends MakerBase<MakerFlatpakOptions> {
     if (!appId) {
       throw new Error("MakerFlatpak requires `id` (the Flatpak app ID).");
     }
-    const runtimeVersion = this.config.runtimeVersion ?? "25.08";
-    const baseVersion = this.config.baseVersion ?? "25.08";
+    const runtimeVersion = this.config.runtimeVersion ?? "26.08";
+    const baseVersion = this.config.baseVersion ?? "26.08";
     const finishArgs = this.config.finishArgs ?? [];
     const metainfo = this.config.metainfo ?? "packaging/flatpak/metainfo.xml";
     // Flathub apps live on the `stable` branch (default in baseManifest too).
