@@ -345,8 +345,8 @@ if (flatpakSourceMatch) {
 // computed directly here.
 const appId = flatpakOptions.id ?? "";
 const appIdentifier = pkg.name;
-const runtimeVersion = String(flatpakOptions.runtimeVersion ?? "25.08");
-const baseVersion = String(flatpakOptions.baseVersion ?? "25.08");
+const runtimeVersion = String(flatpakOptions.runtimeVersion ?? "26.08");
+const baseVersion = String(flatpakOptions.baseVersion ?? "26.08");
 const finishArgs = flatpakOptions.finishArgs ?? [];
 
 const appModule = {
