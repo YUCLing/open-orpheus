@@ -210,12 +210,7 @@
       }
     };
     api
-      .placeOverlay(
-        Math.round(x),
-        Math.round(y),
-        Math.ceil(w),
-        Math.ceil(h)
-      )
+      .placeOverlay(Math.round(x), Math.round(y), Math.ceil(w), Math.ceil(h))
       .then(
         ({ dx, dy }) => {
           if (dx !== 0 || dy !== 0) {
