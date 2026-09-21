@@ -11,6 +11,19 @@ export interface Disposable {
 
 export type OpenDatabase = (path: string) => Database;
 
+/** The renderer side of a window that services push events through. */
+export interface RendererTarget {
+  webContents: { send(channel: string, ...args: unknown[]): void };
+}
+
+/**
+ * Indirection over the main window: it does not exist when services are
+ * constructed, and it becomes unusable once destroyed.
+ */
+export interface MainWindowAccessor {
+  current(): RendererTarget | null;
+}
+
 /**
  * Injectable process boundaries. Tests substitute here rather than mocking our
  * own modules. `logger` has no default because importing the logger module opens

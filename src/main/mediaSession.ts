@@ -2,6 +2,7 @@ import os from "node:os";
 
 import { toError } from "@shared/util";
 import { events as lifecycleEvents } from "./lifecycle";
+import { mainWindowAccessor } from "./window";
 import { resolveCoverUrl } from "./playback/artwork";
 import PlaybackController from "./playback/PlaybackController";
 import { PlaybackChange, TrackInfo } from "./playback/types";
@@ -99,7 +100,7 @@ export async function createMediaSession(): Promise<void> {
   }
 
   // OS media-session commands → renderer.
-  new PlayerCommandRouter(adapter, playbackController);
+  new PlayerCommandRouter(adapter, playbackController, mainWindowAccessor);
 
   // Derived state → OS media-session adapter.
   playbackController.on("trackchanged", ({ data }) => adapter.onTrack(data));

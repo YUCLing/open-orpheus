@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { mainWindow } from "../window";
+import type { MainWindowAccessor } from "../bootstrap/types";
 
 // #region Types
 
@@ -68,7 +68,7 @@ export default class PlayCacheManager {
   private initPromise: Promise<void>;
   private cachePath: string;
 
-  constructor(cachePath: string) {
+  constructor(cachePath: string, private readonly windows: MainWindowAccessor) {
     this.cachePath = cachePath;
     this.initPromise = this.buildIndex();
   }
@@ -295,7 +295,7 @@ export default class PlayCacheManager {
     playCacheUpdateType: number
   ): void {
     try {
-      mainWindow?.webContents.send(
+      this.windows.current()?.webContents.send(
         "channel.call",
         "storage.onPlayCacheUpdate",
         {

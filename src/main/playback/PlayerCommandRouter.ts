@@ -1,6 +1,6 @@
 import Emittery from "emittery";
 
-import { mainWindow } from "../window";
+import type { MainWindowAccessor } from "../bootstrap/types";
 import { PlayerCommandEvents } from "./adapters/MediaSessionAdapter";
 import type PlaybackController from "./PlaybackController";
 import { PlaybackStatus } from "./types";
@@ -43,7 +43,8 @@ export default class PlayerCommandRouter {
    */
   constructor(
     commands: Emittery<PlayerCommandEvents>,
-    private readonly player: PlaybackController
+    private readonly player: PlaybackController,
+    private readonly windows: MainWindowAccessor
   ) {
     // The renderer reports every transition through `player.playbackchange`,
     // which the controller folds into `statuschanged`.
@@ -147,11 +148,11 @@ export default class PlayerCommandRouter {
   }
 
   private send(channel: string, ...args: unknown[]): void {
-    mainWindow?.webContents.send(channel, ...args);
+    this.windows.current()?.webContents.send(channel, ...args);
   }
 
   private sendHotkey(name: string): void {
-    mainWindow?.webContents.send(
+    this.windows.current()?.webContents.send(
       "channel.call",
       "winhelper.onHotkey",
       name,

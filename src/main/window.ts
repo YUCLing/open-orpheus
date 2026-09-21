@@ -9,6 +9,7 @@ import {
   DesktopEnvironment,
 } from "@open-orpheus/window";
 
+import type { MainWindowAccessor } from "./bootstrap/types";
 import AppMenu from "./menu";
 
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
@@ -25,6 +26,10 @@ export let mainWindow: BrowserWindow | null = null;
 export function setMainWindow(wnd: BrowserWindow) {
   mainWindow = wnd;
 }
+
+export const mainWindowAccessor: MainWindowAccessor = {
+  current: () => mainWindow,
+};
 
 export interface InputRegion {
   x: number;

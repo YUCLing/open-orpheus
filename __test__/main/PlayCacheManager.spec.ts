@@ -5,9 +5,7 @@ vi.mock("node:fs/promises");
 
 const hoisted = vi.hoisted(() => ({ send: vi.fn() }));
 
-vi.mock("@main/window", () => ({
-  mainWindow: { webContents: { send: hoisted.send } },
-}));
+import type { MainWindowAccessor } from "@main/bootstrap/types";
 
 import { readFile } from "node:fs/promises";
 
@@ -20,8 +18,12 @@ import PlayCacheManager, {
 const CACHE_PATH = "/cache/play";
 const MiB = 1024 * 1024;
 
+const windows: MainWindowAccessor = {
+  current: () => ({ webContents: { send: hoisted.send } }),
+};
+
 function manager() {
-  return new PlayCacheManager(CACHE_PATH);
+  return new PlayCacheManager(CACHE_PATH, windows);
 }
 
 function meta(songId: string, fileSize = MiB): CacheTrackMeta {

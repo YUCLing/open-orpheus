@@ -34,6 +34,7 @@ import {
   sanitizeRelativePath,
 } from "../util";
 import { webDb } from "../database";
+import { mainWindowAccessor } from "../window";
 import {
   CacheTrackMeta,
   type PlayCacheConfig,
@@ -113,7 +114,7 @@ registerCallHandler<[string, string, string], [string, string]>(
     ]);
     setDownloadPath(downloadDir);
     setCachePath(cacheDir);
-    createCacheManager();
+    createCacheManager(mainWindowAccessor);
 
     if (downloadDirWatcher !== null) {
       downloadDirWatcher.close();

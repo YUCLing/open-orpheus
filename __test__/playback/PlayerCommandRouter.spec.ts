@@ -1,12 +1,12 @@
 import Emittery from "emittery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { MainWindowAccessor } from "@main/bootstrap/types";
 import type { PlayerCommandEvents } from "@main/playback/adapters/MediaSessionAdapter";
 import PlaybackController from "@main/playback/PlaybackController";
 import PlayerCommandRouter from "@main/playback/PlayerCommandRouter";
 import { PlaybackChange, PlaybackStatus } from "@main/playback/types";
 
-// `../window` pulls in Electron; the router only needs `webContents.send`.
 const { send, host } = vi.hoisted(() => {
   const send = vi.fn();
   return {
@@ -17,11 +17,8 @@ const { send, host } = vi.hoisted(() => {
     },
   };
 });
-vi.mock("@main/window", () => ({
-  get mainWindow() {
-    return host.window;
-  },
-}));
+
+const windows: MainWindowAccessor = { current: () => host.window };
 
 const track = { id: "1", title: "title", artist: "artist", album: "album" };
 
@@ -43,7 +40,7 @@ function controllerAt(
 function setup(status: PlaybackStatus, retained = true) {
   const player = controllerAt(status, retained);
   const commands = new Emittery<PlayerCommandEvents>();
-  new PlayerCommandRouter(commands, player);
+  new PlayerCommandRouter(commands, player, windows);
   return { player, commands };
 }
 
@@ -152,7 +149,7 @@ describe("PlayerCommandRouter command routing", () => {
     const commands = new Emittery<PlayerCommandEvents>();
     const on = vi.spyOn(commands, "on");
 
-    new PlayerCommandRouter(commands, player);
+    new PlayerCommandRouter(commands, player, windows);
 
     const subscribed = on.mock.calls.map(([eventName]) => String(eventName));
     expect(subscribed.sort()).toEqual(

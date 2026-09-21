@@ -1,8 +1,8 @@
 # Open Orpheus — Refactor & Plugin Roadmap
 
 **Status:** design review draft. Nothing in this document is implemented yet.
-**Revision:** 10 (2026-09-21) — P1-1/P1-2/P1-3 land the composition root; P1-8's smoke test boots it.
-§5.1's accessor sketch corrected.
+**Revision:** 11 (2026-09-21) — P1-4 partially done: the main-window accessor is injectable and two
+more own-module mocks are gone (11 → 7); the rest needs `window.ts` split first.
 **Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
 
 This document is intentionally written so it can be **corrected between phases**. See
@@ -496,6 +496,23 @@ and the pre-existing undefined-before-init hazard is neither worsened nor hidden
 Files are converted one at a time. The adapter is deleted in the last phase of the
 cleanup, and its deletion is the objective signal that the migration finished.
 
+**What is scaffolding and what is permanent.** Worth keeping straight, because deleting
+the wrong half would undo the migration:
+
+| Scaffolding — delete later | Dies when |
+|---|---|
+| `export let kv` / `events`, `webDb` / `musicLibraryDb` / `nativeDb`, `mainWindow` | the last consumer takes the context instead of importing (P1-10) |
+| `installSettingsService`, `installDatabaseService` | `bootstrap()` owns the services outright |
+| `mainWindowAccessor`, `setMainWindow` as *module exports* | `src/main/window.ts` is split, so the root can own the reference; the accessor is then built by `bootstrap()` and the window service owns both read and write |
+| `ReadyPhase.windows` being absent | same split |
+
+| Permanent — the point of the migration | Why |
+|---|---|
+| `SettingsService`, `DatabaseService`, `MainWindowAccessor`, `RendererTarget` | a consumer declares what it needs rather than reaching for a global |
+| Consumers taking them as parameters (`PlayerCommandRouter`, `PlayCacheManager`, …) | that *is* the explicit dependency; these parameters stay |
+
+So the accessor is not the temporary part — the module-level binding behind it is.
+
 ### 5.2 Context typing
 
 Five rules. Rule 3 (readiness as two value shapes) **requires `strictNullChecks`**,
@@ -808,7 +825,7 @@ finishes the task. Detail for each task is in the phase section referenced below
 | P1-1  | Bootstrap skeleton + phase types (`BootstrapPhase`/`ReadyPhase`)                     | P1    | **Done**    | 2026-09-21 | `src/main/bootstrap/{types,context}.ts`; `bootstrap(deps)` returns a `ReadyPhase`             |
 | P1-2  | Settings service + legacy install adapter                                            | P1    | **Done**    | 2026-09-21 | `createSettingsService` + `installSettingsService`; all 8 `kv`/`events` call sites unchanged; 2 own-module mocks dropped |
 | P1-3  | Database service                                                                     | P1    | **Done**    | 2026-09-21 | `createDatabaseService` owns the schema + PRAGMAs; `openDatabase` is the test seam             |
-| P1-4  | De-globalise `mainWindow` (`src/main/window.ts`)                                     | P1    | Not started |            | 3 specs mock it today                                                                          |
+| P1-4  | De-globalise `mainWindow` (`src/main/window.ts`)                                     | P1    | **Partial** | 2026-09-21 | Accessor injected into `PlayerCommandRouter` + `PlayCacheManager`; the 3 specs that mocked `@main/window` are down to 1 (`inputRegion`, which needs `ManagedWindow`, a different export). Still importing the global: `winhelper`, `tray`, `MediaEngine`, `Av3aEngine`, `main.ts` — see §10 |
 | P1-5  | De-globalise lifecycle `state`                                                       | P1    | Not started |            |                                                                                                |
 | P1-6  | Explicit registrar table replacing `calls/index.ts` barrel                           | P1    | Not started |            | order becomes data                                                                             |
 | P1-7  | Reduce `src/main.ts` to a linear entry                                               | P1    | Not started |            | 486 → thin                                                                                     |
@@ -1188,6 +1205,7 @@ material — so resolving it after P4 starts means redesigning P4.
 | 2026-09-21 | Bundler targets do read `paths`, end to end **[V]**                                                                                                                                                                         | `pnpm package` succeeded with `@shared/*` used from `src/main.ts` and `src/preload.ts` — main, preload, worklets and renderer all bundled.                                                                                               |
 | 2026-09-21 | P0 foundation: types + tests green **[V]**                                                                                                                                                                                  | `pnpm lint:types` → 0 errors (tsc + svelte-check). `pnpm test` → 53 files, 489 tests passed.                                                                                                                                             |
 | 2026-09-21 | P0-5 move verified end to end **[V]** | `pnpm lint:types` 0 errors; `pnpm test` 53 files / 489 tests; `pnpm package` succeeded and `.vite/build` still contains `menu.js`, `manage.js`, `mini-player.js`, `desktop-lyrics.js`, `desktop-lyrics-preview.js`, `package-download.js`, so main's hardcoded `join(import.meta.dirname, "<name>.js")` still resolves. |
+| 2026-09-21 | P1-4 partial — and the rest is not free **[V]** | Added `RendererTarget` + `MainWindowAccessor` (`bootstrap/types.ts`) and a `mainWindowAccessor` export on `window.ts`. Injected as a constructor arg into `PlayerCommandRouter` (3rd) and `PlayCacheManager` (2nd), wired from `mediaSession.ts` and `calls/storage.ts`; `createCacheManager(windows)` takes it rather than importing `window.ts`, which would have dragged electron into `cache.ts`'s importers (`MediaEngine`, `Av3aEngine`). **Remaining**: `winhelper`, `tray`, `MediaEngine`, `Av3aEngine`, `main.ts`. Converting those needs `window.ts` split first — it imports electron, `./menu` and the native `@open-orpheus/window` at module scope, so `bootstrap()` cannot own the accessor without pulling all three into every test. That split is also the prerequisite for §5.2's `ReadyPhase.windows`, so that field stays deferred. |
 | 2026-09-21 | P1-1/P1-2/P1-3: composition root lands **[V]** | `src/main/bootstrap/{types,context}.ts` + `services/{database,settings}.ts`. `bootstrap(deps)` returns a `ReadyPhase`, and `src/main.ts` calls it where `initializeDatabases()` + `initialize()` used to be. `pnpm test` 56 files / 499 tests, `pnpm lint` clean, `pnpm package` succeeded. |
 | 2026-09-21 | §5.1's accessor sketch was not expressible **[V]** | `export const get kv()` is invalid TypeScript — ESM cannot export an accessor. Replaced with an install function (see §5.1). |
 | 2026-09-21 | Relocate code verbatim, do not paraphrase **[V]** | While moving `getMany` into the settings service I rewrote its body (`KV_ENTRIES[keys[i]]` read twice instead of hoisted into `defaultValue`). Behaviourally equivalent, but a move should be a move. Caught because the source file then failed to match on the next edit; corrected to the original form. |
