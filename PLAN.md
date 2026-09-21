@@ -1,8 +1,8 @@
 # Open Orpheus — Refactor & Plugin Roadmap
 
 **Status:** design review draft. Nothing in this document is implemented yet.
-**Revision:** 9 (2026-09-21) — **P0 complete** (P0-1…P0-11). P0-10 and P0-11 closed; see the P0
-status note in §7 for the one residual (dev mode).
+**Revision:** 10 (2026-09-21) — P1-1/P1-2/P1-3 land the composition root; P1-8's smoke test boots it.
+§5.1's accessor sketch corrected.
 **Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
 
 This document is intentionally written so it can be **corrected between phases**. See
@@ -474,15 +474,24 @@ Design points:
 
 #### Legacy accessor adapter (the migration trick)
 
-To avoid a big-bang refactor, the old module-level exports are kept but backed by
-the context:
+To avoid a big-bang refactor, the old module-level exports stay, but they are
+*installed by* the composition root rather than constructed in place:
 
 ```ts
-// src/main/settings.ts — call sites elsewhere stay byte-identical
-export const get kv() {
-  return useContext().settings.kv;
+// src/main/settings.ts
+export let kv: Keyv;
+export let events: Emittery<SettingsEvents>;
+
+export function installSettingsService(service: SettingsService) {
+  kv = service.kv;
+  events = service.events;
 }
 ```
+
+~~The first draft suggested an exported getter (`export const get kv()`), which is not
+expressible in ESM — you cannot export an accessor.~~ The install function gives the
+same practical result: one writer (bootstrap), every existing call site byte-identical,
+and the pre-existing undefined-before-init hazard is neither worsened nor hidden.
 
 Files are converted one at a time. The adapter is deleted in the last phase of the
 cleanup, and its deletion is the objective signal that the migration finished.
@@ -796,14 +805,14 @@ finishes the task. Detail for each task is in the phase section referenced below
 | P0-9  | Guard test: vitest aliases mirror `tsconfig.json` `paths`                            | P0    | **Done**    | 2026-09-21 | `__test__/aliases.spec.ts`; falsified by deleting an alias (failed as expected); also rejects vacuous passes                                          |
 | P0-10 | Ignore generated dirs in eslint (`coverage/**`)                                      | P0    | **Done**    | 2026-09-21 | `coverage/**` ignored in `eslint.config.ts` and `.prettierignore`; `pnpm lint:eslint` now emits nothing at all |
 | P0-11 | Sweep pre-existing offensive comments | P0 | **Done** | 2026-09-21 | Applied R8's tight reading: 14 pure-narration comments deleted. ~30 short label/banner candidates deliberately left — several carry a real *why*, which is a judgement call, not a mechanical one. `#region`/`#endregion` are folding markers, out of scope |
-| P1-1  | Bootstrap skeleton + phase types (`BootstrapPhase`/`ReadyPhase`)                     | P1    | Not started |            |                                                                                                |
-| P1-2  | Settings service + legacy `get kv()` adapter                                         | P1    | Not started |            |                                                                                                |
-| P1-3  | Database service                                                                     | P1    | Not started |            |                                                                                                |
+| P1-1  | Bootstrap skeleton + phase types (`BootstrapPhase`/`ReadyPhase`)                     | P1    | **Done**    | 2026-09-21 | `src/main/bootstrap/{types,context}.ts`; `bootstrap(deps)` returns a `ReadyPhase`             |
+| P1-2  | Settings service + legacy install adapter                                            | P1    | **Done**    | 2026-09-21 | `createSettingsService` + `installSettingsService`; all 8 `kv`/`events` call sites unchanged; 2 own-module mocks dropped |
+| P1-3  | Database service                                                                     | P1    | **Done**    | 2026-09-21 | `createDatabaseService` owns the schema + PRAGMAs; `openDatabase` is the test seam             |
 | P1-4  | De-globalise `mainWindow` (`src/main/window.ts`)                                     | P1    | Not started |            | 3 specs mock it today                                                                          |
 | P1-5  | De-globalise lifecycle `state`                                                       | P1    | Not started |            |                                                                                                |
 | P1-6  | Explicit registrar table replacing `calls/index.ts` barrel                           | P1    | Not started |            | order becomes data                                                                             |
 | P1-7  | Reduce `src/main.ts` to a linear entry                                               | P1    | Not started |            | 486 → thin                                                                                     |
-| P1-8  | Integration smoke test booting the graph                                             | P1    | Not started |            | memfs + fake electron                                                                          |
+| P1-8  | Integration smoke test booting the graph                                             | P1    | **Done**    | 2026-09-21 | `__test__/main/bootstrap/context.spec.ts` boots `bootstrap()` with fake deps and asserts the adapters are installed. Grows as services land |
 | P1-9  | Delete own-module `vi.mock` sites                                                    | P1    | Not started |            | 11 → 0 (§1.2)                                                                                  |
 | P1-10 | Delete the legacy adapter                                                            | P1    | Not started |            | signals migration end                                                                          |
 | P2-1  | Group `src/main/*` per §5.3                                                          | P2    | Not started |            | high churn — schedule                                                                          |
@@ -1179,6 +1188,10 @@ material — so resolving it after P4 starts means redesigning P4.
 | 2026-09-21 | Bundler targets do read `paths`, end to end **[V]**                                                                                                                                                                         | `pnpm package` succeeded with `@shared/*` used from `src/main.ts` and `src/preload.ts` — main, preload, worklets and renderer all bundled.                                                                                               |
 | 2026-09-21 | P0 foundation: types + tests green **[V]**                                                                                                                                                                                  | `pnpm lint:types` → 0 errors (tsc + svelte-check). `pnpm test` → 53 files, 489 tests passed.                                                                                                                                             |
 | 2026-09-21 | P0-5 move verified end to end **[V]** | `pnpm lint:types` 0 errors; `pnpm test` 53 files / 489 tests; `pnpm package` succeeded and `.vite/build` still contains `menu.js`, `manage.js`, `mini-player.js`, `desktop-lyrics.js`, `desktop-lyrics-preview.js`, `package-download.js`, so main's hardcoded `join(import.meta.dirname, "<name>.js")` still resolves. |
+| 2026-09-21 | P1-1/P1-2/P1-3: composition root lands **[V]** | `src/main/bootstrap/{types,context}.ts` + `services/{database,settings}.ts`. `bootstrap(deps)` returns a `ReadyPhase`, and `src/main.ts` calls it where `initializeDatabases()` + `initialize()` used to be. `pnpm test` 56 files / 499 tests, `pnpm lint` clean, `pnpm package` succeeded. |
+| 2026-09-21 | §5.1's accessor sketch was not expressible **[V]** | `export const get kv()` is invalid TypeScript — ESM cannot export an accessor. Replaced with an install function (see §5.1). |
+| 2026-09-21 | Relocate code verbatim, do not paraphrase **[V]** | While moving `getMany` into the settings service I rewrote its body (`KV_ENTRIES[keys[i]]` read twice instead of hoisted into `defaultValue`). Behaviourally equivalent, but a move should be a move. Caught because the source file then failed to match on the next edit; corrected to the original form. |
+| 2026-09-21 | `folders.ts` needs electron at import time **[V]** | It calls `app.getPath` and `app.isPackaged` at module scope, so any spec that reaches it must mock `electron` with at least `{ app: { getPath, isPackaged } }`. This is why the composition root takes `logger` explicitly: `src/main/logger.ts` opens log files and imports electron, so defaulting it would have made `context.ts` unloadable in tests. |
 | 2026-09-21 | P0-10: `coverage/` was missing from both ignore lists **[V]** | `eslint.config.ts` ignored `.vite/**` and `out/**` but not `coverage/**`, and `.prettierignore` had no coverage entry either — so `pnpm format` would also descend into generated files. Both added; `pnpm lint:eslint` now prints nothing. |
 | 2026-09-21 | P0-11 sweep boundary **[V]** | Of 1037 standalone comments, the strict task/date/PR pattern found **zero** real violations — all 4 hits are legitimate (a log-format example, a JSDoc explaining a filename choice, an upstream PR link, which R8 explicitly allows). 14 pure-narration comments deleted. ~30 short label candidates (`// Constants`, `// Flag files`, `// Window might be destroyed`) were left on purpose: several carry a genuine *why*, so purging them is a judgement call rather than a mechanical rule. `#region`/`#endregion` are IDE folding markers and are out of scope. |
 | 2026-09-21 | `build/vite-plugins/` renamed to `build-plugins/` **[V]** | Removes the `build/` vs `.vite/build/` vs `out/` triple meaning. The Makers' own imports needed re-edging again (`../../packaging/` → `../packaging/`) — the checklist step added after P0-4 applied immediately. `pnpm lint:types` 0 errors, `pnpm test` 492 passed, `pnpm package` succeeded. |

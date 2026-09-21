@@ -310,10 +310,7 @@ app.on("ready", async () => {
     // Register for Open Orpheus session
     registerOrpheusScheme(openOrpheusSession.protocol);
 
-    await import("./main/database").then(async (m) => {
-      await m.initializeDatabases();
-      await import("./main/settings").then((m) => m.initialize());
-    });
+    await import("./main/bootstrap/context").then((m) => m.bootstrap({ logger }));
 
     await Promise.all([
       // Install the tray icon

@@ -32,13 +32,18 @@ vi.mock("keyv", () => {
   };
 });
 
-vi.mock("@main/database", () => ({ nativeDb: {} }));
-vi.mock("@main/database/KeyvSqliteDriver", () => ({
-  default: vi.fn(() => ({})),
-}));
 vi.mock("@keyv/sqlite", () => ({ KeyvSqlite: class {} }));
 
-import { events, initialize, kv } from "@main/settings";
+import type { Database } from "@open-orpheus/database";
+
+import { createSettingsService } from "@main/bootstrap/services/settings";
+import { events, installSettingsService, kv } from "@main/settings";
+
+function initialize() {
+  installSettingsService(
+    createSettingsService({ database: { nativeDb: {} as Database } })
+  );
+}
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -63,7 +68,7 @@ type EmitteryLike = {
   ): void;
 };
 
-describe("initialize", () => {
+describe("createSettingsService", () => {
   it("applies the default value of a known key", async () => {
     initialize();
 
