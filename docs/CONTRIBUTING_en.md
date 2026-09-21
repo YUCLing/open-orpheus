@@ -35,7 +35,7 @@ Open Orpheus is an Electron-based host for Netease Cloud Music's Orpheus browser
 ```
 open-orpheus/
 ├── src/                    # Electron main process & preload
-│   ├── main.ts             # App entry point, single-instance lock, protocol registration
+│   ├── main.ts             # App entry point; only wires process setup to the startup sequence
 │   ├── preload.ts          # Renderer bridge entry
 │   ├── main/               # Main process logic (window, IPC, networking, cache...)
 │   │   ├── calls/          # IPC command handlers (winhelper, app, etc.)

@@ -35,7 +35,7 @@ Open Orpheus 是一个基于 Electron 打造的网易云音乐 Orpheus 浏览器
 ```
 open-orpheus/
 ├── src/                    # Electron 主进程 & preload
-│   ├── main.ts             # 应用入口，单实例锁，协议注册
+│   ├── main.ts             # 应用入口，仅编排进程配置与启动序列
 │   ├── preload.ts          # 渲染进程桥接入口
 │   ├── main/               # 主进程逻辑（窗口、IPC、网络、缓存……）
 │   │   ├── calls/          # IPC 命令处理器（winhelper、app 等）
