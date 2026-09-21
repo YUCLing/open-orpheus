@@ -37,7 +37,6 @@ function getWindowSizeStatus(
 }
 
 export default async function createMainWindow() {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
@@ -111,7 +110,6 @@ export default async function createMainWindow() {
 
   setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);
 
-  // Load App URL
   mainWindow.loadURL("orpheus://orpheus/pub/app.html");
 
   setMainWindow(mainWindow);

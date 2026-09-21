@@ -66,7 +66,7 @@ open-orpheus/
 │   ├── nowplaying/         # macOS 媒体会话（MPNowPlayingInfoCenter）
 │   ├── smtc/               # Windows 媒体会话（SMTC）
 │   └── lifecycle/          # 退出回调等生命周期工具
-├── build/vite-plugins/     # Electron Forge 插件与 Maker（deb / rpm / flatpak、日志等）
+├── build-plugins/          # Electron Forge 插件与 Maker（deb / rpm / flatpak、日志等）
 ├── scripts/                # 构建脚本（模块编译、Flatpak 等）
 ├── packaging/              # 各平台打包配置
 ├── data/                   # 开发用运行时数据（资源、缓存、日志）

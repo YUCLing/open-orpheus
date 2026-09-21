@@ -402,7 +402,6 @@ const appModule = {
 
     `pnpm run build:modules`,
 
-    // Package the Electron app
     `pnpm run package`,
 
     // Generate the desktop entry, icons, and /app/bin symlink with our
@@ -413,7 +412,6 @@ const appModule = {
     `install -d /app/lib/${appIdentifier}`,
     `cp -r out/${pkg.name}-linux-*/. /app/lib/${appIdentifier}/`,
 
-    // Install AppStream metainfo
     `install -Dm644 packaging/flatpak/metainfo.xml /app/share/metainfo/${appId}.metainfo.xml`,
   ],
   sources: [
@@ -433,7 +431,7 @@ const appModule = {
   ],
 };
 
-// Top-level manifest is shared with build/vite-plugins/MakerFlatpak.ts (prebuilt mode).
+// Top-level manifest is shared with build-plugins/MakerFlatpak.ts (prebuilt mode).
 const manifest = baseManifest(
   {
     appId,

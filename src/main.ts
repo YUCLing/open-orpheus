@@ -436,10 +436,8 @@ app.on("ready", async () => {
     await (await import("./main/windows/main")).default();
 
     // TODO: Maybe only do this on first launch?
-    // Register as orpheus:// clent
     registerAsProtocolClient();
 
-    // Run a update check
     import("./main/update").then((m) => m.checkUpdate());
   } catch (error) {
     if (error) {

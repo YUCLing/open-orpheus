@@ -1,8 +1,8 @@
 # Open Orpheus — Refactor & Plugin Roadmap
 
 **Status:** design review draft. Nothing in this document is implemented yet.
-**Revision:** 7 (2026-09-21) — P0-4 and P0-7 done; the per-move checklist gained the
-"moved files' own imports" step after that omission bit twice.
+**Revision:** 9 (2026-09-21) — **P0 complete** (P0-1…P0-11). P0-10 and P0-11 closed; see the P0
+status note in §7 for the one residual (dev mode).
 **Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
 
 This document is intentionally written so it can be **corrected between phases**. See
@@ -681,7 +681,7 @@ every importer.
 
 | Tier   | Scope                                                                                                                                      | Risk        | Recommendation              |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --------------------------- |
-| **T1** | Root `plugins/` → `build/vite-plugins/`; `src/windows/` → `src/preload/entries/`; `src/{CallDispatcher,util,constants}.ts` → `src/shared/` | Low         | Do it (P0)                  |
+| **T1** | Root `plugins/` → `build-plugins/`; `src/windows/` → `src/preload/entries/`; `src/{CallDispatcher,util,constants}.ts` → `src/shared/` | Low         | Do it (P0)                  |
 | **T2** | Group `src/main/*` per §5.3; unify the `foo.ts`+`foo/` facade rule; consolidate root `types/` vs `src/bridge/contracts/`                   | Medium      | P2, after aliases           |
 | **T3** | Fold `src/main/playback/adapters/` alongside `modules/{nowplaying,smtc,dbus}`; rename `pack.ts`/`packs/`; split `src/main.ts`              | Opinionated | Defer; P1 handles the split |
 
@@ -788,14 +788,14 @@ finishes the task. Detail for each task is in the phase section referenced below
 | P0-1  | Enable `strict` + `noImplicitOverride` + `noFallthroughCasesInSwitch`                | P0    | **Done**    | 2026-09-21 | 0 errors, as measured (§4.2)                                                                   |
 | P0-2  | Add `@shared`/`@main`/`@preload`/`@bridge` to `tsconfig.json` `paths`                | P0    | **Done**    | 2026-09-21 | Plus mirrored aliases in `vitest.config.ts` — required, see §4.1                               |
 | P0-3  | Rewrite relative `src` imports to aliases                                            | P0    | **Done**    | 2026-09-21 | 0 remaining — the last 7 went with P0-5                                                            |
-| P0-4  | Move `plugins/` → `build/vite-plugins/`                                              | P0    | **Done**    | 2026-09-21 | 18 refs: 8 imports, `tsconfig.json` include, 7 prose, 2 docs; plus the Makers' own relative imports                                                                |
+| P0-4  | Move `plugins/` → `build-plugins/`                                              | P0    | **Done**    | 2026-09-21 | 18 refs: 8 imports, `tsconfig.json` include, 7 prose, 2 docs; plus the Makers' own relative imports                                                                |
 | P0-5  | Move `src/windows/` → `src/preload/entries/`                                         | P0    | **Done**    | 2026-09-21 | 6 forge entries, 2 specs, 2 docs; specs moved to `__test__/preload/entries/`; bundles keep basenames                                    |
 | P0-6  | Move `src/{CallDispatcher,util,constants}.ts` → `src/shared/`                        | P0    | **Done**    | 2026-09-21 | `git mv` used, history preserved                                                               |
 | P0-7  | Add `build/**` to `changes.yml` `node` filters                                       | P0    | **Done**    | 2026-09-21 | `build/**` added to the `node` filter — this was a pre-existing gap                                                                               |
 | P0-8  | Add `plugins/**`, `vite.*.config.ts`, `forge.config.ts` to `include`; fix 9 `TS4114` | P0    | **Done**    | 2026-09-21 | 9 `override` modifiers added; `eslint.config.ts` still unchecked                               |
-| P0-9  | Guard test: vitest aliases mirror `tsconfig.json` `paths`                            | P0    | Not started |            | added 2026-09-21; R1 — the hazard exists from P0-2 on                                          |
-| P0-10 | Ignore generated dirs in eslint (`coverage/**`)                                      | P0    | Not started |            | `pnpm lint:eslint` reports 1 warning in `coverage/block-navigation.js`; keep the R3 gate clean |
-| P0-11 | Sweep pre-existing offensive comments | P0 | Not started | | R8 applies to old code too. **Standalone commit, comments only, no code change** — do not fold into another phase |
+| P0-9  | Guard test: vitest aliases mirror `tsconfig.json` `paths`                            | P0    | **Done**    | 2026-09-21 | `__test__/aliases.spec.ts`; falsified by deleting an alias (failed as expected); also rejects vacuous passes                                          |
+| P0-10 | Ignore generated dirs in eslint (`coverage/**`)                                      | P0    | **Done**    | 2026-09-21 | `coverage/**` ignored in `eslint.config.ts` and `.prettierignore`; `pnpm lint:eslint` now emits nothing at all |
+| P0-11 | Sweep pre-existing offensive comments | P0 | **Done** | 2026-09-21 | Applied R8's tight reading: 14 pure-narration comments deleted. ~30 short label/banner candidates deliberately left — several carry a real *why*, which is a judgement call, not a mechanical one. `#region`/`#endregion` are folding markers, out of scope |
 | P1-1  | Bootstrap skeleton + phase types (`BootstrapPhase`/`ReadyPhase`)                     | P1    | Not started |            |                                                                                                |
 | P1-2  | Settings service + legacy `get kv()` adapter                                         | P1    | Not started |            |                                                                                                |
 | P1-3  | Database service                                                                     | P1    | Not started |            |                                                                                                |
@@ -849,7 +849,7 @@ and moving files before aliases would rewrite their imports twice.
    `@shared`, `@main`, `@preload`, `@bridge` (decided: `@`, §9 Q1).
 2. Mechanically rewrite `../../src/...` imports across `src/**` and `__test__/**`.
    No file moves in the same commit.
-3. Move root `plugins/` → `build/vite-plugins/`; update `forge.config.ts`,
+3. Move root `plugins/` → `build-plugins/`; update `forge.config.ts`,
    `eslint.config.ts`, and any imports.
 4. Move `src/windows/` → `src/preload/entries/`; update the six build entries in
    `forge.config.ts` and mirror `__test__/windows/*` paths.
@@ -873,6 +873,11 @@ rolldown (`watch: {}`), which reads `paths`; the renderer is SvelteKit, which us
 own `$lib`/`$bridge` aliases and imports none of the new ones. That is **[A]**, not
 verified — and Vitest proves a non-bundler resolution path _can_ differ (§4.1), so
 treat dev mode as unproven until someone runs it.
+
+**P0 status: complete (2026-09-21).** P0-1…P0-11 are all done. Residual: dev mode was
+verified by the repo owner *before* P0-4/P0-5 changed the build entries, so `pnpm start`
+has not been exercised against the current entry list. `pnpm package` covers the same
+entry resolution but not the dev server/watch path. Re-run `pnpm start` before starting P1.
 
 **Risk.** Low. Mechanical. The only real hazard is a partially-updated build-entry
 list, which the package step catches.
@@ -1174,6 +1179,10 @@ material — so resolving it after P4 starts means redesigning P4.
 | 2026-09-21 | Bundler targets do read `paths`, end to end **[V]**                                                                                                                                                                         | `pnpm package` succeeded with `@shared/*` used from `src/main.ts` and `src/preload.ts` — main, preload, worklets and renderer all bundled.                                                                                               |
 | 2026-09-21 | P0 foundation: types + tests green **[V]**                                                                                                                                                                                  | `pnpm lint:types` → 0 errors (tsc + svelte-check). `pnpm test` → 53 files, 489 tests passed.                                                                                                                                             |
 | 2026-09-21 | P0-5 move verified end to end **[V]** | `pnpm lint:types` 0 errors; `pnpm test` 53 files / 489 tests; `pnpm package` succeeded and `.vite/build` still contains `menu.js`, `manage.js`, `mini-player.js`, `desktop-lyrics.js`, `desktop-lyrics-preview.js`, `package-download.js`, so main's hardcoded `join(import.meta.dirname, "<name>.js")` still resolves. |
+| 2026-09-21 | P0-10: `coverage/` was missing from both ignore lists **[V]** | `eslint.config.ts` ignored `.vite/**` and `out/**` but not `coverage/**`, and `.prettierignore` had no coverage entry either — so `pnpm format` would also descend into generated files. Both added; `pnpm lint:eslint` now prints nothing. |
+| 2026-09-21 | P0-11 sweep boundary **[V]** | Of 1037 standalone comments, the strict task/date/PR pattern found **zero** real violations — all 4 hits are legitimate (a log-format example, a JSDoc explaining a filename choice, an upstream PR link, which R8 explicitly allows). 14 pure-narration comments deleted. ~30 short label candidates (`// Constants`, `// Flag files`, `// Window might be destroyed`) were left on purpose: several carry a genuine *why*, so purging them is a judgement call rather than a mechanical rule. `#region`/`#endregion` are IDE folding markers and are out of scope. |
+| 2026-09-21 | `build/vite-plugins/` renamed to `build-plugins/` **[V]** | Removes the `build/` vs `.vite/build/` vs `out/` triple meaning. The Makers' own imports needed re-edging again (`../../packaging/` → `../packaging/`) — the checklist step added after P0-4 applied immediately. `pnpm lint:types` 0 errors, `pnpm test` 492 passed, `pnpm package` succeeded. |
+| 2026-09-21 | P0-9 guard test can actually fail **[V]** | Deleted `@bridge` from `vitest.config.ts` and ran `__test__/aliases.spec.ts`: `AssertionError: vitest.config.ts has no alias for @bridge/*`. Restored. It also asserts both alias sets are non-empty, so a JSON import shape change cannot make it pass vacuously. |
 | 2026-09-21 | P0-4 rename verified end to end **[V]** | `pnpm lint:types` 0 errors, `pnpm test` 489 passed, `pnpm lint:eslint` 0 errors, `pnpm package` succeeded (the packaging step is what loads the Makers). `.gitignore` has `build/Release`, not `build/`, so `build/vite-plugins/` is not ignored. |
 | 2026-09-21 | Moving a directory breaks the moved files' own relatives **[V]** | The Makers' `../packaging/*` imports resolved to `build/packaging/*` after the rename; 14 specifiers needed a depth fix. Surfaced as `TS2307` plus `import/no-unresolved`, with one consequential `TS7006` that disappeared once the imports resolved. Caught by `pnpm lint:types`, **not** by `pnpm test` — the Makers are only exercised at package time. |
 | 2026-09-21 | Earlier P0-3 verification was wrong **[V]** | The pattern `from "…"` missed bare side-effect imports and dynamic `import("…")`, so 7 specifiers went unreported. Corrected pattern: `"\.\./(\.\./)*src/`, now 0 matches. |

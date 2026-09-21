@@ -254,7 +254,6 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
             );
           }
 
-          // Verify fileUrl is a valid URL
           try {
             new URL(fileUrl);
           } catch {
@@ -264,7 +263,6 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
             );
           }
 
-          // Fetch from server
           const res = await client(fileUrl, { throwHttpErrors: false });
           if (res.statusCode < 200 || res.statusCode >= 300) {
             throw new LoadError(

@@ -58,7 +58,7 @@ jobs:
               - "forge.config.ts"
               - "forge.env.d.ts"
               - "vite*.config.ts"
-              - "build/**"
+              - "build-plugins/**"
               - "gui/**"
               - "src/**"
               - "types/**"

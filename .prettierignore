@@ -5,6 +5,11 @@ yarn.lock
 bun.lock
 bun.lockb
 
+# Build output
+.vite/
+out/
+coverage/
+
 # Miscellaneous
 gui/static/
 

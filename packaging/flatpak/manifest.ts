@@ -5,7 +5,7 @@ import yaml from "yaml";
 
 // Shared Flatpak builder-manifest generation. Consumed by:
 //  - scripts/build-flatpak-builder.ts  (Flathub: compiles inside the sandbox)
-//  - build/vite-plugins/MakerFlatpak.ts     (prebuilt: reuses the packaged app)
+//  - build-plugins/MakerFlatpak.ts          (prebuilt: reuses the packaged app)
 
 const RUNTIME = "org.freedesktop.Platform";
 const SDK = "org.freedesktop.Sdk";

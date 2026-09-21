@@ -170,7 +170,6 @@ export default class PlayCacheManager {
       return null;
     }
 
-    // Update access time
     meta.lastAccessTime = Math.floor(Date.now() / 1000);
     void this.writeMeta(songId, meta).catch(() => {});
 
@@ -219,10 +218,8 @@ export default class PlayCacheManager {
 
     this.trackIndex.set(songId, meta);
 
-    // Notify frontend
     this.notifyPlayCacheUpdate(meta, 1);
 
-    // Evict if over size limit
     await this.evictIfNeeded();
   }
 

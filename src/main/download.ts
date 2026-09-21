@@ -101,7 +101,6 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
 
   async start() {
     try {
-      // Ensure the directory exists
       await fs.mkdir(dirname(this.path), { recursive: true });
 
       this.fsHandle = await fs.open(this.path, "w");

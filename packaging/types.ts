@@ -1,6 +1,6 @@
 /**
  * Configuration for the custom Debian (.deb) maker
- * (`build/vite-plugins/MakerDeb.ts`), which delegates to the shared prebuilt builder.
+ * (`build-plugins/MakerDeb.ts`), which delegates to the shared prebuilt builder.
  */
 export interface MakerDebOptions {
   /** Skip the build-dependency check (safe: prebuilt mode compiles nothing). Defaults to true. */
@@ -21,7 +21,7 @@ export interface MakerDebOptions {
 
 /**
  * Configuration for the custom RPM maker
- * (`build/vite-plugins/MakerRpm.ts`), which delegates to the shared prebuilt builder.
+ * (`build-plugins/MakerRpm.ts`), which delegates to the shared prebuilt builder.
  */
 export interface MakerRpmOptions {
   /** Skip the build-dependency check (safe: prebuilt mode compiles nothing). Defaults to true. */
@@ -40,7 +40,7 @@ export interface MakerRpmOptions {
 
 /**
  * Configuration for the custom Flatpak maker
- * (`build/vite-plugins/MakerFlatpak.ts`), which reuses the packaged Electron app through
+ * (`build-plugins/MakerFlatpak.ts`), which reuses the packaged Electron app through
  * a prebuilt-aware Flathub builder manifest and bundles it into a `.flatpak`.
  */
 export interface MakerFlatpakOptions {

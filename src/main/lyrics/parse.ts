@@ -62,7 +62,6 @@ export function parseLrc(lrc: string): Lyrics {
     }
   }
 
-  // Sort by timestamp
   entries.sort((a, b) => a.time - b.time);
 
   // Convert to LyricLine[], inferring end_time from the next line

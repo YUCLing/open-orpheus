@@ -11,6 +11,7 @@ export default [
     ignores: [
       ".vite/**",
       "out/**",
+      "coverage/**",
       "**/node_modules/**",
       "**/.svelte-kit/**",
       "modules/**/dist/**",

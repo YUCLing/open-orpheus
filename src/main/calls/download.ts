@@ -48,7 +48,6 @@ registerCallHandler<[DownloadStartRequest], void>(
       type = 0,
     } = request;
 
-    // Parse headers from JSON string
     let headers: Record<string, string> = {};
     if (ext_header) {
       try {

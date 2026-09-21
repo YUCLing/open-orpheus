@@ -29,7 +29,7 @@
     "forge.env.d.ts",
     "forge.config.ts",
     "packaging/**/*.ts",
-    "build/vite-plugins/**/*.ts",
+    "build-plugins/**/*.ts",
     "scripts/*.ts",
     "types/*.ts",
     "vite.*.config.ts",

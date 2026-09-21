@@ -2,11 +2,11 @@ import { resolve } from "node:path";
 
 import { MakerBase, type MakerOptions } from "@electron-forge/maker-base";
 import type { ForgePlatform } from "@electron-forge/shared-types";
-import type { MakerRpmOptions } from "../../packaging/types.ts";
+import type { MakerRpmOptions } from "../packaging/types.ts";
 
-import { buildRpm } from "../../packaging/rpm/build.ts";
-import { rpmArch } from "../../packaging/common/arch.ts";
-import { makeInStaging } from "../../packaging/common/maker.ts";
+import { buildRpm } from "../packaging/rpm/build.ts";
+import { rpmArch } from "../packaging/common/arch.ts";
+import { makeInStaging } from "../packaging/common/maker.ts";
 
 /**
  * Custom RPM maker that reuses the already-packaged Electron app (and its
