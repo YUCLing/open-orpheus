@@ -31,7 +31,7 @@ import type {
   MiniPlayerTogetherStatus,
 } from "$sharedTypes/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
-import { LifecycleState, state as lifecycleState } from "../lifecycle";
+import { LifecycleState, currentState } from "../lifecycle";
 import { font } from "../gui";
 import { kv as settings } from "../settings";
 
@@ -456,7 +456,7 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
   }
 
   miniPlayerWindow.on("close", (e) => {
-    if ((state && !state.alive) || lifecycleState === LifecycleState.Quitting)
+    if ((state && !state.alive) || currentState() === LifecycleState.Quitting)
       return; // Allow closing when hiding or quitting
     e.preventDefault();
     if (!mainWindow || mainWindow.isDestroyed()) return;

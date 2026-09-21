@@ -19,9 +19,11 @@ vi.mock("electron", () => ({
 }));
 
 import type { Database } from "@open-orpheus/database";
+import type { BrowserWindow } from "electron";
 import type { Logger } from "pino";
 
 import { bootstrap } from "@main/bootstrap/context";
+import { mainWindow, setMainWindow } from "@main/bootstrap/services/window";
 import * as database from "@main/database";
 import { events, kv } from "@main/settings";
 
@@ -73,5 +75,20 @@ describe("bootstrap", () => {
     expect(database.nativeDb).toBe(ctx.database.nativeDb);
     expect(kv).toBe(ctx.settings.kv);
     expect(events).toBe(ctx.settings.events);
+  });
+
+  it("shares the main window with the binding `window.ts` re-exports", async () => {
+    const ctx = await bootstrap({
+      logger,
+      openDatabase: () => fakeDatabase() as unknown as Database,
+    });
+
+    expect(mainWindow).toBeNull();
+
+    const wnd = { id: 1 } as unknown as BrowserWindow;
+    setMainWindow(wnd);
+
+    expect(ctx.windows.current()).toBe(wnd);
+    expect(mainWindow).toBe(wnd);
   });
 });

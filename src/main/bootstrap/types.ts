@@ -1,9 +1,11 @@
 import type { Database } from "@open-orpheus/database";
+import type { BrowserWindow } from "electron";
 import type Emittery from "emittery";
 import type { Keyv } from "keyv";
 import type { Logger } from "pino";
 
 import type { SettingsEvents } from "$sharedTypes/settings";
+import type { LifecycleService } from "./services/lifecycle";
 
 export interface Disposable {
   dispose(): void;
@@ -22,6 +24,10 @@ export interface RendererTarget {
  */
 export interface MainWindowAccessor {
   current(): RendererTarget | null;
+}
+
+export interface WindowService extends MainWindowAccessor {
+  setMainWindow(wnd: BrowserWindow | null): void;
 }
 
 /**
@@ -51,6 +57,8 @@ export interface SettingsService {
 
 /** Only `bootstrap()` produces this, so initialisation order is enforced by type. */
 export interface ReadyPhase extends BootstrapPhase {
+  lifecycle: LifecycleService;
+  windows: WindowService;
   database: DatabaseService;
   settings: SettingsService;
 }

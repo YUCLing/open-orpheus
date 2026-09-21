@@ -5,11 +5,7 @@ import { BrowserWindow, screen } from "electron";
 
 import { setMainWindow } from "../window";
 import { window as miniPlayerWindow } from "./mini-player";
-import {
-  LifecycleState,
-  state as lifecycleState,
-  setLifecycleState,
-} from "../lifecycle";
+import { LifecycleState, currentState, setLifecycleState } from "../lifecycle";
 
 function getWindowState(
   wnd: BrowserWindow
@@ -103,7 +99,7 @@ export default async function createMainWindow() {
   });
 
   mainWindow.on("close", (e) => {
-    if (lifecycleState === LifecycleState.Quitting) return;
+    if (currentState() === LifecycleState.Quitting) return;
     mainWindow.webContents.send("channel.call", "winhelper.onclose");
     e.preventDefault();
   });

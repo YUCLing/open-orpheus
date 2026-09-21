@@ -39,7 +39,7 @@ import { toError } from "@shared/util";
 import {
   LifecycleState,
   setLifecycleState,
-  state as lifecycleState,
+  currentState,
 } from "./main/lifecycle";
 import { checkEnvFlagPresent, isFileNotFound } from "./main/util";
 import { PackageDownloadReason } from "$sharedTypes/package-download";
@@ -310,7 +310,9 @@ app.on("ready", async () => {
     // Register for Open Orpheus session
     registerOrpheusScheme(openOrpheusSession.protocol);
 
-    await import("./main/bootstrap/context").then((m) => m.bootstrap({ logger }));
+    await import("./main/bootstrap/context").then((m) =>
+      m.bootstrap({ logger })
+    );
 
     await Promise.all([
       // Install the tray icon
@@ -450,7 +452,7 @@ app.on("ready", async () => {
 
 app.on("window-all-closed", () => {
   // Make sure we don't quit because of package download window being closed before main window has started
-  if (lifecycleState !== LifecycleState.Starting) {
+  if (currentState() !== LifecycleState.Starting) {
     app.quit();
   }
 });

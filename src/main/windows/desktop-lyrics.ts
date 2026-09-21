@@ -23,7 +23,7 @@ import {
   OnDemandWindowState,
   SimpleManagedWindow,
 } from "../window";
-import { LifecycleState, state as lifecycleState } from "../lifecycle";
+import { LifecycleState, currentState } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
   DesktopLyricsContract,
@@ -120,7 +120,7 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
   });
 
   desktopLyricsWindow.on("close", (e) => {
-    if ((state && !state.alive) || lifecycleState === LifecycleState.Quitting)
+    if ((state && !state.alive) || currentState() === LifecycleState.Quitting)
       return; // Only allow direct close when not triggered externally or quitting
     // Not closing, but telling NCM to hide.
     e.preventDefault();
