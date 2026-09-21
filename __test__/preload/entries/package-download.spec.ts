@@ -27,7 +27,7 @@ async function load(...argv: string[]) {
   const original = process.argv;
   process.argv = ["electron", "package-download.js", ...argv];
   try {
-    await import("../../src/windows/package-download");
+    await import("@preload/entries/package-download");
   } finally {
     process.argv = original;
   }

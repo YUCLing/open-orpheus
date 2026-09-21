@@ -11,11 +11,11 @@ vi.mock("@bridge/preload", () => ({
 }));
 
 // Importing these modules is what registers the API surface.
-import "../../src/windows/desktop-lyrics";
-import "../../src/windows/desktop-lyrics-preview";
-import "../../src/windows/manage";
-import "../../src/windows/menu";
-import "../../src/windows/mini-player";
+import "@preload/entries/desktop-lyrics";
+import "@preload/entries/desktop-lyrics-preview";
+import "@preload/entries/manage";
+import "@preload/entries/menu";
+import "@preload/entries/mini-player";
 
 /** The prefixes exposed by the given module, in registration order. */
 function exposed() {
@@ -42,7 +42,7 @@ describe("window preload entry points", () => {
     const original = process.argv;
     process.argv = [...original, "--wayland"];
     try {
-      await import("../../src/windows/menu");
+      await import("@preload/entries/menu");
     } finally {
       process.argv = original;
     }

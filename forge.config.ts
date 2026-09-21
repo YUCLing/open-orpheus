@@ -153,32 +153,32 @@ const config: ForgeConfig = {
           target: "preload",
         },
         {
-          entry: "src/windows/manage.ts",
+          entry: "src/preload/entries/manage.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/package-download.ts",
+          entry: "src/preload/entries/package-download.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/desktop-lyrics.ts",
+          entry: "src/preload/entries/desktop-lyrics.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/desktop-lyrics-preview.ts",
+          entry: "src/preload/entries/desktop-lyrics-preview.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/mini-player.ts",
+          entry: "src/preload/entries/mini-player.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/menu.ts",
+          entry: "src/preload/entries/menu.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
