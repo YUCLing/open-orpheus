@@ -13,9 +13,9 @@ import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-nati
 
 import * as options from "./packaging/options";
 
-import MakerDeb from "./plugins/MakerDeb";
-import MakerFlatpak from "./plugins/MakerFlatpak";
-import MakerRpm from "./plugins/MakerRpm";
+import MakerDeb from "./build/vite-plugins/MakerDeb";
+import MakerFlatpak from "./build/vite-plugins/MakerFlatpak";
+import MakerRpm from "./build/vite-plugins/MakerRpm";
 
 const LOCALES = ["en", "en-US", "zh-CN"];
 

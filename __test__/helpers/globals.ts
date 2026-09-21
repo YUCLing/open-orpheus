@@ -2,7 +2,7 @@ import { vi } from "vitest";
 
 /**
  * The main process gets a global `LOGGER` injected at build time by
- * `plugins/LoggerPlugin.ts`. Modules under `src/main` reference that global
+ * `build/vite-plugins/LoggerPlugin.ts`. Modules under `src/main` reference that global
  * freely, so any unit test importing them has to install a stub first.
  *
  * `LOGGER` is only ever dereferenced inside function bodies, so the stub can be

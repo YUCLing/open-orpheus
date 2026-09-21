@@ -3,10 +3,10 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
 
-import PinoWorkerPlugin from "./plugins/PinoWorkerPlugin.js";
-import NoS3Plugin from "./plugins/NoS3Plugin.js";
-import LoggerPlugin from "./plugins/LoggerPlugin.js";
-import ForceESPlugin from "./plugins/ForceESPlugin.js";
+import PinoWorkerPlugin from "./build/vite-plugins/PinoWorkerPlugin.js";
+import NoS3Plugin from "./build/vite-plugins/NoS3Plugin.js";
+import LoggerPlugin from "./build/vite-plugins/LoggerPlugin.js";
+import ForceESPlugin from "./build/vite-plugins/ForceESPlugin.js";
 
 // https://vitejs.dev/config
 export default defineConfig({

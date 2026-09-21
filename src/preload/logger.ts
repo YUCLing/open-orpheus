@@ -30,7 +30,7 @@ function forward(level: string, bindings: Bindings | undefined): LogFn {
  *
  * `child(bindings)` returns another facade that captures the bindings and
  * applies them to every forwarded entry, so the compile-time injected
- * `_logger.child({ name: "..." })` calls (see `plugins/LoggerPlugin.ts`) work
+ * `_logger.child({ name: "..." })` calls (see `build/vite-plugins/LoggerPlugin.ts`) work
  * in the preload too — the injected binding is a real logger object instead
  * of `undefined`.
  */

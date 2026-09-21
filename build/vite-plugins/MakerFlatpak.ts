@@ -5,17 +5,17 @@ import { promisify } from "node:util";
 
 import { MakerBase, type MakerOptions } from "@electron-forge/maker-base";
 import type { ForgePlatform } from "@electron-forge/shared-types";
-import type { MakerFlatpakOptions } from "../packaging/types.ts";
+import type { MakerFlatpakOptions } from "../../packaging/types.ts";
 
-import { createDirectoryTarball } from "../packaging/common/archive.ts";
-import { flatpakArch } from "../packaging/common/arch.ts";
-import { makeInStaging } from "../packaging/common/maker.ts";
-import { runStreaming } from "../packaging/common/process.ts";
+import { createDirectoryTarball } from "../../packaging/common/archive.ts";
+import { flatpakArch } from "../../packaging/common/arch.ts";
+import { makeInStaging } from "../../packaging/common/maker.ts";
+import { runStreaming } from "../../packaging/common/process.ts";
 import {
   baseManifest,
   prebuiltAppModule,
   writeManifest,
-} from "../packaging/flatpak/manifest.ts";
+} from "../../packaging/flatpak/manifest.ts";
 
 const execFile = promisify(execFileCb);
 

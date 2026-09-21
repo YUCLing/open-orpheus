@@ -1,8 +1,8 @@
 # Open Orpheus — Refactor & Plugin Roadmap
 
 **Status:** design review draft. Nothing in this document is implemented yet.
-**Revision:** 5 (2026-09-21) — P0-5 executed; the last 7 relative `src` specifiers are
-gone and the P0-3 exit criterion is now genuinely met.
+**Revision:** 7 (2026-09-21) — P0-4 and P0-7 done; the per-move checklist gained the
+"moved files' own imports" step after that omission bit twice.
 **Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
 
 This document is intentionally written so it can be **corrected between phases**. See
@@ -663,6 +663,13 @@ src/
 
 `packaging/` and `scripts/` stay as-is.
 
+#### Alias naming
+
+`@types/*` is **forbidden** as an internal alias. It is DefinitelyTyped's published
+scope, and it is the same prefix TypeScript resolves through `node_modules/@types/**`
+and `compilerOptions.types` (e.g. `vite/client` today). Available namespaces:
+`@shared`, `@main`, `@preload`, `@bridge`.
+
 #### Sequencing rule (the important trick)
 
 **Add aliases first, migrate imports, then move files.** After step 1 and 2, moving
@@ -695,6 +702,11 @@ Easy to forget one:
       `packaging/flatpak/manifest.ts`, `scripts/build-flatpak-builder.ts`,
       `src/preload/logger.ts`, `__test__/helpers/globals.ts` all name
       `plugins/LoggerPlugin.ts` or `plugins/Maker*.ts` in prose. **[V]**
+- [ ] **check the moved files' own imports** — a move changes their directory depth, so
+      relative specifiers that escape the new directory must be re-edged or aliased.
+      Grep the moved directory for `"../` and verify each resolves. **This bit twice**
+      (P0-5, then P0-4) because external references were checked but the moved files
+      themselves were not. **[V]**
 
 ---
 
@@ -776,10 +788,10 @@ finishes the task. Detail for each task is in the phase section referenced below
 | P0-1  | Enable `strict` + `noImplicitOverride` + `noFallthroughCasesInSwitch`                | P0    | **Done**    | 2026-09-21 | 0 errors, as measured (§4.2)                                                                   |
 | P0-2  | Add `@shared`/`@main`/`@preload`/`@bridge` to `tsconfig.json` `paths`                | P0    | **Done**    | 2026-09-21 | Plus mirrored aliases in `vitest.config.ts` — required, see §4.1                               |
 | P0-3  | Rewrite relative `src` imports to aliases                                            | P0    | **Done**    | 2026-09-21 | 0 remaining — the last 7 went with P0-5                                                            |
-| P0-4  | Move `plugins/` → `build/vite-plugins/`                                              | P0    | Not started |            | 9 prose refs + CI filter (§4.3)                                                                |
+| P0-4  | Move `plugins/` → `build/vite-plugins/`                                              | P0    | **Done**    | 2026-09-21 | 18 refs: 8 imports, `tsconfig.json` include, 7 prose, 2 docs; plus the Makers' own relative imports                                                                |
 | P0-5  | Move `src/windows/` → `src/preload/entries/`                                         | P0    | **Done**    | 2026-09-21 | 6 forge entries, 2 specs, 2 docs; specs moved to `__test__/preload/entries/`; bundles keep basenames                                    |
 | P0-6  | Move `src/{CallDispatcher,util,constants}.ts` → `src/shared/`                        | P0    | **Done**    | 2026-09-21 | `git mv` used, history preserved                                                               |
-| P0-7  | Add `build/**` to `changes.yml` `node` filters                                       | P0    | Not started |            | pre-existing gap                                                                               |
+| P0-7  | Add `build/**` to `changes.yml` `node` filters                                       | P0    | **Done**    | 2026-09-21 | `build/**` added to the `node` filter — this was a pre-existing gap                                                                               |
 | P0-8  | Add `plugins/**`, `vite.*.config.ts`, `forge.config.ts` to `include`; fix 9 `TS4114` | P0    | **Done**    | 2026-09-21 | 9 `override` modifiers added; `eslint.config.ts` still unchecked                               |
 | P0-9  | Guard test: vitest aliases mirror `tsconfig.json` `paths`                            | P0    | Not started |            | added 2026-09-21; R1 — the hazard exists from P0-2 on                                          |
 | P0-10 | Ignore generated dirs in eslint (`coverage/**`)                                      | P0    | Not started |            | `pnpm lint:eslint` reports 1 warning in `coverage/block-navigation.js`; keep the R3 gate clean |
@@ -796,9 +808,10 @@ finishes the task. Detail for each task is in the phase section referenced below
 | P1-10 | Delete the legacy adapter                                                            | P1    | Not started |            | signals migration end                                                                          |
 | P2-1  | Group `src/main/*` per §5.3                                                          | P2    | Not started |            | high churn — schedule                                                                          |
 | P2-2  | Decide/document the `foo.ts` + `foo/` rule                                           | P2    | Not started |            | likely "document" (§9.1)                                                                       |
+| P2-4  | Fold `types/` → `src/shared/types/`; retire `$sharedTypes` | P2 | Not started | | Decision 2026-09-21: one alias namespace (`@shared/types/*`) instead of `$sharedTypes` + `@shared`. Do with P2-3. Requires: `gui/svelte.config.ts`, `vitest.config.ts` (+ coverage exclude, or declaration-only files enter the denominator), `vite.main.config.ts`; ~40 import sites; `types/**` entry in the CI `node` filter becomes dead |
 | P2-3  | Consolidate root `types/` vs `src/bridge/contracts/`                                 | P2    | Not started |            |                                                                                                |
 | P3-1  | `createTestContext()` helper                                                         | P3    | Not started |            |                                                                                                |
-| P3-2  | Resolve `$sharedTypes` duplication                                                   | P3    | Not started |            | verify before deleting (Q9)                                                                    |
+| P3-2  | ~~Resolve `$sharedTypes` duplication~~ — superseded by P2-4                                                   | P3    | Not started |            | verify before deleting (Q9)                                                                    |
 | P3-3  | Coverage scope for `src/preload/entries/**` (moot after P0-5 — now excluded like its siblings)                                          | P3    | Not started |            |                                                                                                |
 | P3-4  | Mid-cost strictness flags (130 errors total)                                         | P3    | Not started |            | §4.2                                                                                           |
 | P3-5  | Preload `new Function` spike                                                         | P3    | Not started |            | unblocks P4 (§9.2)                                                                             |
@@ -1161,6 +1174,8 @@ material — so resolving it after P4 starts means redesigning P4.
 | 2026-09-21 | Bundler targets do read `paths`, end to end **[V]**                                                                                                                                                                         | `pnpm package` succeeded with `@shared/*` used from `src/main.ts` and `src/preload.ts` — main, preload, worklets and renderer all bundled.                                                                                               |
 | 2026-09-21 | P0 foundation: types + tests green **[V]**                                                                                                                                                                                  | `pnpm lint:types` → 0 errors (tsc + svelte-check). `pnpm test` → 53 files, 489 tests passed.                                                                                                                                             |
 | 2026-09-21 | P0-5 move verified end to end **[V]** | `pnpm lint:types` 0 errors; `pnpm test` 53 files / 489 tests; `pnpm package` succeeded and `.vite/build` still contains `menu.js`, `manage.js`, `mini-player.js`, `desktop-lyrics.js`, `desktop-lyrics-preview.js`, `package-download.js`, so main's hardcoded `join(import.meta.dirname, "<name>.js")` still resolves. |
+| 2026-09-21 | P0-4 rename verified end to end **[V]** | `pnpm lint:types` 0 errors, `pnpm test` 489 passed, `pnpm lint:eslint` 0 errors, `pnpm package` succeeded (the packaging step is what loads the Makers). `.gitignore` has `build/Release`, not `build/`, so `build/vite-plugins/` is not ignored. |
+| 2026-09-21 | Moving a directory breaks the moved files' own relatives **[V]** | The Makers' `../packaging/*` imports resolved to `build/packaging/*` after the rename; 14 specifiers needed a depth fix. Surfaced as `TS2307` plus `import/no-unresolved`, with one consequential `TS7006` that disappeared once the imports resolved. Caught by `pnpm lint:types`, **not** by `pnpm test` — the Makers are only exercised at package time. |
 | 2026-09-21 | Earlier P0-3 verification was wrong **[V]** | The pattern `from "…"` missed bare side-effect imports and dynamic `import("…")`, so 7 specifiers went unreported. Corrected pattern: `"\.\./(\.\./)*src/`, now 0 matches. |
 | 2026-09-21 | `strict` is 0 errors outside `include` too **[V]**                                                                                                                                                                          | Extended-`include` probe over the 12 uncovered files (`plugins/**`, `vite.*.config.ts`, `forge.config.ts`): 0 errors with `strict`; **9** with `noImplicitOverride` (all `TS4114` in `plugins/Maker*.ts`).                               |
 

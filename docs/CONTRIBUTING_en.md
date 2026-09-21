@@ -66,7 +66,7 @@ open-orpheus/
 │   ├── nowplaying/         # macOS media session (MPNowPlayingInfoCenter)
 │   ├── smtc/               # Windows media session (SMTC)
 │   └── lifecycle/          # Exit callbacks and lifecycle utilities
-├── plugins/                # Electron Forge plugins & Makers (deb / rpm / flatpak, logging, etc.)
+├── build/vite-plugins/     # Electron Forge plugins & Makers (deb / rpm / flatpak, logging, etc.)
 ├── scripts/                # Build scripts (module compilation, Flatpak, etc.)
 ├── packaging/              # Per-platform packaging configuration
 ├── data/                   # Development runtime data (resources, cache, logs)

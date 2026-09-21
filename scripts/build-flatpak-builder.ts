@@ -433,7 +433,7 @@ const appModule = {
   ],
 };
 
-// Top-level manifest is shared with plugins/MakerFlatpak.ts (prebuilt mode).
+// Top-level manifest is shared with build/vite-plugins/MakerFlatpak.ts (prebuilt mode).
 const manifest = baseManifest(
   {
     appId,
