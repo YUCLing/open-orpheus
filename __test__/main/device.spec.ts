@@ -13,7 +13,7 @@ vi.mock("electron", () => ({
 
 import { vol } from "memfs";
 
-import { data } from "../../src/main/folders";
+import { data } from "@main/folders";
 import { installLoggerStub } from "../helpers/globals";
 
 const DEVICE_ID_PATH = `${data}/device_id.json`;
@@ -21,7 +21,7 @@ const DEVICE_ID_PATH = `${data}/device_id.json`;
 /** Re-import the module so its module-level device ID state starts empty. */
 async function freshDeviceModule() {
   vi.resetModules();
-  return await import("../../src/main/device");
+  return await import("@main/device");
 }
 
 describe("prepareDeviceId", () => {

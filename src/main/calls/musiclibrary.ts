@@ -15,7 +15,7 @@ import {
   isMusicFile,
   normalizePath,
 } from "../util";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { commentToID3Metadata } from "../id3";
 
 type MusicLibraries =

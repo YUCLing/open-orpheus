@@ -10,7 +10,7 @@ import type {
   Av3aProcessServiceToMain,
 } from "../../bridge/contracts/av3a-process";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 /**
  * Main-process side of the AV3A decode utility process.

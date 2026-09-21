@@ -2,7 +2,7 @@ import { session } from "electron";
 import * as cookie from "cookie";
 
 import { getADDeviceId, getDeviceId } from "./device";
-import { CORE_VERSION, OSVER } from "../constants";
+import { CORE_VERSION, OSVER } from "@shared/constants";
 
 const cookies = session.defaultSession.cookies;
 

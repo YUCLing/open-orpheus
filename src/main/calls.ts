@@ -3,7 +3,7 @@ import { IpcMainInvokeEvent } from "electron";
 import CallDispatcher, {
   CallbackHandlerFunction,
   HandlerFunction,
-} from "../CallDispatcher";
+} from "@shared/CallDispatcher";
 
 export const dispatcher = new CallDispatcher();
 

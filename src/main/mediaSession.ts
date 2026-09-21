@@ -1,6 +1,6 @@
 import os from "node:os";
 
-import { toError } from "../util";
+import { toError } from "@shared/util";
 import { events as lifecycleEvents } from "./lifecycle";
 import { resolveCoverUrl } from "./playback/artwork";
 import PlaybackController from "./playback/PlaybackController";

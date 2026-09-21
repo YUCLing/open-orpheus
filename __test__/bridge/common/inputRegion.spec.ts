@@ -11,11 +11,11 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock("node:os", () => ({ default: { platform: hoisted.platform } }));
 
-vi.mock("../../../src/main/window", () => ({
+vi.mock("@main/window", () => ({
   ManagedWindow: { fromBrowserWindow: hoisted.fromBrowserWindow },
 }));
 
-import { registerInputRegionHandlers } from "../../../src/bridge/common/inputRegion";
+import { registerInputRegionHandlers } from "@bridge/common/inputRegion";
 
 const regions = [{ x: 0, y: 0, width: 10, height: 10 }];
 

@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import mime from "mime";
 import { MusicFile } from "music-tag-native";
 
-import { imageSize } from "../../util";
+import { imageSize } from "@shared/util";
 import { cache } from "../folders";
 import { selectBestMusicPic } from "../util";
 

@@ -9,7 +9,7 @@ vi.mock("electron", () => ({
 
 import { vol } from "memfs";
 
-import HttpCacheStorage from "../../src/main/cache/HttpCacheStorage";
+import HttpCacheStorage from "@main/cache/HttpCacheStorage";
 import { installLoggerStub } from "../helpers/globals";
 
 const LAST_VACUUM_KEY = "httpCache::lastVacuum";

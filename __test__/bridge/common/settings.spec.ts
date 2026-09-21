@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserWindow } from "electron";
 
 // The settings store needs a native sqlite database, so it is faked here.
-vi.mock("../../../src/main/settings", async () => {
+vi.mock("@main/settings", async () => {
   const Emittery = (await import("emittery")).default;
   return {
     kv: {
@@ -17,8 +17,8 @@ vi.mock("../../../src/main/settings", async () => {
   };
 });
 
-import { registerSettingsHandlers } from "../../../src/bridge/common/settings";
-import { events, kv } from "../../../src/main/settings";
+import { registerSettingsHandlers } from "@bridge/common/settings";
+import { events, kv } from "@main/settings";
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));

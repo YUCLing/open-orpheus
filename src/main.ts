@@ -27,7 +27,7 @@ import {
   userdata as userdataDir,
 } from "./main/folders";
 import { prepareDeviceId } from "./main/device";
-import { CORE_VERSION } from "./constants";
+import { CORE_VERSION } from "@shared/constants";
 import versions from "../versions.json";
 import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "./main/pack";
 import showPackgeDownloadWindow from "./main/windows/package-download";
@@ -35,7 +35,7 @@ import { mainWindow } from "./main/window";
 import registerAsProtocolClient, {
   checkOpenCommand as checkWebCommand,
 } from "./main/protocol";
-import { toError } from "./util";
+import { toError } from "@shared/util";
 import {
   LifecycleState,
   setLifecycleState,

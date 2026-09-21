@@ -16,7 +16,7 @@ import registerAsProtocolClient, {
   getProtocolClientName,
   isProtocolClient,
   unregisterAsProtocolClient,
-} from "../../src/main/protocol";
+} from "@main/protocol";
 
 describe("checkOpenCommand", () => {
   it("finds an orpheus URL in the argv", () => {

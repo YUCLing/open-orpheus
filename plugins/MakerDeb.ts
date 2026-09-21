@@ -16,13 +16,13 @@ import { makeInStaging } from "../packaging/common/maker.ts";
 export default class MakerDeb extends MakerBase<MakerDebOptions> {
   name = "deb";
   defaultPlatforms: ForgePlatform[] = ["linux"];
-  requiredExternalBinaries = ["dpkg-buildpackage"];
+  override requiredExternalBinaries = ["dpkg-buildpackage"];
 
-  isSupportedOnCurrentPlatform(): boolean {
+  override isSupportedOnCurrentPlatform(): boolean {
     return process.platform === "linux";
   }
 
-  async make(opts: MakerOptions): Promise<string[]> {
+  override async make(opts: MakerOptions): Promise<string[]> {
     const { dir, makeDir, targetArch } = opts;
     // Built in a temp staging dir; only the .deb is moved to the out dir.
     const outDir = resolve(makeDir, "deb", nodeArch(targetArch));

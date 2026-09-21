@@ -1,4 +1,4 @@
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 import type {
   Av3aDecodeExecutor,

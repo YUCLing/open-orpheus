@@ -1,10 +1,10 @@
 import Emittery from "emittery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PlayerCommandEvents } from "../../src/main/playback/adapters/MediaSessionAdapter";
-import PlaybackController from "../../src/main/playback/PlaybackController";
-import PlayerCommandRouter from "../../src/main/playback/PlayerCommandRouter";
-import { PlaybackChange, PlaybackStatus } from "../../src/main/playback/types";
+import type { PlayerCommandEvents } from "@main/playback/adapters/MediaSessionAdapter";
+import PlaybackController from "@main/playback/PlaybackController";
+import PlayerCommandRouter from "@main/playback/PlayerCommandRouter";
+import { PlaybackChange, PlaybackStatus } from "@main/playback/types";
 
 // `../window` pulls in Electron; the router only needs `webContents.send`.
 const { send, host } = vi.hoisted(() => {
@@ -17,7 +17,7 @@ const { send, host } = vi.hoisted(() => {
     },
   };
 });
-vi.mock("../../src/main/window", () => ({
+vi.mock("@main/window", () => ({
   get mainWindow() {
     return host.window;
   },

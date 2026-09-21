@@ -6,6 +6,10 @@ export default defineConfig({
   resolve: {
     alias: {
       $sharedTypes: fileURLToPath(new URL("./types", import.meta.url)),
+      "@shared": fileURLToPath(new URL("./src/shared", import.meta.url)),
+      "@main": fileURLToPath(new URL("./src/main", import.meta.url)),
+      "@preload": fileURLToPath(new URL("./src/preload", import.meta.url)),
+      "@bridge": fileURLToPath(new URL("./src/bridge", import.meta.url)),
     },
   },
   test: {
@@ -17,7 +21,7 @@ export default defineConfig({
         // Constants
         "packaging/options.ts",
         "packaging/common/toolchain.ts",
-        "src/constants.ts",
+        "src/shared/constants.ts",
       ],
     },
   },

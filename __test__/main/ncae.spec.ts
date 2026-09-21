@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { NcaeType } from "$sharedTypes/ncae";
 
-import { decodeNcae } from "../../src/main/ncae";
+import { decodeNcae } from "@main/ncae";
 
 // Binary layout (mirrors the decoder in `src/main/ncae.ts`).
 const OFF_PAYLOAD_SIZE = 0x04;

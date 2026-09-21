@@ -13,7 +13,7 @@ import {
   registerGlobalShortcut,
   unregisterGlobalShortcut,
   vkCodesToElectronAccelerator,
-} from "../../src/main/shortcuts";
+} from "@main/shortcuts";
 import { installLoggerStub } from "../helpers/globals";
 
 describe("vkCodesToElectronAccelerator", () => {

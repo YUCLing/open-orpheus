@@ -8,7 +8,7 @@ import { vol } from "memfs";
 import {
   localAv3aSource,
   onlineStreamerToAv3aSource,
-} from "../../src/main/av3a/sources";
+} from "@main/av3a/sources";
 
 describe("localAv3aSource", () => {
   beforeEach(() => {

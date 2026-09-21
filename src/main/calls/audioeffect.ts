@@ -1,5 +1,5 @@
 import { NcaeType } from "$sharedTypes/ncae";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { readEffect } from "../audio";
 import { registerCallHandler } from "../calls";
 

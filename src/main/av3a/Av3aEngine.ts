@@ -1,7 +1,7 @@
 import type { AudioPlayInfo } from "../../preload/Player";
 import { mainWindow } from "../window";
 import { normalizePath } from "../util";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { playCacheManager } from "../cache";
 import { OnlineStreamer } from "../audio/OnlineStreamer";
 import { Av3aPlaybackProcess } from "./Av3aPlaybackProcess";

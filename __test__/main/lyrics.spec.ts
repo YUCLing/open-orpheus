@@ -5,7 +5,7 @@ const hoisted = vi.hoisted(() => ({
   controller: {} as Record<string, unknown>,
 }));
 
-vi.mock("../../src/main/mediaSession", async () => {
+vi.mock("@main/mediaSession", async () => {
   const Emittery = (await import("emittery")).default;
   const controller = new Emittery();
   Object.assign(hoisted.controller, controller, { emit: controller.emit });
@@ -20,10 +20,10 @@ const emit = (event: string, data: unknown) =>
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-let lyricsDispatcher: typeof import("../../src/main/lyrics").lyricsDispatcher;
+let lyricsDispatcher: typeof import("@main/lyrics").lyricsDispatcher;
 
 beforeAll(async () => {
-  ({ lyricsDispatcher } = await import("../../src/main/lyrics"));
+  ({ lyricsDispatcher } = await import("@main/lyrics"));
 });
 
 describe("lyrics dispatcher wiring", () => {

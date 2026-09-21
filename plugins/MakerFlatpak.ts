@@ -27,13 +27,13 @@ const execFile = promisify(execFileCb);
 export default class MakerFlatpak extends MakerBase<MakerFlatpakOptions> {
   name = "flatpak";
   defaultPlatforms: ForgePlatform[] = ["linux"];
-  requiredExternalBinaries = ["flatpak", "flatpak-builder"];
+  override requiredExternalBinaries = ["flatpak", "flatpak-builder"];
 
-  isSupportedOnCurrentPlatform(): boolean {
+  override isSupportedOnCurrentPlatform(): boolean {
     return process.platform === "linux";
   }
 
-  async make(opts: MakerOptions): Promise<string[]> {
+  override async make(opts: MakerOptions): Promise<string[]> {
     const { dir, makeDir, targetArch, packageJSON } = opts;
     const projectRoot = resolve(import.meta.dirname, "..");
 

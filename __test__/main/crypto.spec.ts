@@ -11,7 +11,7 @@ import {
   EAPI_SEPARATOR,
   rawRsaEncrypt,
   serialData,
-} from "../../src/main/crypto";
+} from "@main/crypto";
 import { installLoggerStub } from "../helpers/globals";
 
 beforeAll(() => {

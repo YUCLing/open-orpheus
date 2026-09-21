@@ -43,7 +43,7 @@ import createCacheManager, {
   lyricCacheManager,
   playCacheManager,
 } from "../cache";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { commentToID3Json, ID3JsonToComment } from "../id3";
 import globalLogger from "../logger";
 

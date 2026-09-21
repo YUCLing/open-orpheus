@@ -3,14 +3,14 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 // Reading an effect touches the pack/data directories, so it is faked here.
 const hoisted = vi.hoisted(() => ({ readEffect: vi.fn() }));
 
-vi.mock("../../../src/main/audio", () => ({
+vi.mock("@main/audio", () => ({
   readEffect: hoisted.readEffect,
   default: vi.fn(),
 }));
 
 import { NcaeType } from "$sharedTypes/ncae";
 
-import { dispatcher } from "../../../src/main/calls";
+import { dispatcher } from "@main/calls";
 import { installLoggerStub } from "../../helpers/globals";
 
 let logger: ReturnType<typeof installLoggerStub>;
@@ -18,7 +18,7 @@ let logger: ReturnType<typeof installLoggerStub>;
 beforeAll(async () => {
   logger = installLoggerStub();
   // Importing the module installs the `audioeffect.*` handlers.
-  await import("../../../src/main/calls/audioeffect");
+  await import("@main/calls/audioeffect");
 });
 
 /** Dispatch a command and return the tuple spread onto the callback. */

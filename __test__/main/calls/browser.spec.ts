@@ -8,14 +8,14 @@ const hoisted = vi.hoisted(() => ({
   setCookie: vi.fn(),
 }));
 
-vi.mock("../../../src/main/cookie", () => hoisted);
+vi.mock("@main/cookie", () => hoisted);
 
-import { dispatcher } from "../../../src/main/calls";
+import { dispatcher } from "@main/calls";
 import { installLoggerStub } from "../../helpers/globals";
 
 installLoggerStub();
 // Registers the `browser.*` handlers on the shared dispatcher.
-await import("../../../src/main/calls/browser");
+await import("@main/calls/browser");
 
 /** Dispatch a command and return the tuple spread onto the callback. */
 async function call(command: string, ...args: unknown[]) {

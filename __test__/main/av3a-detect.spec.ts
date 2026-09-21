@@ -5,7 +5,7 @@ vi.mock("node:fs/promises");
 
 import { vol } from "memfs";
 
-import { isAv3aFile } from "../../src/main/av3a/detect";
+import { isAv3aFile } from "@main/av3a/detect";
 
 /** Build an ISO-BMFF box: 4-byte big-endian size + 4-byte type + payload. */
 function box(type: string, payload: Buffer = Buffer.alloc(0)): Buffer {

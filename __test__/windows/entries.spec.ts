@@ -5,7 +5,7 @@ const hoisted = vi.hoisted(() => ({
   exposeInMainWorld: vi.fn(),
 }));
 
-vi.mock("../../src/bridge/preload", () => ({
+vi.mock("@bridge/preload", () => ({
   exposeApi: (prefix: string, values: Record<string, unknown> = {}) =>
     hoisted.exposeInMainWorld(prefix, values),
 }));

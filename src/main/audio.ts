@@ -9,7 +9,7 @@ import { sanitizeRelativePath } from "./util";
 import { data as dataDir, pack as packageDir } from "./folders";
 import { events as lifecycleEvents } from "./lifecycle";
 import { kv as settings } from "./settings";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 import { decodeNcae } from "./ncae";
 import { registerIpcHandlers } from "../bridge/register";
 import type { Av3aContract } from "../bridge/contracts/av3a-api";

@@ -7,7 +7,7 @@ const zstdCompress = promisify(zstdCompressCb);
 import { getCookies } from "./cookie";
 import { client as httpClient } from "./request";
 import { chacha20Encrypt, rawRsaEncrypt } from "./crypto";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 const PID = process.pid;
 const FIELD_SEP = "\x01";

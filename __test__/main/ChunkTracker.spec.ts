@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import ChunkTracker from "../../src/main/audio/ChunkTracker";
+import ChunkTracker from "@main/audio/ChunkTracker";
 
 function trackerWith(...ranges: [number, number][]) {
   const tracker = new ChunkTracker();

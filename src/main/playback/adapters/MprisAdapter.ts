@@ -7,7 +7,7 @@ import {
 
 import type { MprisMetadata } from "@open-orpheus/dbus";
 import { client } from "../../request";
-import { imageSize } from "../../../util";
+import { imageSize } from "@shared/util";
 import {
   artworkFileExists,
   artworkFileUrl,

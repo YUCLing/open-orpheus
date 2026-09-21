@@ -8,7 +8,7 @@ import type { AudioPlayInfo } from "../../preload/Player";
 import { mainWindow } from "../window";
 import { playCacheManager } from "../cache";
 import { normalizePath } from "../util";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { OnlineStreamer } from "./OnlineStreamer";
 
 enum MediaType {

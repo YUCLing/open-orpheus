@@ -32,13 +32,13 @@ vi.mock("keyv", () => {
   };
 });
 
-vi.mock("../../src/main/database", () => ({ nativeDb: {} }));
-vi.mock("../../src/main/database/KeyvSqliteDriver", () => ({
+vi.mock("@main/database", () => ({ nativeDb: {} }));
+vi.mock("@main/database/KeyvSqliteDriver", () => ({
   default: vi.fn(() => ({})),
 }));
 vi.mock("@keyv/sqlite", () => ({ KeyvSqlite: class {} }));
 
-import { events, initialize, kv } from "../../src/main/settings";
+import { events, initialize, kv } from "@main/settings";
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));

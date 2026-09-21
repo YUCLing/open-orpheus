@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { WebContents } from "electron";
 
-import { registerIpcHandlers } from "../../src/bridge/register";
+import { registerIpcHandlers } from "@bridge/register";
 
 function createFakeWebContents() {
   const handle = vi.fn();

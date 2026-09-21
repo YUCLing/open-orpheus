@@ -16,13 +16,13 @@ import { makeInStaging } from "../packaging/common/maker.ts";
 export default class MakerRpm extends MakerBase<MakerRpmOptions> {
   name = "rpm";
   defaultPlatforms: ForgePlatform[] = ["linux"];
-  requiredExternalBinaries = ["rpmbuild"];
+  override requiredExternalBinaries = ["rpmbuild"];
 
-  isSupportedOnCurrentPlatform(): boolean {
+  override isSupportedOnCurrentPlatform(): boolean {
     return process.platform === "linux";
   }
 
-  async make(opts: MakerOptions): Promise<string[]> {
+  override async make(opts: MakerOptions): Promise<string[]> {
     const { dir, makeDir, targetArch } = opts;
     // Built in a temp staging dir; only the .rpm is moved to the out dir.
     const outDir = resolve(makeDir, "rpm", rpmArch(targetArch));

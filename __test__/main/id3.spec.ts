@@ -5,7 +5,7 @@ import {
   commentToID3Metadata,
   ID3JsonToComment,
   type ID3MusicMetadata,
-} from "../../src/main/id3";
+} from "@main/id3";
 import { installLoggerStub } from "../helpers/globals";
 
 beforeAll(() => {

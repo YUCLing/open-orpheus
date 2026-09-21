@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { patchById } from "../../src/main/menu/types";
+import { patchById } from "@main/menu/types";
 
 type Item = Parameters<typeof patchById>[0][number];
 

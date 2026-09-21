@@ -5,7 +5,7 @@ vi.mock("node:fs/promises");
 
 const hoisted = vi.hoisted(() => ({ send: vi.fn() }));
 
-vi.mock("../../src/main/window", () => ({
+vi.mock("@main/window", () => ({
   mainWindow: { webContents: { send: hoisted.send } },
 }));
 
@@ -15,7 +15,7 @@ import { vol } from "memfs";
 
 import PlayCacheManager, {
   type CacheTrackMeta,
-} from "../../src/main/cache/PlayCacheManager";
+} from "@main/cache/PlayCacheManager";
 
 const CACHE_PATH = "/cache/play";
 const MiB = 1024 * 1024;

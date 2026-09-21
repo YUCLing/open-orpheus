@@ -1,4 +1,4 @@
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { client } from "../request";
 
 import type ChunkTracker from "./ChunkTracker";

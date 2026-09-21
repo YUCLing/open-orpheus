@@ -21,7 +21,7 @@ import {
   normalizePath,
   sanitizeRelativePath,
   selectBestMusicPic,
-} from "../../src/main/util";
+} from "@main/util";
 
 const onPosix = process.platform !== "win32";
 

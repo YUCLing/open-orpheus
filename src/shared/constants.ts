@@ -1,4 +1,4 @@
-import versions from "../versions.json";
+import versions from "../../versions.json";
 export const BUILD = versions.build;
 export const VERSION = versions.version;
 export const CORE_VERSION = `${VERSION}.${BUILD}`;

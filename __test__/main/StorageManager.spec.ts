@@ -7,7 +7,7 @@ vi.mock("node:fs", async () => (await import("memfs")).fs);
 
 import { vol } from "memfs";
 
-import StorageManager from "../../src/main/audio/StorageManager";
+import StorageManager from "@main/audio/StorageManager";
 
 const FILE = "/stream/audio.tmp";
 
