@@ -1,5 +1,7 @@
 import type { WebContents, IpcMainInvokeEvent } from "electron";
 
+import { toDisposable, type Disposable } from "@shared/disposable";
+
 // Only keep object branches that contain at least one function at some depth.
 // Pure-data records (e.g. NodeJS.ProcessVersions) are sync values from the
 // preload — they don't need ipc.handle handlers in main.
@@ -41,8 +43,9 @@ export function registerIpcHandlers<T>(
   wc: WebContents,
   prefix: string,
   handlers: DeepIpcHandlers<T>
-): void {
+): Disposable {
   const seen = new Set<string>();
+  const channels: string[] = [];
 
   function walk(obj: Record<string, unknown>, path: string[]) {
     for (const [key, value] of Object.entries(obj)) {
@@ -53,6 +56,7 @@ export function registerIpcHandlers<T>(
           throw new Error(`Duplicate IPC channel: "${channel}"`);
         }
         seen.add(channel);
+        channels.push(channel);
         wc.ipc.handle(channel, value as (...args: unknown[]) => unknown);
       } else if (
         value !== null &&
@@ -65,4 +69,8 @@ export function registerIpcHandlers<T>(
   }
 
   walk(handlers as Record<string, unknown>, [prefix]);
+
+  return toDisposable(() => {
+    for (const channel of channels) wc.ipc.removeHandler(channel);
+  });
 }

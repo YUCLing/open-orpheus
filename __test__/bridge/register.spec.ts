@@ -6,7 +6,12 @@ import { registerIpcHandlers } from "@bridge/register";
 
 function createFakeWebContents() {
   const handle = vi.fn();
-  return { handle, wc: { ipc: { handle } } as unknown as WebContents };
+  const removeHandler = vi.fn();
+  return {
+    handle,
+    removeHandler,
+    wc: { ipc: { handle, removeHandler } } as unknown as WebContents,
+  };
 }
 
 describe("registerIpcHandlers", () => {
@@ -71,5 +76,49 @@ describe("registerIpcHandlers", () => {
     registerIpcHandlers(wc, "svc", handlers as never);
 
     expect(handle.mock.calls.map(([channel]) => channel)).toEqual(["svc.own"]);
+  });
+
+  describe("the returned handle", () => {
+    it("removes every channel it registered", () => {
+      const { removeHandler, wc } = createFakeWebContents();
+
+      registerIpcHandlers(wc, "settings", {
+        get: vi.fn(),
+        nested: { set: vi.fn() },
+      } as never).dispose();
+
+      expect(removeHandler.mock.calls.map(([channel]) => channel)).toEqual([
+        "settings.get",
+        "settings.nested.set",
+      ]);
+    });
+
+    it("removes nothing before it is disposed", () => {
+      const { removeHandler, wc } = createFakeWebContents();
+
+      registerIpcHandlers(wc, "settings", { get: vi.fn() } as never);
+
+      expect(removeHandler).not.toHaveBeenCalled();
+    });
+
+    it("removes each channel once when disposed twice", () => {
+      const { removeHandler, wc } = createFakeWebContents();
+      const disposable = registerIpcHandlers(wc, "settings", {
+        get: vi.fn(),
+      } as never);
+
+      disposable.dispose();
+      disposable.dispose();
+
+      expect(removeHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it("removes nothing when no channel was registered", () => {
+      const { removeHandler, wc } = createFakeWebContents();
+
+      registerIpcHandlers(wc, "svc", { version: "1.0.0" } as never).dispose();
+
+      expect(removeHandler).not.toHaveBeenCalled();
+    });
   });
 });

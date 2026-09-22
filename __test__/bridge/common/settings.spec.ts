@@ -32,15 +32,17 @@ function register(wnd: BrowserWindow) {
 function createFakeWindow() {
   const send = vi.fn();
   const handle = vi.fn();
+  const removeHandler = vi.fn();
   const on = vi.fn();
   const wnd = {
-    webContents: { send, ipc: { handle } },
+    webContents: { send, ipc: { handle, removeHandler } },
     on,
   } as unknown as BrowserWindow;
 
   return {
     wnd,
     send,
+    removeHandler,
     /** Invoke a handler registered through `ipc.handle` by channel name. */
     invoke(channel: string, ...args: unknown[]) {
       const call = handle.mock.calls.find(([name]) => name === channel);
@@ -120,5 +122,42 @@ describe("registerSettingsHandlers", () => {
     await flush();
 
     expect(win.send).not.toHaveBeenCalled();
+  });
+
+  describe("the returned handle", () => {
+    it("stops forwarding without waiting for the window to close", async () => {
+      const win = createFakeWindow();
+
+      registerSettingsHandlers(win.wnd, settings).dispose();
+      void events.emit("change", { key: "proxy", value: 1 });
+      void events.emit("delete", { key: "proxy" });
+      await flush();
+
+      expect(win.send).not.toHaveBeenCalled();
+    });
+
+    it("also removes the ipc handlers it registered", () => {
+      const win = createFakeWindow();
+
+      registerSettingsHandlers(win.wnd, settings).dispose();
+
+      expect(win.removeHandler.mock.calls.map(([channel]) => channel)).toEqual([
+        "settings.get",
+        "settings.set",
+        "settings.setMany",
+        "settings.delete",
+        "settings.deleteMany",
+      ]);
+    });
+
+    it("tears down once when both the window closes and the handle is disposed", () => {
+      const win = createFakeWindow();
+      const disposable = registerSettingsHandlers(win.wnd, settings);
+
+      win.close();
+      disposable.dispose();
+
+      expect(win.removeHandler).toHaveBeenCalledTimes(5);
+    });
   });
 });

@@ -7,9 +7,9 @@ import type { Logger } from "pino";
 import type { SettingsEvents } from "@shared/types/settings";
 import type { LifecycleService } from "../services/lifecycle";
 
-export interface Disposable {
-  dispose(): void;
-}
+// Keeps its documented home (§5.3) while living in `src/shared`, where the
+// preload and bridge planes can reach it without importing `@main/**`.
+export type { Disposable } from "@shared/disposable";
 
 export type OpenDatabase = (path: string) => Database;
 

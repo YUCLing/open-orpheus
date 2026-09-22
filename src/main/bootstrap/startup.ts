@@ -30,9 +30,10 @@ import showPackgeDownloadWindow from "@main/windows/package-download";
 
 import type WebPack from "@main/services/packs/WebPack";
 import type { ProxyConfiguration } from "@main/platform/request";
+import type { Disposable } from "@shared/disposable";
 
 /** The ordered start-up sequence; rejects if the app cannot come up. */
-export async function startApplication() {
+export async function startApplication(): Promise<Disposable> {
   // Make sure data directory exists
   await mkdir(path.join(dataDir), { recursive: true });
 
@@ -217,7 +218,7 @@ export async function startApplication() {
     settings: ctx.settings,
   });
 
-  registerCallModules({
+  const callRegistrations = registerCallModules({
     settings: ctx.settings,
     database: ctx.database,
     windows: ctx.windows,
@@ -248,6 +249,10 @@ export async function startApplication() {
   registerAsProtocolClient();
 
   import("@main/platform/update").then((m) => m.checkUpdate());
+
+  // App-scoped registrations outlive every window, so nothing else can own
+  // them; `main.ts` disposes this on `before-quit`.
+  return callRegistrations;
 }
 
 async function configureSessions() {

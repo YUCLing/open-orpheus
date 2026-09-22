@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 
 import type { AppMenuItem } from "@shared/types/menu";
+import { toDisposable, type Disposable } from "@shared/disposable";
 import {
   DesktopEnvironment,
   dragWindow,
@@ -81,7 +82,7 @@ export interface WinhelperDeps {
   lifecycle: Pick<LifecycleService, "setLifecycleState">;
 }
 
-export function register(deps: WinhelperDeps): void {
+export function register(deps: WinhelperDeps): Disposable {
   // TODO: Implement this properly
   registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
     false,
@@ -213,7 +214,10 @@ export function register(deps: WinhelperDeps): void {
     }
   });
 
-  deps.settings.events.on("change", (e) => {
+  // App-scoped, and until now never torn down: it outlives every window, so no
+  // window's `closed` event can act as its trigger and the handle is the only
+  // way out of it.
+  const unlistenSettingsChange = deps.settings.events.on("change", (e) => {
     const current = deps.windows.currentWindow();
     if (!current) return;
     const { key, value } = e.data;
@@ -451,4 +455,8 @@ export function register(deps: WinhelperDeps): void {
       clipboard.writeText(data);
     }
   );
+
+  // The `channel.call` registrations above still return nothing; this is the
+  // only registration in the module that holds a resource.
+  return toDisposable(unlistenSettingsChange);
 }

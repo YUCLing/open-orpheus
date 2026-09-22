@@ -1,3 +1,5 @@
+import type { Disposable } from "@shared/disposable";
+
 import { register as registerApp, type AppDeps } from "./handlers/app";
 import {
   register as registerAudioeffect,
@@ -40,10 +42,10 @@ export type CallModuleDeps = AppDeps &
   TrayiconDeps &
   WinhelperDeps;
 
-export function registerCallModules(deps: CallModuleDeps): void {
+export function registerCallModules(deps: CallModuleDeps): Disposable {
   registerApp(deps);
   registerAudioeffect(deps);
-  registerWinhelper(deps);
+  const winhelper = registerWinhelper(deps);
   registerBrowser(deps);
   registerDesktop();
   registerStorage(deps);
@@ -56,4 +58,9 @@ export function registerCallModules(deps: CallModuleDeps): void {
   registerUpdate();
   registerPlayer();
   registerProcess();
+
+  // `winhelper` is the only module here that holds a resource; the other
+  // fourteen register `channel.call` handlers and return nothing yet, so §3.3
+  // is exercised end to end but not yet universal.
+  return winhelper;
 }
