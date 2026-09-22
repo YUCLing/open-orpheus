@@ -29,6 +29,7 @@ import type { ElementTemplate } from "./skin/dui";
 import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
 import type { AppMenuItem } from "$sharedTypes/menu";
 import { font } from "./gui";
+import { ManagedWindow } from "./window";
 
 registerMenuSkinUpdater();
 
@@ -226,7 +227,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       openSubmenu: async () => {},
       closeSubmenu: async () => {},
     });
-    registerInputRegionHandlers(wnd);
+    registerInputRegionHandlers(wnd, ManagedWindow);
   }
 
   // --- Non-Wayland: transparent popup BrowserWindow ---

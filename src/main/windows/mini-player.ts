@@ -31,6 +31,7 @@ import type {
   MiniPlayerTogetherStatus,
 } from "$sharedTypes/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
+import { lyricsDispatcher } from "../lyrics";
 import { LifecycleState, currentState } from "../lifecycle";
 import { font } from "../gui";
 import { kv as settings } from "../settings";
@@ -479,8 +480,8 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
       },
     }
   );
-  registerInputRegionHandlers(miniPlayerWindow);
-  registerLyricsHandlers(miniPlayerWindow);
+  registerInputRegionHandlers(miniPlayerWindow, ManagedWindow);
+  registerLyricsHandlers(miniPlayerWindow, lyricsDispatcher);
   return miniPlayerWindow;
 }
 

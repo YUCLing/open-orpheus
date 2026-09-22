@@ -21,6 +21,7 @@ import registerAsProtocolClient, {
   unregisterAsProtocolClient,
 } from "../protocol";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
+import { events, kv } from "../settings";
 import { font } from "../gui";
 
 let manageWndInstance: BrowserWindow | null = null;
@@ -176,7 +177,7 @@ export default function showManageWindow() {
       },
     },
   });
-  registerSettingsHandlers(manageWnd);
+  registerSettingsHandlers(manageWnd, { kv, events });
 }
 
 export function setManageWindowFont(font: string | null) {

@@ -2,26 +2,32 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BrowserWindow } from "electron";
 
-// The settings store needs a native sqlite database, so it is faked here.
-vi.mock("@main/settings", async () => {
-  const Emittery = (await import("emittery")).default;
-  return {
-    kv: {
-      get: vi.fn(async (key: unknown) => `value:${String(key)}`),
-      set: vi.fn(async () => true),
-      setMany: vi.fn(async () => [true, false]),
-      delete: vi.fn(async () => true),
-      deleteMany: vi.fn(async () => [true]),
-    },
-    events: new Emittery(),
-  };
-});
+import Emittery from "emittery";
 
+import type { SettingsService } from "@main/bootstrap/types";
 import { registerSettingsHandlers } from "@bridge/common/settings";
-import { events, kv } from "@main/settings";
+
+// The settings store needs a native sqlite database, so a double stands in for it.
+const kv = {
+  get: vi.fn(async (key: unknown) => `value:${String(key)}`),
+  set: vi.fn(async () => true),
+  setMany: vi.fn(async () => [true, false]),
+  delete: vi.fn(async () => true),
+  deleteMany: vi.fn(async () => [true]),
+};
+const events = new Emittery();
+
+const settings = { kv, events } as unknown as Pick<
+  SettingsService,
+  "kv" | "events"
+>;
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function register(wnd: BrowserWindow) {
+  registerSettingsHandlers(wnd, settings);
+}
 
 function createFakeWindow() {
   const send = vi.fn();
@@ -57,7 +63,7 @@ beforeEach(() => {
 describe("registerSettingsHandlers", () => {
   it("delegates every command to the keyv store", async () => {
     const win = createFakeWindow();
-    registerSettingsHandlers(win.wnd);
+    register(win.wnd);
 
     await expect(win.invoke("settings.get", "proxy")).resolves.toBe(
       "value:proxy"
@@ -82,7 +88,7 @@ describe("registerSettingsHandlers", () => {
 
   it("forwards store changes to the renderer", async () => {
     const win = createFakeWindow();
-    registerSettingsHandlers(win.wnd);
+    register(win.wnd);
 
     void events.emit("change", { key: "proxy", value: "http://a" });
     await flush();
@@ -96,7 +102,7 @@ describe("registerSettingsHandlers", () => {
 
   it("forwards store deletions to the renderer", async () => {
     const win = createFakeWindow();
-    registerSettingsHandlers(win.wnd);
+    register(win.wnd);
 
     void events.emit("delete", { key: "proxy" });
     await flush();
@@ -106,7 +112,7 @@ describe("registerSettingsHandlers", () => {
 
   it("stops forwarding once the window is closed", async () => {
     const win = createFakeWindow();
-    registerSettingsHandlers(win.wnd);
+    register(win.wnd);
 
     win.close();
     void events.emit("change", { key: "proxy", value: 1 });

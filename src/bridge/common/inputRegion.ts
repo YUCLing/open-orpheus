@@ -2,14 +2,17 @@ import os from "node:os";
 
 import { registerIpcHandlers } from "../register";
 import { InputRegionContract } from "../contracts/input-region-api";
-import { ManagedWindow } from "../../main/window";
+import type { ManagedWindow } from "../../main/window";
 
-export function registerInputRegionHandlers(wnd: Electron.BrowserWindow) {
+export function registerInputRegionHandlers(
+  wnd: Electron.BrowserWindow,
+  managedWindow: Pick<typeof ManagedWindow, "fromBrowserWindow">
+) {
   registerIpcHandlers<InputRegionContract>(wnd.webContents, "inputRegion", {
     setInputRegions: async (event, regions) => {
       if (!wnd || wnd.isDestroyed()) return false;
       if (os.platform() === "linux") {
-        const managed = ManagedWindow.fromBrowserWindow(wnd);
+        const managed = managedWindow.fromBrowserWindow(wnd);
         if (!managed) return false;
         return managed.setWindowInputRegion(regions);
       } else {

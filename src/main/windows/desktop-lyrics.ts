@@ -32,7 +32,8 @@ import type {
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-import { kv as settings } from "../settings";
+import { kv as settings, events } from "../settings";
+import { lyricsDispatcher } from "../lyrics";
 
 export const lyricsStyle: LyricsStyle = {
   font: {
@@ -179,9 +180,9 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
       },
     }
   );
-  registerInputRegionHandlers(desktopLyricsWindow);
-  registerLyricsHandlers(desktopLyricsWindow);
-  registerSettingsHandlers(desktopLyricsWindow);
+  registerInputRegionHandlers(desktopLyricsWindow, ManagedWindow);
+  registerLyricsHandlers(desktopLyricsWindow, lyricsDispatcher);
+  registerSettingsHandlers(desktopLyricsWindow, { kv: settings, events });
 
   return desktopLyricsWindow;
 }
