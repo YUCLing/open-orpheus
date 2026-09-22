@@ -1,5 +1,3 @@
-import { Database } from "@open-orpheus/database";
-
 import {
   createLifecycleService,
   events as lifecycleEvents,
@@ -7,8 +5,8 @@ import {
 } from "../services/lifecycle";
 import { createDatabaseService } from "../services/database";
 import { createSettingsService } from "../services/settings";
-import { windowService } from "../services/window";
-import type { HostDeps, ReadyPhase } from "./types";
+import { createWindowService } from "../services/window";
+import type { HostDeps, OpenDatabase, ReadyPhase } from "./types";
 
 export async function bootstrap(deps: HostDeps): Promise<ReadyPhase> {
   const lifecycle = createLifecycleService({
@@ -17,7 +15,7 @@ export async function bootstrap(deps: HostDeps): Promise<ReadyPhase> {
   });
   installLifecycleService(lifecycle);
 
-  const openDatabase = deps.openDatabase ?? ((path) => new Database(path));
+  const openDatabase = deps.openDatabase ?? (await loadNativeDatabase());
 
   const database = await createDatabaseService({ openDatabase });
 
@@ -26,8 +24,25 @@ export async function bootstrap(deps: HostDeps): Promise<ReadyPhase> {
   return {
     logger: deps.logger,
     lifecycle,
-    windows: windowService,
+    windows: createWindowService(),
     database,
     settings,
   };
+}
+
+/**
+ * Resolves the native SQLite binding **only** when the caller supplied no
+ * `openDatabase`.
+ *
+ * The import must stay dynamic. `@open-orpheus/database` loads a prebuilt
+ * `*.node` binding from its own top-level code and throws when it is absent, so
+ * a static import here would resolve the native package as soon as this module
+ * is evaluated — before `deps.openDatabase` could ever be consulted, and
+ * whether or not the caller passed one. That is what made the composition root
+ * unbootable in a clean checkout: the substitute was never reached, because the
+ * module failed to load first.
+ */
+async function loadNativeDatabase(): Promise<OpenDatabase> {
+  const { Database } = await import("@open-orpheus/database");
+  return (path) => new Database(path);
 }

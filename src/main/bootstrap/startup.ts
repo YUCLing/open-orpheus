@@ -31,9 +31,24 @@ import showPackgeDownloadWindow from "@main/windows/package-download";
 import type WebPack from "@main/services/packs/WebPack";
 import type { ProxyConfiguration } from "@main/platform/request";
 import type { Disposable } from "@shared/disposable";
+import type { WindowService } from "./types";
+
+/**
+ * What `main.ts` owns for the lifetime of the process once start-up succeeds.
+ */
+export interface Application {
+  /** App-scoped registrations, disposed on `before-quit`. */
+  registrations: Disposable;
+  /**
+   * The window service this process's composition root created. Handed back
+   * rather than imported, so nothing outside `bootstrap()` reaches for a
+   * module-level singleton.
+   */
+  windows: WindowService;
+}
 
 /** The ordered start-up sequence; rejects if the app cannot come up. */
-export async function startApplication(): Promise<Disposable> {
+export async function startApplication(): Promise<Application> {
   // Make sure data directory exists
   await mkdir(path.join(dataDir), { recursive: true });
 
@@ -252,7 +267,7 @@ export async function startApplication(): Promise<Disposable> {
 
   // App-scoped registrations outlive every window, so nothing else can own
   // them; `main.ts` disposes this on `before-quit`.
-  return callRegistrations;
+  return { registrations: callRegistrations, windows: ctx.windows };
 }
 
 async function configureSessions() {

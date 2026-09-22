@@ -1,7 +1,6 @@
 import type { BrowserWindow } from "electron";
 import { describe, expect, it } from "vitest";
 
-import { mainWindow, setMainWindow } from "@main/services/window";
 import {
   createFakeDatabase,
   createTestContext,
@@ -38,15 +37,25 @@ describe("bootstrap", () => {
     expect(Object.keys(ctx.database)).toHaveLength(3);
   });
 
-  it("shares the main window it hands out with the window service", async () => {
-    const ctx = await createTestContext();
-
-    expect(mainWindow).toBeNull();
-
+  it("gives each context its own window service", async () => {
+    const first = await createTestContext();
+    const second = await createTestContext();
     const wnd = { id: 1 } as unknown as BrowserWindow;
-    setMainWindow(wnd);
 
-    expect(ctx.windows.current()).toBe(wnd);
-    expect(mainWindow).toBe(wnd);
+    first.windows.setMainWindow(wnd);
+
+    // The point of the composition root is that it builds an object graph. A
+    // module-level window service made these two contexts share mutable state,
+    // so a window set through one leaked into the other.
+    expect(first.windows.current()).toBe(wnd);
+    expect(second.windows.current()).toBeNull();
+    expect(second.windows.currentWindow()).toBeNull();
+  });
+
+  it("does not hand the same window service object to two contexts", async () => {
+    const first = await createTestContext();
+    const second = await createTestContext();
+
+    expect(first.windows).not.toBe(second.windows);
   });
 });

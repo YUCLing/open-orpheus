@@ -17,21 +17,22 @@ import {
 } from "@main/services/lifecycle";
 import { configureProcess } from "@main/bootstrap/process-setup";
 import { checkOpenCommand as checkWebCommand } from "@main/platform/protocol";
-import { startApplication } from "@main/bootstrap/startup";
-import { windowService } from "@main/services/window";
-import type { Disposable } from "@shared/disposable";
+import { startApplication, type Application } from "@main/bootstrap/startup";
 
 configureProcess();
 
-// App-scoped registrations that outlive every window; disposed on `before-quit`.
-let appRegistrations: Disposable | undefined;
+// What start-up produced: the app-scoped registrations (disposed on
+// `before-quit`) and this process's window service. Both are owned here rather
+// than imported from a module-level singleton, so nothing outside `bootstrap()`
+// can reach the window state.
+let application: Application | undefined;
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
   try {
-    appRegistrations = await startApplication();
+    application = await startApplication();
   } catch (error) {
     if (error) {
       dialog.showErrorBox(
@@ -54,13 +55,15 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   // The app is the owner of the app-scoped registrations, so it is the one
   // that tears them down (§3.3).
-  appRegistrations?.dispose();
+  application?.registrations.dispose();
   // Allow some windows to be closed.
   setLifecycleState(LifecycleState.Quitting);
 });
 
 app.on("second-instance", (event, argv) => {
-  const mainWindow = windowService.currentWindow();
+  // Undefined until start-up resolves, which is also when a main window can
+  // first exist — the same early return the module-level singleton produced.
+  const mainWindow = application?.windows.currentWindow();
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const cmd = checkWebCommand(argv);
   if (cmd) {

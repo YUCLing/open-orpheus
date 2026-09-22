@@ -52,9 +52,11 @@ export async function setCookie(url: string, setCookieValue: SetCookieInput) {
 
   if (setCookieValue.name !== undefined) details.name = setCookieValue.name;
   if (setCookieValue.value !== undefined) details.value = setCookieValue.value;
-  if (setCookieValue.domain !== undefined) details.domain = setCookieValue.domain;
+  if (setCookieValue.domain !== undefined)
+    details.domain = setCookieValue.domain;
   if (setCookieValue.path !== undefined) details.path = setCookieValue.path;
-  if (setCookieValue.secure !== undefined) details.secure = setCookieValue.secure;
+  if (setCookieValue.secure !== undefined)
+    details.secure = setCookieValue.secure;
   if (setCookieValue.httpOnly !== undefined) {
     details.httpOnly = setCookieValue.httpOnly;
   }

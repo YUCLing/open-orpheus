@@ -1,49 +1,54 @@
 import type { BrowserWindow } from "electron";
 import { describe, expect, it } from "vitest";
 
-import {
-  mainWindow,
-  mainWindowAccessor,
-  setMainWindow,
-  windowService,
-} from "@main/services/window";
+import { createWindowService } from "@main/services/window";
 
-describe("window service", () => {
+describe("createWindowService", () => {
   it("reports no window before one is set", () => {
-    setMainWindow(null);
+    const windows = createWindowService();
 
-    expect(windowService.current()).toBeNull();
-    expect(windowService.currentWindow()).toBeNull();
-    expect(mainWindowAccessor.current()).toBeNull();
-    expect(mainWindow).toBeNull();
+    expect(windows.current()).toBeNull();
+    expect(windows.currentWindow()).toBeNull();
   });
 
-  it("reports the window it was given", () => {
+  it("reports the window it was given, through both accessors", () => {
+    const windows = createWindowService();
     const wnd = { id: 1 } as unknown as BrowserWindow;
 
-    setMainWindow(wnd);
+    windows.setMainWindow(wnd);
 
-    expect(windowService.current()).toBe(wnd);
-    expect(windowService.currentWindow()).toBe(wnd);
-    expect(mainWindowAccessor.current()).toBe(wnd);
-    expect(mainWindow).toBe(wnd);
+    expect(windows.current()).toBe(wnd);
+    expect(windows.currentWindow()).toBe(wnd);
   });
 
   it("can be cleared again", () => {
-    setMainWindow({ id: 2 } as unknown as BrowserWindow);
-    setMainWindow(null);
+    const windows = createWindowService();
+    windows.setMainWindow({ id: 2 } as unknown as BrowserWindow);
 
-    expect(windowService.current()).toBeNull();
-    expect(windowService.currentWindow()).toBeNull();
-    expect(mainWindow).toBeNull();
+    windows.setMainWindow(null);
+
+    expect(windows.current()).toBeNull();
+    expect(windows.currentWindow()).toBeNull();
   });
 
-  it("keeps the service and the module binding in step", () => {
-    const wnd = { id: 3 } as unknown as BrowserWindow;
+  it("starts empty even when another instance holds a window", () => {
+    const first = createWindowService();
+    const second = createWindowService();
 
-    windowService.setMainWindow(wnd);
+    first.setMainWindow({ id: 3 } as unknown as BrowserWindow);
 
-    expect(mainWindowAccessor.current()).toBe(wnd);
-    expect(mainWindow).toBe(wnd);
+    expect(second.current()).toBeNull();
+    expect(second.currentWindow()).toBeNull();
+  });
+
+  it("does not follow another instance back to null", () => {
+    const first = createWindowService();
+    const second = createWindowService();
+    const wnd = { id: 4 } as unknown as BrowserWindow;
+
+    second.setMainWindow(wnd);
+    first.setMainWindow(null);
+
+    expect(second.current()).toBe(wnd);
   });
 });
