@@ -59,19 +59,27 @@ export async function startApplication() {
   });
 
   // Initialize schemes and get registrars
-  const [registerOrpheusScheme, registerAudioScheme] = await Promise.all([
+  const [registerOrpheusScheme, audioModule] = await Promise.all([
     import("@main/orpheus").then((m) => m.default),
-    import("@main/audio").then((m) => m.default),
+    import("@main/audio"),
   ]);
 
   // Register for default session
   registerOrpheusScheme(protocol);
-  registerAudioScheme(protocol);
 
   // Register for Open Orpheus session
   registerOrpheusScheme(openOrpheusSession.protocol);
 
   const ctx = await bootstrap({ logger });
+
+  // Registered after `ready` rather than with the other schemes: `protocol.handle`
+  // has no ordering requirement with it, and the engines need the window service,
+  // which only exists once bootstrap has run.
+  const { registerAudioStreamerScheme } = audioModule.createAudio({
+    windows: ctx.windows,
+    settings: ctx.settings,
+  });
+  registerAudioStreamerScheme(protocol);
 
   await Promise.all([
     // Set temp dir for streamer and run cleanup

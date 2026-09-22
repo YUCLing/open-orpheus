@@ -5,11 +5,11 @@ import { Readable } from "node:stream";
 import mime from "mime";
 
 import type { AudioPlayInfo } from "../../preload/Player";
-import { mainWindow } from "../window";
 import { playCacheManager } from "../cache";
 import { normalizePath } from "../util";
 import { toError } from "@shared/util";
 import { OnlineStreamer } from "./OnlineStreamer";
+import type { WindowService } from "../bootstrap/types";
 
 enum MediaType {
   Local,
@@ -35,14 +35,21 @@ type MediaState = { playInfo: AudioPlayInfo } & (
  * decode utility process; exactly one of them is active at a time and the
  * renderer routes which one.
  */
+export interface MediaEngineDeps {
+  windows: Pick<WindowService, "currentWindow">;
+}
+
 export class MediaEngine {
   private state: MediaState | null = null;
+
+  constructor(private readonly deps: MediaEngineDeps) {}
 
   get active(): boolean {
     return this.state !== null;
   }
 
   private sendProgress(prog: number) {
+    const mainWindow = this.deps.windows.currentWindow();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("audio.onProgress", prog);
   }

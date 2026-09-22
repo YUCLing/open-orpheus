@@ -1,5 +1,4 @@
 import type { AudioPlayInfo } from "../../preload/Player";
-import { mainWindow } from "../window";
 import { normalizePath } from "../util";
 import { toError } from "@shared/util";
 import { playCacheManager } from "../cache";
@@ -8,6 +7,7 @@ import { Av3aPlaybackProcess } from "./Av3aPlaybackProcess";
 import { isAv3aFile } from "./detect";
 import { localAv3aSource, onlineStreamerToAv3aSource } from "./sources";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
+import type { WindowService } from "../bootstrap/types";
 
 type Av3aPlaybackState = {
   playId: string;
@@ -25,10 +25,16 @@ type Av3aPlaybackState = {
  * `audio://audio`; PCM and renderer flow control travel on a direct
  * renderer<->utility channel.
  */
+export interface Av3aEngineDeps {
+  windows: Pick<WindowService, "currentWindow">;
+}
+
 export class Av3aEngine {
   private state: Av3aPlaybackState | null = null;
   /** Monotonic sequence for AV3A start requests (only the newest may win). */
   private requestSeq = 0;
+
+  constructor(private readonly deps: Av3aEngineDeps) {}
 
   get active(): boolean {
     return this.state !== null;
@@ -36,6 +42,7 @@ export class Av3aEngine {
 
   /** Push a fallback `av3a.<event>` to the player window. */
   private sendEvent(event: string, ...args: unknown[]) {
+    const mainWindow = this.deps.windows.currentWindow();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send(`av3a.${event}`, ...args);
   }
@@ -170,6 +177,7 @@ export class Av3aEngine {
       return;
     }
 
+    const mainWindow = this.deps.windows.currentWindow();
     const rendererWebContents = mainWindow?.webContents;
     if (!rendererWebContents || mainWindow?.isDestroyed()) {
       this.sendEvent("error", "Player window is not available");
