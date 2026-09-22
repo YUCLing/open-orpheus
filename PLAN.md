@@ -1,6 +1,7 @@
 # Open Orpheus — Refactor & Plugin Roadmap
 
-**Status:** design review draft. Nothing in this document is implemented yet.
+**Status:** in execution. P0 is complete; P1 is in progress, with P1-10 and P1-11
+remaining before P2. Design sections below still carry their evidence tags.
 **Revision:** 17 (2026-09-21) — P1-9 driven as far as P1 allows: own-module mocks 7 → 3,
 and §7's `11 → 0` exit metric corrected to `→ 3`, which is what the phase can actually
 reach. The last 3 sit behind P1-11 by construction, not by omission.
