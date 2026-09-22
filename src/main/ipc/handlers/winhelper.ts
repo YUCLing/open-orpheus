@@ -18,7 +18,7 @@ import {
   registerGlobalShortcut,
   unregisterGlobalShortcut,
 } from "../../platform/shortcuts";
-import { LifecycleState } from "../../lifecycle";
+import { LifecycleState } from "../../services/lifecycle";
 import showManageWindow from "../../windows/manage";
 import type { SettingsService, WindowService } from "../../bootstrap/types";
 import type { LifecycleService } from "../../services/lifecycle";

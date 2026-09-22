@@ -1,7 +1,7 @@
 import os from "node:os";
 
 import { toError } from "@shared/util";
-import { events as lifecycleEvents } from "../lifecycle";
+import { events as lifecycleEvents } from "./lifecycle";
 import type { MainWindowAccessor } from "../bootstrap/types";
 import { resolveCoverUrl } from "../domain/playback/artwork";
 import PlaybackController from "../domain/playback/PlaybackController";

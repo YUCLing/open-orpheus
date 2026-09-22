@@ -31,7 +31,7 @@ import type {
 } from "@shared/types/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { lyricsDispatcher } from "../domain/lyrics";
-import { LifecycleState } from "../lifecycle";
+import { LifecycleState } from "../services/lifecycle";
 import { font } from "../platform/gui";
 import type { SettingsService, WindowService } from "../bootstrap/types";
 import type { LifecycleService } from "../services/lifecycle";

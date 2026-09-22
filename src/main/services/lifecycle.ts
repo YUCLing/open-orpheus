@@ -62,7 +62,7 @@ export function createLifecycleService(deps: {
   logger: Logger;
   events: Emittery<LifecycleEvents>;
 }): LifecycleService {
-  const { events } = deps;
+  const bus = deps.events;
   let state = LifecycleState.Starting;
 
   function setLifecycleState<K extends LifecycleState>(
@@ -77,7 +77,7 @@ export function createLifecycleService(deps: {
     const event =
       STATE_EVENT_MAP[lifecycleState as keyof typeof STATE_EVENT_MAP];
     if (!event) return;
-    events
+    bus
       .emit(
         event as keyof LifecycleEvents,
         args[0] as LifecycleEvents[keyof LifecycleEvents]
@@ -87,5 +87,21 @@ export function createLifecycleService(deps: {
       });
   }
 
-  return { events, currentState: () => state, setLifecycleState };
+  return { events: bus, currentState: () => state, setLifecycleState };
+}
+
+// Created here rather than inside the service: several modules subscribe at import
+// time, which is before bootstrap runs.
+export const events = new Emittery<LifecycleEvents>();
+
+// Safe before `bootstrap()` runs: `main.ts` registers its app-level handlers at
+// module load, and the pack loader can open a window before the root has installed
+// the service. Reporting `Starting` is what those handlers would conclude anyway.
+export let currentState: LifecycleService["currentState"] = () =>
+  LifecycleState.Starting;
+export let setLifecycleState: LifecycleService["setLifecycleState"] = () => {};
+
+export function installLifecycleService(service: LifecycleService) {
+  currentState = service.currentState;
+  setLifecycleState = service.setLifecycleState;
 }

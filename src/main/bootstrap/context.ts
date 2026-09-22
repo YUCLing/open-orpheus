@@ -1,11 +1,11 @@
 import { Database } from "@open-orpheus/database";
 
 import {
+  createLifecycleService,
   events as lifecycleEvents,
   installLifecycleService,
-} from "../lifecycle";
+} from "../services/lifecycle";
 import { createDatabaseService } from "../services/database";
-import { createLifecycleService } from "../services/lifecycle";
 import { createSettingsService } from "../services/settings";
 import { windowService } from "../services/window";
 import type { HostDeps, ReadyPhase } from "./types";

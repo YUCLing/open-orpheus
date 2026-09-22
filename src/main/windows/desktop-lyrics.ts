@@ -22,7 +22,7 @@ import {
   OnDemandWindowState,
   SimpleManagedWindow,
 } from "./managedWindow";
-import { LifecycleState } from "../lifecycle";
+import { LifecycleState } from "../services/lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
   DesktopLyricsContract,

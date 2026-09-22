@@ -14,7 +14,7 @@ import {
   LifecycleState,
   setLifecycleState,
   currentState,
-} from "@main/lifecycle";
+} from "@main/services/lifecycle";
 import { configureProcess } from "@main/bootstrap/process-setup";
 import { checkOpenCommand as checkWebCommand } from "@main/platform/protocol";
 import { startApplication } from "@main/bootstrap/startup";

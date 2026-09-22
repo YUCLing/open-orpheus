@@ -17,7 +17,7 @@ import packManager from "../../services/pack";
 import type { ProxyConfiguration, ProxyTypes } from "../../platform/request";
 import { client, getProxyAgent } from "../../platform/request";
 import { disableHardwareAccelerationFlag } from "../../platform/folders";
-import { LifecycleState } from "../../lifecycle";
+import { LifecycleState } from "../../services/lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../../platform/dawn";
 import globalLogger from "../../logger";
 import type { SettingsService } from "../../bootstrap/types";

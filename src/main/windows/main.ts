@@ -4,7 +4,7 @@ import path from "node:path";
 import { BrowserWindow, screen } from "electron";
 
 import { window as miniPlayerWindow } from "./mini-player";
-import { LifecycleState } from "../lifecycle";
+import { LifecycleState } from "../services/lifecycle";
 import type { WindowService } from "../bootstrap/types";
 import type { LifecycleService } from "../services/lifecycle";
 
