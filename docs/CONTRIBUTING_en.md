@@ -74,6 +74,23 @@ open-orpheus/
 └── patches/                # Dependency patches
 ```
 
+### The `foo.ts` + `foo/` convention
+
+`src/main/` contains several same-named file/directory pairs: `menu.ts` + `menu/`,
+`lyrics.ts` + `lyrics/`, `audio.ts` + `audio/`, `cache.ts` + `cache/`. There is one
+rule:
+
+**`foo.ts` is the module's public surface — the facade, factory or singleton — and
+`foo/` holds the implementation it composes.** Reading `foo.ts` tells you what the
+module offers; go into `foo/` when you need the detail.
+
+The one exception is `pack.ts` + `packs/`: the directory is plural because it holds
+three sibling implementations (`Pack`, `SkinPack`, `WebPack`) rather than the
+internals of `pack.ts`. The reading order is the same.
+
+Do not rename `foo.ts` to `foo/index.ts` for symmetry — the migration cost is high,
+and under the aliases `@main/foo` and `@main/foo/types` are already unambiguous.
+
 ### Architecture Overview
 
 ```mermaid

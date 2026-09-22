@@ -74,6 +74,20 @@ open-orpheus/
 └── patches/                # 依赖补丁
 ```
 
+### `foo.ts` 与 `foo/` 的约定
+
+`src/main/` 下存在若干同名文件与目录：`menu.ts` + `menu/`、`lyrics.ts` + `lyrics/`、
+`audio.ts` + `audio/`、`cache.ts` + `cache/`。约定只有一条：
+
+**`foo.ts` 是该模块对外暴露的面（facade / 工厂 / 单例），`foo/` 放它组合的实现。**
+先读 `foo.ts` 就知道这个模块对外提供什么；需要细节时再进 `foo/`。
+
+唯一的例外是 `pack.ts` + `packs/`：目录用复数，因为里面是 `Pack` / `SkinPack` /
+`WebPack` 三个同级实现，而不是 `pack.ts` 的实现细节；读取顺序不变。
+
+不要为了对称把 `foo.ts` 改成 `foo/index.ts`——迁移成本很高，而在别名下
+`@main/foo` 与 `@main/foo/types` 本来就没有歧义。
+
 ### 架构鸟瞰
 
 ```mermaid
