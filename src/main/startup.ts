@@ -71,7 +71,7 @@ export async function startApplication() {
   // Register for Open Orpheus session
   registerOrpheusScheme(openOrpheusSession.protocol);
 
-  await bootstrap({ logger });
+  const ctx = await bootstrap({ logger });
 
   await Promise.all([
     // Install the tray icon
@@ -185,6 +185,28 @@ export async function startApplication() {
       await m.default();
     }),
   ]);
+
+  // `cookie` reads `session.defaultSession` at module scope, so the concrete modules
+  // the call handlers need are loaded here rather than imported statically.
+  const [{ readEffect }, cookieModule] = await Promise.all([
+    import("@main/audio"),
+    import("@main/cookie"),
+  ]);
+  const { registerCallModules } = await import("@main/calls/index");
+
+  registerCallModules({
+    settings: ctx.settings,
+    database: ctx.database,
+    windows: ctx.windows,
+    lifecycle: ctx.lifecycle,
+    audio: { readEffect },
+    cookie: {
+      getCookies: cookieModule.getCookies,
+      getFullCookies: cookieModule.getFullCookies,
+      removeCookie: cookieModule.removeCookie,
+      setCookie: cookieModule.setCookie,
+    },
+  });
 
   onExit(() => {
     app.quit(); // Graceful exit

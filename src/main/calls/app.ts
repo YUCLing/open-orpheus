@@ -14,13 +14,14 @@ import { registerCallHandler, registerCallbackHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { fileExists, pngFromIco } from "../util";
 import packManager from "../pack";
-import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
 import { client, getProxyAgent } from "../request";
 import { disableHardwareAccelerationFlag } from "../folders";
-import { LifecycleState, setLifecycleState } from "../lifecycle";
+import { LifecycleState } from "../lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../dawn";
 import globalLogger from "../logger";
+import type { SettingsService } from "../bootstrap/types";
+import type { LifecycleService } from "../bootstrap/services/lifecycle";
 
 type StartCommand =
   | { movesrc: string; movedest: string }
@@ -63,7 +64,12 @@ type Button = {
 
 const AUTORUN_ARGS = ["--orpheus-startup=autorun"];
 
-export function register(): void {
+export interface AppDeps {
+  settings: Pick<SettingsService, "kv">;
+  lifecycle: Pick<LifecycleService, "setLifecycleState">;
+}
+
+export function register(deps: AppDeps): void {
   registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
     const raw = args.map((v) => String(v)).join(" ");
     // Format: `[2026-08-09 10:35:57] 【persistentState】,"...","..."`
@@ -142,13 +148,13 @@ export function register(): void {
       // TODO: Implement this properly
       switch (item) {
         case "Proxy": {
-          const proxyConf = await settings.get("proxy");
+          const proxyConf = await deps.settings.kv.get("proxy");
           if (typeof proxyConf !== "string") return [""];
           return [proxyConf];
         }
         case "Update":
           if (subItem === "Install") {
-            const updateConf = await settings.get("update.autoInstall");
+            const updateConf = await deps.settings.kv.get("update.autoInstall");
             if (typeof updateConf !== "string") return [""];
             return [updateConf];
           }
@@ -170,11 +176,11 @@ export function register(): void {
     async (event, item, subItem, value) => {
       switch (item) {
         case "Proxy":
-          await settings.set("proxy", value);
+          await deps.settings.kv.set("proxy", value);
           return;
         case "Update":
           if (subItem === "Install") {
-            await settings.set("update.autoInstall", value);
+            await deps.settings.kv.set("update.autoInstall", value);
           }
           return;
         case "setting":
@@ -325,7 +331,7 @@ export function register(): void {
   });
 
   registerCallHandler<[], void>("app.appStartUpEnd", () => {
-    setLifecycleState(LifecycleState.Started);
+    deps.lifecycle.setLifecycleState(LifecycleState.Started);
   });
 
   registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [

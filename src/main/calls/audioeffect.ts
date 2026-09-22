@@ -1,15 +1,18 @@
 import { NcaeType } from "$sharedTypes/ncae";
 import { toError } from "@shared/util";
-import { readEffect } from "../audio";
 import { registerCallHandler } from "../calls";
 
-export function register(): void {
+export interface AudioeffectDeps {
+  audio: { readEffect: typeof import("../audio").readEffect };
+}
+
+export function register(deps: AudioeffectDeps): void {
   registerCallHandler<
     [number, { path: string; pathtype: number }],
     [{ data: string } | { errorCode: number; errorMsg: string }]
   >("audioeffect.getParams", async (event, num, pathInfo) => {
     try {
-      const effect = await readEffect(pathInfo);
+      const effect = await deps.audio.readEffect(pathInfo);
       if (typeof effect === "string") {
         return [{ data: effect }];
       }

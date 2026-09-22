@@ -33,8 +33,7 @@ import {
   normalizePath,
   sanitizeRelativePath,
 } from "../util";
-import { webDb } from "../database";
-import { mainWindowAccessor } from "../window";
+import type { DatabaseService, MainWindowAccessor } from "../bootstrap/types";
 import {
   CacheTrackMeta,
   type PlayCacheConfig,
@@ -164,7 +163,12 @@ async function handleFileBatch(
   }
 }
 
-export function register(): void {
+export interface StorageDeps {
+  database: Pick<DatabaseService, "webDb">;
+  windows: MainWindowAccessor;
+}
+
+export function register(deps: StorageDeps): void {
   registerCallHandler<[string, string, string], [string, string]>(
     "storage.init",
     async (event, downloadDir, someNumStr, cacheDir) => {
@@ -190,7 +194,7 @@ export function register(): void {
       ]);
       setDownloadPath(downloadDir);
       setCachePath(cacheDir);
-      createCacheManager(mainWindowAccessor);
+      createCacheManager(deps.windows);
 
       if (downloadDirWatcher !== null) {
         downloadDirWatcher.close();
@@ -262,7 +266,7 @@ export function register(): void {
     "storage.execsql",
     async (event, taskId, sql) => {
       try {
-        const execResult = await webDb.executeSql(sql);
+        const execResult = await deps.database.webDb.executeSql(sql);
         event.sender.send(
           "channel.call",
           "storage.onexecsqldone",
@@ -287,7 +291,7 @@ export function register(): void {
     "storage.exectransaction",
     async (event, taskId, sql) => {
       try {
-        const execResult = await webDb.executeTransaction(sql);
+        const execResult = await deps.database.webDb.executeTransaction(sql);
         event.sender.send(
           "channel.call",
           "storage.onexecsqldone",

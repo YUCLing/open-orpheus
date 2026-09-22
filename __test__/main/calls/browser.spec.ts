@@ -1,21 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The cookie jar lives in the Electron session, so it is faked here.
-const hoisted = vi.hoisted(() => ({
+import { dispatcher } from "@main/calls";
+import { installLoggerStub } from "../../helpers/globals";
+
+const cookieApi = {
   getCookies: vi.fn(),
   getFullCookies: vi.fn(),
   removeCookie: vi.fn(),
   setCookie: vi.fn(),
-}));
-
-vi.mock("@main/cookie", () => hoisted);
-
-import { dispatcher } from "@main/calls";
-import { installLoggerStub } from "../../helpers/globals";
+};
 
 installLoggerStub();
 const { register: registerBrowser } = await import("@main/calls/browser");
-registerBrowser();
+registerBrowser({ cookie: cookieApi });
 
 /** Dispatch a command and return the tuple spread onto the callback. */
 async function call(command: string, ...args: unknown[]) {
@@ -31,7 +28,7 @@ beforeEach(() => {
 
 describe("browser.getFullCookies", () => {
   it("maps electron cookies to the fields the renderer expects", async () => {
-    hoisted.getFullCookies.mockResolvedValue([
+    cookieApi.getFullCookies.mockResolvedValue([
       {
         name: "MUSIC_U",
         value: "token",
@@ -64,7 +61,7 @@ describe("browser.getFullCookies", () => {
   });
 
   it("falls back to defaults for a session cookie", async () => {
-    hoisted.getFullCookies.mockResolvedValue([
+    cookieApi.getFullCookies.mockResolvedValue([
       { name: "a", value: "b", secure: false, httpOnly: false },
     ]);
 
@@ -87,7 +84,7 @@ describe("browser.getFullCookies", () => {
 
 describe("browser.getCookies", () => {
   it("returns the plain cookie map", async () => {
-    hoisted.getCookies.mockResolvedValue({ MUSIC_U: "token" });
+    cookieApi.getCookies.mockResolvedValue({ MUSIC_U: "token" });
 
     await expect(call("browser.getCookies", "https://x")).resolves.toEqual([
       { MUSIC_U: "token" },
@@ -111,7 +108,7 @@ describe("browser.setCookie", () => {
   it("rewrites the url hostname to the cookie domain", async () => {
     await expect(call("browser.setCookie", cookie)).resolves.toEqual([true]);
 
-    expect(hoisted.setCookie).toHaveBeenCalledWith("https://music.163.com/", {
+    expect(cookieApi.setCookie).toHaveBeenCalledWith("https://music.163.com/", {
       name: "MUSIC_U",
       value: "token",
       domain: ".music.163.com",
@@ -127,7 +124,7 @@ describe("browser.setCookie", () => {
   it("leaves an already matching hostname alone", async () => {
     await call("browser.setCookie", { ...cookie, Domain: "music.163.com" });
 
-    expect(hoisted.setCookie).toHaveBeenCalledWith(
+    expect(cookieApi.setCookie).toHaveBeenCalledWith(
       "https://music.163.com/",
       expect.objectContaining({ name: "MUSIC_U" })
     );
@@ -141,7 +138,7 @@ describe("browser.setCookie", () => {
       Url: "https://music.163.com",
     });
 
-    expect(hoisted.setCookie).toHaveBeenCalledWith(
+    expect(cookieApi.setCookie).toHaveBeenCalledWith(
       "https://music.163.com/",
       expect.objectContaining({
         httpOnly: undefined,
@@ -153,7 +150,7 @@ describe("browser.setCookie", () => {
   });
 
   it("reports failure when the cookie cannot be set", async () => {
-    hoisted.setCookie.mockRejectedValue(new Error("session gone"));
+    cookieApi.setCookie.mockRejectedValue(new Error("session gone"));
 
     await expect(call("browser.setCookie", cookie)).resolves.toEqual([false]);
   });
@@ -162,26 +159,26 @@ describe("browser.setCookie", () => {
     await expect(
       call("browser.setCookie", { ...cookie, Url: "not a url" })
     ).resolves.toEqual([false]);
-    expect(hoisted.setCookie).not.toHaveBeenCalled();
+    expect(cookieApi.setCookie).not.toHaveBeenCalled();
   });
 });
 
 describe("browser.removeCookie", () => {
   it("removes an existing cookie", async () => {
-    hoisted.getCookies.mockResolvedValue({ MUSIC_U: "token" });
+    cookieApi.getCookies.mockResolvedValue({ MUSIC_U: "token" });
 
     await expect(
       call("browser.removeCookie", "https://x", "MUSIC_U")
     ).resolves.toEqual([1]);
-    expect(hoisted.removeCookie).toHaveBeenCalledWith("https://x", "MUSIC_U");
+    expect(cookieApi.removeCookie).toHaveBeenCalledWith("https://x", "MUSIC_U");
   });
 
   it("does nothing for a cookie that is not there", async () => {
-    hoisted.getCookies.mockResolvedValue({});
+    cookieApi.getCookies.mockResolvedValue({});
 
     await expect(
       call("browser.removeCookie", "https://x", "MUSIC_U")
     ).resolves.toEqual([0]);
-    expect(hoisted.removeCookie).not.toHaveBeenCalled();
+    expect(cookieApi.removeCookie).not.toHaveBeenCalled();
   });
 });

@@ -7,8 +7,8 @@ import { app } from "electron";
 import { MusicFile } from "music-tag-native";
 import mime from "mime";
 
-import { musicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
+import type { DatabaseService } from "../bootstrap/types";
 import {
   fileExists,
   isFileNotFound,
@@ -166,12 +166,16 @@ async function trackEntryFromFile(
 
 const libWatchers: Map<MusicLibraries, FSWatcher> = new Map();
 
-export function register(): void {
+export interface MusiclibraryDeps {
+  database: Pick<DatabaseService, "musicLibraryDb">;
+}
+
+export function register(deps: MusiclibraryDeps): void {
   registerCallHandler<[string, string[]], [boolean]>(
     "musiclibrary.execSql",
     async (event, taskId, sql) => {
       try {
-        const result = await musicLibraryDb.executeSqls(sql);
+        const result = await deps.database.musicLibraryDb.executeSqls(sql);
         event.sender.send("channel.call", "musiclibrary.onexecsql", {
           error: 0,
           id: taskId,
@@ -210,7 +214,7 @@ export function register(): void {
             if (!filename) return;
             if (!isMusicFile(filename)) return;
             const filePath = path.resolve(libPath, filename);
-            const db = musicLibraryDb;
+            const db = deps.database.musicLibraryDb;
             await db.exec("DELETE FROM track WHERE file = ?", [filePath]);
             try {
               const entry = await trackEntryFromFile(lib, filePath);
@@ -270,7 +274,7 @@ export function register(): void {
             });
             return;
           }
-          const db = musicLibraryDb;
+          const db = deps.database.musicLibraryDb;
 
           const existingResult = await db.exec(
             "SELECT file, filesize, timestamp FROM track WHERE dir = ?",
@@ -375,7 +379,7 @@ export function register(): void {
     (event, library) => {
       (async () => {
         try {
-          const db = musicLibraryDb;
+          const db = deps.database.musicLibraryDb;
           await db.exec("DELETE FROM track WHERE dir = ?", [library]);
         } catch (err) {
           LOGGER.error(

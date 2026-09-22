@@ -1,5 +1,13 @@
 import { registerCallHandler } from "../calls";
-import { getCookies, getFullCookies, removeCookie, setCookie } from "../cookie";
+
+export interface BrowserDeps {
+  cookie: {
+    getCookies: typeof import("../cookie").getCookies;
+    getFullCookies: typeof import("../cookie").getFullCookies;
+    removeCookie: typeof import("../cookie").removeCookie;
+    setCookie: typeof import("../cookie").setCookie;
+  };
+}
 
 type SetCookie = {
   Domain: string;
@@ -31,13 +39,13 @@ type FullCookie = {
   Value: string;
 };
 
-export function register(): void {
+export function register(deps: BrowserDeps): void {
   registerCallHandler<[string], [FullCookie[]]>(
     "browser.getFullCookies",
     async (_, url) => {
       // TODO: We might need to know when the cookie was actually created/last accessed and what's the original URL.
       return [
-        (await getFullCookies(url)).map((cookie) => ({
+        (await deps.cookie.getFullCookies(url)).map((cookie) => ({
           Creation: Date.now() / 1000,
           Domain: cookie.domain || "",
           Expires: cookie.expirationDate || Date.now() / 1000,
@@ -57,7 +65,7 @@ export function register(): void {
   registerCallHandler<[string], [Record<string, string>]>(
     "browser.getCookies",
     async (_, url) => {
-      return [await getCookies(url)];
+      return [await deps.cookie.getCookies(url)];
     }
   );
 
@@ -74,7 +82,7 @@ export function register(): void {
           // otherwise Electron will reject it.
           url.hostname = targetDomain;
         }
-        await setCookie(url.toString(), {
+        await deps.cookie.setCookie(url.toString(), {
           name: cookie.Name,
           value: cookie.Value,
           domain: cookie.Domain,
@@ -103,11 +111,11 @@ export function register(): void {
   registerCallHandler<[string, string], [number]>(
     "browser.removeCookie",
     async (_, url, name) => {
-      const hasCookie = (await getCookies(url))[name] !== undefined;
+      const hasCookie = (await deps.cookie.getCookies(url))[name] !== undefined;
       if (!hasCookie) {
         return [0];
       }
-      await removeCookie(url, name);
+      await deps.cookie.removeCookie(url, name);
       return [1];
     }
   );
