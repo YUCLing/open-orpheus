@@ -6,7 +6,7 @@ import {
   mainWindowAccessor,
   setMainWindow,
   windowService,
-} from "@main/bootstrap/services/window";
+} from "@main/services/window";
 
 describe("window service", () => {
   it("reports no window before one is set", () => {

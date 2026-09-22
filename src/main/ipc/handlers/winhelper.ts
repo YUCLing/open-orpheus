@@ -21,7 +21,7 @@ import {
 import { LifecycleState } from "../../lifecycle";
 import showManageWindow from "../../windows/manage";
 import type { SettingsService, WindowService } from "../../bootstrap/types";
-import type { LifecycleService } from "../../bootstrap/services/lifecycle";
+import type { LifecycleService } from "../../services/lifecycle";
 
 function shouldApplyScaleFactor() {
   const de = getDesktopEnvironment();

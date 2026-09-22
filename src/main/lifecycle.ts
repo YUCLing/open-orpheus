@@ -4,7 +4,7 @@ import {
   LifecycleState,
   type LifecycleEvents,
   type LifecycleService,
-} from "./bootstrap/services/lifecycle";
+} from "./services/lifecycle";
 
 export { LifecycleState };
 export type { LifecycleEvents, LifecycleService };

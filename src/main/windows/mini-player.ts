@@ -34,7 +34,7 @@ import { lyricsDispatcher } from "../domain/lyrics";
 import { LifecycleState } from "../lifecycle";
 import { font } from "../platform/gui";
 import type { SettingsService, WindowService } from "../bootstrap/types";
-import type { LifecycleService } from "../bootstrap/services/lifecycle";
+import type { LifecycleService } from "../services/lifecycle";
 
 export interface MiniPlayerDeps {
   windows: Pick<WindowService, "currentWindow">;

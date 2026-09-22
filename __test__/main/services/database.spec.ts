@@ -6,7 +6,7 @@ vi.mock("electron", () => ({
 
 import type { Database } from "@open-orpheus/database";
 
-import { createDatabaseService } from "@main/bootstrap/services/database";
+import { createDatabaseService } from "@main/services/database";
 
 function fakeDatabase() {
   return {

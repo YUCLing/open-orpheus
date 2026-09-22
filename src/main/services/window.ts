@@ -1,6 +1,6 @@
 import type { BrowserWindow } from "electron";
 
-import type { MainWindowAccessor, WindowService } from "../types";
+import type { MainWindowAccessor, WindowService } from "../bootstrap/types";
 
 export let mainWindow: BrowserWindow | null = null;
 

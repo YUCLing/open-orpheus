@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
-import { data } from "../../platform/folders";
-import type { DatabaseService, OpenDatabase } from "../types";
+import { data } from "../platform/folders";
+import type { DatabaseService, OpenDatabase } from "../bootstrap/types";
 
 const MUSIC_LIBRARY_SCHEMA = `CREATE TABLE IF NOT EXISTS track (
   file TEXT,

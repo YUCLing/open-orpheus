@@ -6,7 +6,7 @@ import { BrowserWindow, screen } from "electron";
 import { window as miniPlayerWindow } from "./mini-player";
 import { LifecycleState } from "../lifecycle";
 import type { WindowService } from "../bootstrap/types";
-import type { LifecycleService } from "../bootstrap/services/lifecycle";
+import type { LifecycleService } from "../services/lifecycle";
 
 function getWindowState(
   wnd: BrowserWindow

@@ -23,7 +23,7 @@ import type { BrowserWindow } from "electron";
 import type { Logger } from "pino";
 
 import { bootstrap } from "@main/bootstrap/context";
-import { mainWindow, setMainWindow } from "@main/bootstrap/services/window";
+import { mainWindow, setMainWindow } from "@main/services/window";
 
 const logger = {} as Logger;
 

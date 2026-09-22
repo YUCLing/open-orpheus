@@ -7,7 +7,7 @@ import {
   createLifecycleService,
   LifecycleState,
   type LifecycleEvents,
-} from "@main/bootstrap/services/lifecycle";
+} from "@main/services/lifecycle";
 
 function createService() {
   const logger = { error: vi.fn() } as unknown as Logger;

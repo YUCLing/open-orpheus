@@ -18,7 +18,7 @@ import {
 import { configureProcess } from "@main/bootstrap/process-setup";
 import { checkOpenCommand as checkWebCommand } from "@main/platform/protocol";
 import { startApplication } from "@main/bootstrap/startup";
-import { windowService } from "@main/bootstrap/services/window";
+import { windowService } from "@main/services/window";
 
 configureProcess();
 

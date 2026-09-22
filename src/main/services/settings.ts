@@ -3,8 +3,8 @@ import Emittery from "emittery";
 import { Keyv, KeyvHooks } from "keyv";
 
 import type { SettingsEvents } from "@shared/types/settings";
-import createKeyvSqliteDriver from "../../services/database/KeyvSqliteDriver";
-import type { DatabaseService, SettingsService } from "../types";
+import createKeyvSqliteDriver from "./database/KeyvSqliteDriver";
+import type { DatabaseService, SettingsService } from "../bootstrap/types";
 
 const KV_ENTRIES: Record<string, unknown> = {
   "audio.currentDevice": undefined,

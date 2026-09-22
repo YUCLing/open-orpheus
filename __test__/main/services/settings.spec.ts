@@ -36,7 +36,7 @@ vi.mock("@keyv/sqlite", () => ({ KeyvSqlite: class {} }));
 
 import type { Database } from "@open-orpheus/database";
 
-import { createSettingsService } from "@main/bootstrap/services/settings";
+import { createSettingsService } from "@main/services/settings";
 
 let settings: ReturnType<typeof createSettingsService>;
 

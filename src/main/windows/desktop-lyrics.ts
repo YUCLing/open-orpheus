@@ -33,7 +33,7 @@ import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
 import { lyricsDispatcher } from "../domain/lyrics";
 import type { SettingsService, WindowService } from "../bootstrap/types";
-import type { LifecycleService } from "../bootstrap/services/lifecycle";
+import type { LifecycleService } from "../services/lifecycle";
 
 export interface DesktopLyricsDeps {
   windows: Pick<WindowService, "currentWindow">;
