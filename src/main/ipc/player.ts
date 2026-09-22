@@ -12,10 +12,10 @@ import {
 } from "$sharedTypes/mini-player";
 import { mkdir, writeFile } from "node:fs/promises";
 import { registerCallHandler } from "./dispatcher";
-import { storage as storageDir } from "../folders";
+import { storage as storageDir } from "../platform/folders";
 import { lyricsDispatcher } from "../domain/lyrics";
 import { parseLrc, parseYrc } from "../domain/lyrics/parse";
-import { sanitizeRelativePath } from "../util";
+import { sanitizeRelativePath } from "../platform/util";
 import {
   createDesktopLyricsPreview,
   window as desktopLyricsWindow,
@@ -36,7 +36,7 @@ import {
   updateTogetherStatus,
   updateMute,
 } from "../windows/mini-player";
-import { setFont } from "../gui";
+import { setFont } from "../platform/gui";
 import { mediaSession } from "../mediaSession";
 
 let listItems: ListElement[] = [];

@@ -28,7 +28,7 @@ import {
   streamerTemp,
   userdata,
   wasm,
-} from "@main/folders";
+} from "@main/platform/folders";
 
 describe("folders", () => {
   it("derives the temp directories from the OS temp path", () => {

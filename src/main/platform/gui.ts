@@ -4,10 +4,10 @@ import { readFile } from "node:fs/promises";
 import { Protocol } from "electron";
 import mime from "mime";
 
-import packManager from "./pack";
-import type SkinPack from "./packs/SkinPack";
-import { setMiniPlayerFont } from "./windows/mini-player";
-import { setManageWindowFont } from "./windows/manage";
+import packManager from "../pack";
+import type SkinPack from "../packs/SkinPack";
+import { setMiniPlayerFont } from "../windows/mini-player";
+import { setManageWindowFont } from "../windows/manage";
 
 const guiDir = join(import.meta.dirname, "gui");
 

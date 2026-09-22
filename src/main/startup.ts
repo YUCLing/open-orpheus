@@ -10,13 +10,13 @@ import { CORE_VERSION } from "@shared/constants";
 import { toError } from "@shared/util";
 import versions from "../../versions.json";
 import { bootstrap } from "@main/bootstrap/context";
-import { prepareDeviceId } from "@main/device";
+import { prepareDeviceId } from "@main/platform/device";
 import {
   data as dataDir,
   downloadTemp as downloadTempDir,
   lastWebpackHash as lastWebpackHashPath,
   streamerTemp as streamerTempDir,
-} from "@main/folders";
+} from "@main/platform/folders";
 import logger from "@main/logger";
 import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "@main/pack";
 import {
@@ -24,12 +24,12 @@ import {
   type WebPackLoadDeps,
   type WebPackProbe,
 } from "@main/pack-loader";
-import registerAsProtocolClient from "@main/protocol";
-import { isFileNotFound } from "@main/util";
+import registerAsProtocolClient from "@main/platform/protocol";
+import { isFileNotFound } from "@main/platform/util";
 import showPackgeDownloadWindow from "@main/windows/package-download";
 
 import type WebPack from "@main/packs/WebPack";
-import type { ProxyConfiguration } from "@main/request";
+import type { ProxyConfiguration } from "@main/platform/request";
 
 /** The ordered start-up sequence; rejects if the app cannot come up. */
 export async function startApplication() {
@@ -60,7 +60,7 @@ export async function startApplication() {
 
   // Initialize schemes and get registrars
   const [registerOrpheusScheme, audioModule] = await Promise.all([
-    import("@main/orpheus").then((m) => m.default),
+    import("@main/platform/orpheus").then((m) => m.default),
     import("@main/audio"),
   ]);
 
@@ -118,14 +118,14 @@ export async function startApplication() {
       }
     })(),
     import("@main/domain/afp"),
-    import("@main/fonts"),
+    import("@main/platform/fonts"),
     import("@main/mediaSession").then(async (m) => {
       await m.createMediaSession({ windows: ctx.windows });
       const { bindLyrics } = await import("@main/domain/lyrics");
       bindLyrics(m.playbackController);
     }),
     import("@main/channel"),
-    import("@main/request").then(async (m) => {
+    import("@main/platform/request").then(async (m) => {
       m.setupRequestInterceptors();
 
       // Set the proxy for both the app and our sessions
@@ -182,7 +182,7 @@ export async function startApplication() {
     }),
     prepareDeviceId().then(async () => {
       // Initialize initial cookies
-      await (await import("@main/cookie")).default();
+      await (await import("@main/platform/cookie")).default();
     }),
     packManager.getPack<WebPack>("web").readPack(),
     import("@main/windows/desktop-lyrics").then(async (m) => {
@@ -207,7 +207,7 @@ export async function startApplication() {
   // the call handlers need are loaded here rather than imported statically.
   const [{ readEffect }, cookieModule, trayModule] = await Promise.all([
     import("@main/audio"),
-    import("@main/cookie"),
+    import("@main/platform/cookie"),
     import("@main/tray"),
   ]);
   const { registerCallModules } = await import("@main/ipc/index");
@@ -247,7 +247,7 @@ export async function startApplication() {
   // TODO: Maybe only do this on first launch?
   registerAsProtocolClient();
 
-  import("@main/update").then((m) => m.checkUpdate());
+  import("@main/platform/update").then((m) => m.checkUpdate());
 }
 
 async function configureSessions() {
@@ -277,7 +277,7 @@ async function configureSessions() {
 
   const openOrpheusSession = session.fromPartition("open-orpheus");
 
-  await import("@main/gui").then((m) => {
+  await import("@main/platform/gui").then((m) => {
     // Register GUI scheme for Open Orpheus session now, package download window might need it
     m.default(openOrpheusSession.protocol);
   });

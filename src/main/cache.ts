@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { KeyvSqlite } from "@keyv/sqlite";
 import { Database } from "@open-orpheus/database";
 
-import { cache } from "./folders";
+import { cache } from "./platform/folders";
 import type { MainWindowAccessor } from "./bootstrap/types";
 import LyricCacheManager from "./cache/LyricCahceManager";
 import PlayCacheManager from "./cache/PlayCacheManager";

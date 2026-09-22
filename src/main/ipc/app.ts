@@ -11,14 +11,14 @@ import {
 } from "electron";
 
 import { registerCallHandler, registerCallbackHandler } from "./dispatcher";
-import { loadFromOrpheusUrl } from "../orpheus";
-import { fileExists, pngFromIco } from "../util";
+import { loadFromOrpheusUrl } from "../platform/orpheus";
+import { fileExists, pngFromIco } from "../platform/util";
 import packManager from "../pack";
-import type { ProxyConfiguration, ProxyTypes } from "../request";
-import { client, getProxyAgent } from "../request";
-import { disableHardwareAccelerationFlag } from "../folders";
+import type { ProxyConfiguration, ProxyTypes } from "../platform/request";
+import { client, getProxyAgent } from "../platform/request";
+import { disableHardwareAccelerationFlag } from "../platform/folders";
 import { LifecycleState } from "../lifecycle";
-import { DawnEntry, setStatisEndpoint, statisV2 } from "../dawn";
+import { DawnEntry, setStatisEndpoint, statisV2 } from "../platform/dawn";
 import globalLogger from "../logger";
 import type { SettingsService } from "../bootstrap/types";
 import type { LifecycleService } from "../bootstrap/services/lifecycle";

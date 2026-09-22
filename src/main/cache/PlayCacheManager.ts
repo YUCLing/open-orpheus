@@ -68,7 +68,10 @@ export default class PlayCacheManager {
   private initPromise: Promise<void>;
   private cachePath: string;
 
-  constructor(cachePath: string, private readonly windows: MainWindowAccessor) {
+  constructor(
+    cachePath: string,
+    private readonly windows: MainWindowAccessor
+  ) {
     this.cachePath = cachePath;
     this.initPromise = this.buildIndex();
   }
@@ -295,14 +298,12 @@ export default class PlayCacheManager {
     playCacheUpdateType: number
   ): void {
     try {
-      this.windows.current()?.webContents.send(
-        "channel.call",
-        "storage.onPlayCacheUpdate",
-        {
+      this.windows
+        .current()
+        ?.webContents.send("channel.call", "storage.onPlayCacheUpdate", {
           ...meta,
           playCacheUpdateType,
-        }
-      );
+        });
     } catch {
       // Window might be destroyed
     }

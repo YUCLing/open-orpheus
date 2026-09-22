@@ -10,11 +10,14 @@ import {
 } from "@open-orpheus/window";
 
 import { registerCallHandler } from "./dispatcher";
-import { loadFromOrpheusUrl } from "../orpheus";
-import { getWindowScaleFactor, pngFromIco } from "../util";
+import { loadFromOrpheusUrl } from "../platform/orpheus";
+import { getWindowScaleFactor, pngFromIco } from "../platform/util";
 import { ManagedWindow } from "../window";
 import AppMenu from "../menu";
-import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
+import {
+  registerGlobalShortcut,
+  unregisterGlobalShortcut,
+} from "../platform/shortcuts";
 import { LifecycleState } from "../lifecycle";
 import showManageWindow from "../windows/manage";
 import type { SettingsService, WindowService } from "../bootstrap/types";

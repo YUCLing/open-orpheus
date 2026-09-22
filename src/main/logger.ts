@@ -15,7 +15,7 @@ import { createGzip } from "node:zlib";
 import { ipcMain } from "electron";
 import pino, { LogFn } from "pino";
 
-import { log as logDir } from "./folders";
+import { log as logDir } from "./platform/folders";
 
 /**
  * Render a Date as a Windows-safe, human-readable filename timestamp (UTC).

@@ -13,8 +13,8 @@ import {
   registerGlobalShortcut,
   unregisterGlobalShortcut,
   vkCodesToElectronAccelerator,
-} from "@main/shortcuts";
-import { installLoggerStub } from "../helpers/globals";
+} from "@main/platform/shortcuts";
+import { installLoggerStub } from "../../helpers/globals";
 
 describe("vkCodesToElectronAccelerator", () => {
   it("maps modifiers and letters", () => {

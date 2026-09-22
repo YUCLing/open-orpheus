@@ -5,8 +5,8 @@ import { Protocol } from "electron";
 import mime from "mime";
 
 import type { AudioPlayInfo } from "../preload/Player";
-import { sanitizeRelativePath } from "./util";
-import { data as dataDir, pack as packageDir } from "./folders";
+import { sanitizeRelativePath } from "./platform/util";
+import { data as dataDir, pack as packageDir } from "./platform/folders";
 import { events as lifecycleEvents } from "./lifecycle";
 import { toError } from "@shared/util";
 import { decodeNcae } from "./domain/ncae";

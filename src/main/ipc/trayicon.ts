@@ -1,7 +1,7 @@
 import { nativeImage } from "electron";
 
-import { pngFromIco } from "../util";
-import { loadFromOrpheusUrl } from "../orpheus";
+import { pngFromIco } from "../platform/util";
+import { loadFromOrpheusUrl } from "../platform/orpheus";
 import type { TrayService } from "../tray";
 import { registerCallHandler } from "./dispatcher";
 

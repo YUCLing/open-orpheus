@@ -14,7 +14,7 @@ import {
   isFileNotFound,
   isMusicFile,
   normalizePath,
-} from "../util";
+} from "../platform/util";
 import { toError } from "@shared/util";
 import { commentToID3Metadata } from "../domain/id3";
 

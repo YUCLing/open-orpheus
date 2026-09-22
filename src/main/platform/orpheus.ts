@@ -7,8 +7,8 @@ import mime from "mime";
 import unzipper from "unzipper";
 import { MusicFile } from "music-tag-native";
 
-import packManager from "./pack";
-import WebPack from "./packs/WebPack";
+import packManager from "../pack";
+import WebPack from "../packs/WebPack";
 import {
   fileExists,
   isFileNotFound,
@@ -331,7 +331,7 @@ export async function loadFromOrpheusUrl(url: string): Promise<SimpleResponse> {
       if (url.startsWith("orpheus:")) {
         return loadFromOrpheusUrl(url);
       }
-      const cacheStorage = (await import("./cache")).httpCacheStorage;
+      const cacheStorage = (await import("../cache")).httpCacheStorage;
       if (!cacheStorage) {
         throw new LoadError("URL cache storage is unavailable", 500);
       }

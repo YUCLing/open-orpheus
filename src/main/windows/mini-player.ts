@@ -32,7 +32,7 @@ import type {
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { lyricsDispatcher } from "../domain/lyrics";
 import { LifecycleState } from "../lifecycle";
-import { font } from "../gui";
+import { font } from "../platform/gui";
 import type { SettingsService, WindowService } from "../bootstrap/types";
 import type { LifecycleService } from "../bootstrap/services/lifecycle";
 

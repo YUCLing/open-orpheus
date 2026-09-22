@@ -6,22 +6,22 @@ import { app, BrowserWindow, Menu } from "electron";
 
 import packManager from "../pack";
 import WebPack from "../packs/WebPack";
-import { wasm as wasmDir } from "../folders";
+import { wasm as wasmDir } from "../platform/folders";
 import {
   httpCacheStorage,
   lyricCacheManager,
   playCacheManager,
 } from "../cache";
-import { checkUpdate } from "../update";
+import { checkUpdate } from "../platform/update";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { ManageContract } from "../../bridge/contracts/manage-api";
 import registerAsProtocolClient, {
   getProtocolClientName,
   isProtocolClient,
   unregisterAsProtocolClient,
-} from "../protocol";
+} from "../platform/protocol";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-import { font } from "../gui";
+import { font } from "../platform/gui";
 import type { SettingsService } from "../bootstrap/types";
 
 let manageWndInstance: BrowserWindow | null = null;

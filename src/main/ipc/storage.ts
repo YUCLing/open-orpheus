@@ -24,7 +24,7 @@ import {
   downloadTemp,
   setCachePath,
   setDownloadPath,
-} from "../folders";
+} from "../platform/folders";
 import { registerCallHandler } from "./dispatcher";
 import {
   fileExists,
@@ -32,7 +32,7 @@ import {
   isMusicFile,
   normalizePath,
   sanitizeRelativePath,
-} from "../util";
+} from "../platform/util";
 import type { DatabaseService, MainWindowAccessor } from "../bootstrap/types";
 import {
   CacheTrackMeta,

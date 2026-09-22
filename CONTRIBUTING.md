@@ -39,11 +39,12 @@ open-orpheus/
 │   ├── preload.ts          # 渲染进程桥接入口
 │   ├── main/               # 主进程逻辑（窗口、IPC、网络、缓存……）
 │   │   ├── ipc/            # IPC 命令处理器（winhelper、app 等）
+│   │   ├── domain/         # 纯逻辑（歌词、皮肤、播放、id3、ncae、afp、加解密）
+│   │   ├── platform/       # 系统/应用集成（协议、网络请求、cookie、设备、字体、快捷键）
 │   │   ├── packs/          # WebPack / SkinPack 加载器
 │   │   ├── menu.ts         # 右键菜单管理（Electron BrowserWindow）
-│   │   ├── orpheus.ts      # orpheus:// 自定义协议
 │   │   ├── window.ts       # BrowserWindow 管理
-│   │   └── ...             # 网络请求、加解密、下载、缓存、托盘等
+│   │   └── ...             # 缓存、托盘、下载、启动流程等
 │   ├── preload/            # preload 暴露的 API（channel 桥接）
 │   │   └── ...             # 播放控制、听歌识曲、云信 IM 桥接等
 │   ├── bridge/             # 类型化 RPC 框架（契约 / preload 暴露 / renderer Proxy / main 注册）

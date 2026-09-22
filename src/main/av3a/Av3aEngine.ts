@@ -1,5 +1,5 @@
 import type { AudioPlayInfo } from "../../preload/Player";
-import { normalizePath } from "../util";
+import { normalizePath } from "../platform/util";
 import { toError } from "@shared/util";
 import { playCacheManager } from "../cache";
 import { OnlineStreamer } from "../audio/OnlineStreamer";

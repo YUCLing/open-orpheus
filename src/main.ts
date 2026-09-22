@@ -5,7 +5,7 @@ import "@main/logger";
 import "@open-orpheus/window";
 
 // Handle errors as early as possible
-import "@main/error";
+import "@main/platform/error";
 
 import { app, dialog } from "electron";
 
@@ -16,7 +16,7 @@ import {
   currentState,
 } from "@main/lifecycle";
 import { configureProcess } from "@main/process-setup";
-import { checkOpenCommand as checkWebCommand } from "@main/protocol";
+import { checkOpenCommand as checkWebCommand } from "@main/platform/protocol";
 import { startApplication } from "@main/startup";
 import { windowService } from "@main/bootstrap/services/window";
 

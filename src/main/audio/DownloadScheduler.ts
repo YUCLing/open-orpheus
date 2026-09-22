@@ -1,5 +1,5 @@
 import { toError } from "@shared/util";
-import { client } from "../request";
+import { client } from "../platform/request";
 
 import type ChunkTracker from "./ChunkTracker";
 import type StorageManager from "./StorageManager";
