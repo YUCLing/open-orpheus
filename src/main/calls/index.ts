@@ -59,8 +59,8 @@ export function registerCallModules(deps: CallModuleDeps): Disposable {
   registerPlayer();
   registerProcess();
 
-  // `winhelper` is the only module here that holds a resource; the other
-  // fourteen register `channel.call` handlers and return nothing yet, so §3.3
-  // is exercised end to end but not yet universal.
+  // `winhelper` is the only module here that acquires anything; the other
+  // fourteen register `channel.call` commands, which are permanent by design
+  // and carry no `Disposable` (see `CallDispatcher`).
   return winhelper;
 }

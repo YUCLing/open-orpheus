@@ -456,7 +456,8 @@ export function register(deps: WinhelperDeps): Disposable {
     }
   );
 
-  // The `channel.call` registrations above still return nothing; this is the
-  // only registration in the module that holds a resource.
+  // The `channel.call` commands registered above are permanent by design and
+  // carry no handle; this subscription is the one thing in the module that can
+  // outlive its usefulness.
   return toDisposable(unlistenSettingsChange);
 }
