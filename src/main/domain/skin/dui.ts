@@ -131,11 +131,11 @@ export function parseBtnUrl(url: string): BtnImages | null {
     if (state) states[key] = state;
   }
 
-  if (!states.normal) return null;
+  if (!states["normal"]) return null;
   return {
-    normal: states.normal,
-    hot: states.hot,
-    pushed: states.pushed,
-    disabled: states.disabled,
+    normal: states["normal"],
+    hot: states["hot"],
+    pushed: states["pushed"],
+    disabled: states["disabled"],
   };
 }

@@ -45,8 +45,8 @@ export default class MprisAdapter
 
     let mprisName = "open-orpheus";
     let desktopEntry = "open-orpheus";
-    if (process.env.FLATPAK_ID) {
-      mprisName = desktopEntry = process.env.FLATPAK_ID;
+    if (process.env["FLATPAK_ID"]) {
+      mprisName = desktopEntry = process.env["FLATPAK_ID"];
     }
 
     this.mediaSession = new MediaSession(

@@ -287,9 +287,9 @@ export function register(deps: MusiclibraryDeps): void {
             { filesize: number; timestamp: number }
           >();
           for (const row of existingRows) {
-            existingMap.set(row.file as string, {
-              filesize: Number(row.filesize),
-              timestamp: Number(row.timestamp),
+            existingMap.set(row["file"] as string, {
+              filesize: Number(row["filesize"]),
+              timestamp: Number(row["timestamp"]),
             });
           }
 

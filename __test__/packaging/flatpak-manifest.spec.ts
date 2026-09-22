@@ -44,13 +44,13 @@ describe("baseManifest", () => {
   });
 
   it("launches through the zypak wrapper", () => {
-    expect(baseManifest(ctx, appModule).command).toBe("electron-wrapper");
+    expect(baseManifest(ctx, appModule)["command"]).toBe("electron-wrapper");
   });
 
   it("adds a branch only when one is given", () => {
-    expect(baseManifest({ ...ctx, branch: "stable" }, appModule).branch).toBe(
-      "stable"
-    );
+    expect(
+      baseManifest({ ...ctx, branch: "stable" }, appModule)["branch"]
+    ).toBe("stable");
     expect(baseManifest(ctx, appModule)).not.toHaveProperty("branch");
   });
 
@@ -76,7 +76,7 @@ describe("baseManifest", () => {
     const extra = { name: "ffmpeg" };
     const manifest = baseManifest({ ...ctx, extraModules: [extra] }, appModule);
 
-    expect(manifest.modules).toEqual([extra, appModule]);
+    expect(manifest["modules"]).toEqual([extra, appModule]);
   });
 });
 

@@ -9,7 +9,7 @@ import ForceESPlugin from "./build-plugins/ForceESPlugin.js";
 export default defineConfig({
   base: "",
   build: {
-    sourcemap: process.env.INLINE_SOURCEMAP ? "inline" : false,
+    sourcemap: process.env["INLINE_SOURCEMAP"] ? "inline" : false,
     rolldownOptions: {
       external: [
         // Node built-ins

@@ -18,19 +18,19 @@ const unlisteners = new Map<string, ReturnType<typeof vi.fn>>();
 // The real dispatcher is wired to the media session, so a double stands in for it.
 const dispatcher = {
   get lyrics() {
-    return state.lyrics;
+    return state["lyrics"];
   },
   get slogan() {
-    return state.slogan;
+    return state["slogan"];
   },
   get playState() {
-    return state.playState;
+    return state["playState"];
   },
   get time() {
-    return state.time;
+    return state["time"];
   },
   get playbackRate() {
-    return state.playbackRate;
+    return state["playbackRate"];
   },
   on(event: string, listener: (e: { name: string; data: unknown }) => void) {
     listeners.set(event, listener);

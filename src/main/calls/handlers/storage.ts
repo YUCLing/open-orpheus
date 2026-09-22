@@ -177,13 +177,13 @@ export function register(deps: StorageDeps): void {
     async (event, downloadDir, someNumStr, cacheDir) => {
       if (!downloadDir) {
         downloadDir = resolve(app.getPath("downloads"), "CloudMusic");
-        if (process.env.FLATPAK_ID) {
+        if (process.env["FLATPAK_ID"]) {
           // We store to only writable path in Flatpak
           downloadDir = resolve(
             app.getPath("home"),
             ".var",
             "app",
-            process.env.FLATPAK_ID,
+            process.env["FLATPAK_ID"],
             "downloads"
           );
         }

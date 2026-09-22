@@ -143,8 +143,8 @@ async function buildModules() {
   const moduleNames = await readdir(modulesDir);
   const modules = await readModuleInfos(modulesDir, moduleNames);
   const layers = computeLayers(modules);
-  const preferScript = process.env.PREFER_SCRIPT;
-  const skipIfNoScript = process.env.SKIP_IF_NO_SCRIPT;
+  const preferScript = process.env["PREFER_SCRIPT"];
+  const skipIfNoScript = process.env["SKIP_IF_NO_SCRIPT"];
 
   for (const layer of layers) {
     await Promise.all(

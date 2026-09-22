@@ -246,8 +246,8 @@ async function handleUpload(
         });
       });
 
-      upload.context = uploadRes.context;
-      upload.token = allocRes.data.token;
+      upload["context"] = uploadRes.context;
+      upload["token"] = allocRes.data.token;
 
       event.sender.send(
         "channel.call",

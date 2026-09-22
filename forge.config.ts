@@ -88,7 +88,7 @@ const config: ForgeConfig = {
       // EXTRACT_LICENSES_TO is set, then remove it from the build.
       (buildPath, _electronVersion, platform, _arch, callback) => {
         (async () => {
-          const destDir = process.env.EXTRACT_LICENSES_TO;
+          const destDir = process.env["EXTRACT_LICENSES_TO"];
           if (destDir) {
             platform = platform === "mas" ? "darwin" : platform;
             const src = resolve(buildPath, "LICENSES.chromium.html");
@@ -106,7 +106,7 @@ const config: ForgeConfig = {
     // In offline environments (e.g. flatpak sandbox), SHASUMS256.txt cannot be
     // downloaded from GitHub. The electron zip is already verified by sha256 in
     // generated-node-sources.json, so it's safe to skip checksum verification.
-    ...(process.env.ELECTRON_OFFLINE_BUILD
+    ...(process.env["ELECTRON_OFFLINE_BUILD"]
       ? { download: { unsafelyDisableChecksums: true } }
       : {}),
 

@@ -140,7 +140,9 @@ describe("createSettingsService", () => {
     hoisted.store.hooks.get("after:delete")?.({ key: "c" });
     await flush();
 
-    expect(seen.map(({ event, data }) => [event, data.key as string])).toEqual([
+    expect(
+      seen.map(({ event, data }) => [event, data["key"] as string])
+    ).toEqual([
       ["delete", "a"],
       ["delete", "b"],
       ["delete", "c"],

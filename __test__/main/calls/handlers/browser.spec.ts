@@ -58,7 +58,7 @@ describe("browser.getFullCookies", () => {
       Expires: 2_000_000_000,
       Url: "https://.music.163.com/",
     });
-    expect(cookies[0].Creation).toBeCloseTo(Date.now() / 1000, -2);
+    expect(cookies[0]["Creation"]).toBeCloseTo(Date.now() / 1000, -2);
   });
 
   it("falls back to defaults for a session cookie", async () => {
@@ -79,7 +79,9 @@ describe("browser.getFullCookies", () => {
       // Built from the raw (missing) fields, as upstream does.
       Url: "http://undefinedundefined",
     });
-    expect(cookies[0].Expires as number).toBeGreaterThan(Date.now() / 1000 - 5);
+    expect(cookies[0]["Expires"] as number).toBeGreaterThan(
+      Date.now() / 1000 - 5
+    );
   });
 });
 
