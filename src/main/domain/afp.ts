@@ -3,7 +3,7 @@ import { deflateSync } from "node:zlib";
 
 import FFT from "fft.js";
 
-import { events as lifecycleEvents } from "./lifecycle";
+import { events as lifecycleEvents } from "../lifecycle";
 
 const VERSION = "hyai_1.2.0_client_1.0.0";
 const VERSION_BYTES = new TextEncoder().encode(VERSION);

@@ -18,8 +18,8 @@ import type { BtnImages, BtnState } from "../../../types/dui";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import packManager from "../pack";
 import type SkinPack from "../packs/SkinPack";
-import { extractColor } from "../skin/color";
-import { argbToCss, parseBtnState } from "../skin/dui";
+import { extractColor } from "../domain/skin/color";
+import { argbToCss, parseBtnState } from "../domain/skin/dui";
 import type {
   MiniPlayerLikeMark,
   MiniPlayerPlayInfo,
@@ -30,7 +30,7 @@ import type {
   MiniPlayerTogetherStatus,
 } from "$sharedTypes/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
-import { lyricsDispatcher } from "../lyrics";
+import { lyricsDispatcher } from "../domain/lyrics";
 import { LifecycleState } from "../lifecycle";
 import { font } from "../gui";
 import type { SettingsService, WindowService } from "../bootstrap/types";

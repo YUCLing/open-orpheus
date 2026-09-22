@@ -31,7 +31,7 @@ import type {
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-import { lyricsDispatcher } from "../lyrics";
+import { lyricsDispatcher } from "../domain/lyrics";
 import type { SettingsService, WindowService } from "../bootstrap/types";
 import type { LifecycleService } from "../bootstrap/services/lifecycle";
 

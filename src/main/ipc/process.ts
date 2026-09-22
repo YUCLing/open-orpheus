@@ -6,7 +6,7 @@ import { MusicFile } from "music-tag-native";
 import type { Progress } from "got";
 
 import { registerCallHandler } from "./dispatcher";
-import { serialData } from "../crypto";
+import { serialData } from "../domain/crypto";
 import { client, type ProxyTypes } from "../request";
 import { isFileNotFound, normalizePath } from "../util";
 import globalLogger from "../logger";

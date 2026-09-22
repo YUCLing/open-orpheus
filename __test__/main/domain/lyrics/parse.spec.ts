@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseLrc, parseYrc } from "@main/lyrics/parse";
+import { parseLrc, parseYrc } from "@main/domain/lyrics/parse";
 
 describe("parseLrc", () => {
   it("parses timestamps, text and inferred end times", () => {

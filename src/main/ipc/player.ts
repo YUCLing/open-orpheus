@@ -13,8 +13,8 @@ import {
 import { mkdir, writeFile } from "node:fs/promises";
 import { registerCallHandler } from "./dispatcher";
 import { storage as storageDir } from "../folders";
-import { lyricsDispatcher } from "../lyrics";
-import { parseLrc, parseYrc } from "../lyrics/parse";
+import { lyricsDispatcher } from "../domain/lyrics";
+import { parseLrc, parseYrc } from "../domain/lyrics/parse";
 import { sanitizeRelativePath } from "../util";
 import {
   createDesktopLyricsPreview,

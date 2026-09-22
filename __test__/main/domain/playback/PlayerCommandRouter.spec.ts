@@ -2,10 +2,10 @@ import Emittery from "emittery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MainWindowAccessor } from "@main/bootstrap/types";
-import type { PlayerCommandEvents } from "@main/playback/adapters/MediaSessionAdapter";
-import PlaybackController from "@main/playback/PlaybackController";
-import PlayerCommandRouter from "@main/playback/PlayerCommandRouter";
-import { PlaybackChange, PlaybackStatus } from "@main/playback/types";
+import type { PlayerCommandEvents } from "@main/domain/playback/adapters/MediaSessionAdapter";
+import PlaybackController from "@main/domain/playback/PlaybackController";
+import PlayerCommandRouter from "@main/domain/playback/PlayerCommandRouter";
+import { PlaybackChange, PlaybackStatus } from "@main/domain/playback/types";
 
 const { send, host } = vi.hoisted(() => {
   const send = vi.fn();

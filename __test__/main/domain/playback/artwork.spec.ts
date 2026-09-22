@@ -27,7 +27,7 @@ import {
   remoteArtExt,
   resolveCoverUrl,
   resolveEmbeddedArtwork,
-} from "@main/playback/artwork";
+} from "@main/domain/playback/artwork";
 
 const orpheusCoverUrl = (filePath: string) =>
   `orpheus://localmusic/pic?${encodeURIComponent(filePath)}`;

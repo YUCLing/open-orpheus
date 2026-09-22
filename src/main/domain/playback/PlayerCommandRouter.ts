@@ -1,6 +1,6 @@
 import Emittery from "emittery";
 
-import type { MainWindowAccessor } from "../bootstrap/types";
+import type { MainWindowAccessor } from "../../bootstrap/types";
 import { PlayerCommandEvents } from "./adapters/MediaSessionAdapter";
 import type PlaybackController from "./PlaybackController";
 import { PlaybackStatus } from "./types";
@@ -152,11 +152,8 @@ export default class PlayerCommandRouter {
   }
 
   private sendHotkey(name: string): void {
-    this.windows.current()?.webContents.send(
-      "channel.call",
-      "winhelper.onHotkey",
-      name,
-      true
-    );
+    this.windows
+      .current()
+      ?.webContents.send("channel.call", "winhelper.onHotkey", name, true);
   }
 }

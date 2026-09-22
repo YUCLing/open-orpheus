@@ -6,8 +6,8 @@ import mime from "mime";
 import { MusicFile } from "music-tag-native";
 
 import { imageSize } from "@shared/util";
-import { cache } from "../folders";
-import { selectBestMusicPic } from "../util";
+import { cache } from "../../folders";
+import { selectBestMusicPic } from "../../util";
 
 /**
  * Album-art handling shared by the media-session integrations (MPRIS / SMTC /

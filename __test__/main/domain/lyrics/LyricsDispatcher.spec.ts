@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import LyricsDispatcher from "@main/lyrics/LyricsDispatcher";
+import LyricsDispatcher from "@main/domain/lyrics/LyricsDispatcher";
 
 type Recorded = { event: string; data: unknown };
 

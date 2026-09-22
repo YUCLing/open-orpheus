@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { bindLyrics, lyricsDispatcher } from "@main/lyrics";
-import PlaybackController from "@main/playback/PlaybackController";
+import { bindLyrics, lyricsDispatcher } from "@main/domain/lyrics";
+import PlaybackController from "@main/domain/playback/PlaybackController";
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));

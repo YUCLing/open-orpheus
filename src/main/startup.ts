@@ -117,11 +117,11 @@ export async function startApplication() {
         );
       }
     })(),
-    import("@main/afp"),
+    import("@main/domain/afp"),
     import("@main/fonts"),
     import("@main/mediaSession").then(async (m) => {
       await m.createMediaSession({ windows: ctx.windows });
-      const { bindLyrics } = await import("@main/lyrics");
+      const { bindLyrics } = await import("@main/domain/lyrics");
       bindLyrics(m.playbackController);
     }),
     import("@main/channel"),

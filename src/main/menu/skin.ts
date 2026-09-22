@@ -3,8 +3,8 @@ import photon from "@silvia-odwyer/photon-node";
 import packManager from "../pack";
 import type SkinPack from "../packs/SkinPack";
 import type { MenuSkin } from "$sharedTypes/menu";
-import { extractColor } from "../skin/color";
-import { argbToCss } from "../skin/dui";
+import { extractColor } from "../domain/skin/color";
+import { argbToCss } from "../domain/skin/dui";
 
 export const menuSkin: MenuSkin = {
   background: "#fffffffa",

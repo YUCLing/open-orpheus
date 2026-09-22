@@ -8,7 +8,7 @@ import {
   enData,
   SERIAL_AES_KEY,
   serialData,
-} from "./crypto";
+} from "./domain/crypto";
 
 ipcMain.handle(
   "channel.call",

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BrowserWindow } from "electron";
 
-import type LyricsDispatcher from "@main/lyrics/LyricsDispatcher";
+import type LyricsDispatcher from "@main/domain/lyrics/LyricsDispatcher";
 import { registerLyricsHandlers } from "@bridge/common/lyrics";
 
 /** Values reported by the dispatcher getters. */

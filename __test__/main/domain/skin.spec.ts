@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { extractColor } from "@main/skin/color";
+import { extractColor } from "@main/domain/skin/color";
 import {
   abgrToCss,
   argbToCss,
   parseBtnState,
   parseBtnUrl,
   parseElementTemplate,
-} from "@main/skin/dui";
+} from "@main/domain/skin/dui";
 
 /** Minimal stand-in for a `photon.PhotonImage` backed by raw RGBA bytes. */
 function fakeImage(width: number, height: number, pixels: number[]) {

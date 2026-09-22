@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({ BrowserWindow: vi.fn() }));
 
-import { GenerateFP } from "@main/afp";
+import { GenerateFP } from "@main/domain/afp";
 
 const VERSION = "hyai_1.2.0_client_1.0.0";
 const SAMPLE_RATE = 8000;
