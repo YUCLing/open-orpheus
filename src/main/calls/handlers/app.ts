@@ -34,11 +34,13 @@ type FeaturesSwitch = Partial<Record<Features, boolean>>;
 
 type ThumbnailOptions = {
   btnExtends: Button[];
-  btnLeft?: Button;
-  btnRight?: Button;
-  btnMiddle?: Button;
-  defaultCover?: string;
-  tooltip?: string;
+  // Explicit `undefined` is allowed: the accumulator below merges partial
+  // updates with `||`, so a missing update legitimately lands as undefined.
+  btnLeft?: Button | undefined;
+  btnRight?: Button | undefined;
+  btnMiddle?: Button | undefined;
+  defaultCover?: string | undefined;
+  tooltip?: string | undefined;
 };
 const currentThumbnailOptions: ThumbnailOptions = { btnExtends: [] };
 function createButtonFactory(

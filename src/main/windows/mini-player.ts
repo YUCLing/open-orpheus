@@ -179,7 +179,11 @@ packManager.on("skin2packloaded", async (event) => {
     })
   );
 
-  const style: Partial<MiniPlayerStyle> = {};
+  // Unlike `Partial`, this permits an explicit `undefined`: the skin parser fills
+  // whichever buttons the skin happens to define and leaves the rest targetless.
+  const style: {
+    [K in keyof MiniPlayerStyle]?: MiniPlayerStyle[K] | undefined;
+  } = {};
 
   style.background = bgColor;
 
@@ -300,7 +304,10 @@ packManager.on("skin2packloaded", async (event) => {
     if (btnsFound >= 13) break;
   }
 
-  const listStyle: Partial<MiniPlayerStyle["list"]> = {
+  const listStyle: {
+    [K in keyof MiniPlayerStyle["list"]]?:
+      MiniPlayerStyle["list"][K] | undefined;
+  } = {
     background: listBgColor,
     itemBackground: listItemBgColor,
     hoverBackground: listHoverBgColor,
