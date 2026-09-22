@@ -17,8 +17,8 @@ let logger: ReturnType<typeof installLoggerStub>;
 
 beforeAll(async () => {
   logger = installLoggerStub();
-  // Importing the module installs the `audioeffect.*` handlers.
-  await import("@main/calls/audioeffect");
+  const { register } = await import("@main/calls/audioeffect");
+  register();
 });
 
 /** Dispatch a command and return the tuple spread onto the callback. */

@@ -164,272 +164,275 @@ async function trackEntryFromFile(
   };
 }
 
-registerCallHandler<[string, string[]], [boolean]>(
-  "musiclibrary.execSql",
-  async (event, taskId, sql) => {
-    try {
-      const result = await musicLibraryDb.executeSqls(sql);
-      event.sender.send("channel.call", "musiclibrary.onexecsql", {
-        error: 0,
-        id: taskId,
-        reason: "",
-        result: true,
-        ...result,
-      });
-    } catch (error) {
-      LOGGER.error({ sql }, "Error executing music library SQL: %s", error);
-      event.sender.send("channel.call", "musiclibrary.onexecsql", {
-        error: 1,
-        id: taskId,
-        reason: "",
-        result: false,
-      });
-    }
-    return [true];
-  }
-);
-
 const libWatchers: Map<MusicLibraries, FSWatcher> = new Map();
-registerCallHandler<[MusicLibraries], void>(
-  "musiclibrary.observeLibrary",
-  (event, lib) => {
-    if (libWatchers.has(lib)) return;
-    const libPath = getLibraryPath(lib);
-    if (!libPath) return;
 
-    try {
-      const watcher = watch(
-        libPath,
-        {
-          recursive: true,
-          ignore: (path) => !(mime.getType(path) ?? "").startsWith("audio/"),
-        },
-        async (eventType, filename) => {
-          if (!filename) return;
-          if (!isMusicFile(filename)) return;
-          const filePath = path.resolve(libPath, filename);
-          const db = musicLibraryDb;
-          await db.exec("DELETE FROM track WHERE file = ?", [filePath]);
-          try {
-            const entry = await trackEntryFromFile(lib, filePath);
-            await db.execNamed(
-              `INSERT INTO track (file, tid, aid, dir, title, album, genre, artist, duration, timestamp, bitrate, filesize, ignored, id, artistid, parentdir, track, librarypath, tracknumber, source, starttime, type)
-            VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
-              entry
-            );
-          } catch (err) {
-            if (!isFileNotFound(err))
-              LOGGER.error(
-                { filename, library: lib, err: toError(err) },
-                "Failed to refresh music metadata in library"
-              );
-          }
-          event.sender.send("channel.call", "musiclibrary.onobserveLibrary", {
-            library: lib,
-          });
-        }
-      );
-      watcher.on("error", (err) => {
-        LOGGER.error({ err }, "Library observer encountered error");
-      });
-      libWatchers.set(lib, watcher);
-    } catch (err) {
-      if (!isFileNotFound(err))
-        LOGGER.error(
-          { library: lib, err: toError(err) },
-          "Cannot monitor music library"
-        );
-    }
-  }
-);
-
-registerCallHandler<[MusicLibraries], void>(
-  "musiclibrary.removeObserveLibrary",
-  (event, lib) => {
-    const watcher = libWatchers.get(lib);
-    if (!watcher) return;
-    watcher.close();
-    libWatchers.delete(lib);
-  }
-);
-
-registerCallHandler<[MusicLibraries, number], [boolean]>(
-  "musiclibrary.addLibrary",
-  (event, library) => {
-    (async () => {
+export function register(): void {
+  registerCallHandler<[string, string[]], [boolean]>(
+    "musiclibrary.execSql",
+    async (event, taskId, sql) => {
       try {
-        const libPath = getLibraryPath(library);
-        if (!libPath || !(await fileExists(libPath))) {
+        const result = await musicLibraryDb.executeSqls(sql);
+        event.sender.send("channel.call", "musiclibrary.onexecsql", {
+          error: 0,
+          id: taskId,
+          reason: "",
+          result: true,
+          ...result,
+        });
+      } catch (error) {
+        LOGGER.error({ sql }, "Error executing music library SQL: %s", error);
+        event.sender.send("channel.call", "musiclibrary.onexecsql", {
+          error: 1,
+          id: taskId,
+          reason: "",
+          result: false,
+        });
+      }
+      return [true];
+    }
+  );
+
+  registerCallHandler<[MusicLibraries], void>(
+    "musiclibrary.observeLibrary",
+    (event, lib) => {
+      if (libWatchers.has(lib)) return;
+      const libPath = getLibraryPath(lib);
+      if (!libPath) return;
+
+      try {
+        const watcher = watch(
+          libPath,
+          {
+            recursive: true,
+            ignore: (path) => !(mime.getType(path) ?? "").startsWith("audio/"),
+          },
+          async (eventType, filename) => {
+            if (!filename) return;
+            if (!isMusicFile(filename)) return;
+            const filePath = path.resolve(libPath, filename);
+            const db = musicLibraryDb;
+            await db.exec("DELETE FROM track WHERE file = ?", [filePath]);
+            try {
+              const entry = await trackEntryFromFile(lib, filePath);
+              await db.execNamed(
+                `INSERT INTO track (file, tid, aid, dir, title, album, genre, artist, duration, timestamp, bitrate, filesize, ignored, id, artistid, parentdir, track, librarypath, tracknumber, source, starttime, type)
+            VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
+                entry
+              );
+            } catch (err) {
+              if (!isFileNotFound(err))
+                LOGGER.error(
+                  { filename, library: lib, err: toError(err) },
+                  "Failed to refresh music metadata in library"
+                );
+            }
+            event.sender.send("channel.call", "musiclibrary.onobserveLibrary", {
+              library: lib,
+            });
+          }
+        );
+        watcher.on("error", (err) => {
+          LOGGER.error({ err }, "Library observer encountered error");
+        });
+        libWatchers.set(lib, watcher);
+      } catch (err) {
+        if (!isFileNotFound(err))
+          LOGGER.error(
+            { library: lib, err: toError(err) },
+            "Cannot monitor music library"
+          );
+      }
+    }
+  );
+
+  registerCallHandler<[MusicLibraries], void>(
+    "musiclibrary.removeObserveLibrary",
+    (event, lib) => {
+      const watcher = libWatchers.get(lib);
+      if (!watcher) return;
+      watcher.close();
+      libWatchers.delete(lib);
+    }
+  );
+
+  registerCallHandler<[MusicLibraries, number], [boolean]>(
+    "musiclibrary.addLibrary",
+    (event, library) => {
+      (async () => {
+        try {
+          const libPath = getLibraryPath(library);
+          if (!libPath || !(await fileExists(libPath))) {
+            event.sender.send("channel.call", "musiclibrary.onaddend", {
+              dirs: undefined,
+              library,
+              reason: "",
+              result: 0,
+            });
+            return;
+          }
+          const db = musicLibraryDb;
+
+          const existingResult = await db.exec(
+            "SELECT file, filesize, timestamp FROM track WHERE dir = ?",
+            [library]
+          );
+          const existingRows: Array<Record<string, unknown>> =
+            existingResult[1] ?? [];
+          const existingMap = new Map<
+            string,
+            { filesize: number; timestamp: number }
+          >();
+          for (const row of existingRows) {
+            existingMap.set(row.file as string, {
+              filesize: Number(row.filesize),
+              timestamp: Number(row.timestamp),
+            });
+          }
+
+          const entries = await readdir(libPath, { recursive: true });
+          let processed = 0;
+
+          for (const relative of entries) {
+            if (!isMusicFile(relative)) continue;
+            try {
+              const filePath = path.resolve(libPath, relative);
+
+              const existing = existingMap.get(filePath);
+              let needsUpdate = !existing; // new file, always index
+
+              if (existing) {
+                // File exists on disk — remove from map so we can detect stale entries later
+                existingMap.delete(filePath);
+
+                // Check metadata only: file size + last modify time vs stored timestamp
+                const fstat = await stat(filePath);
+                if (
+                  fstat.size !== existing.filesize ||
+                  fstat.mtimeMs > existing.timestamp
+                ) {
+                  needsUpdate = true;
+                }
+              }
+
+              if (needsUpdate) {
+                const entry = await trackEntryFromFile(library, filePath);
+                await db.exec("DELETE FROM track WHERE file = ?", [filePath]);
+                await db.execNamed(
+                  `INSERT INTO track (file, tid, aid, dir, title, album, genre, artist, duration, timestamp, bitrate, filesize, ignored, id, artistid, parentdir, track, librarypath, tracknumber, source, starttime, type)
+              VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
+                  entry
+                );
+              }
+
+              processed++;
+
+              // Progress update every 10 entries
+              if (processed % 10 === 0) {
+                event.sender.send(
+                  "channel.call",
+                  "musiclibrary.onaddprogress",
+                  library,
+                  processed
+                );
+              }
+            } catch (err) {
+              LOGGER.error(
+                { filename: relative, library, err: toError(err) },
+                "Failed to read music in library"
+              );
+            }
+          }
+
+          // If there are still files in the map, they are stale (in the db but not filesystem),
+          // remove them here
+          for (const staleFile of existingMap.keys()) {
+            await db.exec("DELETE FROM track WHERE file = ?", [staleFile]);
+          }
+
           event.sender.send("channel.call", "musiclibrary.onaddend", {
-            dirs: undefined,
+            dirs: [libPath],
             library,
             reason: "",
             result: 0,
           });
-          return;
-        }
-        const db = musicLibraryDb;
-
-        const existingResult = await db.exec(
-          "SELECT file, filesize, timestamp FROM track WHERE dir = ?",
-          [library]
-        );
-        const existingRows: Array<Record<string, unknown>> =
-          existingResult[1] ?? [];
-        const existingMap = new Map<
-          string,
-          { filesize: number; timestamp: number }
-        >();
-        for (const row of existingRows) {
-          existingMap.set(row.file as string, {
-            filesize: Number(row.filesize),
-            timestamp: Number(row.timestamp),
+        } catch (err) {
+          LOGGER.error({ err: toError(err) }, "Failed to add music library");
+          event.sender.send("channel.call", "musiclibrary.onaddend", {
+            dirs: undefined,
+            library,
+            reason: toError(err).message,
+            result: 1,
           });
         }
+      })();
 
-        const entries = await readdir(libPath, { recursive: true });
-        let processed = 0;
+      return [true];
+    }
+  );
 
-        for (const relative of entries) {
-          if (!isMusicFile(relative)) continue;
-          try {
-            const filePath = path.resolve(libPath, relative);
-
-            const existing = existingMap.get(filePath);
-            let needsUpdate = !existing; // new file, always index
-
-            if (existing) {
-              // File exists on disk — remove from map so we can detect stale entries later
-              existingMap.delete(filePath);
-
-              // Check metadata only: file size + last modify time vs stored timestamp
-              const fstat = await stat(filePath);
-              if (
-                fstat.size !== existing.filesize ||
-                fstat.mtimeMs > existing.timestamp
-              ) {
-                needsUpdate = true;
-              }
-            }
-
-            if (needsUpdate) {
-              const entry = await trackEntryFromFile(library, filePath);
-              await db.exec("DELETE FROM track WHERE file = ?", [filePath]);
-              await db.execNamed(
-                `INSERT INTO track (file, tid, aid, dir, title, album, genre, artist, duration, timestamp, bitrate, filesize, ignored, id, artistid, parentdir, track, librarypath, tracknumber, source, starttime, type)
-              VALUES (:file, :tid, :aid, :dir, :title, :album, :genre, :artist, :duration, :timestamp, :bitrate, :filesize, :ignored, :id, :artistid, :parentdir, :track, :librarypath, :tracknumber, :source, :starttime, :type)`,
-                entry
-              );
-            }
-
-            processed++;
-
-            // Progress update every 10 entries
-            if (processed % 10 === 0) {
-              event.sender.send(
-                "channel.call",
-                "musiclibrary.onaddprogress",
-                library,
-                processed
-              );
-            }
-          } catch (err) {
-            LOGGER.error(
-              { filename: relative, library, err: toError(err) },
-              "Failed to read music in library"
-            );
-          }
+  registerCallHandler<[string], [boolean]>(
+    "musiclibrary.removeLibrary",
+    (event, library) => {
+      (async () => {
+        try {
+          const db = musicLibraryDb;
+          await db.exec("DELETE FROM track WHERE dir = ?", [library]);
+        } catch (err) {
+          LOGGER.error(
+            { library, err: toError(err) },
+            "Failed to delete tracks from library"
+          );
         }
-
-        // If there are still files in the map, they are stale (in the db but not filesystem),
-        // remove them here
-        for (const staleFile of existingMap.keys()) {
-          await db.exec("DELETE FROM track WHERE file = ?", [staleFile]);
-        }
-
-        event.sender.send("channel.call", "musiclibrary.onaddend", {
-          dirs: [libPath],
-          library,
-          reason: "",
-          result: 0,
-        });
-      } catch (err) {
-        LOGGER.error({ err: toError(err) }, "Failed to add music library");
-        event.sender.send("channel.call", "musiclibrary.onaddend", {
-          dirs: undefined,
-          library,
-          reason: toError(err).message,
-          result: 1,
-        });
-      }
-    })();
-
-    return [true];
-  }
-);
-
-registerCallHandler<[string], [boolean]>(
-  "musiclibrary.removeLibrary",
-  (event, library) => {
-    (async () => {
-      try {
-        const db = musicLibraryDb;
-        await db.exec("DELETE FROM track WHERE dir = ?", [library]);
-      } catch (err) {
-        LOGGER.error(
-          { library, err: toError(err) },
-          "Failed to delete tracks from library"
-        );
-      }
-      event.sender.send(
-        "channel.call",
-        "musiclibrary.onremovelibrary",
-        library
-      );
-    })();
-    return [true];
-  }
-);
-
-registerCallHandler<[string, string, boolean], void>(
-  "musiclibrary.readMusicInfo",
-  (event, taskId, path) => {
-    (async () => {
-      const fullPath = normalizePath(path);
-      try {
-        const [stats, taggedFile] = await Promise.all([
-          stat(fullPath),
-          MusicFile.load(fullPath),
-        ]);
-
         event.sender.send(
           "channel.call",
-          "musiclibrary.onreadmusicinfo",
-          taskId,
-          path,
-          0,
-          {
-            album: taggedFile.album,
-            artist: taggedFile.artist,
-            audiomd5: "",
-            bitrate: taggedFile.bitRate,
-            comment: taggedFile.comment,
-            duration: taggedFile.duration,
-            filesize: stats.size,
-            genre: taggedFile.genre,
-            title: taggedFile.title || basename(fullPath),
-          }
+          "musiclibrary.onremovelibrary",
+          library
         );
-      } catch (err) {
-        event.sender.send(
-          "channel.call",
-          "musiclibrary.onreadmusicinfo",
-          taskId,
-          path,
-          isFileNotFound(err) ? 5 : 6,
-          {}
-        );
-      }
-    })();
-  }
-);
+      })();
+      return [true];
+    }
+  );
+
+  registerCallHandler<[string, string, boolean], void>(
+    "musiclibrary.readMusicInfo",
+    (event, taskId, path) => {
+      (async () => {
+        const fullPath = normalizePath(path);
+        try {
+          const [stats, taggedFile] = await Promise.all([
+            stat(fullPath),
+            MusicFile.load(fullPath),
+          ]);
+
+          event.sender.send(
+            "channel.call",
+            "musiclibrary.onreadmusicinfo",
+            taskId,
+            path,
+            0,
+            {
+              album: taggedFile.album,
+              artist: taggedFile.artist,
+              audiomd5: "",
+              bitrate: taggedFile.bitRate,
+              comment: taggedFile.comment,
+              duration: taggedFile.duration,
+              filesize: stats.size,
+              genre: taggedFile.genre,
+              title: taggedFile.title || basename(fullPath),
+            }
+          );
+        } catch (err) {
+          event.sender.send(
+            "channel.call",
+            "musiclibrary.onreadmusicinfo",
+            taskId,
+            path,
+            isFileNotFound(err) ? 5 : 6,
+            {}
+          );
+        }
+      })();
+    }
+  );
+}

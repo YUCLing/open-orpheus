@@ -32,127 +32,129 @@ type DownloadStartRequest = {
 
 const downloadTasks = new Map<string, DownloadTask>();
 
-registerCallHandler<[DownloadStartRequest], void>(
-  "download.start",
-  async (event, request: DownloadStartRequest) => {
-    const {
-      ext_header,
-      id,
-      md5,
-      //md5_check_fail,
-      //mediaType,
-      //pre_path,
-      rel_path,
-      size,
-      url,
-      type = 0,
-    } = request;
+export function register(): void {
+  registerCallHandler<[DownloadStartRequest], void>(
+    "download.start",
+    async (event, request: DownloadStartRequest) => {
+      const {
+        ext_header,
+        id,
+        md5,
+        //md5_check_fail,
+        //mediaType,
+        //pre_path,
+        rel_path,
+        size,
+        url,
+        type = 0,
+      } = request;
 
-    let headers: Record<string, string> = {};
-    if (ext_header) {
-      try {
-        headers = JSON.parse(ext_header);
-      } catch (error) {
-        LOGGER.error(
-          { json: ext_header },
-          "Failed to parse ext_header: %s",
-          error
-        );
-      }
-    }
-
-    // Construct destination path: tmpdir + rel_path
-    const destPath = normalizePath(downloadTemp, rel_path);
-
-    const task = await startDownload(url, destPath, {
-      headers,
-      md5,
-      size,
-    });
-
-    task.on("progress", (e) => {
-      event.sender.send("channel.call", "download.onprocess", id, {
-        down: e.data.downloaded,
-        islast: false,
-        path: destPath,
-        relative: rel_path,
-        speed: e.data.speed,
-        total: e.data.total || size,
-        type: 0,
-      });
-    });
-
-    task.on("end", async (e) => {
-      if (type === 2) {
-        // Audio effect, ...?
-        const finalPath = sanitizeRelativePath(dataDir, rel_path);
-        if (finalPath === false) {
-          // Trigger task error
-          throw new Error("Illegal path: " + rel_path);
+      let headers: Record<string, string> = {};
+      if (ext_header) {
+        try {
+          headers = JSON.parse(ext_header);
+        } catch (error) {
+          LOGGER.error(
+            { json: ext_header },
+            "Failed to parse ext_header: %s",
+            error
+          );
         }
-        await mkdir(dirname(finalPath), { recursive: true });
-        await cp(destPath, finalPath);
-        await rm(destPath);
       }
 
-      event.sender.send("channel.call", "download.onprocess", id, {
-        down: e.data.downloaded,
-        islast: true,
-        path: destPath,
-        relative: rel_path,
-        speed: e.data.speed,
-        total: e.data.total || size,
-        type: 0,
+      // Construct destination path: tmpdir + rel_path
+      const destPath = normalizePath(downloadTemp, rel_path);
+
+      const task = await startDownload(url, destPath, {
+        headers,
+        md5,
+        size,
       });
 
-      downloadTasks.delete(id);
-    });
-
-    task.on("error", (e) => {
-      LOGGER.error({ id, err: e.data }, "Download errored");
-      event.sender.send("channel.call", "download.onprocess", id, {
-        down: 0,
-        islast: true,
-        path: destPath,
-        relative: rel_path,
-        speed: 0,
-        total: size,
-        type: 1,
+      task.on("progress", (e) => {
+        event.sender.send("channel.call", "download.onprocess", id, {
+          down: e.data.downloaded,
+          islast: false,
+          path: destPath,
+          relative: rel_path,
+          speed: e.data.speed,
+          total: e.data.total || size,
+          type: 0,
+        });
       });
-      downloadTasks.delete(id);
-    });
 
-    downloadTasks.set(id, task);
-  }
-);
+      task.on("end", async (e) => {
+        if (type === 2) {
+          // Audio effect, ...?
+          const finalPath = sanitizeRelativePath(dataDir, rel_path);
+          if (finalPath === false) {
+            // Trigger task error
+            throw new Error("Illegal path: " + rel_path);
+          }
+          await mkdir(dirname(finalPath), { recursive: true });
+          await cp(destPath, finalPath);
+          await rm(destPath);
+        }
 
-registerCallHandler<[string], void>(
-  "download.pause",
-  async (event, id: string) => {
-    const task = downloadTasks.get(id);
-    if (task) {
-      task.pause();
+        event.sender.send("channel.call", "download.onprocess", id, {
+          down: e.data.downloaded,
+          islast: true,
+          path: destPath,
+          relative: rel_path,
+          speed: e.data.speed,
+          total: e.data.total || size,
+          type: 0,
+        });
+
+        downloadTasks.delete(id);
+      });
+
+      task.on("error", (e) => {
+        LOGGER.error({ id, err: e.data }, "Download errored");
+        event.sender.send("channel.call", "download.onprocess", id, {
+          down: 0,
+          islast: true,
+          path: destPath,
+          relative: rel_path,
+          speed: 0,
+          total: size,
+          type: 1,
+        });
+        downloadTasks.delete(id);
+      });
+
+      downloadTasks.set(id, task);
     }
-  }
-);
+  );
 
-registerCallHandler<[string], void>(
-  "download.resume",
-  async (event, id: string) => {
-    const task = downloadTasks.get(id);
-    if (task) {
-      task.resume();
+  registerCallHandler<[string], void>(
+    "download.pause",
+    async (event, id: string) => {
+      const task = downloadTasks.get(id);
+      if (task) {
+        task.pause();
+      }
     }
-  }
-);
+  );
 
-registerCallHandler<[string], void>(
-  "download.cancel",
-  async (event, id: string) => {
-    const task = downloadTasks.get(id);
-    if (task) {
-      await task.cancel();
-      downloadTasks.delete(id);
+  registerCallHandler<[string], void>(
+    "download.resume",
+    async (event, id: string) => {
+      const task = downloadTasks.get(id);
+      if (task) {
+        task.resume();
+      }
     }
-  }
-);
+  );
+
+  registerCallHandler<[string], void>(
+    "download.cancel",
+    async (event, id: string) => {
+      const task = downloadTasks.get(id);
+      if (task) {
+        await task.cancel();
+        downloadTasks.delete(id);
+      }
+    }
+  );
+}

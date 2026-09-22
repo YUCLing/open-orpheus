@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 
 import { dispatcher } from "./calls";
+import { registerCallModules } from "./calls/index";
 import {
   deData,
   deserialData,
@@ -10,7 +11,7 @@ import {
   serialData,
 } from "./crypto";
 
-import "./calls/index";
+registerCallModules();
 
 ipcMain.handle(
   "channel.call",

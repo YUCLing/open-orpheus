@@ -1,9 +1,11 @@
 import { registerCallHandler } from "../calls";
 
-registerCallHandler<[Record<string, unknown>], void>("rtc.enter", () => {
-  /* empty */
-});
+export function register(): void {
+  registerCallHandler<[Record<string, unknown>], void>("rtc.enter", () => {
+    /* empty */
+  });
 
-registerCallHandler<[], [boolean]>("rtc.leave", () => {
-  return [true];
-});
+  registerCallHandler<[], [boolean]>("rtc.leave", () => {
+    return [true];
+  });
+}

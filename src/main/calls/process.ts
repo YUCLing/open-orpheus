@@ -376,13 +376,15 @@ async function handleUpload(
   }
 }
 
-registerCallHandler<[number, string, string, string], void>(
-  "process.call",
-  (event, num, exe, action, payload) => {
-    if (exe === "cloudmusic_util") {
-      if (action === "upload.upload") {
-        handleUpload(event, JSON.parse(payload));
+export function register(): void {
+  registerCallHandler<[number, string, string, string], void>(
+    "process.call",
+    (event, num, exe, action, payload) => {
+      if (exe === "cloudmusic_util") {
+        if (action === "upload.upload") {
+          handleUpload(event, JSON.parse(payload));
+        }
       }
     }
-  }
-);
+  );
+}

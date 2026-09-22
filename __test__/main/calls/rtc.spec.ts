@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { dispatcher } from "@main/calls";
-// Importing the module installs the `rtc.*` handlers on the dispatcher.
-import "@main/calls/rtc";
+import { register as registerRtc } from "@main/calls/rtc";
+
+registerRtc();
 
 /** Dispatch a command and return the tuple spread onto the callback. */
 async function call(command: string, ...args: unknown[]) {

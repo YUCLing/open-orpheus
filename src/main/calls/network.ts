@@ -32,122 +32,124 @@ export type NetworkFetchResponse = {
   blob: string;
 }>;
 
-registerCallHandler<[NetworkFetchRequest], [NetworkFetchResponse]>(
-  "network.fetch",
-  async (_, request): Promise<[NetworkFetchResponse]> => {
-    const retryCount = request.retryCount ?? 1;
+export function register(): void {
+  registerCallHandler<[NetworkFetchRequest], [NetworkFetchResponse]>(
+    "network.fetch",
+    async (_, request): Promise<[NetworkFetchResponse]> => {
+      const retryCount = request.retryCount ?? 1;
 
-    try {
-      const anonymousRes = await interceptAnonymousRequest(request);
-      if (anonymousRes !== null) {
-        const [res, suc, fail] = anonymousRes;
-        globalSucCount += suc;
-        globalFailCount += fail;
-        if (res instanceof Error) throw res;
+      try {
+        const anonymousRes = await interceptAnonymousRequest(request);
+        if (anonymousRes !== null) {
+          const [res, suc, fail] = anonymousRes;
+          globalSucCount += suc;
+          globalFailCount += fail;
+          if (res instanceof Error) throw res;
+          return [
+            {
+              code: 0,
+              error: "",
+              globalFailCount,
+              globalSucCount,
+              ...res,
+            },
+          ];
+        }
+
+        const response = await client(request.url, {
+          method: request.method,
+          headers: {
+            ...request.headers,
+          },
+          body: request.body || undefined,
+          throwHttpErrors: false,
+          retry: {
+            limit: retryCount,
+            backoffLimit: 10000,
+          },
+          hooks: {
+            beforeRetry: [
+              () => {
+                globalFailCount++;
+              },
+            ],
+          },
+        });
+
+        const headers: Record<string, string> = {};
+        for (const [key, value] of Object.entries(response.headers)) {
+          if (Array.isArray(value)) {
+            headers[key] = value.join(", ");
+          } else if (value !== undefined) {
+            headers[key] = value;
+          }
+        }
+
+        const responseBody = Buffer.from(response.rawBody);
+        const blob = request.isDecrypt
+          ? deserialData(
+              responseBody.buffer.slice(
+                responseBody.byteOffset,
+                responseBody.byteOffset + responseBody.byteLength
+              )
+            )
+          : responseBody.toString();
+
+        globalSucCount++;
+
         return [
           {
             code: 0,
+            blob,
             error: "",
             globalFailCount,
             globalSucCount,
-            ...res,
+            headers,
+            retryTimes: retryCount - response.retryCount - 1,
+            status: response.statusCode,
+          },
+        ];
+      } catch (error) {
+        globalFailCount++;
+        const retryTimes =
+          error instanceof RequestError && error.request
+            ? retryCount - error.request.retryCount - 1
+            : 0;
+
+        return [
+          {
+            code: 28,
+            error:
+              (error as Error)?.message ||
+              (error ? String(error) : "Unknown error"),
+            status: 0,
+            blob: "",
+            headers: {},
+            retryTimes,
           },
         ];
       }
-
-      const response = await client(request.url, {
-        method: request.method,
-        headers: {
-          ...request.headers,
-        },
-        body: request.body || undefined,
-        throwHttpErrors: false,
-        retry: {
-          limit: retryCount,
-          backoffLimit: 10000,
-        },
-        hooks: {
-          beforeRetry: [
-            () => {
-              globalFailCount++;
-            },
-          ],
-        },
-      });
-
-      const headers: Record<string, string> = {};
-      for (const [key, value] of Object.entries(response.headers)) {
-        if (Array.isArray(value)) {
-          headers[key] = value.join(", ");
-        } else if (value !== undefined) {
-          headers[key] = value;
-        }
-      }
-
-      const responseBody = Buffer.from(response.rawBody);
-      const blob = request.isDecrypt
-        ? deserialData(
-            responseBody.buffer.slice(
-              responseBody.byteOffset,
-              responseBody.byteOffset + responseBody.byteLength
-            )
-          )
-        : responseBody.toString();
-
-      globalSucCount++;
-
-      return [
-        {
-          code: 0,
-          blob,
-          error: "",
-          globalFailCount,
-          globalSucCount,
-          headers,
-          retryTimes: retryCount - response.retryCount - 1,
-          status: response.statusCode,
-        },
-      ];
-    } catch (error) {
-      globalFailCount++;
-      const retryTimes =
-        error instanceof RequestError && error.request
-          ? retryCount - error.request.retryCount - 1
-          : 0;
-
-      return [
-        {
-          code: 28,
-          error:
-            (error as Error)?.message ||
-            (error ? String(error) : "Unknown error"),
-          status: 0,
-          blob: "",
-          headers: {},
-          retryTimes,
-        },
-      ];
     }
-  }
-);
+  );
 
-registerCallHandler<
-  [],
-  [
+  registerCallHandler<
+    [],
+    [
+      {
+        dnsInvalid: boolean;
+        firstDNS: string;
+        inProxy: boolean;
+        restricted: boolean;
+        unreachable: boolean;
+      },
+    ]
+  >("network.getEnv", () => [
     {
-      dnsInvalid: boolean;
-      firstDNS: string;
-      inProxy: boolean;
-      restricted: boolean;
-      unreachable: boolean;
+      dnsInvalid: false,
+      firstDNS: dns.getServers()[0] || "",
+      inProxy: false,
+      restricted: false,
+      unreachable: false,
     },
-  ]
->("network.getEnv", () => [
-  {
-    dnsInvalid: false,
-    firstDNS: dns.getServers()[0] || "",
-    inProxy: false,
-    restricted: false,
-    unreachable: false,
-  },
-]);
+  ]);
+}

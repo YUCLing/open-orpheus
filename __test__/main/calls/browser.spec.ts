@@ -14,8 +14,8 @@ import { dispatcher } from "@main/calls";
 import { installLoggerStub } from "../../helpers/globals";
 
 installLoggerStub();
-// Registers the `browser.*` handlers on the shared dispatcher.
-await import("@main/calls/browser");
+const { register: registerBrowser } = await import("@main/calls/browser");
+registerBrowser();
 
 /** Dispatch a command and return the tuple spread onto the callback. */
 async function call(command: string, ...args: unknown[]) {
