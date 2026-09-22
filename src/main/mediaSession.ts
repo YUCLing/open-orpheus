@@ -2,7 +2,7 @@ import os from "node:os";
 
 import { toError } from "@shared/util";
 import { events as lifecycleEvents } from "./lifecycle";
-import { mainWindowAccessor } from "./window";
+import type { MainWindowAccessor } from "./bootstrap/types";
 import { resolveCoverUrl } from "./playback/artwork";
 import PlaybackController from "./playback/PlaybackController";
 import { PlaybackChange, TrackInfo } from "./playback/types";
@@ -69,7 +69,13 @@ async function loadAdapter(
   }
 }
 
-export async function createMediaSession(): Promise<void> {
+export interface MediaSessionDeps {
+  windows: MainWindowAccessor;
+}
+
+export async function createMediaSession(
+  deps: MediaSessionDeps
+): Promise<void> {
   switch (os.platform()) {
     case "linux":
       // MPRIS is Linux-only (`@open-orpheus/dbus`); load the adapter only here.
@@ -100,7 +106,7 @@ export async function createMediaSession(): Promise<void> {
   }
 
   // OS media-session commands → renderer.
-  new PlayerCommandRouter(adapter, playbackController, mainWindowAccessor);
+  new PlayerCommandRouter(adapter, playbackController, deps.windows);
 
   // Derived state → OS media-session adapter.
   playbackController.on("trackchanged", ({ data }) => adapter.onTrack(data));

@@ -113,7 +113,9 @@ export async function startApplication() {
     })(),
     import("@main/afp"),
     import("@main/fonts"),
-    import("@main/mediaSession").then((m) => m.createMediaSession()),
+    import("@main/mediaSession").then((m) =>
+      m.createMediaSession({ windows: ctx.windows })
+    ),
     import("@main/channel"),
     import("@main/request").then(async (m) => {
       m.setupRequestInterceptors();
