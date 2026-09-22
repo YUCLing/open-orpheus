@@ -17,7 +17,7 @@ import {
   lastWebpackHash as lastWebpackHashPath,
   streamerTemp as streamerTempDir,
 } from "@main/platform/folders";
-import logger from "@main/logger";
+import logger from "@main/platform/logger";
 import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "@main/services/pack";
 import {
   ensureWebPack,

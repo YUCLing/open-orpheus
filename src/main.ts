@@ -1,5 +1,5 @@
 // Setup logger as early as possible
-import "@main/logger";
+import "@main/platform/logger";
 
 // We want to hook Wayland connections as early as possible.
 import "@open-orpheus/window";

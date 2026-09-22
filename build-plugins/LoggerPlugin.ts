@@ -1,4 +1,4 @@
-import { dirname, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 import { default as MagicString } from "magic-string";
 import ts from "typescript";
@@ -13,13 +13,26 @@ export interface LoggerPluginOptions {
   /**
    * Path of the logger module to import when a module uses the global
    * `LOGGER`. Accepts an absolute path or a path relative to the project
-   * root. Defaults to `src/main/logger.ts`.
-   *
-   * The directory containing this module is also used as the base for the
-   * per-file child logger names (e.g. `cache.ts` -> "cache",
-   * `audio/OnlineStreamer.ts` -> "audio/OnlineStreamer").
+   * root. Defaults to `src/main/platform/logger.ts`.
    */
   logger?: string;
+  /**
+   * Directory that per-file child logger names are resolved against, e.g.
+   * `cache.ts` -> "cache", `audio/OnlineStreamer.ts` -> "audio/OnlineStreamer".
+   * Accepts an absolute path or a path relative to the project root. Defaults
+   * to the directory containing the logger module.
+   *
+   * Setting it explicitly decouples the names in log output from wherever the
+   * logger module happens to live.
+   */
+  base?: string;
+  /**
+   * Directory holding the command modules: `LOGGER` references inside a
+   * `registerCallHandler(cmd, handler)` argument function get their own child
+   * logger carrying the command name. Accepts an absolute path or a path
+   * relative to the project root. Defaults to `<logger directory>/calls`.
+   */
+  callModulesDir?: string;
 }
 
 /**
@@ -42,10 +55,10 @@ export interface LoggerPluginOptions {
  * 3. Rewrites every `LOGGER` reference to that generated binding
  *    (e.g. `_logger_a`).
  *
- * For modules inside a `calls/` folder, references that occur inside a
- * `registerCallHandler(cmd, handler)` argument function (at any nesting level)
- * are rewritten to a child of the base logger carrying the command name as its
- * `call` field and a fixed `name` field:
+ * For modules inside the configured call-modules directory, references that occur
+ * inside a `registerCallHandler(cmd, handler)` argument function (at any nesting
+ * level) are rewritten to a child of the base logger carrying the command name as
+ * its `call` field and a fixed `name` field:
  * ```ts
  * const _logger_b = _logger.child({ name: "call", call: "download.start" });
  * ```
@@ -66,10 +79,19 @@ export default function LoggerPlugin(
   options: LoggerPluginOptions = {}
 ): Plugin {
   const loggerPath = normalizePath(
-    resolve(process.cwd(), options.logger ?? "src/main/logger.ts")
+    resolve(process.cwd(), options.logger ?? "src/main/platform/logger.ts")
   );
-  // Child logger names are the module path relative to the logger's directory.
-  const childNameBase = dirname(loggerPath);
+  // Child logger names are the module path relative to the configured base,
+  // which defaults to the logger's own directory.
+  const childNameBase = options.base
+    ? normalizePath(resolve(process.cwd(), options.base))
+    : dirname(loggerPath);
+  const callModulesDir = normalizePath(
+    resolve(
+      process.cwd(),
+      options.callModulesDir ?? join(dirname(loggerPath), "calls")
+    )
+  );
 
   return {
     name: "logger",
@@ -80,7 +102,7 @@ export default function LoggerPlugin(
       if (!code.includes(GLOBAL_NAME)) return null;
       if (id === loggerPath) return null;
 
-      const inCallsFolder = isInCallsFolder(id, childNameBase);
+      const inCallsFolder = isInsideDir(id, callModulesDir);
       const references = findGlobalLoggerReferences(id, code);
       if (references.length === 0) return null;
 
@@ -166,11 +188,11 @@ function createBindingGenerator(code: string): () => string {
 }
 
 /**
- * Whether the module lives inside the `calls` folder, i.e. its path relative
- * to the logger module's directory starts with `calls/`.
+ * Whether the module lives inside `dir`.
  */
-function isInCallsFolder(id: string, baseDir: string): boolean {
-  return relative(baseDir, id).replaceAll("\\", "/").split("/")[0] === "calls";
+function isInsideDir(id: string, dir: string): boolean {
+  const rel = relative(dir, id).replaceAll("\\", "/");
+  return rel.length > 0 && !rel.startsWith("..");
 }
 
 /** 0 -> "a", 25 -> "z", 26 -> "aa", 27 -> "ab", ... */

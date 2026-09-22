@@ -48,7 +48,7 @@ import createCacheManager, {
 } from "../../services/cache";
 import { toError } from "@shared/util";
 import { commentToID3Json, ID3JsonToComment } from "../../domain/id3";
-import globalLogger from "../../logger";
+import globalLogger from "../../platform/logger";
 
 type DownloadScannerItem = {
   comment: string; // comment added by addid3

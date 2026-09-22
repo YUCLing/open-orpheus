@@ -19,7 +19,7 @@ import { client, getProxyAgent } from "../../platform/request";
 import { disableHardwareAccelerationFlag } from "../../platform/folders";
 import { LifecycleState } from "../../services/lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../../platform/dawn";
-import globalLogger from "../../logger";
+import globalLogger from "../../platform/logger";
 import type { SettingsService } from "../../bootstrap/types";
 import type { LifecycleService } from "../../services/lifecycle";
 

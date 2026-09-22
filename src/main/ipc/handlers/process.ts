@@ -9,7 +9,7 @@ import { registerCallHandler } from "../dispatcher";
 import { serialData } from "../../domain/crypto";
 import { client, type ProxyTypes } from "../../platform/request";
 import { isFileNotFound, normalizePath } from "../../platform/util";
-import globalLogger from "../../logger";
+import globalLogger from "../../platform/logger";
 
 type UploadPayload = {
   encrypt: 0 | 1;

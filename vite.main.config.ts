@@ -37,5 +37,18 @@ export default defineConfig({
   },
   // unzipper has a dependency on @aws-sdk/client-s3, which is not needed in
   // our context and causes build issues. This plugin mocks it out.
-  plugins: [NoS3Plugin(), ForceESPlugin(), PinoWorkerPlugin(), LoggerPlugin()],
+  plugins: [
+    NoS3Plugin(),
+    ForceESPlugin(),
+    PinoWorkerPlugin(),
+    LoggerPlugin({
+      logger: "src/main/platform/logger.ts",
+      // Child logger names stay relative to src/main even though the logger module
+      // now lives in platform/, so no log record is renamed by the move.
+      base: "src/main",
+      // The command modules moved from calls/ to ipc/handlers/; without this the
+      // per-command `call` loggers would silently disappear.
+      callModulesDir: "src/main/ipc/handlers",
+    }),
+  ],
 });
