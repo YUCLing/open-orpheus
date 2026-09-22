@@ -37,12 +37,11 @@ vi.mock("@keyv/sqlite", () => ({ KeyvSqlite: class {} }));
 import type { Database } from "@open-orpheus/database";
 
 import { createSettingsService } from "@main/bootstrap/services/settings";
-import { events, installSettingsService, kv } from "@main/settings";
+
+let settings: ReturnType<typeof createSettingsService>;
 
 function initialize() {
-  installSettingsService(
-    createSettingsService({ database: { nativeDb: {} as Database } })
-  );
+  settings = createSettingsService({ database: { nativeDb: {} as Database } });
 }
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
@@ -51,7 +50,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 function recordEvents() {
   const seen: { event: string; data: Record<string, unknown> }[] = [];
   for (const name of ["change", "delete"]) {
-    (events as unknown as EmitteryLike).on(
+    (settings.events as unknown as EmitteryLike).on(
       name,
       (event: { name: string; data: Record<string, unknown> }) => {
         seen.push({ event: event.name, data: event.data });
@@ -72,24 +71,26 @@ describe("createSettingsService", () => {
   it("applies the default value of a known key", async () => {
     initialize();
 
-    await expect(kv.get("tray.clickBehavior")).resolves.toBe(
+    await expect(settings.kv.get("tray.clickBehavior")).resolves.toBe(
       "always-show-menu"
     );
-    await expect(kv.get("desktopLyrics.opacity")).resolves.toBe(1);
+    await expect(settings.kv.get("desktopLyrics.opacity")).resolves.toBe(1);
   });
 
   it("keeps a stored value over the default", async () => {
     hoisted.store.get.mockResolvedValueOnce("minimize");
     initialize();
 
-    await expect(kv.get("tray.clickBehavior")).resolves.toBe("minimize");
+    await expect(settings.kv.get("tray.clickBehavior")).resolves.toBe(
+      "minimize"
+    );
   });
 
   it("leaves keys without default as they are", async () => {
     initialize();
 
-    await expect(kv.get("proxy")).resolves.toBeUndefined();
-    await expect(kv.get("nope.unknown")).resolves.toBeUndefined();
+    await expect(settings.kv.get("proxy")).resolves.toBeUndefined();
+    await expect(settings.kv.get("nope.unknown")).resolves.toBeUndefined();
   });
 
   it("forwards an array request to keyv untouched", async () => {
@@ -98,7 +99,7 @@ describe("createSettingsService", () => {
     const keys = ["desktopLyrics.opacity", "proxy", "nope.unknown"];
 
     // Defaults are only applied by `getMany`, not by this passthrough.
-    await expect(kv.get(keys)).resolves.toEqual(["stored"]);
+    await expect(settings.kv.get(keys)).resolves.toEqual(["stored"]);
     expect(hoisted.store.get).toHaveBeenCalledWith(keys);
   });
 
@@ -107,7 +108,7 @@ describe("createSettingsService", () => {
     initialize();
 
     await expect(
-      kv.get(["desktopLyrics.opacity", "proxy", "nope.unknown"])
+      settings.kv.get(["desktopLyrics.opacity", "proxy", "nope.unknown"])
     ).resolves.toEqual([0.5, "http://proxy", "kept"]);
   });
 
@@ -115,7 +116,7 @@ describe("createSettingsService", () => {
     initialize();
 
     await expect(
-      kv.getMany(["desktopLyrics.opacity", "proxy", "nope.unknown"])
+      settings.kv.getMany(["desktopLyrics.opacity", "proxy", "nope.unknown"])
     ).resolves.toEqual([1, undefined, undefined]);
   });
 

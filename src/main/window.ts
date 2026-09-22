@@ -20,12 +20,6 @@ const finalizationRegistry = new FinalizationRegistry<WeakRef<ManagedWindow>>(
   }
 );
 
-export {
-  mainWindow,
-  mainWindowAccessor,
-  setMainWindow,
-} from "./bootstrap/services/window";
-
 export interface InputRegion {
   x: number;
   y: number;

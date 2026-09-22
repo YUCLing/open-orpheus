@@ -1,11 +1,9 @@
 import { Database } from "@open-orpheus/database";
 
-import { installDatabaseService } from "../database";
 import {
   events as lifecycleEvents,
   installLifecycleService,
 } from "../lifecycle";
-import { installSettingsService } from "../settings";
 import { createDatabaseService } from "./services/database";
 import { createLifecycleService } from "./services/lifecycle";
 import { createSettingsService } from "./services/settings";
@@ -22,10 +20,8 @@ export async function bootstrap(deps: HostDeps): Promise<ReadyPhase> {
   const openDatabase = deps.openDatabase ?? ((path) => new Database(path));
 
   const database = await createDatabaseService({ openDatabase });
-  installDatabaseService(database);
 
   const settings = createSettingsService({ database });
-  installSettingsService(settings);
 
   return {
     logger: deps.logger,

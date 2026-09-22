@@ -18,7 +18,7 @@ import {
 import { configureProcess } from "@main/process-setup";
 import { checkOpenCommand as checkWebCommand } from "@main/protocol";
 import { startApplication } from "@main/startup";
-import { mainWindow } from "@main/window";
+import { windowService } from "@main/bootstrap/services/window";
 
 configureProcess();
 
@@ -53,6 +53,7 @@ app.on("before-quit", () => {
 });
 
 app.on("second-instance", (event, argv) => {
+  const mainWindow = windowService.currentWindow();
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const cmd = checkWebCommand(argv);
   if (cmd) {

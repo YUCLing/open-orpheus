@@ -24,8 +24,6 @@ import type { Logger } from "pino";
 
 import { bootstrap } from "@main/bootstrap/context";
 import { mainWindow, setMainWindow } from "@main/bootstrap/services/window";
-import * as database from "@main/database";
-import { events, kv } from "@main/settings";
 
 const logger = {} as Logger;
 
@@ -64,20 +62,7 @@ describe("bootstrap", () => {
     expect(Object.keys(ctx.database)).toHaveLength(3);
   });
 
-  it("installs the adapters so existing call sites keep resolving", async () => {
-    const ctx = await bootstrap({
-      logger,
-      openDatabase: () => fakeDatabase() as unknown as Database,
-    });
-
-    expect(database.webDb).toBe(ctx.database.webDb);
-    expect(database.musicLibraryDb).toBe(ctx.database.musicLibraryDb);
-    expect(database.nativeDb).toBe(ctx.database.nativeDb);
-    expect(kv).toBe(ctx.settings.kv);
-    expect(events).toBe(ctx.settings.events);
-  });
-
-  it("shares the main window with the binding `window.ts` re-exports", async () => {
+  it("shares the main window it hands out with the window service", async () => {
     const ctx = await bootstrap({
       logger,
       openDatabase: () => fakeDatabase() as unknown as Database,
