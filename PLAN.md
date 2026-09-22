@@ -1,14 +1,17 @@
 # Open Orpheus — Refactor & Plugin Roadmap
 
-**Status:** in execution. P0 and P1 are complete; P2 is next. §7.0 records one open item
-carried forward: the documented `lifecycle.ts` pre-`bootstrap()` exception. Design
-sections below still carry their evidence tags.
-**Revision:** 49 (2026-09-22) — P3-4 complete: `exactOptionalPropertyTypes` is **enabled**
-(51 → 0 errors). P3-4(c)'s judgement — that omitting keys at a call site changes object
-shapes and so was ruled out — is **corrected**: that is true of our own shared objects, but
-at a vendor boundary the shape is read by name, and omission there was verified
-behaviour-preserving per boundary. Two of the three mid-cost flags are now on; the third is
-blocked by native-module declarations (§1.3). See P3-4 and P3-4(d).
+**Status:** the cleanup is complete. P0–P3 are done, P3's exit criteria are met, and
+**§10.1 is the cleanup's exit report**. One caveat belongs here rather than only in that
+report: §7's P3 review checkpoint is met for the alias mechanism and `ReadyPhase`, and **not
+met for the `Disposable` convention (§3.3)** — `Disposable` is designed and has no
+implementation or consumer anywhere in `src/`. By §7's own wording that blocks P4, so **do
+not start P4** until it is closed. The `lifecycle.ts` pre-`bootstrap()` exception remains a
+documented, deliberate residual, not an open defect. Design sections below still carry their
+evidence tags.
+**Revision:** 50 (2026-09-22) — P3 complete; §10.1 adds the cleanup's exit report and §1.2 is
+now a scorecard. Recorded there: `verbatimModuleSyntax` is the one measured mid-cost flag that
+cannot be enabled (native-module ambient const enums, §1.3), and the `Disposable`
+review-checkpoint gap above.
 **Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
 
 This document is intentionally written so it can be **corrected between phases**. See
@@ -127,14 +130,14 @@ comment loses nothing for a reader who never saw the conversation, delete it.
 
 ### 1.2 Success metrics
 
-| Metric                            | Now                    | Target                          | Phase |
-| --------------------------------- | ---------------------- | ------------------------------- | ----- |
-| Own-module `vi.mock` sites        | 11 in 10 files **[V]** | **0** — reached at P1-12        | P1    |
-| Specs importing via `../../src/…` | ~38 sites **[V]**      | 0                               | P0    |
-| `$sharedTypes` declared in        | 4 places **[V]**       | **0** — retired in P2-4         | P2    |
-| `src/main.ts`                     | 486 lines **[V]**      | thin entry                      | P1    |
-| `strict` in root `tsconfig.json`  | off **[V]**            | on — measured 0 errors          | P0    |
-| App graph bootable in Vitest      | no                     | yes (via `createTestContext()`) | P1/P3 |
+| Metric                            | Now                              | Target                          | Phase |
+| --------------------------------- | -------------------------------- | ------------------------------- | ----- |
+| Own-module `vi.mock` sites        | ~~11 in 10 files~~ **0** **[V]** | **0** — reached at P1-12        | P1    |
+| Specs importing via `../../src/…` | ~~~38 sites~~ **0** **[V]**      | 0                               | P0    |
+| `$sharedTypes` declared in        | ~~4 places~~ **0** **[V]**       | **0** — retired in P2-4         | P2    |
+| `src/main.ts`                     | ~~486 lines~~ **74** **[V]**     | thin entry                      | P1    |
+| `strict` in root `tsconfig.json`  | ~~off~~ **on** **[V]**           | on — measured 0 errors          | P0    |
+| App graph bootable in Vitest      | ~~no~~ **yes**                   | yes (via `createTestContext()`) | P1/P3 |
 
 ### 1.3 Non-goals
 
@@ -1310,6 +1313,69 @@ material — so resolving it after P4 starts means redesigning P4.
 | 2026-09-21 | Moving a directory breaks the moved files' own relatives **[V]**                                                                                                                                                            | The Makers' `../packaging/*` imports resolved to `build/packaging/*` after the rename; 14 specifiers needed a depth fix. Surfaced as `TS2307` plus `import/no-unresolved`, with one consequential `TS7006` that disappeared once the imports resolved. Caught by `pnpm lint:types`, **not** by `pnpm test` — the Makers are only exercised at package time.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 2026-09-21 | Earlier P0-3 verification was wrong **[V]**                                                                                                                                                                                 | The pattern `from "…"` missed bare side-effect imports and dynamic `import("…")`, so 7 specifiers went unreported. Corrected pattern: `"\.\./(\.\./)*src/`, now 0 matches.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 2026-09-21 | `strict` is 0 errors outside `include` too **[V]**                                                                                                                                                                          | Extended-`include` probe over the 12 uncovered files (`plugins/**`, `vite.*.config.ts`, `forge.config.ts`): 0 errors with `strict`; **9** with `noImplicitOverride` (all `TS4114` in `plugins/Maker*.ts`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+
+### 10.1 The cleanup's exit report (end of P3)
+
+**Written 2026-09-22**, covering `33726c0` (P0-1) → `47ad048` (P3-4(d)): **50 commits**
+(the commit that adds this report is the 51st).
+P3's exit criteria (§7) are "every phase's metrics in §1.2 met" plus this report. Both are
+discharged below, with one metric that cannot be met and one review-checkpoint precondition
+that is not met. Both are stated here rather than left for P4 to discover.
+
+**§1.2 metrics, measured at the freeze.** §1.2 is now a scorecard; these are the
+measurements behind it.
+
+| Metric                            | Baseline       | Final   | How it was measured                                                                                                                                                                                                                                  |
+| --------------------------------- | -------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Own-module `vi.mock` sites        | 11 in 10 files | **0**   | 42 `vi.mock` calls remain, and every target is a bare specifier or a `node:` builtin — not one resolves into `src/`. The metric was "mock our own modules", not "mock nothing": the 42 are process/vendor boundaries and are the point of the seams. |
+| Specs importing via `../../src/…` | ~38 sites      | **0**   | `grep -E '"(\.\./)+src/'` over `__test__/**` (the pattern widened in P0 after the first one missed side-effect and dynamic imports).                                                                                                                 |
+| `$sharedTypes` declared in        | 4 places       | **0**   | 0 occurrences in `tsconfig.json`, `vitest.config.ts`, `vite.main.config.ts` and `gui/svelte.config.ts` — and 0 anywhere in the repo outside this plan.                                                                                               |
+| `src/main.ts`                     | 486 lines      | **74**  | `wc -l`. Process wiring, the ordered start-up call, and the pack/commit decision loop all left; no loops and no whole-file reads remain.                                                                                                             |
+| `strict` in root `tsconfig.json`  | off            | **on**  | Plus `noImplicitOverride`, `noFallthroughCasesInSwitch`, `noPropertyAccessFromIndexSignature` and `exactOptionalPropertyTypes`; `tsc --noEmit -p tsconfig.json` is clean.                                                                            |
+| App graph bootable in Vitest      | no             | **yes** | `__test__/main/bootstrap/context.spec.ts` calls `createTestContext()` in four tests, including one asserting every database it hands back is open and one asserting the window service and the phase share a main window.                            |
+
+**The one metric that cannot be met as written.** `verbatimModuleSyntax` is **not** enabled.
+It is not a cost judgement: applying it fixes 47 type-only imports cleanly and then fails on
+5 ambient const enums declared by the native modules (`DesktopEnvironment` in
+`@open-orpheus/window`, a dbus `PlaybackStatus`), which verbatim mode forbids inlining. §1.3
+puts those declarations out of scope, so the flag is unreachable from our source. Recorded in
+P3-4(b). `noUncheckedIndexedAccess` (264 errors) was never in scope — no phase requires it.
+
+**Gates at the freeze.** `pnpm test` 60 files / 528 tests; `pnpm lint` clean (eslint +
+`tsc --noEmit` + `svelte-check`); `pnpm package` succeeded.
+
+**Shape.** `src/main/` holds six group directories and nothing else — `bootstrap/`, `calls/`,
+`domain/`, `platform/`, `services/`, `windows/` — and every directory in the tree holds **≤15
+entries** (the two largest are `calls/handlers/` and `services/`, at 15 each). `calls/` is
+named for the pack ABI reached by `channel.call`, **not** for the project's IPC, which is
+`src/bridge/**`; that distinction was got wrong once and reverted (§10).
+
+**Carried forward, deliberately.** The `lifecycle.ts` pre-`bootstrap()` exception is closed
+as a residual rather than a defect: `currentState`/`setLifecycleState` default to
+`Starting`/no-op before install, because `main.ts` registers `window-all-closed` before
+`bootstrap()` runs and the pack loader can open a download window first. It is documented at
+both the definition (`services/lifecycle.ts`) and the dependency (`src/main.ts`). P2-1's four
+§5.3 gaps are recorded in the ledger rather than papered over; the §5.1/§5.3 disagreement
+about where services live was resolved in favour of §5.3 by P2-5(1).
+
+**The P3 review checkpoint: one of three preconditions is NOT met.** §7's P3 block reads
+"Do not begin P4 until the alias mechanism, `ReadyPhase`, and the `Disposable` convention
+have each been _exercised_ by P0–P3 rather than merely designed." Individually:
+
+| Precondition                   | Status      | Evidence                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Alias mechanism (§3.4, §4.1)   | **Met**     | All four aliases have real consumers (`@shared/` 61 sites in `src/`, `@main/` 19, `@bridge/` 5, `@preload/` 3 spec files), and `__test__/aliases.spec.ts` guards the vitest mirror by failing when an alias is removed — falsified in P0-9, not assumed.                                                                                                                                      |
+| `ReadyPhase` (§5.1)            | **Met**     | `bootstrap()` is the only producer of the type, and `startup.ts` consumes it at 18 sites (`ctx.windows` ×7, `ctx.settings` ×6, `ctx.lifecycle` ×4, `ctx.database` ×1), so the dependency is load-bearing rather than decorative. `createTestContext()` returns the same type to specs.                                                                                                        |
+| `Disposable` convention (§3.3) | **NOT MET** | `Disposable` occurs **exactly once** in all of `src/` and `__test__/`: its own declaration at `bootstrap/types.ts:10`. Nothing returns one, nothing consumes one, and no registration has been converted. The `dispose()` methods that do exist belong to `MediaSessionAdapter` and the preload's `PlaybackBackend` — pre-existing teardown for object lifetimes, unrelated to the interface. |
+
+So §3.3 is **designed and not exercised**, and by the plan's own wording that is a blocker on
+P4, not a note. It is cheap to close, and §3.3 already points at the shape: Emittery's
+`on(...)` returns an unlisten function, and `src/bridge/common/settings.ts` composes two of
+them into a `wnd.on("closed")` handler. The smallest honest exercise is to make the
+registrations that already have teardown — the single `settings.events.on("change", …)`
+subscription in `calls/handlers/winhelper.ts`, and the bridge's `wnd.on("closed")`
+composition of two Emittery unlisteners — return a real `Disposable`, and add a leak test that fails when `dispose()` is not called. Until that
+exists, P4 would be building plugin teardown on a convention with zero implementations.
 
 ---
 
