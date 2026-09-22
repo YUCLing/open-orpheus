@@ -48,6 +48,14 @@ export default [
     },
   },
   {
+    // Sandboxed preloads must be CommonJS: Electron only supports ESM preloads
+    // with `sandbox: false`, which is the flag this spike exists to avoid.
+    files: ["scripts/spike-preload-eval/**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
     files: ["gui/**/*.{svelte,ts,js}"],
     languageOptions: {
       globals: {
