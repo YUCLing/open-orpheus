@@ -15,7 +15,7 @@ type Av3aPlaybackState = {
   source: Av3aM4aSource;
   process: Av3aPlaybackProcess;
   /** Present only when decoding a streamed (URL) temp file. */
-  streamer?: OnlineStreamer;
+  streamer?: OnlineStreamer | undefined;
 };
 
 /**

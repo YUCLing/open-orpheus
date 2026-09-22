@@ -26,7 +26,7 @@ interface ModuleInfo {
   path: string;
   workspaceDeps: string[];
   scripts: Record<string, string>;
-  os?: string[];
+  os?: string[] | undefined;
 }
 
 async function readModuleInfos(

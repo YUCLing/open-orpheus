@@ -23,7 +23,7 @@ export interface DebOptions {
   /** Directory that receives the `.deb`; emptied before building. Defaults to `out/make/deb/<nodeArch>`. */
   outDir?: string;
   /** Node/Electron arch name (e.g. `x64`) used in the default `outDir`. Defaults to the host arch. */
-  arch?: string;
+  arch?: string | undefined;
   /** Empty `outDir` before building. Defaults to true. */
   clean?: boolean;
   /** Bake the toolchain install (rust/node/pnpm) into the rendered `debian/rules`. Defaults to true. */
@@ -31,7 +31,7 @@ export interface DebOptions {
   /** Pass `-d` to dpkg-buildpackage to skip the build-dependency check. Defaults to false. */
   nodeps?: boolean;
   /** Path to a prebuilt packaged app dir (out/<name>-linux-<arch>) to bundle instead of compiling. */
-  prebuilt?: string;
+  prebuilt?: string | undefined;
 }
 
 async function resolveMeta(projectRoot: string) {
@@ -65,8 +65,8 @@ async function stageSource(
   name: string,
   version: string,
   options: {
-    installTools?: boolean;
-    prebuilt?: string;
+    installTools?: boolean | undefined;
+    prebuilt?: string | undefined;
     control: ControlOptions;
   }
 ) {

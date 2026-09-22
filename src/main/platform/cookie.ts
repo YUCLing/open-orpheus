@@ -1,4 +1,5 @@
 import { session } from "electron";
+import type { CookiesSetDetails } from "electron";
 import * as cookie from "cookie";
 
 import { getADDeviceId, getDeviceId } from "./device";
@@ -23,24 +24,44 @@ export async function removeCookie(url: string, name: string) {
   await cookies.remove(url, name);
 }
 
-export async function setCookie(url: string, setCookieValue: cookie.SetCookie) {
-  await cookies.set({
-    url,
-    ...setCookieValue,
-    expirationDate: setCookieValue.expires
-      ? Math.floor(new Date(setCookieValue.expires).getTime() / 1000)
-      : setCookieValue.maxAge
-        ? Math.floor(Date.now() / 1000) + setCookieValue.maxAge
-        : undefined,
-    sameSite:
-      setCookieValue.sameSite === true
-        ? "strict"
-        : setCookieValue.sameSite === false
-          ? "unspecified"
-          : setCookieValue.sameSite === "none"
-            ? "no_restriction"
-            : setCookieValue.sameSite,
-  });
+/** `cookie.SetCookie`, but every field may also be explicitly `undefined`. */
+export type SetCookieInput = {
+  [K in keyof cookie.SetCookie]?: cookie.SetCookie[K] | undefined;
+};
+
+export async function setCookie(url: string, setCookieValue: SetCookieInput) {
+  const expirationDate = setCookieValue.expires
+    ? Math.floor(new Date(setCookieValue.expires).getTime() / 1000)
+    : setCookieValue.maxAge
+      ? Math.floor(Date.now() / 1000) + setCookieValue.maxAge
+      : undefined;
+  const sameSite =
+    setCookieValue.sameSite === true
+      ? "strict"
+      : setCookieValue.sameSite === false
+        ? "unspecified"
+        : setCookieValue.sameSite === "none"
+          ? "no_restriction"
+          : setCookieValue.sameSite;
+
+  // Only the attributes Chromium understands are forwarded. The remainder of
+  // `cookie.SetCookie` (`expires`, `maxAge`, `partitioned`, `priority`,
+  // `sameParty`, `extensions`) is either translated above or meaningless to
+  // Electron, so it is deliberately left out rather than spread wholesale.
+  const details: CookiesSetDetails = { url };
+
+  if (setCookieValue.name !== undefined) details.name = setCookieValue.name;
+  if (setCookieValue.value !== undefined) details.value = setCookieValue.value;
+  if (setCookieValue.domain !== undefined) details.domain = setCookieValue.domain;
+  if (setCookieValue.path !== undefined) details.path = setCookieValue.path;
+  if (setCookieValue.secure !== undefined) details.secure = setCookieValue.secure;
+  if (setCookieValue.httpOnly !== undefined) {
+    details.httpOnly = setCookieValue.httpOnly;
+  }
+  if (expirationDate !== undefined) details.expirationDate = expirationDate;
+  if (sameSite !== undefined) details.sameSite = sameSite;
+
+  await cookies.set(details);
 }
 
 /**

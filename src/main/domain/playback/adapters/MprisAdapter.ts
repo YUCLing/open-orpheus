@@ -131,8 +131,8 @@ export default class MprisAdapter
       title: this.metadata.title,
       artist: [this.metadata.artist],
       album: this.metadata.album,
-      artUrl: this.artUrl || undefined,
-      length: this.duration ? this.duration * TIME_RATIO : undefined,
+      ...(this.artUrl ? { artUrl: this.artUrl } : {}),
+      ...(this.duration ? { length: this.duration * TIME_RATIO } : {}),
     };
     this.mediaSession.setMetadata(metadata);
   }

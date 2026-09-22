@@ -103,10 +103,10 @@ export default class NowPlayingAdapter
             title: this.track.title,
             artist: this.track.artist,
             album: this.track.album,
-            duration: this.duration ?? undefined,
-            elapsed: this.position ?? undefined,
+            ...(this.duration != null ? { duration: this.duration } : {}),
+            ...(this.position != null ? { elapsed: this.position } : {}),
             rate: this.rate,
-            artUrl: this.artUrl ? nativeArtUrl(this.artUrl) : undefined,
+            ...(this.artUrl ? { artUrl: nativeArtUrl(this.artUrl) } : {}),
           }
         : null
     );

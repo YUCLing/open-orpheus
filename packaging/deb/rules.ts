@@ -13,7 +13,7 @@ export interface RulesOptions {
   /** Zig version required by `cargo-zigbuild`. */
   zig: string;
   /** Install the build toolchain (rust/node/pnpm) inside `override_dh_auto_build`. Defaults to true. */
-  installTools?: boolean;
+  installTools?: boolean | undefined;
   /** Install a bundled prebuilt app (prebuilt/) instead of compiling. Defaults to false. */
   prebuilt?: boolean;
 }

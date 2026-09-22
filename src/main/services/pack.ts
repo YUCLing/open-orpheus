@@ -32,8 +32,8 @@ async function chooseWebPackFile() {
 export type DownloadPackageProgress = {
   step: "downloading" | "extracting" | "saving" | "completed";
   downloadedBytes?: number;
-  totalBytes?: number;
-  progress?: number;
+  totalBytes?: number | undefined;
+  progress?: number | undefined;
   file?: string;
   fileIndex?: number;
   fileCount?: number;

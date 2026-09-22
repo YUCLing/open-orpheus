@@ -144,7 +144,10 @@ export default class YunxinIM extends EventTarget {
         onmsgs: (msgs) => {
           for (const msg of msgs) {
             this.dispatchEvent(
-              new CustomEvent("chatroommsg", { detail: msg.content })
+              new CustomEvent(
+                "chatroommsg",
+                msg.content !== undefined ? { detail: msg.content } : {}
+              )
             );
           }
         },

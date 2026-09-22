@@ -227,7 +227,7 @@ interface LoggerReference {
    * The `registerCallHandler` command name when the reference is inside that
    * call's handler function, otherwise `undefined`.
    */
-  call?: string;
+  call?: string | undefined;
 }
 
 interface CallHandler {
@@ -235,7 +235,7 @@ interface CallHandler {
   start: number;
   end: number;
   /** Value of the first argument (the command string), if it is a literal. */
-  call?: string;
+  call?: string | undefined;
 }
 
 /** True for inline handler functions (arrow functions / function expressions). */

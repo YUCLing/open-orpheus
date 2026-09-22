@@ -1,6 +1,6 @@
 export interface BtnState {
   uri: string;
-  color?: string;
+  color?: string | undefined;
 }
 
 export interface BtnImages {
@@ -15,11 +15,11 @@ export type LayoutNode =
   | { type: "vertical"; children: LayoutNode[] }
   | {
       type: "container";
-      width?: number;
-      height?: number;
+      width?: number | undefined;
+      height?: number | undefined;
       children: LayoutNode[];
     }
-  | { type: "control"; width?: number; height?: number }
+  | { type: "control"; width?: number | undefined; height?: number | undefined }
   | { type: "button"; width: number; height: number; index: number };
 
 export interface ElementTemplate {

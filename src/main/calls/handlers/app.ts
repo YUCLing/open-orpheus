@@ -563,7 +563,7 @@ export function register(deps: AppDeps): void {
         const agent = await getProxyAgent(cfg);
         try {
           const req = await client(url, {
-            agent,
+            ...(agent ? { agent } : {}),
             throwHttpErrors: false,
           });
           event.sender.send(

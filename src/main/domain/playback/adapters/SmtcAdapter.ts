@@ -73,7 +73,7 @@ export default class SmtcAdapter
             title: this.track.title,
             artist: this.track.artist,
             album: this.track.album,
-            artUrl: this.artUrl ? nativeArtUrl(this.artUrl) : undefined,
+            ...(this.artUrl ? { artUrl: nativeArtUrl(this.artUrl) } : {}),
           }
         : null
     );

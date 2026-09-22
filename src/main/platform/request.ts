@@ -109,9 +109,7 @@ export let client: Got = got.extend({
 });
 
 export function setProxy(agents: Agents | undefined) {
-  client = client.extend({
-    agent: agents,
-  });
+  client = client.extend(agents ? { agent: agents } : {});
 }
 
 export function setupRequestInterceptors() {

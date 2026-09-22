@@ -29,7 +29,7 @@ export interface ManifestContext {
   /** SDK extensions. Prebuilt builds need none (default: node24 for source builds). */
   sdkExtensions?: string[];
   /** Extra manifest modules appended before the app module. */
-  extraModules?: unknown[];
+  extraModules?: unknown[] | undefined;
 }
 
 /** Assemble the top-level manifest shared by every variant. */

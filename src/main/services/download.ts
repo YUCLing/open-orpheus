@@ -10,7 +10,7 @@ import { client } from "../platform/request";
 
 export type DownloadStartOptions = {
   headers?: Record<string, string>;
-  md5?: string;
+  md5?: string | undefined;
   // Preferred total size in bytes
   size?: number;
 };
@@ -106,9 +106,10 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
       this.fsHandle = await fs.open(this.path, "w");
       this.writeStream = this.fsHandle.createWriteStream();
 
-      this.request = client.stream(this.url, {
-        headers: this.options.headers,
-      });
+      this.request = client.stream(
+        this.url,
+        this.options.headers ? { headers: this.options.headers } : {}
+      );
 
       // Initialize trackers exactly when data is about to start flowing
       this.lastTime = performance.now();
