@@ -12,7 +12,7 @@ import {
 import { registerCallHandler } from "../dispatcher";
 import { loadFromOrpheusUrl } from "../../platform/orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../../platform/util";
-import { ManagedWindow } from "../../window";
+import { ManagedWindow } from "../../windows/managedWindow";
 import AppMenu from "../../windows/menu";
 import {
   registerGlobalShortcut,

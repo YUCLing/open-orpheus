@@ -2,7 +2,7 @@ import os from "node:os";
 
 import { registerIpcHandlers } from "../register";
 import { InputRegionContract } from "../contracts/input-region-api";
-import type { ManagedWindow } from "../../main/window";
+import type { ManagedWindow } from "../../main/windows/managedWindow";
 
 export function registerInputRegionHandlers(
   wnd: Electron.BrowserWindow,

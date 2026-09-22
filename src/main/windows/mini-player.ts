@@ -11,7 +11,7 @@ import {
   OnDemandWindow,
   OnDemandWindowState,
   SimpleManagedWindow,
-} from "../window";
+} from "./managedWindow";
 import { registerIpcHandlers } from "../../bridge/register";
 import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
 import type { BtnImages, BtnState } from "../../shared/types/dui";

@@ -29,7 +29,7 @@ import type { ElementTemplate } from "../domain/skin/dui";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import type { AppMenuItem } from "@shared/types/menu";
 import { font } from "../platform/gui";
-import { ManagedWindow } from "../window";
+import { ManagedWindow } from "./managedWindow";
 
 registerMenuSkinUpdater();
 

@@ -9,7 +9,7 @@ import {
   DesktopEnvironment,
 } from "@open-orpheus/window";
 
-import type AppMenu from "./windows/menu";
+import type AppMenu from "./menu";
 
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
 const managedBrowserWindows = new Set<BrowserWindow>();

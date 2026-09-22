@@ -21,7 +21,7 @@ import {
   OnDemandWindow,
   OnDemandWindowState,
   SimpleManagedWindow,
-} from "../window";
+} from "./managedWindow";
 import { LifecycleState } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
