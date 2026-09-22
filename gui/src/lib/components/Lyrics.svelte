@@ -9,8 +9,8 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
 
-  import type { LyricLine } from "$sharedTypes/lyrics";
-  import { LineMode, type LyricsStyle } from "$sharedTypes/desktop-lyrics";
+  import type { LyricLine } from "@shared/types/lyrics";
+  import { LineMode, type LyricsStyle } from "@shared/types/desktop-lyrics";
 
   type SupportedLyrics = (LyricLine | ComponentLyricLine)[];
 

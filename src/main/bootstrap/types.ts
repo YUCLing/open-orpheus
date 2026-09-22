@@ -4,7 +4,7 @@ import type Emittery from "emittery";
 import type { Keyv } from "keyv";
 import type { Logger } from "pino";
 
-import type { SettingsEvents } from "$sharedTypes/settings";
+import type { SettingsEvents } from "@shared/types/settings";
 import type { LifecycleService } from "./services/lifecycle";
 
 export interface Disposable {

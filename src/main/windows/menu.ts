@@ -27,7 +27,7 @@ import type { MenuContract } from "../../bridge/contracts/menu-api";
 import { parseBtnUrl, parseElementTemplate } from "../domain/skin/dui";
 import type { ElementTemplate } from "../domain/skin/dui";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
-import type { AppMenuItem } from "$sharedTypes/menu";
+import type { AppMenuItem } from "@shared/types/menu";
 import { font } from "../platform/gui";
 import { ManagedWindow } from "../window";
 

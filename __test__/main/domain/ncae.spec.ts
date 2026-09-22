@@ -2,7 +2,7 @@ import { deflateRawSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
-import { NcaeType } from "$sharedTypes/ncae";
+import { NcaeType } from "@shared/types/ncae";
 
 import { decodeNcae } from "@main/domain/ncae";
 

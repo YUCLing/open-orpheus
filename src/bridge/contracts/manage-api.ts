@@ -1,5 +1,5 @@
-import type { UpdateInfo } from "$sharedTypes/update";
-import type { CacheGroupStats, AllCacheStats } from "$sharedTypes/manage";
+import type { UpdateInfo } from "@shared/types/update";
+import type { CacheGroupStats, AllCacheStats } from "@shared/types/manage";
 
 export type { CacheGroupStats, AllCacheStats };
 

@@ -17,7 +17,6 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "$sharedTypes/*": ["./types/*"],
       "@bridge/*": ["./src/bridge/*"],
       "@main/*": ["./src/main/*"],
       "@preload/*": ["./src/preload/*"],
@@ -31,7 +30,6 @@
     "packaging/**/*.ts",
     "build-plugins/**/*.ts",
     "scripts/*.ts",
-    "types/*.ts",
     "vite.*.config.ts",
     "__test__/**/*.ts"
   ],

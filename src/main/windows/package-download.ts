@@ -3,7 +3,7 @@ import path from "node:path";
 import { BrowserWindow } from "electron";
 
 import packManager from "../services/pack";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 
 export default function showPackgeDownloadWindow(
   downloadReason = PackageDownloadReason.LoadFailed

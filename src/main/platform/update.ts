@@ -1,7 +1,7 @@
 import { app } from "electron";
 import semver from "semver";
 
-import type { UpdateInfo } from "$sharedTypes/update";
+import type { UpdateInfo } from "@shared/types/update";
 
 let cachedUpdateInfo: UpdateInfo | null | false = false;
 

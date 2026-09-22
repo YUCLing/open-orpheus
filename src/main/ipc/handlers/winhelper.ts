@@ -2,7 +2,7 @@ import { BrowserWindow, clipboard, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
-import type { AppMenuItem } from "$sharedTypes/menu";
+import type { AppMenuItem } from "@shared/types/menu";
 import {
   DesktopEnvironment,
   dragWindow,

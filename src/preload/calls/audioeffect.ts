@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 
-import { Ncae, NcaeType } from "$sharedTypes/ncae";
+import { Ncae, NcaeType } from "@shared/types/ncae";
 
 import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";

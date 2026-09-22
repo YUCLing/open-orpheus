@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 
 import { toError } from "@shared/util";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 
 export const REDOWNLOAD_FLAG = "--redownload-package";
 

@@ -2,7 +2,7 @@ import photon from "@silvia-odwyer/photon-node";
 
 import packManager from "../../services/pack";
 import type SkinPack from "../../services/packs/SkinPack";
-import type { MenuSkin } from "$sharedTypes/menu";
+import type { MenuSkin } from "@shared/types/menu";
 import { extractColor } from "../../domain/skin/color";
 import { argbToCss } from "../../domain/skin/dui";
 

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { NcaeType } from "$sharedTypes/ncae";
+import { NcaeType } from "@shared/types/ncae";
 
 import { dispatcher } from "@main/ipc/dispatcher";
 import { installLoggerStub } from "../../../helpers/globals";

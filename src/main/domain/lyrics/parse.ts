@@ -1,4 +1,4 @@
-import type { LyricLine, LyricWord, Lyrics } from "$sharedTypes/lyrics";
+import type { LyricLine, LyricWord, Lyrics } from "@shared/types/lyrics";
 
 /**
  * Parse a timestamp tag like `[mm:ss.xx]` or `[mm:ss:xx]` into milliseconds.

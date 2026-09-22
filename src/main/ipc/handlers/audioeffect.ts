@@ -1,4 +1,4 @@
-import { NcaeType } from "$sharedTypes/ncae";
+import { NcaeType } from "@shared/types/ncae";
 import { toError } from "@shared/util";
 import { registerCallHandler } from "../dispatcher";
 

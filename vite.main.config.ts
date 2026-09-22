@@ -1,6 +1,3 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { defineConfig } from "vite";
 
 import PinoWorkerPlugin from "./build-plugins/PinoWorkerPlugin.js";
@@ -11,14 +8,6 @@ import ForceESPlugin from "./build-plugins/ForceESPlugin.js";
 // https://vitejs.dev/config
 export default defineConfig({
   base: "",
-  resolve: {
-    alias: {
-      $sharedTypes: path.resolve(
-        path.dirname(fileURLToPath(import.meta.url)),
-        "types"
-      ),
-    },
-  },
   build: {
     sourcemap: process.env.INLINE_SOURCEMAP ? "inline" : false,
     rolldownOptions: {

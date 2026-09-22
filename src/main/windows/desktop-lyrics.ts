@@ -14,7 +14,7 @@ import {
   LyricsStyle,
   ShowTranslate,
   TextAlignType,
-} from "$sharedTypes/desktop-lyrics";
+} from "@shared/types/desktop-lyrics";
 
 import {
   ManagedWindow,

@@ -16,7 +16,7 @@
 </script>
 
 <script lang="ts">
-  import { PackageDownloadReason } from "$sharedTypes/package-download";
+  import { PackageDownloadReason } from "@shared/types/package-download";
 
   import { Button } from "$lib/components/ui/button";
   import FileQuestionMark from "@lucide/svelte/icons/file-question-mark";

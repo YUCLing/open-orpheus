@@ -4,12 +4,12 @@ import {
   LineMode,
   ShowTranslate,
   TextAlignType,
-} from "$sharedTypes/desktop-lyrics";
-import { LyricsStore } from "$sharedTypes/lyrics";
+} from "@shared/types/desktop-lyrics";
+import { LyricsStore } from "@shared/types/lyrics";
 import {
   MiniPlayerLikeMark,
   MiniPlayerTogetherStatus,
-} from "$sharedTypes/mini-player";
+} from "@shared/types/mini-player";
 import { mkdir, writeFile } from "node:fs/promises";
 import { registerCallHandler } from "../dispatcher";
 import { storage as storageDir } from "../../platform/folders";

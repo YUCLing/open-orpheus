@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Logger } from "pino";
 
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 import {
   ensureWebPack,
   REDOWNLOAD_FLAG,

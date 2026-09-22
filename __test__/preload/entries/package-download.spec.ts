@@ -13,7 +13,7 @@ vi.mock("electron", () => ({
   ipcRenderer: { send: hoisted.send, on: hoisted.on, off: hoisted.off },
 }));
 
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 
 type Progress = { step: "downloading" | "extracting" | "saving" | "completed" };
 type Listener = (event: unknown, progress: Progress) => void;

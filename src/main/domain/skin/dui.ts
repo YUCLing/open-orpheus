@@ -5,7 +5,7 @@ import type {
   BtnState,
   ElementTemplate,
   LayoutNode,
-} from "$sharedTypes/dui";
+} from "@shared/types/dui";
 
 export type { ElementTemplate, LayoutNode };
 
