@@ -21,12 +21,16 @@ import registerAsProtocolClient, {
   unregisterAsProtocolClient,
 } from "../protocol";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-import { events, kv } from "../settings";
 import { font } from "../gui";
+import type { SettingsService } from "../bootstrap/types";
 
 let manageWndInstance: BrowserWindow | null = null;
 
-export default function showManageWindow() {
+export interface ManageWindowDeps {
+  settings: Pick<SettingsService, "kv" | "events">;
+}
+
+export default function showManageWindow(deps: ManageWindowDeps) {
   if (manageWndInstance && !manageWndInstance.isDestroyed()) {
     manageWndInstance.focus();
     return;
@@ -177,7 +181,7 @@ export default function showManageWindow() {
       },
     },
   });
-  registerSettingsHandlers(manageWnd, { kv, events });
+  registerSettingsHandlers(manageWnd, deps.settings);
 }
 
 export function setManageWindowFont(font: string | null) {

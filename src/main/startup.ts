@@ -74,8 +74,6 @@ export async function startApplication() {
   const ctx = await bootstrap({ logger });
 
   await Promise.all([
-    // Install the tray icon
-    import("@main/tray"),
     // Set temp dir for streamer and run cleanup
     import("@main/audio/OnlineStreamer").then(async (m) => {
       m.OnlineStreamer.tempDir = streamerTempDir;
@@ -130,8 +128,7 @@ export async function startApplication() {
       };
 
       // Apply stored proxy settings
-      const { kv: settings } = await import("@main/settings");
-      const proxy = await settings.get("proxy");
+      const proxy = await ctx.settings.kv.get("proxy");
       if (typeof proxy !== "string" || !proxy) return;
 
       try {
@@ -190,11 +187,17 @@ export async function startApplication() {
 
   // `cookie` reads `session.defaultSession` at module scope, so the concrete modules
   // the call handlers need are loaded here rather than imported statically.
-  const [{ readEffect }, cookieModule] = await Promise.all([
+  const [{ readEffect }, cookieModule, trayModule] = await Promise.all([
     import("@main/audio"),
     import("@main/cookie"),
+    import("@main/tray"),
   ]);
   const { registerCallModules } = await import("@main/calls/index");
+
+  const tray = trayModule.createTray({
+    windows: ctx.windows,
+    settings: ctx.settings,
+  });
 
   registerCallModules({
     settings: ctx.settings,
@@ -208,6 +211,7 @@ export async function startApplication() {
       removeCookie: cookieModule.removeCookie,
       setCookie: cookieModule.setCookie,
     },
+    tray,
   });
 
   onExit(() => {

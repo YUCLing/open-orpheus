@@ -427,7 +427,7 @@ export function register(deps: WinhelperDeps): void {
       }
       const onClick = (itemId: string | null) => {
         if (itemId === "openOrpheus.manage") {
-          showManageWindow();
+          showManageWindow({ settings: deps.settings });
           return;
         } else if (itemId === "openOrpheus.showMainWindow") {
           event.sender.send("channel.call", "trayicon.onclick");

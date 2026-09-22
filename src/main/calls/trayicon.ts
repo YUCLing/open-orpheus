@@ -2,42 +2,40 @@ import { nativeImage } from "electron";
 
 import { pngFromIco } from "../util";
 import { loadFromOrpheusUrl } from "../orpheus";
-import {
-  install,
-  setIcon,
-  setTooltip,
-  trayInstalled,
-  uninstall,
-} from "../tray";
+import type { TrayService } from "../tray";
 import { registerCallHandler } from "../calls";
 
-export function register(): void {
+export interface TrayiconDeps {
+  tray: TrayService;
+}
+
+export function register(deps: TrayiconDeps): void {
   registerCallHandler<[string], void>(
     "trayicon.setIcon",
     async (event, iconUrl) => {
       const icon = await loadFromOrpheusUrl(iconUrl);
       const buf = pngFromIco(icon.content as unknown as Uint8Array);
       const image = nativeImage.createFromBuffer(Buffer.from(buf));
-      setIcon(image);
+      deps.tray.setIcon(image);
     }
   );
 
   registerCallHandler<[string], void>(
     "trayicon.setToolTip",
     (event, tooltip) => {
-      setTooltip(tooltip);
+      deps.tray.setTooltip(tooltip);
     }
   );
 
   registerCallHandler<[], [boolean]>("trayicon.wasInstall", () => {
-    return [trayInstalled];
+    return [deps.tray.isInstalled()];
   });
 
   registerCallHandler<[], void>("trayicon.install", () => {
-    install();
+    deps.tray.install();
   });
 
   registerCallHandler<[], void>("trayicon.uninstall", () => {
-    uninstall();
+    deps.tray.uninstall();
   });
 }

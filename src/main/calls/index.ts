@@ -16,7 +16,7 @@ import { register as registerPlayer } from "./player";
 import { register as registerProcess } from "./process";
 import { register as registerRtc } from "./rtc";
 import { register as registerStorage, type StorageDeps } from "./storage";
-import { register as registerTrayicon } from "./trayicon";
+import { register as registerTrayicon, type TrayiconDeps } from "./trayicon";
 import { register as registerUpdate } from "./update";
 import { register as registerWinhelper, type WinhelperDeps } from "./winhelper";
 
@@ -25,6 +25,7 @@ export type CallModuleDeps = AppDeps &
   BrowserDeps &
   MusiclibraryDeps &
   StorageDeps &
+  TrayiconDeps &
   WinhelperDeps;
 
 export function registerCallModules(deps: CallModuleDeps): void {
@@ -36,7 +37,7 @@ export function registerCallModules(deps: CallModuleDeps): void {
   registerStorage(deps);
   registerMusiclibrary(deps);
   registerOs();
-  registerTrayicon();
+  registerTrayicon(deps);
   registerNetwork();
   registerDownload();
   registerRtc();
