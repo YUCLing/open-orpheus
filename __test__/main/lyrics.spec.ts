@@ -1,41 +1,24 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-// The real controller drives the OS media session, so only its events matter here.
-const hoisted = vi.hoisted(() => ({
-  controller: {} as Record<string, unknown>,
-}));
-
-vi.mock("@main/mediaSession", async () => {
-  const Emittery = (await import("emittery")).default;
-  const controller = new Emittery();
-  Object.assign(hoisted.controller, controller, { emit: controller.emit });
-  return { playbackController: controller };
-});
-
-type Emitter = { emit(event: string, data: unknown): Promise<void> };
-
-const emit = (event: string, data: unknown) =>
-  (hoisted.controller as unknown as Emitter).emit(event, data);
+import { bindLyrics, lyricsDispatcher } from "@main/lyrics";
+import PlaybackController from "@main/playback/PlaybackController";
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-let lyricsDispatcher: typeof import("@main/lyrics").lyricsDispatcher;
-
-beforeAll(async () => {
-  ({ lyricsDispatcher } = await import("@main/lyrics"));
-});
-
 describe("lyrics dispatcher wiring", () => {
   it("mirrors playback state into the dispatcher", async () => {
+    const controller = new PlaybackController();
+    bindLyrics(controller);
+
     const seen: unknown[] = [];
     lyricsDispatcher.on("timeupdate", (e) => {
       seen.push(e.data);
     });
 
-    await emit("timeupdate", 12.5);
-    await emit("playbackratechange", 1.5);
-    await emit("advancingchange", true);
+    await controller.emit("timeupdate", 12.5);
+    await controller.emit("playbackratechange", 1.5);
+    await controller.emit("advancingchange", true);
     await flush();
 
     expect(lyricsDispatcher.time).toBe(12.5);

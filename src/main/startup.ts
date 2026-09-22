@@ -119,9 +119,11 @@ export async function startApplication() {
     })(),
     import("@main/afp"),
     import("@main/fonts"),
-    import("@main/mediaSession").then((m) =>
-      m.createMediaSession({ windows: ctx.windows })
-    ),
+    import("@main/mediaSession").then(async (m) => {
+      await m.createMediaSession({ windows: ctx.windows });
+      const { bindLyrics } = await import("@main/lyrics");
+      bindLyrics(m.playbackController);
+    }),
     import("@main/channel"),
     import("@main/request").then(async (m) => {
       m.setupRequestInterceptors();
