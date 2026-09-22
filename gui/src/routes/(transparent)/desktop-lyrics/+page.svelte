@@ -6,8 +6,8 @@
   import type {
     DesktopLyricsPlayInfo,
     LyricsStyle,
-  } from "$sharedTypes/desktop-lyrics";
-  import type { Lyrics, LyricsStore } from "$sharedTypes/lyrics";
+  } from "@shared/types/desktop-lyrics";
+  import type { Lyrics, LyricsStore } from "@shared/types/lyrics";
   import IconButton from "$lib/components/IconButton.svelte";
   import { cn } from "$lib/utils";
   import { getBridge } from "$lib/bridge";

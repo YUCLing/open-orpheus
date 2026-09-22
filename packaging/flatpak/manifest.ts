@@ -5,7 +5,7 @@ import yaml from "yaml";
 
 // Shared Flatpak builder-manifest generation. Consumed by:
 //  - scripts/build-flatpak-builder.ts  (Flathub: compiles inside the sandbox)
-//  - plugins/MakerFlatpak.ts           (prebuilt: reuses the packaged app)
+//  - build-plugins/MakerFlatpak.ts          (prebuilt: reuses the packaged app)
 
 const RUNTIME = "org.freedesktop.Platform";
 const SDK = "org.freedesktop.Sdk";
@@ -29,7 +29,7 @@ export interface ManifestContext {
   /** SDK extensions. Prebuilt builds need none (default: node24 for source builds). */
   sdkExtensions?: string[];
   /** Extra manifest modules appended before the app module. */
-  extraModules?: unknown[];
+  extraModules?: unknown[] | undefined;
 }
 
 /** Assemble the top-level manifest shared by every variant. */

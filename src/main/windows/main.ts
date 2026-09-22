@@ -3,13 +3,10 @@ import path from "node:path";
 
 import { BrowserWindow, screen } from "electron";
 
-import { setMainWindow } from "../window";
 import { window as miniPlayerWindow } from "./mini-player";
-import {
-  LifecycleState,
-  state as lifecycleState,
-  setLifecycleState,
-} from "../lifecycle";
+import { LifecycleState } from "../services/lifecycle";
+import type { WindowService } from "../bootstrap/types";
+import type { LifecycleService } from "../services/lifecycle";
 
 function getWindowState(
   wnd: BrowserWindow
@@ -36,8 +33,12 @@ function getWindowSizeStatus(
   ];
 }
 
-export default async function createMainWindow() {
-  // Create the browser window.
+export interface MainWindowDeps {
+  windows: Pick<WindowService, "setMainWindow">;
+  lifecycle: Pick<LifecycleService, "currentState" | "setLifecycleState">;
+}
+
+export default async function createMainWindow(deps: MainWindowDeps) {
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
@@ -104,15 +105,17 @@ export default async function createMainWindow() {
   });
 
   mainWindow.on("close", (e) => {
-    if (lifecycleState === LifecycleState.Quitting) return;
+    if (deps.lifecycle.currentState() === LifecycleState.Quitting) return;
     mainWindow.webContents.send("channel.call", "winhelper.onclose");
     e.preventDefault();
   });
 
-  setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);
+  deps.lifecycle.setLifecycleState(
+    LifecycleState.MainWindowCreated,
+    mainWindow
+  );
 
-  // Load App URL
   mainWindow.loadURL("orpheus://orpheus/pub/app.html");
 
-  setMainWindow(mainWindow);
+  deps.windows.setMainWindow(mainWindow);
 }

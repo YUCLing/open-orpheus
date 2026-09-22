@@ -1,4 +1,4 @@
-import { OSVER } from "../../constants";
+import { OSVER } from "@shared/constants";
 import { registerCallHandler } from "../calls";
 import { fireNativeCall } from "../channel";
 

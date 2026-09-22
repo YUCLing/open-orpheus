@@ -35,15 +35,16 @@ Open Orpheus 是一个基于 Electron 打造的网易云音乐 Orpheus 浏览器
 ```
 open-orpheus/
 ├── src/                    # Electron 主进程 & preload
-│   ├── main.ts             # 应用入口，单实例锁，协议注册
+│   ├── main.ts             # 应用入口，仅编排进程配置与启动序列
 │   ├── preload.ts          # 渲染进程桥接入口
 │   ├── main/               # 主进程逻辑（窗口、IPC、网络、缓存……）
-│   │   ├── calls/          # IPC 命令处理器（winhelper、app 等）
-│   │   ├── packs/          # WebPack / SkinPack 加载器
-│   │   ├── menu.ts         # 右键菜单管理（Electron BrowserWindow）
-│   │   ├── orpheus.ts      # orpheus:// 自定义协议
-│   │   ├── window.ts       # BrowserWindow 管理
-│   │   └── ...             # 网络请求、加解密、下载、缓存、托盘等
+│   │   ├── calls/          # 命令处理器（由 channel.call 调用；与本项目 bridge IPC 无关）
+│   │   ├── domain/         # 纯逻辑（歌词、皮肤、播放、id3、ncae、afp、加解密）
+│   │   ├── platform/       # 系统/应用集成（协议、网络请求、cookie、设备、字体、快捷键）
+│   │   ├── services/       # 有状态、可注入（缓存、音频引擎、资源包、托盘）
+│   │   ├── windows/        # BrowserWindow 定义与 ManagedWindow 模型
+│   │   ├── bootstrap/      # 组合根与启动序列
+│   │   └── ...             # 日志、生命周期等横切模块
 │   ├── preload/            # preload 暴露的 API（channel 桥接）
 │   │   └── ...             # 播放控制、听歌识曲、云信 IM 桥接等
 │   ├── bridge/             # 类型化 RPC 框架（契约 / preload 暴露 / renderer Proxy / main 注册）
@@ -66,12 +67,41 @@ open-orpheus/
 │   ├── nowplaying/         # macOS 媒体会话（MPNowPlayingInfoCenter）
 │   ├── smtc/               # Windows 媒体会话（SMTC）
 │   └── lifecycle/          # 退出回调等生命周期工具
-├── plugins/                # Electron Forge 插件与 Maker（deb / rpm / flatpak、日志等）
+├── build-plugins/          # Electron Forge 插件与 Maker（deb / rpm / flatpak、日志等）
 ├── scripts/                # 构建脚本（模块编译、Flatpak 等）
 ├── packaging/              # 各平台打包配置
 ├── data/                   # 开发用运行时数据（资源、缓存、日志）
 └── patches/                # 依赖补丁
 ```
+
+### 各分组职责
+
+`src/main/` 刻意保持扁平——六个分组，没有散落文件：
+
+| 分组         | 职责                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap/` | 组合根：`context.ts`、`types.ts`、启动序列与进程级接线（含未捕获异常处理）                                              |
+| `services/`  | 有状态、可注入：缓存、音频引擎与 AV3A、资源包、托盘、数据库、窗口、生命周期                                             |
+| `domain/`    | 播放、歌词、皮肤、元数据——不感知 Electron 的逻辑                                                                        |
+| `platform/`  | 主进程与 Electron／操作系统／远端服务的集成：自定义协议、HTTP、cookie、设备、系统字体、全局快捷键、应用目录、日志、更新 |
+| `calls/`     | Web 包的 `channel.call` ABI：命令处理器、dispatcher、注册。**不是**本项目 IPC——那是 `src/bridge/**`                     |
+| `windows/`   | `BrowserWindow` 定义与 `ManagedWindow` 模型                                                                             |
+
+`platform/util.ts` 是通用工具模块而非平台集成。它留在 `src/main/` 而不放 `src/shared/`，是因为它依赖 `node:fs` 与 Electron，而**沙箱化的** preload 可以触达 `src/shared/**`，不能引入 `node:` 内置模块。
+
+### `foo.ts` 与 `foo/` 的约定
+
+`src/main/` 下存在若干同名文件与目录：`menu.ts` + `menu/`、`lyrics.ts` + `lyrics/`、
+`audio.ts` + `audio/`、`cache.ts` + `cache/`。约定只有一条：
+
+**`foo.ts` 是该模块对外暴露的面（facade / 工厂 / 单例），`foo/` 放它组合的实现。**
+先读 `foo.ts` 就知道这个模块对外提供什么；需要细节时再进 `foo/`。
+
+唯一的例外是 `pack.ts` + `packs/`：目录用复数，因为里面是 `Pack` / `SkinPack` /
+`WebPack` 三个同级实现，而不是 `pack.ts` 的实现细节；读取顺序不变。
+
+不要为了对称把 `foo.ts` 改成 `foo/index.ts`——迁移成本很高，而在别名下
+`@main/foo` 与 `@main/foo/types` 本来就没有歧义。
 
 ### 架构鸟瞰
 
@@ -110,7 +140,7 @@ flowchart TB
 - **主窗口 Preload**（`src/preload.ts`）暴露 `window.channel`，专供 NCM Orpheus Web 应用使用，基于 CallDispatcher 的命令分发模式。
 - **Bridge 框架**（`src/bridge/`）是主进程与 GUI 窗口之间的类型化 RPC 层，分三层协作：
   1. **契约层**（`contracts/*-api.ts`）—— TypeScript 接口，定义每个窗口的完整 API 面（方法签名、事件签名、同步值），主进程和渲染进程共享同一份类型。
-  2. **Preload 侧**（`preload.ts` → `exposeApi(prefix, syncValues)`）—— 通过 `contextBridge` 暴露原始 `_call(channel, ...args)` 和 `_on(event, callback)` 原语，各窗口 preload（`src/windows/*.ts`）按需调用。
+  2. **Preload 侧**（`preload.ts` → `exposeApi(prefix, syncValues)`）—— 通过 `contextBridge` 暴露原始 `_call(channel, ...args)` 和 `_on(event, callback)` 原语，各窗口 preload（`src/preload/entries/*.ts`）按需调用。
   3. **Renderer 侧**（`gui/src/lib/bridge.ts` → `getBridge<T>(name)`）—— 用 Proxy 将属性访问自动映射为 channel 路径：`api.cache.getStats()` → `_call("cache.getStats")`，`api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`，提供完整的类型推导和 IDE 自动补全。
   4. **Main 侧**（`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`）—— 遍历 handler 对象树，自动为每个叶子函数注册 `ipc.handle()`；`events` 子树被排除（纯 push-from-main）。
 - **GUI 界面**（`gui/`）是一个 Svelte 单页应用，负责设置页、桌面歌词、右键菜单、迷你播放器等所有辅助界面，通过 `gui://` 协议加载。菜单以透明无边框 BrowserWindow 形式呈现（Wayland 下使用全屏覆盖层方案）。

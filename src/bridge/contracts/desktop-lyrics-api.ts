@@ -1,7 +1,7 @@
 import type {
   DesktopLyricsPlayInfo,
   LyricsStyle,
-} from "$sharedTypes/desktop-lyrics";
+} from "@shared/types/desktop-lyrics";
 
 export interface DesktopLyricsContract {
   platform: NodeJS.Platform;

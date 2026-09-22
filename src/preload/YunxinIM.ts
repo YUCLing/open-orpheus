@@ -4,7 +4,7 @@ import SDK from "@yxim/nim-web-sdk";
 import type {
   NetworkFetchRequest,
   NetworkFetchResponse,
-} from "../main/calls/network";
+} from "../main/calls/handlers/network";
 
 export default class YunxinIM extends EventTarget {
   static APP_KEY = "3a6a3e48f6854dfa4e4464f3bdaec3b4";
@@ -144,7 +144,10 @@ export default class YunxinIM extends EventTarget {
         onmsgs: (msgs) => {
           for (const msg of msgs) {
             this.dispatchEvent(
-              new CustomEvent("chatroommsg", { detail: msg.content })
+              new CustomEvent(
+                "chatroommsg",
+                msg.content !== undefined ? { detail: msg.content } : {}
+              )
             );
           }
         },

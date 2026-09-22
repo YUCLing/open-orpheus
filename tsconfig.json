@@ -6,7 +6,12 @@
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "strict": true,
     "noImplicitAny": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
     "sourceMap": true,
     "outDir": "dist",
     "moduleResolution": "bundler",
@@ -14,15 +19,20 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "$sharedTypes/*": ["./types/*"]
+      "@bridge/*": ["./src/bridge/*"],
+      "@main/*": ["./src/main/*"],
+      "@preload/*": ["./src/preload/*"],
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [
     "src",
     "forge.env.d.ts",
+    "forge.config.ts",
     "packaging/**/*.ts",
+    "build-plugins/**/*.ts",
     "scripts/*.ts",
-    "types/*.ts",
+    "vite.*.config.ts",
     "__test__/**/*.ts"
   ],
   "exclude": ["gui"]

@@ -7,20 +7,19 @@ import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
 import {
-  mainWindow,
   ManagedWindow,
   OnDemandWindow,
   OnDemandWindowState,
   SimpleManagedWindow,
-} from "../window";
+} from "./managedWindow";
 import { registerIpcHandlers } from "../../bridge/register";
 import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
-import type { BtnImages, BtnState } from "../../../types/dui";
+import type { BtnImages, BtnState } from "../../shared/types/dui";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
-import packManager from "../pack";
-import type SkinPack from "../packs/SkinPack";
-import { extractColor } from "../skin/color";
-import { argbToCss, parseBtnState } from "../skin/dui";
+import packManager from "../services/pack";
+import type SkinPack from "../services/packs/SkinPack";
+import { extractColor } from "../domain/skin/color";
+import { argbToCss, parseBtnState } from "../domain/skin/dui";
 import type {
   MiniPlayerLikeMark,
   MiniPlayerPlayInfo,
@@ -29,11 +28,19 @@ import type {
   MiniPlayerFullState,
   MiniPlayerStyle,
   MiniPlayerTogetherStatus,
-} from "$sharedTypes/mini-player";
+} from "@shared/types/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
-import { LifecycleState, state as lifecycleState } from "../lifecycle";
-import { font } from "../gui";
-import { kv as settings } from "../settings";
+import { lyricsDispatcher } from "../domain/lyrics";
+import { LifecycleState } from "../services/lifecycle";
+import { font } from "../platform/gui";
+import type { SettingsService, WindowService } from "../bootstrap/types";
+import type { LifecycleService } from "../services/lifecycle";
+
+export interface MiniPlayerDeps {
+  windows: Pick<WindowService, "currentWindow">;
+  lifecycle: Pick<LifecycleService, "currentState">;
+  settings: Pick<SettingsService, "kv">;
+}
 
 // State
 let playInfo: MiniPlayerPlayInfo | null = null;
@@ -172,7 +179,11 @@ packManager.on("skin2packloaded", async (event) => {
     })
   );
 
-  const style: Partial<MiniPlayerStyle> = {};
+  // Unlike `Partial`, this permits an explicit `undefined`: the skin parser fills
+  // whichever buttons the skin happens to define and leaves the rest targetless.
+  const style: {
+    [K in keyof MiniPlayerStyle]?: MiniPlayerStyle[K] | undefined;
+  } = {};
 
   style.background = bgColor;
 
@@ -293,7 +304,10 @@ packManager.on("skin2packloaded", async (event) => {
     if (btnsFound >= 13) break;
   }
 
-  const listStyle: Partial<MiniPlayerStyle["list"]> = {
+  const listStyle: {
+    [K in keyof MiniPlayerStyle["list"]]?:
+      MiniPlayerStyle["list"][K] | undefined;
+  } = {
     background: listBgColor,
     itemBackground: listItemBgColor,
     hoverBackground: listHoverBgColor,
@@ -433,7 +447,10 @@ export function getFullState(): MiniPlayerFullState {
   };
 }
 
-function createWindow(state?: OnDemandWindowState): BrowserWindow {
+function createWindow(
+  deps: MiniPlayerDeps,
+  state?: OnDemandWindowState
+): BrowserWindow {
   const miniPlayerWindow = new BrowserWindow({
     width: 310,
     height: 50 + 340, // Total size: Main + List
@@ -456,9 +473,13 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
   }
 
   miniPlayerWindow.on("close", (e) => {
-    if ((state && !state.alive) || lifecycleState === LifecycleState.Quitting)
+    if (
+      (state && !state.alive) ||
+      deps.lifecycle.currentState() === LifecycleState.Quitting
+    )
       return; // Allow closing when hiding or quitting
     e.preventDefault();
+    const mainWindow = deps.windows.currentWindow();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
   });
@@ -474,27 +495,32 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
         dragWindow(hwnd);
       },
       fireCall: async (event, cmd, ...args) => {
+        const mainWindow = deps.windows.currentWindow();
         if (!mainWindow || mainWindow.isDestroyed()) return;
         mainWindow.webContents.send("channel.call", cmd, ...args);
       },
     }
   );
-  registerInputRegionHandlers(miniPlayerWindow);
-  registerLyricsHandlers(miniPlayerWindow);
+  registerInputRegionHandlers(miniPlayerWindow, ManagedWindow);
+  registerLyricsHandlers(miniPlayerWindow, lyricsDispatcher);
   return miniPlayerWindow;
 }
 
 class MiniPlayerOnDemandWindow extends OnDemandWindow {
+  constructor(private readonly deps: MiniPlayerDeps) {
+    super();
+  }
+
   createWindow(state: OnDemandWindowState): BrowserWindow {
-    return createWindow(state);
+    return createWindow(this.deps, state);
   }
 }
 
 export let window: ManagedWindow;
-export default async function createMiniPlayerWindow() {
+export default async function createMiniPlayerWindow(deps: MiniPlayerDeps) {
   window =
-    (await settings.get("window.lifecycle")) !== "on-demand"
-      ? new SimpleManagedWindow(createWindow())
-      : new MiniPlayerOnDemandWindow();
+    (await deps.settings.kv.get("window.lifecycle")) !== "on-demand"
+      ? new SimpleManagedWindow(createWindow(deps))
+      : new MiniPlayerOnDemandWindow(deps);
   window.setData("name", "mini_player");
 }

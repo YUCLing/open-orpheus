@@ -1,26 +1,15 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { defineConfig } from "vite";
 
-import PinoWorkerPlugin from "./plugins/PinoWorkerPlugin.js";
-import NoS3Plugin from "./plugins/NoS3Plugin.js";
-import LoggerPlugin from "./plugins/LoggerPlugin.js";
-import ForceESPlugin from "./plugins/ForceESPlugin.js";
+import PinoWorkerPlugin from "./build-plugins/PinoWorkerPlugin.js";
+import NoS3Plugin from "./build-plugins/NoS3Plugin.js";
+import LoggerPlugin from "./build-plugins/LoggerPlugin.js";
+import ForceESPlugin from "./build-plugins/ForceESPlugin.js";
 
 // https://vitejs.dev/config
 export default defineConfig({
   base: "",
-  resolve: {
-    alias: {
-      $sharedTypes: path.resolve(
-        path.dirname(fileURLToPath(import.meta.url)),
-        "types"
-      ),
-    },
-  },
   build: {
-    sourcemap: process.env.INLINE_SOURCEMAP ? "inline" : false,
+    sourcemap: process.env["INLINE_SOURCEMAP"] ? "inline" : false,
     rolldownOptions: {
       external: [
         // Node built-ins
@@ -48,5 +37,18 @@ export default defineConfig({
   },
   // unzipper has a dependency on @aws-sdk/client-s3, which is not needed in
   // our context and causes build issues. This plugin mocks it out.
-  plugins: [NoS3Plugin(), ForceESPlugin(), PinoWorkerPlugin(), LoggerPlugin()],
+  plugins: [
+    NoS3Plugin(),
+    ForceESPlugin(),
+    PinoWorkerPlugin(),
+    LoggerPlugin({
+      logger: "src/main/platform/logger.ts",
+      // Child logger names stay relative to src/main even though the logger module
+      // now lives in platform/, so no log record is renamed by the move.
+      base: "src/main",
+      // These are the modules registered into the pack's CallDispatcher, i.e. the ones
+      // reachable through channel.call. Without this the per-command `call` loggers vanish.
+      callModulesDir: "src/main/calls/handlers",
+    }),
+  ],
 });

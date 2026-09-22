@@ -11,6 +11,7 @@ export default [
     ignores: [
       ".vite/**",
       "out/**",
+      "coverage/**",
       "**/node_modules/**",
       "**/.svelte-kit/**",
       "modules/**/dist/**",
@@ -42,6 +43,14 @@ export default [
   },
   {
     files: ["modules/**/*.{ts,tsx,cts,mts}"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    // Sandboxed preloads must be CommonJS: Electron only supports ESM preloads
+    // with `sandbox: false`, which is the flag this spike exists to avoid.
+    files: ["scripts/spike-preload-eval/**/*.cjs"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },

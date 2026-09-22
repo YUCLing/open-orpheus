@@ -13,9 +13,9 @@ import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-nati
 
 import * as options from "./packaging/options";
 
-import MakerDeb from "./plugins/MakerDeb";
-import MakerFlatpak from "./plugins/MakerFlatpak";
-import MakerRpm from "./plugins/MakerRpm";
+import MakerDeb from "./build-plugins/MakerDeb";
+import MakerFlatpak from "./build-plugins/MakerFlatpak";
+import MakerRpm from "./build-plugins/MakerRpm";
 
 const LOCALES = ["en", "en-US", "zh-CN"];
 
@@ -88,7 +88,7 @@ const config: ForgeConfig = {
       // EXTRACT_LICENSES_TO is set, then remove it from the build.
       (buildPath, _electronVersion, platform, _arch, callback) => {
         (async () => {
-          const destDir = process.env.EXTRACT_LICENSES_TO;
+          const destDir = process.env["EXTRACT_LICENSES_TO"];
           if (destDir) {
             platform = platform === "mas" ? "darwin" : platform;
             const src = resolve(buildPath, "LICENSES.chromium.html");
@@ -106,7 +106,7 @@ const config: ForgeConfig = {
     // In offline environments (e.g. flatpak sandbox), SHASUMS256.txt cannot be
     // downloaded from GitHub. The electron zip is already verified by sha256 in
     // generated-node-sources.json, so it's safe to skip checksum verification.
-    ...(process.env.ELECTRON_OFFLINE_BUILD
+    ...(process.env["ELECTRON_OFFLINE_BUILD"]
       ? { download: { unsafelyDisableChecksums: true } }
       : {}),
 
@@ -153,32 +153,32 @@ const config: ForgeConfig = {
           target: "preload",
         },
         {
-          entry: "src/windows/manage.ts",
+          entry: "src/preload/entries/manage.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/package-download.ts",
+          entry: "src/preload/entries/package-download.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/desktop-lyrics.ts",
+          entry: "src/preload/entries/desktop-lyrics.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/desktop-lyrics-preview.ts",
+          entry: "src/preload/entries/desktop-lyrics-preview.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/mini-player.ts",
+          entry: "src/preload/entries/mini-player.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },
         {
-          entry: "src/windows/menu.ts",
+          entry: "src/preload/entries/menu.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },

@@ -1,10 +1,10 @@
-import type { MenuSkin, MenuPullResult } from "$sharedTypes/menu";
+import type { MenuSkin, MenuPullResult } from "@shared/types/menu";
 import type {
   ElementTemplate,
   LayoutNode,
   BtnImages,
   BtnState,
-} from "$sharedTypes/dui";
+} from "@shared/types/dui";
 
 export type { MenuSkin };
 export type { ElementTemplate, LayoutNode };

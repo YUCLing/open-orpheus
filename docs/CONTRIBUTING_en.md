@@ -35,15 +35,16 @@ Open Orpheus is an Electron-based host for Netease Cloud Music's Orpheus browser
 ```
 open-orpheus/
 ├── src/                    # Electron main process & preload
-│   ├── main.ts             # App entry point, single-instance lock, protocol registration
+│   ├── main.ts             # App entry point; only wires process setup to the startup sequence
 │   ├── preload.ts          # Renderer bridge entry
 │   ├── main/               # Main process logic (window, IPC, networking, cache...)
-│   │   ├── calls/          # IPC command handlers (winhelper, app, etc.)
-│   │   ├── packs/          # WebPack / SkinPack loaders
-│   │   ├── menu.ts         # Context menu management (Electron BrowserWindow)
-│   │   ├── orpheus.ts      # orpheus:// custom protocol
-│   │   ├── window.ts       # BrowserWindow management
-│   │   └── ...             # Networking, crypto, download, cache, tray, etc.
+│   │   ├── calls/          # Command handlers reached via channel.call, not the bridge IPC
+│   │   ├── domain/         # Pure logic (lyrics, skin, playback, id3, ncae, afp, crypto)
+│   │   ├── platform/       # OS/app integration (protocol, request, cookie, device, fonts, shortcuts)
+│   │   ├── services/       # Stateful and injectable (cache, audio engines, packs, tray)
+│   │   ├── windows/        # BrowserWindow definitions and the ManagedWindow model
+│   │   ├── bootstrap/      # Composition root and startup sequence
+│   │   └── ...             # Cross-cutting: logger, lifecycle
 │   ├── preload/            # Preload-exposed APIs (channel bridge)
 │   │   └── ...             # Playback control, music recognition, IM bridge, etc.
 │   ├── bridge/             # Typed RPC framework (contracts / preload exposure / renderer Proxy / main registration)
@@ -66,12 +67,44 @@ open-orpheus/
 │   ├── nowplaying/         # macOS media session (MPNowPlayingInfoCenter)
 │   ├── smtc/               # Windows media session (SMTC)
 │   └── lifecycle/          # Exit callbacks and lifecycle utilities
-├── plugins/                # Electron Forge plugins & Makers (deb / rpm / flatpak, logging, etc.)
+├── build-plugins/          # Electron Forge plugins & Makers (deb / rpm / flatpak, logging, etc.)
 ├── scripts/                # Build scripts (module compilation, Flatpak, etc.)
 ├── packaging/              # Per-platform packaging configuration
 ├── data/                   # Development runtime data (resources, cache, logs)
 └── patches/                # Dependency patches
 ```
+
+### What belongs in each group
+
+`src/main/` is deliberately shallow — six groups, no loose files:
+
+| Group        | Scope                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap/` | the composition root: `context.ts`, `types.ts`, the startup sequence and process-level wiring (including the uncaught-exception handler)                                  |
+| `services/`  | stateful and injectable: cache, audio engines and AV3A, packs, tray, database, window, lifecycle                                                                          |
+| `domain/`    | playback, lyrics, skin, metadata — logic that does not know about Electron                                                                                                |
+| `platform/`  | main-process integration with Electron, the OS and remote services: custom protocols, HTTP, cookies, devices, system fonts, global shortcuts, app paths, logging, updater |
+| `calls/`     | the web pack's `channel.call` ABI: command handlers, the dispatcher, registration. **Not** this project's IPC — that is `src/bridge/**`                                   |
+| `windows/`   | `BrowserWindow` definitions and the `ManagedWindow` model                                                                                                                 |
+
+`platform/util.ts` is a general-purpose helper module rather than platform integration. It stays under `main/` and not `src/shared/` because it uses `node:fs` and Electron, and `src/shared/**` is reachable from the **sandboxed** preload, which must not pull in `node:` builtins.
+
+### The `foo.ts` + `foo/` convention
+
+`src/main/` contains several same-named file/directory pairs: `menu.ts` + `menu/`,
+`lyrics.ts` + `lyrics/`, `audio.ts` + `audio/`, `cache.ts` + `cache/`. There is one
+rule:
+
+**`foo.ts` is the module's public surface — the facade, factory or singleton — and
+`foo/` holds the implementation it composes.** Reading `foo.ts` tells you what the
+module offers; go into `foo/` when you need the detail.
+
+The one exception is `pack.ts` + `packs/`: the directory is plural because it holds
+three sibling implementations (`Pack`, `SkinPack`, `WebPack`) rather than the
+internals of `pack.ts`. The reading order is the same.
+
+Do not rename `foo.ts` to `foo/index.ts` for symmetry — the migration cost is high,
+and under the aliases `@main/foo` and `@main/foo/types` are already unambiguous.
 
 ### Architecture Overview
 
@@ -110,7 +143,7 @@ flowchart TB
 - **Main Window Preload** (`src/preload.ts`) exposes `window.channel`, exclusively for the NCM Orpheus web app, using a CallDispatcher-based command dispatch pattern.
 - **Bridge Framework** (`src/bridge/`) is the typed RPC layer between the main process and GUI windows, with four cooperating layers:
   1. **Contract Layer** (`contracts/*-api.ts`) — TypeScript interfaces defining each window's full API surface (method signatures, event signatures, sync values), shared between main and renderer for type safety.
-  2. **Preload Side** (`preload.ts` → `exposeApi(prefix, syncValues)`) — exposes raw `_call(channel, ...args)` and `_on(event, callback)` primitives via `contextBridge`; each window's preload (`src/windows/*.ts`) calls it as needed.
+  2. **Preload Side** (`preload.ts` → `exposeApi(prefix, syncValues)`) — exposes raw `_call(channel, ...args)` and `_on(event, callback)` primitives via `contextBridge`; each window's preload (`src/preload/entries/*.ts`) calls it as needed.
   3. **Renderer Side** (`gui/src/lib/bridge.ts` → `getBridge<T>(name)`) — uses a Proxy to map property access to channel paths: `api.cache.getStats()` → `_call("cache.getStats")`, `api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`, providing full type inference and IDE autocompletion.
   4. **Main Side** (`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`) — walks the handler object tree, automatically registering `ipc.handle()` for each leaf function; the `events` subtree is excluded (push-from-main only).
 - **GUI** (`gui/`) is a Svelte SPA responsible for settings, desktop lyrics, context menus, mini player, and all auxiliary UI, loaded via the `gui://` protocol. Menus are rendered as transparent frameless BrowserWindows (using a fullscreen overlay approach on Wayland due to protocol limitations).

@@ -36,8 +36,32 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ vars.RUST_VERSION || 'stable' }}
+          target: wasm32-unknown-unknown
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install wasm-bindgen-cli
+        shell: bash
+        run: |
+          version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          cargo install "wasm-bindgen-cli@$version"
+
+      - name: Install cross-compilation toolchain
+        shell: bash
+        run: |
+          cargo_zigbuild_version=$(sed -n 's/.*CARGO_ZIGBUILD_VERSION = "\([^"]*\)".*/\1/p' packaging/common/toolchain.ts)
+          zig_version=$(sed -n 's/.*ZIG_VERSION = "\([^"]*\)".*/\1/p' packaging/common/toolchain.ts)
+          cargo install --locked "cargo-zigbuild@$cargo_zigbuild_version"
+          # --break-system-packages: the Ubuntu images are PEP 668 managed.
+          pip install --break-system-packages "ziglang==$zig_version"
+
+      - name: Build native modules
+        run: pnpm build:modules
 
       - name: Run tests
         run: pnpm coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-report.junit.xml

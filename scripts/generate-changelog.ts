@@ -25,7 +25,7 @@ if (!notesFile || !version) {
     "Usage: generate-changelog.ts --notes <release-notes.md> --version <version>"
   );
 }
-const apiKey = process.env.DEEPSEEK_API_KEY;
+const apiKey = process.env["DEEPSEEK_API_KEY"];
 if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY env var.");
 
 const pkg = JSON.parse(

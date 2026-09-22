@@ -1,10 +1,10 @@
 import { ipcRenderer } from "electron";
 
-import { Ncae, NcaeType } from "$sharedTypes/ncae";
+import { Ncae, NcaeType } from "@shared/types/ncae";
 
 import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
-import { dbToGain, toError } from "../../util";
+import { dbToGain, toError } from "@shared/util";
 
 type EqualizerData = {
   /** 10-band graphic equalizer. */

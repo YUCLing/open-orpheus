@@ -23,7 +23,7 @@ export interface BuildSrpmOptions {
   /** Pass `--nodeps` to rpmbuild to skip the build-dependency check. Defaults to false. */
   nodeps?: boolean;
   /** Path to a prebuilt packaged app dir (out/<name>-linux-<arch>) to bundle as Source1. */
-  prebuilt?: string;
+  prebuilt?: string | undefined;
 }
 
 /**

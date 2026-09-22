@@ -2,46 +2,47 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BrowserWindow } from "electron";
 
-// The real dispatcher is wired to the media session, so it is faked here.
-const hoisted = vi.hoisted(() => ({
-  /** Values reported by the dispatcher getters. */
-  state: {} as Record<string, unknown>,
-  /** Listeners registered by the bridge, keyed by event name. */
-  listeners: new Map<
-    string,
-    (event: { name: string; data: unknown }) => void
-  >(),
-  /** Unsubscribe functions handed back by `on`. */
-  unlisteners: new Map<string, ReturnType<typeof vi.fn>>(),
-}));
+import type LyricsDispatcher from "@main/domain/lyrics/LyricsDispatcher";
+import { registerLyricsHandlers } from "@bridge/common/lyrics";
 
-vi.mock("../../../src/main/lyrics", () => ({
-  lyricsDispatcher: {
-    get lyrics() {
-      return hoisted.state.lyrics;
-    },
-    get slogan() {
-      return hoisted.state.slogan;
-    },
-    get playState() {
-      return hoisted.state.playState;
-    },
-    get time() {
-      return hoisted.state.time;
-    },
-    get playbackRate() {
-      return hoisted.state.playbackRate;
-    },
-    on(event: string, listener: (e: { name: string; data: unknown }) => void) {
-      hoisted.listeners.set(event, listener);
-      const off = vi.fn();
-      hoisted.unlisteners.set(event, off);
-      return off;
-    },
+/** Values reported by the dispatcher getters. */
+let state: Record<string, unknown> = {};
+/** Listeners registered by the bridge, keyed by event name. */
+const listeners = new Map<
+  string,
+  (event: { name: string; data: unknown }) => void
+>();
+/** Unsubscribe functions handed back by `on`. */
+const unlisteners = new Map<string, ReturnType<typeof vi.fn>>();
+
+// The real dispatcher is wired to the media session, so a double stands in for it.
+const dispatcher = {
+  get lyrics() {
+    return state["lyrics"];
   },
-}));
+  get slogan() {
+    return state["slogan"];
+  },
+  get playState() {
+    return state["playState"];
+  },
+  get time() {
+    return state["time"];
+  },
+  get playbackRate() {
+    return state["playbackRate"];
+  },
+  on(event: string, listener: (e: { name: string; data: unknown }) => void) {
+    listeners.set(event, listener);
+    const off = vi.fn();
+    unlisteners.set(event, off);
+    return off;
+  },
+} as unknown as LyricsDispatcher;
 
-import { registerLyricsHandlers } from "../../../src/bridge/common/lyrics";
+function register(wnd: BrowserWindow) {
+  registerLyricsHandlers(wnd, dispatcher);
+}
 
 /** Dispatcher events and the renderer channels they are forwarded to. */
 const FORWARDING = [
@@ -80,9 +81,9 @@ function createFakeWindow() {
 }
 
 beforeEach(() => {
-  hoisted.listeners.clear();
-  hoisted.unlisteners.clear();
-  hoisted.state = {
+  listeners.clear();
+  unlisteners.clear();
+  state = {
     lyrics: { lines: [] },
     slogan: "hello",
     playState: true,
@@ -94,7 +95,7 @@ beforeEach(() => {
 describe("registerLyricsHandlers", () => {
   it("answers a full update with every current value", async () => {
     const win = createFakeWindow();
-    registerLyricsHandlers(win.wnd);
+    register(win.wnd);
 
     await win.invoke("lyrics.requestFullUpdate");
 
@@ -109,14 +110,12 @@ describe("registerLyricsHandlers", () => {
 
   it("subscribes to each dispatcher event and forwards its data", () => {
     const win = createFakeWindow();
-    registerLyricsHandlers(win.wnd);
+    register(win.wnd);
 
-    expect([...hoisted.listeners.keys()]).toEqual(
-      FORWARDING.map(([event]) => event)
-    );
+    expect([...listeners.keys()]).toEqual(FORWARDING.map(([event]) => event));
 
     for (const [event, channel] of FORWARDING) {
-      hoisted.listeners.get(event)?.({ name: event, data: `${event}-data` });
+      listeners.get(event)?.({ name: event, data: `${event}-data` });
       expect(win.send).toHaveBeenLastCalledWith(channel, `${event}-data`);
     }
 
@@ -125,11 +124,11 @@ describe("registerLyricsHandlers", () => {
 
   it("unsubscribes everything once the window is closed", () => {
     const win = createFakeWindow();
-    registerLyricsHandlers(win.wnd);
+    register(win.wnd);
 
     win.close();
 
-    for (const [, off] of hoisted.unlisteners) expect(off).toHaveBeenCalled();
-    expect(hoisted.unlisteners.size).toBe(FORWARDING.length);
+    for (const [, off] of unlisteners) expect(off).toHaveBeenCalled();
+    expect(unlisteners.size).toBe(FORWARDING.length);
   });
 });

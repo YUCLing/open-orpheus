@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import Lyrics from "$lib/components/Lyrics.svelte";
-  import type { LyricLine } from "$sharedTypes/lyrics";
-  import { LineMode, type LyricsStyle } from "$sharedTypes/desktop-lyrics";
+  import type { LyricLine } from "@shared/types/lyrics";
+  import { LineMode, type LyricsStyle } from "@shared/types/desktop-lyrics";
   import { getBridge } from "$lib/bridge";
   import type { DesktopLyricsPreviewContract } from "$bridge/contracts/desktop-lyrics-api";
 

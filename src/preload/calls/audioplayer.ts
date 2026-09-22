@@ -3,7 +3,7 @@ import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
 import { fireNativeCall } from "../channel";
 import { AudioPlayInfo } from "../Player";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 registerCallHandler<[string, AudioPlayInfo], void>(
   "audioplayer.load",
