@@ -34,14 +34,14 @@ import type {
   Av3aProcessMainToService as MainToService,
   Av3aProcessServiceToMain as ServiceToMain,
 } from "../bridge/contracts/av3a-process";
-import { Av3aM4aSession } from "../main/services/av3a/Av3aM4aSession";
-import type { Av3aM4aSource } from "../main/services/av3a/Av3aM4aSession";
+import { Av3aM4aSession } from "../main/services/audio/av3a/Av3aM4aSession";
+import type { Av3aM4aSource } from "../main/services/audio/av3a/Av3aM4aSession";
 import type {
   Av3aDecodedFrame,
   Av3aDecodeExecutor,
   Av3aSampleRange,
   Av3aTrackInfo,
-} from "../main/services/av3a/types";
+} from "../main/services/audio/av3a/types";
 
 const parent = process.parentPort;
 if (!parent) {

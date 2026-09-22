@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 
-import type { OnlineStreamer } from "../audio/OnlineStreamer";
+import type { OnlineStreamer } from "../OnlineStreamer";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
 
 /**

@@ -1,13 +1,13 @@
-import type { AudioPlayInfo } from "../../../preload/Player";
-import { normalizePath } from "../../platform/util";
+import type { AudioPlayInfo } from "../../../../preload/Player";
+import { normalizePath } from "../../../platform/util";
 import { toError } from "@shared/util";
-import { playCacheManager } from "../cache";
-import { OnlineStreamer } from "../audio/OnlineStreamer";
+import { playCacheManager } from "../../cache";
+import { OnlineStreamer } from "../OnlineStreamer";
 import { Av3aPlaybackProcess } from "./Av3aPlaybackProcess";
 import { isAv3aFile } from "./detect";
 import { localAv3aSource, onlineStreamerToAv3aSource } from "./sources";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
-import type { WindowService } from "../../bootstrap/types";
+import type { WindowService } from "../../../bootstrap/types";
 
 type Av3aPlaybackState = {
   playId: string;

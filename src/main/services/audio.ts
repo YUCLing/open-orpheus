@@ -13,8 +13,8 @@ import { decodeNcae } from "../domain/ncae";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { Av3aContract } from "../../bridge/contracts/av3a-api";
 import { MediaEngine } from "./audio/MediaEngine";
-import { Av3aEngine } from "./av3a/Av3aEngine";
-import { isAv3aFile } from "./av3a/detect";
+import { Av3aEngine } from "./audio/av3a/Av3aEngine";
+import { isAv3aFile } from "./audio/av3a/detect";
 import type { SettingsService, WindowService } from "../bootstrap/types";
 
 export interface AudioDeps {

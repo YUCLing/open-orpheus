@@ -8,7 +8,7 @@
 // `Av3aTrackInfo` has a single home in the bridge contracts (it is the `opened`
 // wire payload too); import + re-export it here so decode-core code keeps one
 // import. Both are type-only, so nothing leaks into the utility-process bundle.
-import type { Av3aTrackInfo } from "../../../bridge/contracts/av3a-api";
+import type { Av3aTrackInfo } from "../../../../bridge/contracts/av3a-api";
 
 export type { Av3aTrackInfo };
 
