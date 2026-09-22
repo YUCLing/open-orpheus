@@ -177,11 +177,19 @@ export async function startApplication() {
     packManager.getPack<WebPack>("web").readPack(),
     import("@main/windows/desktop-lyrics").then(async (m) => {
       // Create desktop lyrics window
-      await m.default();
+      await m.default({
+        windows: ctx.windows,
+        lifecycle: ctx.lifecycle,
+        settings: ctx.settings,
+      });
     }),
     import("@main/windows/mini-player").then(async (m) => {
       // Create mini player window
-      await m.default();
+      await m.default({
+        windows: ctx.windows,
+        lifecycle: ctx.lifecycle,
+        settings: ctx.settings,
+      });
     }),
   ]);
 

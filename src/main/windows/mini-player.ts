@@ -7,7 +7,6 @@ import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
 import {
-  mainWindow,
   ManagedWindow,
   OnDemandWindow,
   OnDemandWindowState,
@@ -32,9 +31,16 @@ import type {
 } from "$sharedTypes/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { lyricsDispatcher } from "../lyrics";
-import { LifecycleState, currentState } from "../lifecycle";
+import { LifecycleState } from "../lifecycle";
 import { font } from "../gui";
-import { kv as settings } from "../settings";
+import type { SettingsService, WindowService } from "../bootstrap/types";
+import type { LifecycleService } from "../bootstrap/services/lifecycle";
+
+export interface MiniPlayerDeps {
+  windows: Pick<WindowService, "currentWindow">;
+  lifecycle: Pick<LifecycleService, "currentState">;
+  settings: Pick<SettingsService, "kv">;
+}
 
 // State
 let playInfo: MiniPlayerPlayInfo | null = null;
@@ -434,7 +440,10 @@ export function getFullState(): MiniPlayerFullState {
   };
 }
 
-function createWindow(state?: OnDemandWindowState): BrowserWindow {
+function createWindow(
+  deps: MiniPlayerDeps,
+  state?: OnDemandWindowState
+): BrowserWindow {
   const miniPlayerWindow = new BrowserWindow({
     width: 310,
     height: 50 + 340, // Total size: Main + List
@@ -457,9 +466,13 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
   }
 
   miniPlayerWindow.on("close", (e) => {
-    if ((state && !state.alive) || currentState() === LifecycleState.Quitting)
+    if (
+      (state && !state.alive) ||
+      deps.lifecycle.currentState() === LifecycleState.Quitting
+    )
       return; // Allow closing when hiding or quitting
     e.preventDefault();
+    const mainWindow = deps.windows.currentWindow();
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
   });
@@ -475,6 +488,7 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
         dragWindow(hwnd);
       },
       fireCall: async (event, cmd, ...args) => {
+        const mainWindow = deps.windows.currentWindow();
         if (!mainWindow || mainWindow.isDestroyed()) return;
         mainWindow.webContents.send("channel.call", cmd, ...args);
       },
@@ -486,16 +500,20 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
 }
 
 class MiniPlayerOnDemandWindow extends OnDemandWindow {
+  constructor(private readonly deps: MiniPlayerDeps) {
+    super();
+  }
+
   createWindow(state: OnDemandWindowState): BrowserWindow {
-    return createWindow(state);
+    return createWindow(this.deps, state);
   }
 }
 
 export let window: ManagedWindow;
-export default async function createMiniPlayerWindow() {
+export default async function createMiniPlayerWindow(deps: MiniPlayerDeps) {
   window =
-    (await settings.get("window.lifecycle")) !== "on-demand"
-      ? new SimpleManagedWindow(createWindow())
-      : new MiniPlayerOnDemandWindow();
+    (await deps.settings.kv.get("window.lifecycle")) !== "on-demand"
+      ? new SimpleManagedWindow(createWindow(deps))
+      : new MiniPlayerOnDemandWindow(deps);
   window.setData("name", "mini_player");
 }

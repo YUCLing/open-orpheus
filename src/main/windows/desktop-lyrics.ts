@@ -17,13 +17,12 @@ import {
 } from "$sharedTypes/desktop-lyrics";
 
 import {
-  mainWindow,
   ManagedWindow,
   OnDemandWindow,
   OnDemandWindowState,
   SimpleManagedWindow,
 } from "../window";
-import { LifecycleState, currentState } from "../lifecycle";
+import { LifecycleState } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
   DesktopLyricsContract,
@@ -32,8 +31,15 @@ import type {
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-import { kv as settings, events } from "../settings";
 import { lyricsDispatcher } from "../lyrics";
+import type { SettingsService, WindowService } from "../bootstrap/types";
+import type { LifecycleService } from "../bootstrap/services/lifecycle";
+
+export interface DesktopLyricsDeps {
+  windows: Pick<WindowService, "currentWindow">;
+  lifecycle: Pick<LifecycleService, "currentState">;
+  settings: Pick<SettingsService, "kv" | "events">;
+}
 
 export const lyricsStyle: LyricsStyle = {
   font: {
@@ -83,7 +89,8 @@ export function updateLyricsPlayInfo(info: DesktopLyricsPlayInfo | null) {
   return window.send("desktopLyrics.playInfoUpdate", info);
 }
 
-function performAction(action: string) {
+function performAction(deps: DesktopLyricsDeps, action: string) {
+  const mainWindow = deps.windows.currentWindow();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(
       "channel.call",
@@ -93,7 +100,10 @@ function performAction(action: string) {
   }
 }
 
-function createWindow(state?: OnDemandWindowState): BrowserWindow {
+function createWindow(
+  deps: DesktopLyricsDeps,
+  state?: OnDemandWindowState
+): BrowserWindow {
   const desktopLyricsWindow = new BrowserWindow({
     width: 800, // TODO: Proper sizes
     height: 225,
@@ -121,11 +131,14 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
   });
 
   desktopLyricsWindow.on("close", (e) => {
-    if ((state && !state.alive) || currentState() === LifecycleState.Quitting)
+    if (
+      (state && !state.alive) ||
+      deps.lifecycle.currentState() === LifecycleState.Quitting
+    )
       return; // Only allow direct close when not triggered externally or quitting
     // Not closing, but telling NCM to hide.
     e.preventDefault();
-    performAction("close");
+    performAction(deps, "close");
   });
 
   const de = getDesktopEnvironment();
@@ -143,7 +156,7 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
         updateLyricsPlayInfo(lyricsPlayInfo);
       },
       performAction: async (_event, action: string) => {
-        performAction(action);
+        performAction(deps, action);
       },
       onMouseWheel: async (
         _event,
@@ -152,6 +165,7 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
         delta: number,
         modifier = 0
       ) => {
+        const mainWindow = deps.windows.currentWindow();
         if (!mainWindow || mainWindow.isDestroyed()) return;
         let x = pageX;
         let y = pageY;
@@ -182,23 +196,29 @@ function createWindow(state?: OnDemandWindowState): BrowserWindow {
   );
   registerInputRegionHandlers(desktopLyricsWindow, ManagedWindow);
   registerLyricsHandlers(desktopLyricsWindow, lyricsDispatcher);
-  registerSettingsHandlers(desktopLyricsWindow, { kv: settings, events });
+  registerSettingsHandlers(desktopLyricsWindow, deps.settings);
 
   return desktopLyricsWindow;
 }
 
 class DesktopLyricsOnDemandWindow extends OnDemandWindow {
+  constructor(private readonly deps: DesktopLyricsDeps) {
+    super();
+  }
+
   createWindow(state: OnDemandWindowState): BrowserWindow {
-    return createWindow(state);
+    return createWindow(this.deps, state);
   }
 }
 
 export let window: ManagedWindow;
-export default async function createDesktopLyricsWindow() {
+export default async function createDesktopLyricsWindow(
+  deps: DesktopLyricsDeps
+) {
   window =
-    (await settings.get("window.lifecycle")) !== "on-demand"
-      ? new SimpleManagedWindow(createWindow())
-      : new DesktopLyricsOnDemandWindow();
+    (await deps.settings.kv.get("window.lifecycle")) !== "on-demand"
+      ? new SimpleManagedWindow(createWindow(deps))
+      : new DesktopLyricsOnDemandWindow(deps);
   window.setData("name", "desktop_lyrics");
 }
 
