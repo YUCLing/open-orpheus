@@ -4,9 +4,9 @@ import {
   dispatcher,
   registerCallHandler,
   registerCallbackHandler,
-} from "@main/calls";
+} from "@main/ipc/dispatcher";
 
-// `src/main/calls.ts` is a thin wrapper around the shared `CallDispatcher`
+// `src/main/ipc/dispatcher.ts` is a thin wrapper around the shared `CallDispatcher`
 // instance. Dispatch semantics themselves are covered by
 // `__test__/CallDispatcher.spec.ts`, so only the wiring is tested here.
 describe("registerCallHandler", () => {

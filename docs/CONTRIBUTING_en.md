@@ -38,7 +38,7 @@ open-orpheus/
 │   ├── main.ts             # App entry point; only wires process setup to the startup sequence
 │   ├── preload.ts          # Renderer bridge entry
 │   ├── main/               # Main process logic (window, IPC, networking, cache...)
-│   │   ├── calls/          # IPC command handlers (winhelper, app, etc.)
+│   │   ├── ipc/            # IPC command handlers (winhelper, app, etc.)
 │   │   ├── packs/          # WebPack / SkinPack loaders
 │   │   ├── menu.ts         # Context menu management (Electron BrowserWindow)
 │   │   ├── orpheus.ts      # orpheus:// custom protocol

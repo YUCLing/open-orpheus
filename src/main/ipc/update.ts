@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog } from "electron";
 
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 
 export function register(): void {
   registerCallHandler<

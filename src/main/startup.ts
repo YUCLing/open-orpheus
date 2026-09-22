@@ -210,7 +210,7 @@ export async function startApplication() {
     import("@main/cookie"),
     import("@main/tray"),
   ]);
-  const { registerCallModules } = await import("@main/calls/index");
+  const { registerCallModules } = await import("@main/ipc/index");
 
   const tray = trayModule.createTray({
     windows: ctx.windows,

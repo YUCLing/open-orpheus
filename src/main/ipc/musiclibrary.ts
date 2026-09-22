@@ -7,7 +7,7 @@ import { app } from "electron";
 import { MusicFile } from "music-tag-native";
 import mime from "mime";
 
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import type { DatabaseService } from "../bootstrap/types";
 import {
   fileExists,

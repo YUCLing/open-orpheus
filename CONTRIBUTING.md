@@ -38,7 +38,7 @@ open-orpheus/
 │   ├── main.ts             # 应用入口，仅编排进程配置与启动序列
 │   ├── preload.ts          # 渲染进程桥接入口
 │   ├── main/               # 主进程逻辑（窗口、IPC、网络、缓存……）
-│   │   ├── calls/          # IPC 命令处理器（winhelper、app 等）
+│   │   ├── ipc/            # IPC 命令处理器（winhelper、app 等）
 │   │   ├── packs/          # WebPack / SkinPack 加载器
 │   │   ├── menu.ts         # 右键菜单管理（Electron BrowserWindow）
 │   │   ├── orpheus.ts      # orpheus:// 自定义协议

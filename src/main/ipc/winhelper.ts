@@ -9,7 +9,7 @@ import {
   getDesktopEnvironment,
 } from "@open-orpheus/window";
 
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
 import { ManagedWindow } from "../window";

@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 
-import { dispatcher } from "./calls";
+import { dispatcher } from "./ipc/dispatcher";
 import {
   deData,
   deserialData,

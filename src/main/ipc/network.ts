@@ -3,7 +3,7 @@ import dns from "node:dns";
 import { RequestError } from "got";
 import type { Method } from "got";
 
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import { deserialData } from "../crypto";
 import { client } from "../request";
 import interceptAnonymousRequest from "../anonymous";

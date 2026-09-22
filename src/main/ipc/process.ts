@@ -5,7 +5,7 @@ import { basename, extname } from "node:path";
 import { MusicFile } from "music-tag-native";
 import type { Progress } from "got";
 
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import { serialData } from "../crypto";
 import { client, type ProxyTypes } from "../request";
 import { isFileNotFound, normalizePath } from "../util";

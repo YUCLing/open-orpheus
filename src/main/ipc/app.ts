@@ -10,7 +10,7 @@ import {
   WebContents,
 } from "electron";
 
-import { registerCallHandler, registerCallbackHandler } from "../calls";
+import { registerCallHandler, registerCallbackHandler } from "./dispatcher";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { fileExists, pngFromIco } from "../util";
 import packManager from "../pack";

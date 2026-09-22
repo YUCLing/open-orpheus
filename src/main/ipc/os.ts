@@ -7,7 +7,7 @@ import { app, BrowserWindow, powerSaveBlocker, screen, shell } from "electron";
 import { getSystemFonts } from "@open-orpheus/ui";
 
 import { fileExists, normalizePath, sanitizeRelativePath } from "../util";
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import { getADDeviceId, getDeviceId } from "../device";
 
 type PowerSaveBlocker = Parameters<typeof powerSaveBlocker.start>[0];

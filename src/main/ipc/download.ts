@@ -1,7 +1,7 @@
 import { cp, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import startDownload, { type DownloadTask } from "../download";
 import { data as dataDir, downloadTemp } from "../folders";
 import { normalizePath, sanitizeRelativePath } from "../util";

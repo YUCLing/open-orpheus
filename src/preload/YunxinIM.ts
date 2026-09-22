@@ -4,7 +4,7 @@ import SDK from "@yxim/nim-web-sdk";
 import type {
   NetworkFetchRequest,
   NetworkFetchResponse,
-} from "../main/calls/network";
+} from "../main/ipc/network";
 
 export default class YunxinIM extends EventTarget {
   static APP_KEY = "3a6a3e48f6854dfa4e4464f3bdaec3b4";

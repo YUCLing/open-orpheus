@@ -3,7 +3,7 @@ import type PlaybackController from "./playback/PlaybackController";
 
 export const lyricsDispatcher = new LyricsDispatcher();
 
-// Lyrics update events are handled in calls.
+// Lyrics update events are handled in ipc.
 
 export function bindLyrics(playbackController: PlaybackController) {
   playbackController.on("timeupdate", ({ data }) => {

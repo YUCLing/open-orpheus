@@ -3,25 +3,28 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-const callsDir = fileURLToPath(
-  new URL("../../../src/main/calls/", import.meta.url)
+const ipcDir = fileURLToPath(
+  new URL("../../../src/main/ipc/", import.meta.url)
 );
 
-const modules = readdirSync(callsDir)
-  .filter((name) => name.endsWith(".ts") && name !== "index.ts")
+const modules = readdirSync(ipcDir)
+  .filter(
+    (name) =>
+      name.endsWith(".ts") && name !== "index.ts" && name !== "dispatcher.ts"
+  )
   .map((name) => name.slice(0, -".ts".length));
 
 function source(name: string) {
-  return readFileSync(`${callsDir}${name}.ts`, "utf8");
+  return readFileSync(`${ipcDir}${name}.ts`, "utf8");
 }
 
-describe("call module barrel", () => {
+describe("ipc module barrel", () => {
   it("finds the call modules", () => {
     expect(modules.length).toBeGreaterThan(0);
   });
 
-  it("imports every module in src/main/calls", () => {
-    const barrel = readFileSync(`${callsDir}index.ts`, "utf8");
+  it("imports every module in src/main/ipc", () => {
+    const barrel = readFileSync(`${ipcDir}index.ts`, "utf8");
     const missing = modules.filter((name) => !barrel.includes(`"./${name}"`));
     expect(missing).toEqual([]);
   });

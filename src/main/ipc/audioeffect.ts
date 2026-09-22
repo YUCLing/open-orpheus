@@ -1,6 +1,6 @@
 import { NcaeType } from "$sharedTypes/ncae";
 import { toError } from "@shared/util";
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 
 export interface AudioeffectDeps {
   audio: { readEffect: typeof import("../audio").readEffect };

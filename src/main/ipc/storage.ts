@@ -25,7 +25,7 @@ import {
   setCachePath,
   setDownloadPath,
 } from "../folders";
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import {
   fileExists,
   isFileNotFound,

@@ -1,4 +1,4 @@
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 
 export interface BrowserDeps {
   cookie: {

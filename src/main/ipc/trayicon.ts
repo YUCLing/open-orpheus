@@ -3,7 +3,7 @@ import { nativeImage } from "electron";
 import { pngFromIco } from "../util";
 import { loadFromOrpheusUrl } from "../orpheus";
 import type { TrayService } from "../tray";
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 
 export interface TrayiconDeps {
   tray: TrayService;

@@ -11,7 +11,7 @@ import {
   MiniPlayerTogetherStatus,
 } from "$sharedTypes/mini-player";
 import { mkdir, writeFile } from "node:fs/promises";
-import { registerCallHandler } from "../calls";
+import { registerCallHandler } from "./dispatcher";
 import { storage as storageDir } from "../folders";
 import { lyricsDispatcher } from "../lyrics";
 import { parseLrc, parseYrc } from "../lyrics/parse";
