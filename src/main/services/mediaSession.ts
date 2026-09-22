@@ -1,16 +1,16 @@
 import os from "node:os";
 
 import { toError } from "@shared/util";
-import { events as lifecycleEvents } from "./lifecycle";
-import type { MainWindowAccessor } from "./bootstrap/types";
-import { resolveCoverUrl } from "./domain/playback/artwork";
-import PlaybackController from "./domain/playback/PlaybackController";
-import { PlaybackChange, TrackInfo } from "./domain/playback/types";
+import { events as lifecycleEvents } from "../lifecycle";
+import type { MainWindowAccessor } from "../bootstrap/types";
+import { resolveCoverUrl } from "../domain/playback/artwork";
+import PlaybackController from "../domain/playback/PlaybackController";
+import { PlaybackChange, TrackInfo } from "../domain/playback/types";
 import {
   MediaSessionAdapter,
   NoopAdapter,
-} from "./domain/playback/adapters/MediaSessionAdapter";
-import PlayerCommandRouter from "./domain/playback/PlayerCommandRouter";
+} from "../domain/playback/adapters/MediaSessionAdapter";
+import PlayerCommandRouter from "../domain/playback/PlayerCommandRouter";
 
 /**
  * Track metadata passed through the frozen `player.setInfo` seam.
@@ -82,7 +82,7 @@ export async function createMediaSession(
       // Constructing it registers a D-Bus name and throws when the session bus
       // is unavailable — `loadAdapter` degrades gracefully instead of aborting.
       adapter = await loadAdapter(
-        () => import("./domain/playback/adapters/MprisAdapter"),
+        () => import("../domain/playback/adapters/MprisAdapter"),
         "MPRIS"
       );
       break;
@@ -90,14 +90,14 @@ export async function createMediaSession(
       // `@open-orpheus/smtc` is a Windows-only native module, so it is only
       // loaded on this platform (kept out of other platform bundles).
       adapter = await loadAdapter(
-        () => import("./domain/playback/adapters/SmtcAdapter"),
+        () => import("../domain/playback/adapters/SmtcAdapter"),
         "SMTC"
       );
       break;
     case "darwin":
       // `@open-orpheus/nowplaying` is a macOS-only native module (MPNowPlayingInfoCenter).
       adapter = await loadAdapter(
-        () => import("./domain/playback/adapters/NowPlayingAdapter"),
+        () => import("../domain/playback/adapters/NowPlayingAdapter"),
         "NowPlaying"
       );
       break;

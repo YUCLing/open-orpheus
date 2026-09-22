@@ -41,10 +41,10 @@ open-orpheus/
 │   │   ├── ipc/            # IPC 命令处理器（winhelper、app 等）
 │   │   ├── domain/         # 纯逻辑（歌词、皮肤、播放、id3、ncae、afp、加解密）
 │   │   ├── platform/       # 系统/应用集成（协议、网络请求、cookie、设备、字体、快捷键）
-│   │   ├── packs/          # WebPack / SkinPack 加载器
+│   │   ├── services/       # 有状态、可注入（缓存、音频引擎、资源包、托盘）
 │   │   ├── menu.ts         # 右键菜单管理（Electron BrowserWindow）
 │   │   ├── window.ts       # BrowserWindow 管理
-│   │   └── ...             # 缓存、托盘、下载、启动流程等
+│   │   └── ...             # 启动流程、引导等
 │   ├── preload/            # preload 暴露的 API（channel 桥接）
 │   │   └── ...             # 播放控制、听歌识曲、云信 IM 桥接等
 │   ├── bridge/             # 类型化 RPC 框架（契约 / preload 暴露 / renderer Proxy / main 注册）

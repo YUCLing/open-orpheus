@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import Pack from "@main/packs/Pack";
+import Pack from "@main/services/packs/Pack";
 
 /** `Pack` is abstract — this subclass only exposes the shared behaviour. */
 class TestPack extends Pack {

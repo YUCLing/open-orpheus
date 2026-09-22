@@ -10,10 +10,10 @@ import {
   Tray,
 } from "electron";
 
-import showManageWindow from "./windows/manage";
+import showManageWindow from "../windows/manage";
 
-import iconFilename from "../../assets/icon_256.png?no-inline";
-import type { SettingsService, WindowService } from "./bootstrap/types";
+import iconFilename from "../../../assets/icon_256.png?no-inline";
+import type { SettingsService, WindowService } from "../bootstrap/types";
 
 const defaultIconPath = resolve(import.meta.dirname, `.${iconFilename}`);
 

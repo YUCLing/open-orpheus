@@ -4,18 +4,18 @@ import { readFile } from "node:fs/promises";
 import { Protocol } from "electron";
 import mime from "mime";
 
-import type { AudioPlayInfo } from "../preload/Player";
-import { sanitizeRelativePath } from "./platform/util";
-import { data as dataDir, pack as packageDir } from "./platform/folders";
-import { events as lifecycleEvents } from "./lifecycle";
+import type { AudioPlayInfo } from "../../preload/Player";
+import { sanitizeRelativePath } from "../platform/util";
+import { data as dataDir, pack as packageDir } from "../platform/folders";
+import { events as lifecycleEvents } from "../lifecycle";
 import { toError } from "@shared/util";
-import { decodeNcae } from "./domain/ncae";
-import { registerIpcHandlers } from "../bridge/register";
-import type { Av3aContract } from "../bridge/contracts/av3a-api";
+import { decodeNcae } from "../domain/ncae";
+import { registerIpcHandlers } from "../../bridge/register";
+import type { Av3aContract } from "../../bridge/contracts/av3a-api";
 import { MediaEngine } from "./audio/MediaEngine";
 import { Av3aEngine } from "./av3a/Av3aEngine";
 import { isAv3aFile } from "./av3a/detect";
-import type { SettingsService, WindowService } from "./bootstrap/types";
+import type { SettingsService, WindowService } from "../bootstrap/types";
 
 export interface AudioDeps {
   windows: Pick<WindowService, "currentWindow">;

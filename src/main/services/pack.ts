@@ -4,10 +4,10 @@ import { dirname, resolve } from "node:path";
 import got from "got";
 import Emittery from "emittery";
 
-import { pack as base } from "./platform/folders";
+import { pack as base } from "../platform/folders";
 import type Pack from "./packs/Pack";
 
-import versions from "../../versions.json";
+import versions from "../../../versions.json";
 
 export const NO_WEBPACK_ERROR_MESSAGE = "No usable web pack file found";
 

@@ -20,8 +20,8 @@ import {
   getMenuWindow,
   getOverlayWindow,
 } from "./menu/windows";
-import packManager from "./pack";
-import SkinPack from "./packs/SkinPack";
+import packManager from "./services/pack";
+import SkinPack from "./services/packs/SkinPack";
 import { registerIpcHandlers } from "../bridge/register";
 import type { MenuContract } from "../bridge/contracts/menu-api";
 import { parseBtnUrl, parseElementTemplate } from "./domain/skin/dui";

@@ -38,11 +38,11 @@ import {
   CacheTrackMeta,
   type PlayCacheConfig,
   type PlayCacheInfo,
-} from "../cache/PlayCacheManager";
+} from "../services/cache/PlayCacheManager";
 import createCacheManager, {
   lyricCacheManager,
   playCacheManager,
-} from "../cache";
+} from "../services/cache";
 import { toError } from "@shared/util";
 import { commentToID3Json, ID3JsonToComment } from "../domain/id3";
 import globalLogger from "../logger";

@@ -5,7 +5,7 @@ vi.mock("node:fs/promises");
 
 import { vol } from "memfs";
 
-import LyricCacheManager from "@main/cache/LyricCahceManager";
+import LyricCacheManager from "@main/services/cache/LyricCahceManager";
 
 const CACHE_DIR = "/cache/lyrics";
 

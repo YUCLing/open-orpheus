@@ -18,17 +18,17 @@ import {
   streamerTemp as streamerTempDir,
 } from "@main/platform/folders";
 import logger from "@main/logger";
-import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "@main/pack";
+import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "@main/services/pack";
 import {
   ensureWebPack,
   type WebPackLoadDeps,
   type WebPackProbe,
-} from "@main/pack-loader";
+} from "@main/services/pack-loader";
 import registerAsProtocolClient from "@main/platform/protocol";
 import { isFileNotFound } from "@main/platform/util";
 import showPackgeDownloadWindow from "@main/windows/package-download";
 
-import type WebPack from "@main/packs/WebPack";
+import type WebPack from "@main/services/packs/WebPack";
 import type { ProxyConfiguration } from "@main/platform/request";
 
 /** The ordered start-up sequence; rejects if the app cannot come up. */
@@ -61,7 +61,7 @@ export async function startApplication() {
   // Initialize schemes and get registrars
   const [registerOrpheusScheme, audioModule] = await Promise.all([
     import("@main/platform/orpheus").then((m) => m.default),
-    import("@main/audio"),
+    import("@main/services/audio"),
   ]);
 
   // Register for default session
@@ -83,7 +83,7 @@ export async function startApplication() {
 
   await Promise.all([
     // Set temp dir for streamer and run cleanup
-    import("@main/audio/OnlineStreamer").then(async (m) => {
+    import("@main/services/audio/OnlineStreamer").then(async (m) => {
       m.OnlineStreamer.tempDir = streamerTempDir;
       // This will be done in the background, the OnlineStreamer will know what files are
       // currently being used, cleanup will only clean the leftovers from previous usages.
@@ -119,7 +119,7 @@ export async function startApplication() {
     })(),
     import("@main/domain/afp"),
     import("@main/platform/fonts"),
-    import("@main/mediaSession").then(async (m) => {
+    import("@main/services/mediaSession").then(async (m) => {
       await m.createMediaSession({ windows: ctx.windows });
       const { bindLyrics } = await import("@main/domain/lyrics");
       bindLyrics(m.playbackController);
@@ -206,9 +206,9 @@ export async function startApplication() {
   // `cookie` reads `session.defaultSession` at module scope, so the concrete modules
   // the call handlers need are loaded here rather than imported statically.
   const [{ readEffect }, cookieModule, trayModule] = await Promise.all([
-    import("@main/audio"),
+    import("@main/services/audio"),
     import("@main/platform/cookie"),
-    import("@main/tray"),
+    import("@main/services/tray"),
   ]);
   const { registerCallModules } = await import("@main/ipc/index");
 

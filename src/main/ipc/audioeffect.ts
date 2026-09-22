@@ -3,7 +3,7 @@ import { toError } from "@shared/util";
 import { registerCallHandler } from "./dispatcher";
 
 export interface AudioeffectDeps {
-  audio: { readEffect: typeof import("../audio").readEffect };
+  audio: { readEffect: typeof import("../services/audio").readEffect };
 }
 
 export function register(deps: AudioeffectDeps): void {

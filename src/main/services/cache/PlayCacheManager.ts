@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import type { MainWindowAccessor } from "../bootstrap/types";
+import type { MainWindowAccessor } from "../../bootstrap/types";
 
 // #region Types
 

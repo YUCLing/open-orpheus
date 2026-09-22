@@ -41,10 +41,10 @@ open-orpheus/
 │   │   ├── ipc/            # IPC command handlers (winhelper, app, etc.)
 │   │   ├── domain/         # Pure logic (lyrics, skin, playback, id3, ncae, afp, crypto)
 │   │   ├── platform/       # OS/app integration (protocol, request, cookie, device, fonts, shortcuts)
-│   │   ├── packs/          # WebPack / SkinPack loaders
+│   │   ├── services/       # Stateful and injectable (cache, audio engines, packs, tray)
 │   │   ├── menu.ts         # Context menu management (Electron BrowserWindow)
 │   │   ├── window.ts       # BrowserWindow management
-│   │   └── ...             # Cache, tray, download, startup, etc.
+│   │   └── ...             # Startup sequence, bootstrap, etc.
 │   ├── preload/            # Preload-exposed APIs (channel bridge)
 │   │   └── ...             # Playback control, music recognition, IM bridge, etc.
 │   ├── bridge/             # Typed RPC framework (contracts / preload exposure / renderer Proxy / main registration)

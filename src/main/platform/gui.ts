@@ -4,8 +4,8 @@ import { readFile } from "node:fs/promises";
 import { Protocol } from "electron";
 import mime from "mime";
 
-import packManager from "../pack";
-import type SkinPack from "../packs/SkinPack";
+import packManager from "../services/pack";
+import type SkinPack from "../services/packs/SkinPack";
 import { setMiniPlayerFont } from "../windows/mini-player";
 import { setManageWindowFont } from "../windows/manage";
 

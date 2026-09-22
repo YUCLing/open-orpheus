@@ -9,8 +9,8 @@ vi.mock("electron", () => ({
 
 import { vol } from "memfs";
 
-import HttpCacheStorage from "@main/cache/HttpCacheStorage";
-import { installLoggerStub } from "../helpers/globals";
+import HttpCacheStorage from "@main/services/cache/HttpCacheStorage";
+import { installLoggerStub } from "../../../helpers/globals";
 
 const LAST_VACUUM_KEY = "httpCache::lastVacuum";
 const DB_PATH = "/data/cache.sqlite";

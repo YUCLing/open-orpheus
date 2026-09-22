@@ -13,7 +13,7 @@ import { vol } from "memfs";
 
 import PlayCacheManager, {
   type CacheTrackMeta,
-} from "@main/cache/PlayCacheManager";
+} from "@main/services/cache/PlayCacheManager";
 
 const CACHE_PATH = "/cache/play";
 const MiB = 1024 * 1024;

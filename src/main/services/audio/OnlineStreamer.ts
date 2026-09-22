@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import Emittery from "emittery";
 
 import { toError } from "@shared/util";
-import { client } from "../platform/request";
+import { client } from "../../platform/request";
 
 import ChunkTracker from "./ChunkTracker";
 import DownloadScheduler from "./DownloadScheduler";

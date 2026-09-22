@@ -16,8 +16,8 @@ import { registerIpcHandlers } from "../../bridge/register";
 import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
 import type { BtnImages, BtnState } from "../../../types/dui";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
-import packManager from "../pack";
-import type SkinPack from "../packs/SkinPack";
+import packManager from "../services/pack";
+import type SkinPack from "../services/packs/SkinPack";
 import { extractColor } from "../domain/skin/color";
 import { argbToCss, parseBtnState } from "../domain/skin/dui";
 import type {

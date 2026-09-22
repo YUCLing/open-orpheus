@@ -4,14 +4,14 @@ import { readdir, stat, rm } from "node:fs/promises";
 
 import { app, BrowserWindow, Menu } from "electron";
 
-import packManager from "../pack";
-import WebPack from "../packs/WebPack";
+import packManager from "../services/pack";
+import WebPack from "../services/packs/WebPack";
 import { wasm as wasmDir } from "../platform/folders";
 import {
   httpCacheStorage,
   lyricCacheManager,
   playCacheManager,
-} from "../cache";
+} from "../services/cache";
 import { checkUpdate } from "../platform/update";
 import { registerIpcHandlers } from "../../bridge/register";
 import type { ManageContract } from "../../bridge/contracts/manage-api";

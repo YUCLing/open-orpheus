@@ -37,7 +37,7 @@ import {
   updateMute,
 } from "../windows/mini-player";
 import { setFont } from "../platform/gui";
-import { mediaSession } from "../mediaSession";
+import { mediaSession } from "../services/mediaSession";
 
 let listItems: ListElement[] = [];
 let currentPlay: string | null = null;

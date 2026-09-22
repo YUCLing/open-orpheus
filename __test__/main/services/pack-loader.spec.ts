@@ -8,7 +8,7 @@ import {
   REDOWNLOAD_FLAG,
   type WebPackLoadDeps,
   type WebPackProbe,
-} from "@main/pack-loader";
+} from "@main/services/pack-loader";
 
 const EXPECTED_COMMIT = "aaaaaaaa";
 
@@ -87,7 +87,10 @@ describe("ensureWebPack", () => {
 
   it("calls a corrupt pack a load failure, not a missing one", async () => {
     const h = harness({
-      probes: [{ status: "failed" }, { status: "ready", commit: EXPECTED_COMMIT }],
+      probes: [
+        { status: "failed" },
+        { status: "ready", commit: EXPECTED_COMMIT },
+      ],
     });
 
     await ensureWebPack(h.deps);

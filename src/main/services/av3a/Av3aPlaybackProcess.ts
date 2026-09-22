@@ -3,12 +3,12 @@ import type { MessagePortMain, UtilityProcess, WebContents } from "electron";
 import { fileURLToPath } from "node:url";
 
 // eslint-disable-next-line import/default
-import decoderProcessPath from "../../workers/av3a-decoder?worker&url";
+import decoderProcessPath from "../../../workers/av3a-decoder?worker&url";
 
 import type {
   Av3aProcessMainToService,
   Av3aProcessServiceToMain,
-} from "../../bridge/contracts/av3a-process";
+} from "../../../bridge/contracts/av3a-process";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
 import { toError } from "@shared/util";
 

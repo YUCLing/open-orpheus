@@ -13,7 +13,7 @@ import {
 import { registerCallHandler, registerCallbackHandler } from "./dispatcher";
 import { loadFromOrpheusUrl } from "../platform/orpheus";
 import { fileExists, pngFromIco } from "../platform/util";
-import packManager from "../pack";
+import packManager from "../services/pack";
 import type { ProxyConfiguration, ProxyTypes } from "../platform/request";
 import { client, getProxyAgent } from "../platform/request";
 import { disableHardwareAccelerationFlag } from "../platform/folders";

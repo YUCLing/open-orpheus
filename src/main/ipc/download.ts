@@ -2,7 +2,7 @@ import { cp, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { registerCallHandler } from "./dispatcher";
-import startDownload, { type DownloadTask } from "../download";
+import startDownload, { type DownloadTask } from "../services/download";
 import { data as dataDir, downloadTemp } from "../platform/folders";
 import { normalizePath, sanitizeRelativePath } from "../platform/util";
 

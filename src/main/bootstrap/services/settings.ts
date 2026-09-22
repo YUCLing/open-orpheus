@@ -3,7 +3,7 @@ import Emittery from "emittery";
 import { Keyv, KeyvHooks } from "keyv";
 
 import type { SettingsEvents } from "$sharedTypes/settings";
-import createKeyvSqliteDriver from "../../database/KeyvSqliteDriver";
+import createKeyvSqliteDriver from "../../services/database/KeyvSqliteDriver";
 import type { DatabaseService, SettingsService } from "../types";
 
 const KV_ENTRIES: Record<string, unknown> = {
