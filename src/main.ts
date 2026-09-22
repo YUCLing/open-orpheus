@@ -5,7 +5,7 @@ import "@main/platform/logger";
 import "@open-orpheus/window";
 
 // Handle errors as early as possible
-import "@main/platform/error";
+import "@main/bootstrap/error";
 
 import { app, dialog } from "electron";
 

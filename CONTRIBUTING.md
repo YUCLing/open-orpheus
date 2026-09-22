@@ -74,6 +74,21 @@ open-orpheus/
 └── patches/                # 依赖补丁
 ```
 
+### 各分组职责
+
+`src/main/` 刻意保持扁平——六个分组，没有散落文件：
+
+| 分组         | 职责                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap/` | 组合根：`context.ts`、`types.ts`、启动序列与进程级接线（含未捕获异常处理）                                              |
+| `services/`  | 有状态、可注入：缓存、音频引擎与 AV3A、资源包、托盘、数据库、窗口、生命周期                                             |
+| `domain/`    | 播放、歌词、皮肤、元数据——不感知 Electron 的逻辑                                                                        |
+| `platform/`  | 主进程与 Electron／操作系统／远端服务的集成：自定义协议、HTTP、cookie、设备、系统字体、全局快捷键、应用目录、日志、更新 |
+| `calls/`     | Web 包的 `channel.call` ABI：命令处理器、dispatcher、注册。**不是**本项目 IPC——那是 `src/bridge/**`                     |
+| `windows/`   | `BrowserWindow` 定义与 `ManagedWindow` 模型                                                                             |
+
+`platform/util.ts` 是通用工具模块而非平台集成。它留在 `src/main/` 而不放 `src/shared/`，是因为它依赖 `node:fs` 与 Electron，而**沙箱化的** preload 可以触达 `src/shared/**`，不能引入 `node:` 内置模块。
+
 ### `foo.ts` 与 `foo/` 的约定
 
 `src/main/` 下存在若干同名文件与目录：`menu.ts` + `menu/`、`lyrics.ts` + `lyrics/`、

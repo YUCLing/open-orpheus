@@ -74,6 +74,21 @@ open-orpheus/
 └── patches/                # Dependency patches
 ```
 
+### What belongs in each group
+
+`src/main/` is deliberately shallow — six groups, no loose files:
+
+| Group        | Scope                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap/` | the composition root: `context.ts`, `types.ts`, the startup sequence and process-level wiring (including the uncaught-exception handler)                                  |
+| `services/`  | stateful and injectable: cache, audio engines and AV3A, packs, tray, database, window, lifecycle                                                                          |
+| `domain/`    | playback, lyrics, skin, metadata — logic that does not know about Electron                                                                                                |
+| `platform/`  | main-process integration with Electron, the OS and remote services: custom protocols, HTTP, cookies, devices, system fonts, global shortcuts, app paths, logging, updater |
+| `calls/`     | the web pack's `channel.call` ABI: command handlers, the dispatcher, registration. **Not** this project's IPC — that is `src/bridge/**`                                   |
+| `windows/`   | `BrowserWindow` definitions and the `ManagedWindow` model                                                                                                                 |
+
+`platform/util.ts` is a general-purpose helper module rather than platform integration. It stays under `main/` and not `src/shared/` because it uses `node:fs` and Electron, and `src/shared/**` is reachable from the **sandboxed** preload, which must not pull in `node:` builtins.
+
 ### The `foo.ts` + `foo/` convention
 
 `src/main/` contains several same-named file/directory pairs: `menu.ts` + `menu/`,
