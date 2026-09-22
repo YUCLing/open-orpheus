@@ -219,7 +219,12 @@ export async function startApplication() {
   });
 
   // Create main window
-  await (await import("@main/windows/main")).default();
+  await (
+    await import("@main/windows/main")
+  ).default({
+    windows: ctx.windows,
+    lifecycle: ctx.lifecycle,
+  });
 
   // TODO: Maybe only do this on first launch?
   registerAsProtocolClient();
