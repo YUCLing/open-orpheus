@@ -14,5 +14,6 @@ export const mainWindowAccessor: MainWindowAccessor = {
 
 export const windowService: WindowService = {
   current: () => mainWindow,
+  currentWindow: () => mainWindow,
   setMainWindow,
 };

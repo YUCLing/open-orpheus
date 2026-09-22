@@ -27,6 +27,11 @@ export interface MainWindowAccessor {
 }
 
 export interface WindowService extends MainWindowAccessor {
+  /**
+   * The main window itself, for consumers that need more than a renderer target:
+   * geometry, `isDestroyed`, or wrapping the window into a `ManagedWindow`.
+   */
+  currentWindow(): BrowserWindow | null;
   setMainWindow(wnd: BrowserWindow | null): void;
 }
 

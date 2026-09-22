@@ -18,18 +18,19 @@ import { register as registerRtc } from "./rtc";
 import { register as registerStorage, type StorageDeps } from "./storage";
 import { register as registerTrayicon } from "./trayicon";
 import { register as registerUpdate } from "./update";
-import { register as registerWinhelper } from "./winhelper";
+import { register as registerWinhelper, type WinhelperDeps } from "./winhelper";
 
 export type CallModuleDeps = AppDeps &
   AudioeffectDeps &
   BrowserDeps &
   MusiclibraryDeps &
-  StorageDeps;
+  StorageDeps &
+  WinhelperDeps;
 
 export function registerCallModules(deps: CallModuleDeps): void {
   registerApp(deps);
   registerAudioeffect(deps);
-  registerWinhelper();
+  registerWinhelper(deps);
   registerBrowser(deps);
   registerDesktop();
   registerStorage(deps);

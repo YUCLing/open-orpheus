@@ -12,12 +12,13 @@ import {
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
-import { mainWindow, ManagedWindow } from "../window";
+import { ManagedWindow } from "../window";
 import AppMenu from "../menu";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
-import * as settings from "../settings";
-import { LifecycleState, setLifecycleState } from "../lifecycle";
+import { LifecycleState } from "../lifecycle";
 import showManageWindow from "../windows/manage";
+import type { SettingsService, WindowService } from "../bootstrap/types";
+import type { LifecycleService } from "../bootstrap/services/lifecycle";
 
 function shouldApplyScaleFactor() {
   const de = getDesktopEnvironment();
@@ -71,7 +72,13 @@ function parseMenuData(menuData: MenuRequest[0]) {
   };
 }
 
-export function register(): void {
+export interface WinhelperDeps {
+  windows: Pick<WindowService, "currentWindow">;
+  settings: Pick<SettingsService, "kv" | "events">;
+  lifecycle: Pick<LifecycleService, "setLifecycleState">;
+}
+
+export function register(deps: WinhelperDeps): void {
   // TODO: Implement this properly
   registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [
     false,
@@ -131,7 +138,7 @@ export function register(): void {
 
   registerCallHandler<[], void>("winhelper.finishLoadMainWindow", (event) => {
     // Window cannot be not existing at this time
-    setLifecycleState(
+    deps.lifecycle.setLifecycleState(
       LifecycleState.MainWindowLoaded,
       BrowserWindow.fromWebContents(event.sender)!
     );
@@ -184,8 +191,9 @@ export function register(): void {
       ? getWindowScaleFactor(wnd)
       : 1;
     if (
-      wnd !== mainWindow ||
-      (await settings.kv.get("window.overrideMainWindowSizeLimit")) !== "true"
+      wnd !== deps.windows.currentWindow() ||
+      (await deps.settings.kv.get("window.overrideMainWindowSizeLimit")) !==
+        "true"
     ) {
       // Use window module to set maximum size to avoid issues with maximized/fullscreen windows
       const managed = ManagedWindow.fromBrowserWindow(wnd);
@@ -194,7 +202,7 @@ export function register(): void {
         managed.setMaximumSize(max.x * scaleFactor, max.y * scaleFactor);
       }
     }
-    if (wnd == mainWindow) {
+    if (wnd == deps.windows.currentWindow()) {
       mainWindowSizeLimits = [
         min,
         { x: max.x * scaleFactor, y: max.y * scaleFactor },
@@ -202,11 +210,12 @@ export function register(): void {
     }
   });
 
-  settings.events.on("change", (e) => {
-    if (!mainWindow) return;
+  deps.settings.events.on("change", (e) => {
+    const current = deps.windows.currentWindow();
+    if (!current) return;
     const { key, value } = e.data;
     if (key === "window.overrideMainWindowSizeLimit") {
-      const managed = ManagedWindow.fromBrowserWindow(mainWindow);
+      const managed = ManagedWindow.fromBrowserWindow(current);
       if (!managed) return;
       if (value === "true" || !mainWindowSizeLimits) {
         managed.setMinimumSize(0, 0);
@@ -381,7 +390,8 @@ export function register(): void {
       const platform = os.platform();
       const injectShowMainWindowMenuItem =
         platform === "linux" &&
-        (await settings.kv.get("tray.clickBehavior")) === "always-show-menu";
+        (await deps.settings.kv.get("tray.clickBehavior")) ===
+          "always-show-menu";
       for (let i = 0; i < parsedMenuData.content.length; i++) {
         const item = parsedMenuData.content[i];
         // Inject "Manage Open Orpheus" menu item after "Settings" menu item

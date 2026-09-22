@@ -13,6 +13,7 @@ describe("window service", () => {
     setMainWindow(null);
 
     expect(windowService.current()).toBeNull();
+    expect(windowService.currentWindow()).toBeNull();
     expect(mainWindowAccessor.current()).toBeNull();
     expect(mainWindow).toBeNull();
   });
@@ -23,6 +24,7 @@ describe("window service", () => {
     setMainWindow(wnd);
 
     expect(windowService.current()).toBe(wnd);
+    expect(windowService.currentWindow()).toBe(wnd);
     expect(mainWindowAccessor.current()).toBe(wnd);
     expect(mainWindow).toBe(wnd);
   });
@@ -32,6 +34,7 @@ describe("window service", () => {
     setMainWindow(null);
 
     expect(windowService.current()).toBeNull();
+    expect(windowService.currentWindow()).toBeNull();
     expect(mainWindow).toBeNull();
   });
 
