@@ -1,11 +1,11 @@
-import { registerCallHandler } from "./dispatcher";
+import { registerCallHandler } from "../dispatcher";
 
 export interface BrowserDeps {
   cookie: {
-    getCookies: typeof import("../platform/cookie").getCookies;
-    getFullCookies: typeof import("../platform/cookie").getFullCookies;
-    removeCookie: typeof import("../platform/cookie").removeCookie;
-    setCookie: typeof import("../platform/cookie").setCookie;
+    getCookies: typeof import("../../platform/cookie").getCookies;
+    getFullCookies: typeof import("../../platform/cookie").getFullCookies;
+    removeCookie: typeof import("../../platform/cookie").removeCookie;
+    setCookie: typeof import("../../platform/cookie").setCookie;
   };
 }
 

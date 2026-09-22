@@ -1,9 +1,9 @@
 import { nativeImage } from "electron";
 
-import { pngFromIco } from "../platform/util";
-import { loadFromOrpheusUrl } from "../platform/orpheus";
-import type { TrayService } from "../services/tray";
-import { registerCallHandler } from "./dispatcher";
+import { pngFromIco } from "../../platform/util";
+import { loadFromOrpheusUrl } from "../../platform/orpheus";
+import type { TrayService } from "../../services/tray";
+import { registerCallHandler } from "../dispatcher";
 
 export interface TrayiconDeps {
   tray: TrayService;

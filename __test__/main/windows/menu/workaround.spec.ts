@@ -9,7 +9,7 @@ vi.mock("electron", () => ({
   screen: { getDisplayMatching: vi.fn() },
 }));
 
-type WorkaroundModule = typeof import("@main/menu/workaround");
+type WorkaroundModule = typeof import("@main/windows/menu/workaround");
 
 /** The enum type accepted by `workaroundEnabled`. */
 type WorkaroundFlag = Parameters<WorkaroundModule["workaroundEnabled"]>[0];
@@ -24,7 +24,7 @@ async function loadWorkarounds(
     if (value === undefined) vi.stubEnv(name, "");
     else vi.stubEnv(name, value);
   }
-  return await import("@main/menu/workaround");
+  return await import("@main/windows/menu/workaround");
 }
 
 afterEach(() => {

@@ -8,7 +8,7 @@ See https://github.com/YUCLing/open-orpheus/pull/75
 
 import { randomBytes } from "node:crypto";
 
-import type { NetworkFetchRequest } from "../ipc/network";
+import type { NetworkFetchRequest } from "../ipc/handlers/network";
 import { deserialData, encodeAnonymousId } from "../domain/crypto";
 import { client } from "./request";
 

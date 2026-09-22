@@ -8,7 +8,7 @@ import { onExit } from "@open-orpheus/lifecycle";
 
 import { CORE_VERSION } from "@shared/constants";
 import { toError } from "@shared/util";
-import versions from "../../versions.json";
+import versions from "../../../versions.json";
 import { bootstrap } from "@main/bootstrap/context";
 import { prepareDeviceId } from "@main/platform/device";
 import {
@@ -124,7 +124,7 @@ export async function startApplication() {
       const { bindLyrics } = await import("@main/domain/lyrics");
       bindLyrics(m.playbackController);
     }),
-    import("@main/channel"),
+    import("@main/ipc/channel"),
     import("@main/platform/request").then(async (m) => {
       m.setupRequestInterceptors();
 

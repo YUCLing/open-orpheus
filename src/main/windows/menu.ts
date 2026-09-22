@@ -20,16 +20,16 @@ import {
   getMenuWindow,
   getOverlayWindow,
 } from "./menu/windows";
-import packManager from "./services/pack";
-import SkinPack from "./services/packs/SkinPack";
-import { registerIpcHandlers } from "../bridge/register";
-import type { MenuContract } from "../bridge/contracts/menu-api";
-import { parseBtnUrl, parseElementTemplate } from "./domain/skin/dui";
-import type { ElementTemplate } from "./domain/skin/dui";
-import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
+import packManager from "../services/pack";
+import SkinPack from "../services/packs/SkinPack";
+import { registerIpcHandlers } from "../../bridge/register";
+import type { MenuContract } from "../../bridge/contracts/menu-api";
+import { parseBtnUrl, parseElementTemplate } from "../domain/skin/dui";
+import type { ElementTemplate } from "../domain/skin/dui";
+import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import type { AppMenuItem } from "$sharedTypes/menu";
-import { font } from "./platform/gui";
-import { ManagedWindow } from "./window";
+import { font } from "../platform/gui";
+import { ManagedWindow } from "../window";
 
 registerMenuSkinUpdater();
 

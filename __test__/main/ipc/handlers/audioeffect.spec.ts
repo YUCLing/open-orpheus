@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { NcaeType } from "$sharedTypes/ncae";
 
 import { dispatcher } from "@main/ipc/dispatcher";
-import { installLoggerStub } from "../../helpers/globals";
+import { installLoggerStub } from "../../../helpers/globals";
 
 const readEffect = vi.fn();
 
@@ -11,7 +11,7 @@ let logger: ReturnType<typeof installLoggerStub>;
 
 beforeAll(async () => {
   logger = installLoggerStub();
-  const { register } = await import("@main/ipc/audioeffect");
+  const { register } = await import("@main/ipc/handlers/audioeffect");
   register({ audio: { readEffect } });
 });
 

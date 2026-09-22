@@ -9,19 +9,19 @@ import {
   getDesktopEnvironment,
 } from "@open-orpheus/window";
 
-import { registerCallHandler } from "./dispatcher";
-import { loadFromOrpheusUrl } from "../platform/orpheus";
-import { getWindowScaleFactor, pngFromIco } from "../platform/util";
-import { ManagedWindow } from "../window";
-import AppMenu from "../menu";
+import { registerCallHandler } from "../dispatcher";
+import { loadFromOrpheusUrl } from "../../platform/orpheus";
+import { getWindowScaleFactor, pngFromIco } from "../../platform/util";
+import { ManagedWindow } from "../../window";
+import AppMenu from "../../windows/menu";
 import {
   registerGlobalShortcut,
   unregisterGlobalShortcut,
-} from "../platform/shortcuts";
-import { LifecycleState } from "../lifecycle";
-import showManageWindow from "../windows/manage";
-import type { SettingsService, WindowService } from "../bootstrap/types";
-import type { LifecycleService } from "../bootstrap/services/lifecycle";
+} from "../../platform/shortcuts";
+import { LifecycleState } from "../../lifecycle";
+import showManageWindow from "../../windows/manage";
+import type { SettingsService, WindowService } from "../../bootstrap/types";
+import type { LifecycleService } from "../../bootstrap/services/lifecycle";
 
 function shouldApplyScaleFactor() {
   const de = getDesktopEnvironment();

@@ -3,10 +3,10 @@ import dns from "node:dns";
 import { RequestError } from "got";
 import type { Method } from "got";
 
-import { registerCallHandler } from "./dispatcher";
-import { deserialData } from "../domain/crypto";
-import { client } from "../platform/request";
-import interceptAnonymousRequest from "../platform/anonymous";
+import { registerCallHandler } from "../dispatcher";
+import { deserialData } from "../../domain/crypto";
+import { client } from "../../platform/request";
+import interceptAnonymousRequest from "../../platform/anonymous";
 
 let globalFailCount = 0;
 let globalSucCount = 0;

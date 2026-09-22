@@ -10,9 +10,9 @@ import {
   fileExists,
   normalizePath,
   sanitizeRelativePath,
-} from "../platform/util";
-import { registerCallHandler } from "./dispatcher";
-import { getADDeviceId, getDeviceId } from "../platform/device";
+} from "../../platform/util";
+import { registerCallHandler } from "../dispatcher";
+import { getADDeviceId, getDeviceId } from "../../platform/device";
 
 type PowerSaveBlocker = Parameters<typeof powerSaveBlocker.start>[0];
 const powerSaveBlockers: Partial<Record<PowerSaveBlocker, number>> = {};

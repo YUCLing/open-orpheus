@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 
-import { dispatcher } from "./ipc/dispatcher";
+import { dispatcher } from "./dispatcher";
 import {
   deData,
   deserialData,
@@ -8,7 +8,7 @@ import {
   enData,
   SERIAL_AES_KEY,
   serialData,
-} from "./domain/crypto";
+} from "../domain/crypto";
 
 ipcMain.handle(
   "channel.call",

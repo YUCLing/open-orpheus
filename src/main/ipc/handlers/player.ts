@@ -11,11 +11,11 @@ import {
   MiniPlayerTogetherStatus,
 } from "$sharedTypes/mini-player";
 import { mkdir, writeFile } from "node:fs/promises";
-import { registerCallHandler } from "./dispatcher";
-import { storage as storageDir } from "../platform/folders";
-import { lyricsDispatcher } from "../domain/lyrics";
-import { parseLrc, parseYrc } from "../domain/lyrics/parse";
-import { sanitizeRelativePath } from "../platform/util";
+import { registerCallHandler } from "../dispatcher";
+import { storage as storageDir } from "../../platform/folders";
+import { lyricsDispatcher } from "../../domain/lyrics";
+import { parseLrc, parseYrc } from "../../domain/lyrics/parse";
+import { sanitizeRelativePath } from "../../platform/util";
 import {
   createDesktopLyricsPreview,
   window as desktopLyricsWindow,
@@ -24,7 +24,7 @@ import {
   setLyricsLocked,
   setLyricsOffset,
   updateLyricsPlayInfo,
-} from "../windows/desktop-lyrics";
+} from "../../windows/desktop-lyrics";
 import {
   updatePlayInfo,
   updateCoverUrl,
@@ -35,9 +35,9 @@ import {
   updateFavour,
   updateTogetherStatus,
   updateMute,
-} from "../windows/mini-player";
-import { setFont } from "../platform/gui";
-import { mediaSession } from "../services/mediaSession";
+} from "../../windows/mini-player";
+import { setFont } from "../../platform/gui";
+import { mediaSession } from "../../services/mediaSession";
 
 let listItems: ListElement[] = [];
 let currentPlay: string | null = null;

@@ -42,9 +42,9 @@ open-orpheus/
 │   │   ├── domain/         # Pure logic (lyrics, skin, playback, id3, ncae, afp, crypto)
 │   │   ├── platform/       # OS/app integration (protocol, request, cookie, device, fonts, shortcuts)
 │   │   ├── services/       # Stateful and injectable (cache, audio engines, packs, tray)
-│   │   ├── menu.ts         # Context menu management (Electron BrowserWindow)
-│   │   ├── window.ts       # BrowserWindow management
-│   │   └── ...             # Startup sequence, bootstrap, etc.
+│   │   ├── windows/        # BrowserWindow definitions and the ManagedWindow model
+│   │   ├── bootstrap/      # Composition root and startup sequence
+│   │   └── ...             # Cross-cutting: logger, lifecycle
 │   ├── preload/            # Preload-exposed APIs (channel bridge)
 │   │   └── ...             # Playback control, music recognition, IM bridge, etc.
 │   ├── bridge/             # Typed RPC framework (contracts / preload exposure / renderer Proxy / main registration)

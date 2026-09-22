@@ -1,4 +1,4 @@
-import { registerCallHandler } from "./dispatcher";
+import { registerCallHandler } from "../dispatcher";
 
 export function register(): void {
   registerCallHandler<[Record<string, unknown>], void>("rtc.enter", () => {

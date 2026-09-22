@@ -3,19 +3,19 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-const ipcDir = fileURLToPath(
-  new URL("../../../src/main/ipc/", import.meta.url)
+const handlersDir = fileURLToPath(
+  new URL("../../../src/main/ipc/handlers/", import.meta.url)
+);
+const barrelPath = fileURLToPath(
+  new URL("../../../src/main/ipc/index.ts", import.meta.url)
 );
 
-const modules = readdirSync(ipcDir)
-  .filter(
-    (name) =>
-      name.endsWith(".ts") && name !== "index.ts" && name !== "dispatcher.ts"
-  )
+const modules = readdirSync(handlersDir)
+  .filter((name) => name.endsWith(".ts"))
   .map((name) => name.slice(0, -".ts".length));
 
 function source(name: string) {
-  return readFileSync(`${ipcDir}${name}.ts`, "utf8");
+  return readFileSync(`${handlersDir}${name}.ts`, "utf8");
 }
 
 describe("ipc module barrel", () => {
@@ -23,9 +23,11 @@ describe("ipc module barrel", () => {
     expect(modules.length).toBeGreaterThan(0);
   });
 
-  it("imports every module in src/main/ipc", () => {
-    const barrel = readFileSync(`${ipcDir}index.ts`, "utf8");
-    const missing = modules.filter((name) => !barrel.includes(`"./${name}"`));
+  it("imports every module in src/main/ipc/handlers", () => {
+    const barrel = readFileSync(barrelPath, "utf8");
+    const missing = modules.filter(
+      (name) => !barrel.includes(`"./handlers/${name}"`)
+    );
     expect(missing).toEqual([]);
   });
 

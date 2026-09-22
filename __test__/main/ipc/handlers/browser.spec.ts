@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dispatcher } from "@main/ipc/dispatcher";
-import { installLoggerStub } from "../../helpers/globals";
+import { installLoggerStub } from "../../../helpers/globals";
 
 const cookieApi = {
   getCookies: vi.fn(),
@@ -11,7 +11,8 @@ const cookieApi = {
 };
 
 installLoggerStub();
-const { register: registerBrowser } = await import("@main/ipc/browser");
+const { register: registerBrowser } =
+  await import("@main/ipc/handlers/browser");
 registerBrowser({ cookie: cookieApi });
 
 /** Dispatch a command and return the tuple spread onto the callback. */

@@ -24,28 +24,31 @@ import {
   downloadTemp,
   setCachePath,
   setDownloadPath,
-} from "../platform/folders";
-import { registerCallHandler } from "./dispatcher";
+} from "../../platform/folders";
+import { registerCallHandler } from "../dispatcher";
 import {
   fileExists,
   isFileNotFound,
   isMusicFile,
   normalizePath,
   sanitizeRelativePath,
-} from "../platform/util";
-import type { DatabaseService, MainWindowAccessor } from "../bootstrap/types";
+} from "../../platform/util";
+import type {
+  DatabaseService,
+  MainWindowAccessor,
+} from "../../bootstrap/types";
 import {
   CacheTrackMeta,
   type PlayCacheConfig,
   type PlayCacheInfo,
-} from "../services/cache/PlayCacheManager";
+} from "../../services/cache/PlayCacheManager";
 import createCacheManager, {
   lyricCacheManager,
   playCacheManager,
-} from "../services/cache";
+} from "../../services/cache";
 import { toError } from "@shared/util";
-import { commentToID3Json, ID3JsonToComment } from "../domain/id3";
-import globalLogger from "../logger";
+import { commentToID3Json, ID3JsonToComment } from "../../domain/id3";
+import globalLogger from "../../logger";
 
 type DownloadScannerItem = {
   comment: string; // comment added by addid3

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { patchById } from "@main/menu/types";
+import { patchById } from "@main/windows/menu/types";
 
 type Item = Parameters<typeof patchById>[0][number];
 

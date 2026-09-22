@@ -7,16 +7,16 @@ import { app } from "electron";
 import { MusicFile } from "music-tag-native";
 import mime from "mime";
 
-import { registerCallHandler } from "./dispatcher";
-import type { DatabaseService } from "../bootstrap/types";
+import { registerCallHandler } from "../dispatcher";
+import type { DatabaseService } from "../../bootstrap/types";
 import {
   fileExists,
   isFileNotFound,
   isMusicFile,
   normalizePath,
-} from "../platform/util";
+} from "../../platform/util";
 import { toError } from "@shared/util";
-import { commentToID3Metadata } from "../domain/id3";
+import { commentToID3Metadata } from "../../domain/id3";
 
 type MusicLibraries =
   "<mymusic>" | "<download>" | "<windowsmedia>" | "<itunes>" | string;

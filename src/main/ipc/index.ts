@@ -1,24 +1,36 @@
-import { register as registerApp, type AppDeps } from "./app";
+import { register as registerApp, type AppDeps } from "./handlers/app";
 import {
   register as registerAudioeffect,
   type AudioeffectDeps,
-} from "./audioeffect";
-import { register as registerBrowser, type BrowserDeps } from "./browser";
-import { register as registerDesktop } from "./desktop";
-import { register as registerDownload } from "./download";
+} from "./handlers/audioeffect";
+import {
+  register as registerBrowser,
+  type BrowserDeps,
+} from "./handlers/browser";
+import { register as registerDesktop } from "./handlers/desktop";
+import { register as registerDownload } from "./handlers/download";
 import {
   register as registerMusiclibrary,
   type MusiclibraryDeps,
-} from "./musiclibrary";
-import { register as registerNetwork } from "./network";
-import { register as registerOs } from "./os";
-import { register as registerPlayer } from "./player";
-import { register as registerProcess } from "./process";
-import { register as registerRtc } from "./rtc";
-import { register as registerStorage, type StorageDeps } from "./storage";
-import { register as registerTrayicon, type TrayiconDeps } from "./trayicon";
-import { register as registerUpdate } from "./update";
-import { register as registerWinhelper, type WinhelperDeps } from "./winhelper";
+} from "./handlers/musiclibrary";
+import { register as registerNetwork } from "./handlers/network";
+import { register as registerOs } from "./handlers/os";
+import { register as registerPlayer } from "./handlers/player";
+import { register as registerProcess } from "./handlers/process";
+import { register as registerRtc } from "./handlers/rtc";
+import {
+  register as registerStorage,
+  type StorageDeps,
+} from "./handlers/storage";
+import {
+  register as registerTrayicon,
+  type TrayiconDeps,
+} from "./handlers/trayicon";
+import { register as registerUpdate } from "./handlers/update";
+import {
+  register as registerWinhelper,
+  type WinhelperDeps,
+} from "./handlers/winhelper";
 
 export type CallModuleDeps = AppDeps &
   AudioeffectDeps &

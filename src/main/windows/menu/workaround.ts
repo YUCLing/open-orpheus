@@ -1,4 +1,4 @@
-import { checkEnvFlagPresent } from "../platform/util";
+import { checkEnvFlagPresent } from "../../platform/util";
 
 export let workaroundFlags = 0;
 
