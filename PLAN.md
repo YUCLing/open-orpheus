@@ -480,9 +480,13 @@ Design points:
 - Services declare narrow dependency interfaces using `Pick<OtherService, "…">`.
   This keeps the **type** graph acyclic while the **runtime** graph may be cyclic
   (`settings` needs `database`, `database` needs `settings`).
-- The `calls/index.ts` barrel becomes an explicit, ordered array typed with
+- ~~The `calls/index.ts` barrel becomes an explicit, ordered array typed with
   `satisfies`, making registration order _data_ rather than an import-graph
-  accident.
+  accident.~~ **Corrected by the P1-6 revert and P1-11.** The ordered table was built
+  and reverted: registration order was measured to be unobservable, so making it data
+  bought nothing (§10). What P1-11 changed instead is that each `calls/*.ts` exports
+  `register()` and the barrel is an explicit sequence of calls — that is what makes
+  the modules injectable, and it is the seam P1-10 uses.
 
 #### Legacy accessor adapter (the migration trick)
 
@@ -945,8 +949,10 @@ graph constructible in a test.
    factory, with a legacy `get kv()` adapter (§5.1).
 3. De-globalise `mainWindow` (`src/main/window.ts`) and `state`
    (`src/main/lifecycle.ts`) via the adapter.
-4. Replace the `src/main/calls/index.ts` barrel with the explicit ordered registrar
-   table typed `satisfies`.
+4. ~~Replace the `src/main/calls/index.ts` barrel with the explicit ordered registrar
+   table typed `satisfies`.~~ **Reverted in P1-6** — the order rationale was false — and
+   superseded by P1-11: each `calls/*.ts` exports `register()`, and the barrel is an
+   explicit sequence of calls.
 5. ~~Reduce `src/main.ts` to: parse argv → `bootstrap(deps)` → create windows.~~
    P1-7 reduced it to `configureProcess()` → `startApplication()`, i.e. 483 → 73 lines.
    The ordered app-level work does **not** live in `bootstrap()` — see the §5.1 correction.
