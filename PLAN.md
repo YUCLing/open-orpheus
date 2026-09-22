@@ -1,13 +1,11 @@
 # Open Orpheus — Refactor & Plugin Roadmap
 
-**Status:** in execution. P0 and P1 are complete; P2 is next. §7.0 records two open
-items carried forward: the documented `lifecycle.ts` pre-`bootstrap()` exception, and
-the fact that `pnpm start` has still not been exercised. Design sections below still
-carry their evidence tags.
-**Revision:** 27 (2026-09-22) — **P1-12 done: own-module `vi.mock` sites reach 0** (from
-11). `main/lyrics.ts` exposes `bindLyrics(playbackController)` instead of subscribing at
-import, and its spec drives a real `PlaybackController` rather than mocking
-`@main/mediaSession`.
+**Status:** in execution. P0 and P1 are complete; P2 is next. §7.0 records one open item
+carried forward: the documented `lifecycle.ts` pre-`bootstrap()` exception. Design
+sections below still carry their evidence tags.
+**Revision:** 28 (2026-09-22) — dev mode closed out: the repo owner confirms `pnpm start`
+runs against the current build-entry list, which retires the last **[A]** from P0.
+Starting P2.
 **Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
 
 This document is intentionally written so it can be **corrected between phases**. See
@@ -914,18 +912,16 @@ and moving files before aliases would rewrite their imports twice.
 - No file in the repo refers to `plugins/` meaning Vite plugins without the new
   path.
 
-**Gate status (2026-09-21).** Verified for the alias foundation: types, tests and
-`pnpm package` all pass. **Dev mode (`pnpm start`) has not been exercised.** The
-reasoning that it is safe: forge's `serve` mode still bundles main/preload through
-rolldown (`watch: {}`), which reads `paths`; the renderer is SvelteKit, which uses its
-own `$lib`/`$bridge` aliases and imports none of the new ones. That is **[A]**, not
-verified — and Vitest proves a non-bundler resolution path _can_ differ (§4.1), so
-treat dev mode as unproven until someone runs it.
+**Gate status (2026-09-22).** Verified: types, tests, `pnpm package` and — at last —
+`pnpm start`, confirmed by the repo owner against the current build-entry list. The
+earlier reasoning for why dev mode should be safe (forge's `serve` mode bundles
+main/preload through rolldown, which reads `paths`; the SvelteKit renderer uses its own
+aliases) was **[A]**; it is now **[V]** by direct observation. This closes the P0
+residual carried through P1.
 
-**P0 status: complete (2026-09-21).** P0-1…P0-11 are all done. Residual: dev mode was
-verified by the repo owner _before_ P0-4/P0-5 changed the build entries, so `pnpm start`
-has not been exercised against the current entry list. `pnpm package` covers the same
-entry resolution but not the dev server/watch path. Re-run `pnpm start` before starting P1.
+**P0 status: complete (2026-09-21).** P0-1…P0-11 are all done. The one residual — dev
+mode unexercised against the P0-4/P0-5 entry list — was resolved on 2026-09-22: see the
+gate status above.
 
 **Risk.** Low. Mechanical. The only real hazard is a partially-updated build-entry
 list, which the package step catches.
@@ -1238,6 +1234,7 @@ material — so resolving it after P4 starts means redesigning P4.
 | 2026-09-22 | P1-10h: `main.ts` reads the window service **[V]**                                                                                                                                                                          | The entry point cannot take a context: it registers `window-all-closed`, `before-quit` and `second-instance` at module load, before `bootstrap()` runs. `window-all-closed` in particular must already be live when the pack loader opens the download window, because `ensureWebPack(createWebPackLoadDeps())` runs _before_ bootstrap and `requestDownload` creates that window. `main.ts` now reads `windowService.currentWindow()` from the service module instead of the `window.ts` re-export — the last `mainWindow` consumer.                                                                                                                                                                                                                                                                                                                                                            |
 | 2026-09-22 | P1-10i: the adapter is deleted **[V]**                                                                                                                                                                                      | `src/main/settings.ts` and `src/main/database.ts` removed: after P1-10g their `export let` bindings had no production importers, only their own `install*` assignments plus two specs. `window.ts`'s re-export block is gone, and `bootstrap()` installs only the lifecycle service. `context.spec`'s "installs the adapters" case was deleted; `settings.spec` now builds the service directly rather than going through the install function, so it still covers `get`/`getMany` defaults and both event hooks. `lifecycle.ts` initialises `currentState`/`setLifecycleState` to safe pre-bootstrap values (`Starting`, no-op) so the pre-bootstrap window cannot throw. `pnpm test` 60 files / 527 tests, `pnpm lint` clean, `pnpm package` succeeded.                                                                                                                                        |
 | 2026-09-22 | P1-12: the last own-module mock is gone **[V]**                                                                                                                                                                             | `main/lyrics.ts` imported `playbackController` from `mediaSession` and subscribed at import time, so `lyrics.spec` had to mock the whole module. The subscriptions moved behind `bindLyrics(playbackController)`, called from `startApplication` immediately after `createMediaSession` resolves — which settles the ordering the ledger row flagged, since both modules load in the same `Promise.all`. The spec needed no double: `new PlaybackController()` is side-effect-free, so it binds a real one and emits on it, and the assertions (including the dispatcher's own re-emission) are unchanged. Own-module `vi.mock` sites: **1 → 0**, so §1.2's headline metric is met. `pnpm test` 60 files / 527 tests, `pnpm lint` clean, `pnpm package` succeeded.                                                                                                                               |
+| 2026-09-22 | `pnpm start` runs against the current build-entry list **[V]**                                                                                                                                                              | Stated by the repo owner. This retires the P0 residual: dev mode had been verified only _before_ P0-4/P0-5 changed the entries, and the reasoning that `serve` mode would still resolve `paths` through rolldown was **[A]**. Note that ten P1 commits changed when modules evaluate (call modules, tray, audio, both on-demand window factories, the adapter deletion), so this also clears the load-timing risk those changes carried.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 2026-09-21 | Vite 8 resolves tsconfig `paths` with no `resolve.alias` **[V]**                                                                                                                                                            | Real `build()` of a virtual module at `src/__probe__.ts` importing `$sharedTypes/ncae`: RESOLVED. Control `$nope/whatever`: FAILED. Explicit alias: RESOLVED.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | 2026-09-21 | `paths` only apply to files covered by tsconfig `include` **[V]**                                                                                                                                                           | Same probe with the virtual module at repo root (outside `include`) FAILED, then RESOLVED once moved under `src/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 2026-09-21 | Forge Vite plugin injects no alias **[V]**                                                                                                                                                                                  | Read `node_modules/@electron-forge/plugin-vite/dist/{ViteConfig.js,config/vite.*.config.js,vite.base.config.js}`; `getConfig` merges base + target + userConfig only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
