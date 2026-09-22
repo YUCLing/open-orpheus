@@ -46,9 +46,9 @@ export default defineConfig({
       // Child logger names stay relative to src/main even though the logger module
       // now lives in platform/, so no log record is renamed by the move.
       base: "src/main",
-      // The command modules moved from calls/ to ipc/handlers/; without this the
-      // per-command `call` loggers would silently disappear.
-      callModulesDir: "src/main/ipc/handlers",
+      // These are the modules registered into the pack's CallDispatcher, i.e. the ones
+      // reachable through channel.call. Without this the per-command `call` loggers vanish.
+      callModulesDir: "src/main/calls/handlers",
     }),
   ],
 });

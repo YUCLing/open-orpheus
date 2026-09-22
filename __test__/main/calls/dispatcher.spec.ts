@@ -4,7 +4,7 @@ import {
   dispatcher,
   registerCallHandler,
   registerCallbackHandler,
-} from "@main/ipc/dispatcher";
+} from "@main/calls/dispatcher";
 
 // `src/main/ipc/dispatcher.ts` is a thin wrapper around the shared `CallDispatcher`
 // instance. Dispatch semantics themselves are covered by

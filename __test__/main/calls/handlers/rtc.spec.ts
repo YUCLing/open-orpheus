@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { dispatcher } from "@main/ipc/dispatcher";
-import { register as registerRtc } from "@main/ipc/handlers/rtc";
+import { dispatcher } from "@main/calls/dispatcher";
+import { register as registerRtc } from "@main/calls/handlers/rtc";
 
 registerRtc();
 

@@ -38,7 +38,7 @@ open-orpheus/
 │   ├── main.ts             # App entry point; only wires process setup to the startup sequence
 │   ├── preload.ts          # Renderer bridge entry
 │   ├── main/               # Main process logic (window, IPC, networking, cache...)
-│   │   ├── ipc/            # IPC command handlers (winhelper, app, etc.)
+│   │   ├── calls/          # Command handlers reached via channel.call, not the bridge IPC
 │   │   ├── domain/         # Pure logic (lyrics, skin, playback, id3, ncae, afp, crypto)
 │   │   ├── platform/       # OS/app integration (protocol, request, cookie, device, fonts, shortcuts)
 │   │   ├── services/       # Stateful and injectable (cache, audio engines, packs, tray)

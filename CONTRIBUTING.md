@@ -38,7 +38,7 @@ open-orpheus/
 │   ├── main.ts             # 应用入口，仅编排进程配置与启动序列
 │   ├── preload.ts          # 渲染进程桥接入口
 │   ├── main/               # 主进程逻辑（窗口、IPC、网络、缓存……）
-│   │   ├── ipc/            # IPC 命令处理器（winhelper、app 等）
+│   │   ├── calls/          # 命令处理器（由 channel.call 调用；与本项目 bridge IPC 无关）
 │   │   ├── domain/         # 纯逻辑（歌词、皮肤、播放、id3、ncae、afp、加解密）
 │   │   ├── platform/       # 系统/应用集成（协议、网络请求、cookie、设备、字体、快捷键）
 │   │   ├── services/       # 有状态、可注入（缓存、音频引擎、资源包、托盘）

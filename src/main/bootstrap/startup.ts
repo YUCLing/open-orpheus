@@ -124,7 +124,7 @@ export async function startApplication() {
       const { bindLyrics } = await import("@main/domain/lyrics");
       bindLyrics(m.playbackController);
     }),
-    import("@main/ipc/channel"),
+    import("@main/calls/channel"),
     import("@main/platform/request").then(async (m) => {
       m.setupRequestInterceptors();
 
@@ -210,7 +210,7 @@ export async function startApplication() {
     import("@main/platform/cookie"),
     import("@main/services/tray"),
   ]);
-  const { registerCallModules } = await import("@main/ipc/index");
+  const { registerCallModules } = await import("@main/calls/index");
 
   const tray = trayModule.createTray({
     windows: ctx.windows,

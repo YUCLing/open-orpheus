@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { dispatcher } from "@main/ipc/dispatcher";
+import { dispatcher } from "@main/calls/dispatcher";
 import { installLoggerStub } from "../../../helpers/globals";
 
 const cookieApi = {
@@ -12,7 +12,7 @@ const cookieApi = {
 
 installLoggerStub();
 const { register: registerBrowser } =
-  await import("@main/ipc/handlers/browser");
+  await import("@main/calls/handlers/browser");
 registerBrowser({ cookie: cookieApi });
 
 /** Dispatch a command and return the tuple spread onto the callback. */

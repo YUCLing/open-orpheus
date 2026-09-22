@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const handlersDir = fileURLToPath(
-  new URL("../../../src/main/ipc/handlers/", import.meta.url)
+  new URL("../../../src/main/calls/handlers/", import.meta.url)
 );
 const barrelPath = fileURLToPath(
-  new URL("../../../src/main/ipc/index.ts", import.meta.url)
+  new URL("../../../src/main/calls/index.ts", import.meta.url)
 );
 
 const modules = readdirSync(handlersDir)
@@ -18,12 +18,12 @@ function source(name: string) {
   return readFileSync(`${handlersDir}${name}.ts`, "utf8");
 }
 
-describe("ipc module barrel", () => {
+describe("call module barrel", () => {
   it("finds the call modules", () => {
     expect(modules.length).toBeGreaterThan(0);
   });
 
-  it("imports every module in src/main/ipc/handlers", () => {
+  it("imports every module in src/main/calls/handlers", () => {
     const barrel = readFileSync(barrelPath, "utf8");
     const missing = modules.filter(
       (name) => !barrel.includes(`"./handlers/${name}"`)
