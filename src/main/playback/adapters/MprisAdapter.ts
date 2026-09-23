@@ -55,28 +55,28 @@ export default class MprisAdapter
       desktopEntry
     );
 
-    this.mediaSession.setEventHandler((err, event) => {
+    this.mediaSession.setEventHandler(async (err, event) => {
       switch (event.type) {
         case "Play":
-          this.emit("play");
+          await this.emit("play");
           break;
         case "Pause":
-          this.emit("pause");
+          await this.emit("pause");
           break;
         case "Next":
-          this.emit("next");
+          await this.emit("next");
           break;
         case "Previous":
-          this.emit("previous");
+          await this.emit("previous");
           break;
         case "Seek":
-          this.emit("seek", event.delta / TIME_RATIO);
+          await this.emit("seek", event.delta / TIME_RATIO);
           break;
         case "SetPosition":
-          this.emit("setPosition", event.position / TIME_RATIO);
+          await this.emit("setPosition", event.position / TIME_RATIO);
           break;
         case "SetVolume":
-          this.emit("volume", event.volume);
+          await this.emit("volume", event.volume);
           break;
       }
     });
