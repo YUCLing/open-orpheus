@@ -14,6 +14,15 @@ import { PlaybackStatus } from "./types";
 const INTENT_TTL_MS = 3000;
 
 /**
+ * How long a forwarded volume is awaited before the request fails.
+ *
+ * The same backstop role as the toggle TTL: a renderer that never reports the
+ * change back — crashed, its window destroyed, or the IPC simply dropped — must
+ * not leave the caller (and the D-Bus reply behind it) waiting forever.
+ */
+const VOLUME_TTL_MS = 3000;
+
+/**
  * Translates media-session commands (MPRIS / SMTC / MPNowPlayingInfo adapters)
  * into the renderer-facing IPC the preload already understands.
  *
@@ -24,6 +33,10 @@ const INTENT_TTL_MS = 3000;
  * Playback is the exception: the OS sends absolute intents (`play` / `pause`)
  * but the renderer only exposes a *toggle*, so this router decides whether a
  * toggle is warranted and tracks the toggles still in flight.
+ *
+ * Volume is the other: it is idempotent, but the media session must not report
+ * the old value after an OS volume change, so the command waits for the
+ * renderer to report the volume back before it resolves.
  */
 export default class PlayerCommandRouter {
   /**
@@ -56,7 +69,7 @@ export default class PlayerCommandRouter {
     commands.on("previous", () => this.sendHotkey("prev_1"));
     commands.on("seek", ({ data }) => this.send("player.seek", data));
     commands.on("setPosition", ({ data }) => this.send("player.seekto", data));
-    commands.on("volume", ({ data }) => this.send("player.volume", data));
+    commands.on("volume", ({ data }) => this.setVolume(data));
   }
 
   /** Where playback is headed once every in-flight toggle has landed. */
@@ -143,6 +156,49 @@ export default class PlayerCommandRouter {
     if (this.expiryTimer !== null) {
       clearTimeout(this.expiryTimer);
       this.expiryTimer = null;
+    }
+  }
+
+  /**
+   * Forward an absolute volume to the renderer and wait for it to report that
+   * value back, so a caller that awaits this command (MPRIS `Set`) only returns
+   * once the app actually has that volume.
+   *
+   * The wait is tied to `volume`, not merely to "the next change": overlapping
+   * requests must not satisfy each other's confirmation. It is also bounded, so
+   * a request the renderer never answers fails instead of hanging.
+   *
+   * The controller suppresses an unchanged volume, so a value the renderer
+   * already has would never report back; neither would a message with no window
+   * to deliver it to. Both cases complete immediately.
+   */
+  private async setVolume(volume: number): Promise<void> {
+    if (!mainWindow) return;
+    if (this.player.snapshot.volume === volume) {
+      this.send("player.volume", volume);
+      return;
+    }
+
+    // A plain `setTimeout`, rather than `AbortSignal.timeout`, so the wait can
+    // be driven deterministically (and tested) with fake timers.
+    const expired = new AbortController();
+    const timer = setTimeout(
+      () => expired.abort(new Error(`Volume ${volume} was not confirmed`)),
+      VOLUME_TTL_MS
+    );
+    const confirmed = this.player.once("volumechanged", {
+      predicate: ({ data }) => data === volume,
+      signal: expired.signal,
+    });
+    // Registering before the send keeps a fast report from slipping past, but a
+    // synchronous `send` failure would then leave this promise to reject with
+    // nothing observing it; keep a handled branch for that case.
+    void confirmed.catch(() => {});
+    this.send("player.volume", volume);
+    try {
+      await confirmed;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

@@ -1,9 +1,12 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
 
 use napi_derive::napi;
 use zbus::{
     fdo::Error,
     interface,
+    names::InterfaceName,
     object_server::{InterfaceRef, SignalEmitter},
     zvariant::{DeserializeDict, ObjectPath, OwnedObjectPath, SerializeDict, Type, Value},
     Connection,
@@ -310,7 +313,7 @@ impl PlayerInterface {
             .unwrap_or_else(MprisMetadataDict::no_track)
     }
 
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     fn volume(&self) -> f64 {
         lock(&self.state).volume
     }
@@ -432,6 +435,21 @@ pub async fn update_metadata(
     Ok(())
 }
 
+/// Emit the single `PropertiesChanged` for `Volume`.
+async fn emit_volume_changed(emitter: &SignalEmitter<'_>, volume: f64) -> Result<(), String> {
+    let mut changed = HashMap::new();
+    changed.insert("Volume", Value::from(volume));
+
+    zbus::fdo::Properties::properties_changed(
+        emitter,
+        InterfaceName::from_static_str_unchecked("org.mpris.MediaPlayer2.Player"),
+        changed,
+        Cow::Borrowed(&[]),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Replace the volume and emit `PropertiesChanged`.
 pub async fn update_volume(
     conn: &Connection,
@@ -439,16 +457,12 @@ pub async fn update_volume(
     volume: f64,
 ) -> Result<(), String> {
     let iface_ref = player_interface(conn).await?;
-    let iface = iface_ref.get().await;
 
-    // The state lock is released before the signal is emitted: the generated
-    // `volume_changed` calls the property getter, which takes the same lock.
+    // The state lock is released before the signal is emitted. Emitting needs
+    // only the emitter, so no interface guard is held either.
     lock(state).volume = volume;
 
-    iface
-        .volume_changed(iface_ref.signal_emitter())
-        .await
-        .map_err(|e| e.to_string())
+    emit_volume_changed(iface_ref.signal_emitter(), volume).await
 }
 
 /// Replace the playback state and emit the signals its diff implies.
