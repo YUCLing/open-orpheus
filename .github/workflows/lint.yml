@@ -74,6 +74,12 @@ jobs:
           toolchain: ${{ vars.RUST_VERSION || 'stable' }}
           components: clippy,rustfmt
 
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libfreetype-dev
+
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 

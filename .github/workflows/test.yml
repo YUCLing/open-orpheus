@@ -78,6 +78,11 @@ jobs:
           # cargo-llvm-cov needs llvm-cov/llvm-profdata from the toolchain.
           components: llvm-tools-preview
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libfreetype-dev
+
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
