@@ -55,6 +55,11 @@ const expectToggle = () =>
     true
   );
 
+/** Let Emittery reach (and run) its listeners before asserting on them. */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+}
+
 beforeEach(() => {
   send.mockClear();
   host.window = { webContents: { send } };
@@ -211,11 +216,14 @@ describe("PlayerCommandRouter command routing", () => {
   });
 
   it("forwards volume changes", async () => {
-    const { commands } = setup(PlaybackStatus.Playing);
+    const { player, commands } = setup(PlaybackStatus.Playing);
 
-    await commands.emit("volume", 0.5);
-
+    const emitted = commands.emit("volume", 0.5);
+    await flushMicrotasks();
     expect(send).toHaveBeenCalledWith("player.volume", 0.5);
+
+    player.applyVolume(0.5); // renderer reports it back
+    await emitted;
   });
 
   it("stays silent when there is no main window", async () => {
@@ -230,5 +238,78 @@ describe("PlayerCommandRouter command routing", () => {
     await commands.emit("play"); // routed through the same window seam
 
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlayerCommandRouter volume handshake", () => {
+  it("waits for the renderer to report the volume back", async () => {
+    const { player, commands } = setup(PlaybackStatus.Playing);
+    let settled = false;
+
+    const emitted = commands.emit("volume", 0.5).then(() => {
+      settled = true;
+    });
+    await flushMicrotasks();
+
+    expect(send).toHaveBeenCalledWith("player.volume", 0.5);
+    expect(settled).toBe(false);
+
+    player.applyVolume(0.5); // renderer confirmation
+    await emitted;
+    expect(settled).toBe(true);
+  });
+
+  it("does not wait when the renderer already has that volume", async () => {
+    const { player, commands } = setup(PlaybackStatus.Playing);
+    player.applyVolume(0.5);
+
+    await commands.emit("volume", 0.5);
+
+    expect(send).toHaveBeenCalledWith("player.volume", 0.5);
+  });
+
+  it("releases each request only on its own value", async () => {
+    const { player, commands } = setup(PlaybackStatus.Playing);
+    const settled: string[] = [];
+
+    const first = commands.emit("volume", 0.5).then(() => settled.push("0.5"));
+    const second = commands.emit("volume", 0.2).then(() => settled.push("0.2"));
+    await flushMicrotasks();
+
+    player.applyVolume(0.5); // the first request's value only
+    await flushMicrotasks();
+    expect(settled).toEqual(["0.5"]); // 0.2 must not be released by it
+
+    player.applyVolume(0.2);
+    await Promise.all([first, second]);
+    expect(settled.sort()).toEqual(["0.2", "0.5"]);
+  });
+
+  it("fails when the renderer never confirms the value", async () => {
+    vi.useFakeTimers();
+    try {
+      const { commands } = setup(PlaybackStatus.Playing);
+      const outcome = commands.emit("volume", 0.5).then(
+        () => "resolved",
+        () => "rejected"
+      );
+      await flushMicrotasks();
+      expect(send).toHaveBeenCalledWith("player.volume", 0.5);
+
+      await vi.advanceTimersByTimeAsync(5000); // well past the volume TTL
+      expect(await outcome).toBe("rejected");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails when the send itself throws", async () => {
+    const { commands } = setup(PlaybackStatus.Playing);
+    send.mockImplementationOnce(() => {
+      throw new Error("Object has been destroyed");
+    });
+
+    // Emittery wraps listener errors, so only the rejection is observable here.
+    await expect(commands.emit("volume", 0.5)).rejects.toThrow();
   });
 });

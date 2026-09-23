@@ -39,6 +39,14 @@ export default class MprisAdapter
   private position: number | null = null;
   private duration: number | null = null;
   private rate = 1;
+  /**
+   * The most recent MPRIS volume write, keyed by the value it was for. The
+   * native write is asynchronous, so `SetVolume` awaits the write for *its*
+   * value once the renderer has confirmed that value — a write triggered by
+   * some other (concurrent or in-app) change must not be mistaken for it.
+   */
+  private volumeApplied: { volume: number; write: Promise<unknown> } | null =
+    null;
 
   constructor() {
     super();
@@ -55,29 +63,44 @@ export default class MprisAdapter
       desktopEntry
     );
 
-    this.mediaSession.setEventHandler((err, event) => {
+    this.mediaSession.setEventHandler(async (err, event) => {
       switch (event.type) {
         case "Play":
-          this.emit("play");
+          await this.emit("play");
           break;
         case "Pause":
-          this.emit("pause");
+          await this.emit("pause");
           break;
         case "Next":
-          this.emit("next");
+          await this.emit("next");
           break;
         case "Previous":
-          this.emit("previous");
+          await this.emit("previous");
           break;
         case "Seek":
-          this.emit("seek", event.delta / TIME_RATIO);
+          await this.emit("seek", event.delta / TIME_RATIO);
           break;
         case "SetPosition":
-          this.emit("setPosition", event.position / TIME_RATIO);
+          await this.emit("setPosition", event.position / TIME_RATIO);
           break;
-        case "SetVolume":
-          this.emit("volume", event.volume);
+        case "SetVolume": {
+          try {
+            await this.emit("volume", event.volume);
+          } catch {
+            // The router rejects when the renderer never confirms the value; a
+            // rejected handler becomes a D-Bus error, so the client learns the
+            // request failed rather than waiting forever.
+            throw new Error(
+              `MPRIS volume change to ${event.volume} was not confirmed by the renderer`
+            );
+          }
+          // The renderer confirmed this exact value, so `onVolume` has already
+          // recorded the matching MPRIS write; awaiting it keeps the reply
+          // behind the property actually changing.
+          const applied = this.volumeApplied;
+          if (applied?.volume === event.volume) await applied.write;
           break;
+        }
       }
     });
   }
@@ -116,7 +139,10 @@ export default class MprisAdapter
   }
 
   onVolume(volume: number): void {
-    this.mediaSession.setVolume(volume);
+    this.volumeApplied = {
+      volume,
+      write: this.mediaSession.setVolume(volume) as Promise<unknown>,
+    };
   }
 
   dispose(): void {

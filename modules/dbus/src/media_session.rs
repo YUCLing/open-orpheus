@@ -1,12 +1,13 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
 
-use napi::{bindgen_prelude::Object, threadsafe_function::ThreadsafeFunction, Env, Error, Result};
+use napi::bindgen_prelude::{Either, Object, Promise, Undefined};
+use napi::threadsafe_function::ThreadsafeFunction;
+use napi::{Env, Error, Result};
 use napi_derive::napi;
-use smol::lock::Mutex;
 use zbus::Connection;
 
 use crate::media_session::mpris::{
-    Interface, MprisMetadata, PlaybackState, PlayerInterface, PlayerInterfaceSignals,
+    Interface, MprisMetadata, PlaybackState, PlayerInterface, PlayerState,
 };
 
 mod mpris;
@@ -37,10 +38,68 @@ pub enum MediaSessionEvents {
     SetVolume { volume: f64 },
 }
 
+/// What a JS event handler may return.
+///
+/// A handler may be synchronous (it returns nothing) or asynchronous (it
+/// returns a promise). The promise arm must come *first*: `Either` picks the
+/// first arm whose value validates, and the `Undefined` arm accepts anything.
+type EventReturn = Either<Promise<()>, Undefined>;
+
+type EventHandler = Arc<ThreadsafeFunction<MediaSessionEvents, EventReturn>>;
+
+/// Lock a `std::sync::Mutex`, recovering the guard if a previous holder
+/// panicked. These locks are always released before awaiting, so poisoning is
+/// not a meaningful signal.
+fn lock<T>(mutex: &StdMutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Shared handle to the JS event handler.
+///
+/// The zbus interfaces and the JS-facing `MediaSession` each hold a clone, so
+/// `set_event_handler` can swap the handler at any time while commands already
+/// in flight keep the handler they started with alive.
+#[derive(Clone, Default)]
+pub struct EventDispatcher {
+    handler: Arc<StdMutex<Option<EventHandler>>>,
+}
+
+impl EventDispatcher {
+    pub fn set(&self, handler: Option<EventHandler>) {
+        *lock(&self.handler) = handler;
+    }
+
+    /// Hand `event` to JS and wait for the handler to finish.
+    ///
+    /// The handler is cloned out of the slot and the slot lock is released
+    /// before calling into JS: the callback runs on the thread that also calls
+    /// `set_event_handler`, so holding the lock across the call would deadlock
+    /// that thread — and with it the very callback the lock is waiting on.
+    ///
+    /// A missing handler is an error rather than a silently dropped event, and
+    /// a rejected handler promise (or a throw) is reported back to the D-Bus
+    /// caller.
+    pub async fn dispatch(&self, event: MediaSessionEvents) -> std::result::Result<(), String> {
+        let handler = lock(&self.handler).clone();
+        let Some(handler) = handler else {
+            return Err("No media session event handler is registered".to_string());
+        };
+
+        match handler.call_async(Ok(event)).await {
+            Ok(Either::A(promise)) => promise.await.map_err(|e| e.to_string()),
+            Ok(Either::B(())) => Ok(()),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 #[napi]
 pub struct MediaSession {
     conn: Connection,
-    event_handler: Arc<Mutex<Option<ThreadsafeFunction<MediaSessionEvents, ()>>>>,
+    state: Arc<StdMutex<PlayerState>>,
+    dispatcher: EventDispatcher,
 }
 
 macro_rules! napi_deferred_task {
@@ -61,17 +120,17 @@ macro_rules! napi_deferred_task {
 impl MediaSession {
     #[napi(constructor)]
     pub fn new(name: String, identity: String, desktop_entry: String) -> Result<Self> {
-        let (event_tx, event_rx) = smol::channel::unbounded::<MediaSessionEvents>();
+        let state = Arc::new(StdMutex::new(PlayerState::new()));
+        let dispatcher = EventDispatcher::default();
+
         let interface = Interface {
-            tx: event_tx.clone(),
+            dispatcher: dispatcher.clone(),
             identity,
             desktop_entry,
         };
         let player_interface = PlayerInterface {
-            tx: event_tx.clone(),
-            volume: 1.0,
-            playback_state: None,
-            metadata: None,
+            dispatcher: dispatcher.clone(),
+            state: state.clone(),
         };
         let conn = smol::block_on::<zbus::Result<Connection>>(async {
             let conn = Connection::session().await?;
@@ -85,28 +144,19 @@ impl MediaSession {
         })
         .map_err(|x| Error::from_reason(x.description().unwrap_or_default()))?;
 
-        let event_handler: Arc<Mutex<Option<ThreadsafeFunction<MediaSessionEvents, ()>>>> =
-            Arc::new(Mutex::new(None));
-        let cloned_event_handler = event_handler.clone();
-        smol::spawn(async move {
-            while let Ok(event) = event_rx.recv().await {
-                let Some(event_handler) = &*cloned_event_handler.lock().await else {
-                    continue;
-                };
-                let _ = event_handler.call_async(Ok(event)).await;
-            }
-        })
-        .detach();
-
         Ok(Self {
             conn,
-            event_handler,
+            state,
+            dispatcher,
         })
     }
 
     #[napi]
-    pub fn set_event_handler(&self, handler: Option<ThreadsafeFunction<MediaSessionEvents, ()>>) {
-        *self.event_handler.lock_blocking() = handler;
+    pub fn set_event_handler(
+        &self,
+        handler: Option<ThreadsafeFunction<MediaSessionEvents, Either<Promise<()>, Undefined>>>,
+    ) {
+        self.dispatcher.set(handler.map(Arc::new));
     }
 
     #[napi]
@@ -116,66 +166,18 @@ impl MediaSession {
         metadata: Option<MprisMetadata>,
     ) -> Result<Object<'a>> {
         let conn = self.conn.clone();
+        let state = self.state.clone();
         napi_deferred_task!(env, async {
-            let iface_ref = conn
-                .object_server()
-                .interface::<_, PlayerInterface>(MPRIS_OBJECT_PATH)
-                .await
-                .map_err(|e| e.to_string())?;
-            let mut iface = iface_ref.get_mut().await;
-
-            let metadata_was_available = iface.metadata.is_some();
-            let metadata_is_available = metadata.is_some();
-
-            iface.metadata = metadata;
-
-            if metadata_was_available != metadata_is_available {
-                iface
-                    .can_go_next_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-                iface
-                    .can_go_previous_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-                iface
-                    .can_play_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-                iface
-                    .can_pause_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-                iface
-                    .can_seek_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-            }
-
-            iface
-                .metadata_changed(iface_ref.signal_emitter())
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok::<(), String>(())
+            mpris::update_metadata(&conn, &state, metadata).await
         })
     }
 
     #[napi]
     pub fn set_volume<'a>(&'a self, env: &'a Env, volume: f64) -> Result<Object<'a>> {
         let conn = self.conn.clone();
+        let state = self.state.clone();
         napi_deferred_task!(env, async {
-            let iface_ref = conn
-                .object_server()
-                .interface::<_, PlayerInterface>(MPRIS_OBJECT_PATH)
-                .await
-                .map_err(|e| e.to_string())?;
-            let mut iface = iface_ref.get_mut().await;
-            iface.volume = volume;
-            iface
-                .volume_changed(iface_ref.signal_emitter())
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok::<(), String>(())
+            mpris::update_volume(&conn, &state, volume).await
         })
     }
 
@@ -186,67 +188,15 @@ impl MediaSession {
         playback_state: Option<PlaybackState>,
     ) -> Result<Object<'a>> {
         let conn = self.conn.clone();
+        let state = self.state.clone();
         napi_deferred_task!(env, async {
-            let iface_ref = conn
-                .object_server()
-                .interface::<_, PlayerInterface>(MPRIS_OBJECT_PATH)
-                .await
-                .map_err(|e| e.to_string())?;
-            let mut iface = iface_ref.get_mut().await;
-
-            let state_was_available = iface.playback_state.is_some();
-            let state_is_available = playback_state.is_some();
-
-            let prev_status = iface.playback_state.as_ref().map(|x| x.status);
-            let new_status = playback_state.as_ref().map(|x| x.status);
-
-            let prev_speed = iface.playback_state.as_ref().and_then(|x| x.speed);
-            let new_speed = playback_state.as_ref().and_then(|x| x.speed);
-
-            iface.playback_state = playback_state;
-
-            if state_was_available != state_is_available {
-                iface
-                    .can_play_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-                iface
-                    .can_pause_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-            }
-
-            if prev_status != new_status {
-                iface
-                    .playback_status_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-            }
-
-            if prev_speed != new_speed {
-                iface
-                    .rate_changed(iface_ref.signal_emitter())
-                    .await
-                    .map_err(|e| e.to_string())?;
-            }
-
-            Ok::<(), String>(())
+            mpris::update_playback_state(&conn, &state, playback_state).await
         })
     }
 
     #[napi]
     pub fn send_seeked<'a>(&'a self, env: &'a Env, time: i64) -> Result<Object<'a>> {
         let conn = self.conn.clone();
-        napi_deferred_task!(env, async {
-            conn.object_server()
-                .interface::<_, PlayerInterface>(MPRIS_OBJECT_PATH)
-                .await
-                .map_err(|e| e.to_string())?
-                .seeked(time)
-                .await
-                .map_err(|e| e.to_string())?;
-
-            Ok::<(), String>(())
-        })
+        napi_deferred_task!(env, async { mpris::send_seeked(&conn, time).await })
     }
 }
