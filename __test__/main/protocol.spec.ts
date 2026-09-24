@@ -12,41 +12,14 @@ vi.mock("electron", () => ({
 import { app } from "electron";
 
 import registerAsProtocolClient, {
-  checkOpenCommand,
   getProtocolClientName,
   isProtocolClient,
   unregisterAsProtocolClient,
 } from "../../src/main/protocol";
 
-describe("checkOpenCommand", () => {
-  it("finds an orpheus URL in the argv", () => {
-    expect(checkOpenCommand(["/usr/bin/open-orpheus", "orpheus://x/y"])).toBe(
-      "orpheus://x/y"
-    );
-  });
-
-  it("returns the first orpheus URL", () => {
-    expect(checkOpenCommand(["orpheus://first", "orpheus://second"])).toBe(
-      "orpheus://first"
-    );
-  });
-
-  it("returns null when nothing matches", () => {
-    expect(checkOpenCommand(["--flag", "file.txt"])).toBeNull();
-    expect(checkOpenCommand([])).toBeNull();
-    expect(checkOpenCommand(["notorpheus://x"])).toBeNull();
-  });
-
-  it("falls back to the process argv", () => {
-    const original = process.argv;
-    process.argv = ["node", "main.js", "orpheus://from-process-argv"];
-    try {
-      expect(checkOpenCommand()).toBe("orpheus://from-process-argv");
-    } finally {
-      process.argv = original;
-    }
-  });
-});
+// Command line parsing no longer lives here: `checkOpenCommand` moved to
+// `src/main/arguments.ts` and is covered by `arguments.spec.ts`. This file only
+// covers the protocol registration helpers.
 
 describe("registerAsProtocolClient", () => {
   beforeEach(() => {

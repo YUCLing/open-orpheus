@@ -5,7 +5,6 @@ import { createHash } from "node:crypto";
 
 import { app } from "electron";
 import { MusicFile } from "music-tag-native";
-import mime from "mime";
 
 import { musicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
@@ -202,7 +201,7 @@ registerCallHandler<[MusicLibraries], void>(
         libPath,
         {
           recursive: true,
-          ignore: (path) => !(mime.getType(path) ?? "").startsWith("audio/"),
+          ignore: (path) => !isMusicFile(path),
         },
         async (eventType, filename) => {
           if (!filename) return;

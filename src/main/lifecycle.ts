@@ -3,6 +3,23 @@ import Emittery from "emittery";
 
 import { toError } from "../util";
 
+export type StartupTask =
+  | {
+      type: "openFile";
+      file: string;
+    }
+  | {
+      type: "openUrl";
+      url: string;
+    };
+
+export let startupTask: StartupTask | null = null;
+
+export function setStartupTask(task: StartupTask) {
+  if (startupTask !== null) return; // Task is already set, ignoring.
+  startupTask = task;
+}
+
 export enum LifecycleState {
   Starting,
   MainWindowCreated,
