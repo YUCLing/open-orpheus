@@ -1,14 +1,5 @@
 import { app } from "electron";
 
-export function checkOpenCommand(argv?: string[]): string | null {
-  for (const arg of argv ?? process.argv) {
-    if (arg.startsWith("orpheus://")) {
-      return arg;
-    }
-  }
-  return null;
-}
-
 export const isProtocolClient = () => app.isDefaultProtocolClient("orpheus");
 export const getProtocolClientName = () =>
   app.getApplicationNameForProtocol("orpheus://");

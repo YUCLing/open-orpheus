@@ -32,14 +32,18 @@ import versions from "../versions.json";
 import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "./main/pack";
 import showPackgeDownloadWindow from "./main/windows/package-download";
 import { mainWindow } from "./main/window";
-import registerAsProtocolClient, {
-  checkOpenCommand as checkWebCommand,
-} from "./main/protocol";
+import registerAsProtocolClient from "./main/protocol";
+import {
+  parseLocalFile,
+  parseWebCommand,
+  raceArgument,
+} from "./main/arguments";
 import { toError } from "./util";
 import {
   LifecycleState,
   setLifecycleState,
   state as lifecycleState,
+  setStartupTask,
 } from "./main/lifecycle";
 import { checkEnvFlagPresent, isFileNotFound } from "./main/util";
 import { PackageDownloadReason } from "$sharedTypes/package-download";
@@ -465,15 +469,51 @@ app.on("before-quit", () => {
   setLifecycleState(LifecycleState.Quitting);
 });
 
-app.on("second-instance", (event, argv) => {
+app.on("open-file", (e, path) => {
+  e.preventDefault();
+  setStartupTask({
+    type: "openFile",
+    file: path,
+  });
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  const cmd = checkWebCommand(argv);
+  mainWindow.webContents.send(
+    "channel.call",
+    "ipc.onipcmessagerecived",
+    2,
+    path
+  );
+});
+
+app.on("open-url", (e, url) => {
+  if (!url.startsWith("orpheus://")) return;
+  e.preventDefault();
+  setStartupTask({
+    type: "openUrl",
+    url,
+  });
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(
+    "channel.call",
+    "ipc.onipcmessagerecived",
+    3,
+    url
+  );
+});
+
+app.on("second-instance", async (event, argv) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const cmd = await raceArgument<[number, string]>(async (arg) => {
+    const webCmd = parseWebCommand(arg);
+    if (webCmd) return [3, webCmd];
+    const localFile = await parseLocalFile(arg);
+    if (localFile) return [2, localFile];
+    return null;
+  }, argv);
   if (cmd) {
     mainWindow.webContents.send(
       "channel.call",
       "ipc.onipcmessagerecived",
-      3,
-      cmd
+      ...cmd
     );
     return;
   }

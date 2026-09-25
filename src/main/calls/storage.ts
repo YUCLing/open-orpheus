@@ -125,7 +125,7 @@ registerCallHandler<[string, string, string], [string, string]>(
         downloadDir,
         {
           recursive: true,
-          ignore: (path) => !(mime.getType(path) ?? "").startsWith("audio/"),
+          ignore: (path) => !isMusicFile(path),
         },
         async (eventType, filename) => {
           if (

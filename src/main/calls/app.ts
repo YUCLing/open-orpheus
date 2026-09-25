@@ -18,9 +18,15 @@ import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
 import { client, getProxyAgent } from "../request";
 import { disableHardwareAccelerationFlag } from "../folders";
-import { LifecycleState, setLifecycleState } from "../lifecycle";
+import { LifecycleState, setLifecycleState, startupTask } from "../lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../dawn";
 import globalLogger from "../logger";
+import {
+  parseLocalFile,
+  parseMoveRun,
+  parseWebCommand,
+  raceArgument,
+} from "../arguments";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   const raw = args.map((v) => String(v)).join(" ");
@@ -72,29 +78,38 @@ type StartCommand =
   | { movesrc: string; movedest: string }
   | {
       webcmd: string;
-    };
-registerCallHandler<[], [] | [StartCommand]>("app.getAppStartCommand", () => {
-  for (let i = 0; i < process.argv.length; i++) {
-    const v = process.argv[i];
-    if (v === "--moverun" && process.argv.length > i + 2) {
-      const src = process.argv[i + 1];
-      const dest = process.argv[i + 2];
-      return [
-        {
-          movesrc: src,
-          movedest: dest,
-        },
-      ];
-    } else if (v.startsWith("orpheus://")) {
-      return [
-        {
-          webcmd: v,
-        },
-      ];
     }
+  | { play: string };
+registerCallHandler<[], [] | [StartCommand]>(
+  "app.getAppStartCommand",
+  async () => {
+    if (startupTask) {
+      switch (startupTask.type) {
+        case "openFile":
+          return [{ play: startupTask.file }];
+        case "openUrl":
+          return [{ webcmd: startupTask.url }];
+      }
+    }
+    return (
+      (await raceArgument<[StartCommand]>(async (v, i, arr) => {
+        const moveRun = parseMoveRun(v, i, arr);
+        if (moveRun)
+          return [
+            {
+              movesrc: moveRun[0],
+              movedest: moveRun[1],
+            },
+          ];
+        const localFile = await parseLocalFile(v);
+        if (localFile) return [{ play: localFile }];
+        const webCmd = parseWebCommand(v);
+        if (webCmd) return [{ webcmd: webCmd }];
+        return null;
+      })) ?? []
+    );
   }
-  return [];
-});
+);
 
 registerCallHandler<[string, string], [string]>(
   "app.getLocalConfig",
@@ -318,9 +333,14 @@ registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [
   false,
 ]);
 
-registerCallHandler<[], void>("app.getDefaultMusicPlayPath", () => {
-  return;
-});
+registerCallHandler<[], [] | [string]>(
+  "app.getDefaultMusicPlayPath",
+  async () => {
+    if (startupTask?.type === "openFile") return [startupTask.file];
+    const path = await raceArgument((arg) => parseLocalFile(arg));
+    return path ? [path] : [];
+  }
+);
 
 registerCallHandler<[string], void>("app.login", (event, uid) => {
   if (uid) {
