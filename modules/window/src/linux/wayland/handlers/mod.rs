@@ -4,6 +4,7 @@
 //! `(&mut WaylandConn, &WlMessage)` returning an [`Action`]. The dispatch
 //! tables below are the single index of every intercept point.
 
+mod layer_shell;
 mod objects;
 mod pointer;
 mod title;
@@ -12,9 +13,10 @@ mod touch;
 use std::os::fd::RawFd;
 
 use super::codec::{
-    EVT_DELETE_ID, Iface, REQ_BIND, REQ_CREATE_SURFACE, REQ_DESTROY, REQ_GET_POINTER,
-    REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_TITLE,
-    WL_POINTER_RELEASE, WL_TOUCH_RELEASE, WlMessage,
+    EVT_DELETE_ID, EVT_GLOBAL, EVT_GLOBAL_REMOVE, Iface, REQ_BIND, REQ_CREATE_SURFACE, REQ_DESTROY,
+    REQ_GET_POINTER, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_TOPLEVEL_DECORATION,
+    REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE, WL_POINTER_RELEASE,
+    WL_TOUCH_RELEASE, WlMessage,
 };
 use super::state::WaylandConn;
 
@@ -24,6 +26,8 @@ pub(crate) enum Action {
     Forward,
     /// Drop the message.
     Suppress,
+    /// Emit these messages in the original's place, in order.
+    Replace(Vec<Vec<u8>>),
 }
 
 /// Side effects a handler wants applied *after* the connection lock is
@@ -33,6 +37,8 @@ pub(crate) struct Effects {
     pub(crate) button: Option<(u32, u32, u32)>,
     pub(crate) entered: Option<(u32, i32, i32)>,
     pub(crate) arm_watchers_for: Option<u32>,
+    /// A window whose surface could not take the layer role, by custom id.
+    pub(crate) layer_shell_refused: Option<String>,
 }
 
 pub(crate) fn dispatch_request(
@@ -41,6 +47,19 @@ pub(crate) fn dispatch_request(
     msg: &WlMessage,
     fx: &mut Effects,
 ) -> Action {
+    // A converted window answers to xdg-shell opcodes but must not reach the
+    // compositor as xdg-shell.
+    if conn.layer_windows.contains_key(&msg.object_id) {
+        return layer_shell::on_client_toplevel_request(fd, conn, msg);
+    }
+    if conn.xdg_to_layer.contains_key(&msg.object_id) {
+        return layer_shell::on_client_xdg_surface_request(conn, msg);
+    }
+    // A decoration object the compositor has no toplevel for.
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::ZxdgToplevelDecoration) {
+        return layer_shell::on_decoration_object_request(conn, msg);
+    }
+
     let Some(iface) = conn.ifaces.get(&msg.object_id).copied() else {
         return Action::Forward;
     };
@@ -52,7 +71,13 @@ pub(crate) fn dispatch_request(
         (Iface::WlSeat, REQ_GET_POINTER) => objects::on_get_pointer(conn, msg),
         (Iface::WlSeat, REQ_GET_TOUCH) => objects::on_get_touch(conn, msg),
         (Iface::XdgWmBase, REQ_GET_XDG_SURFACE) => objects::on_get_xdg_surface(conn, msg),
-        (Iface::XdgSurface, REQ_GET_TOPLEVEL) => objects::on_get_toplevel(conn, msg, fx),
+        (Iface::ZxdgDecorationManager, REQ_GET_TOPLEVEL_DECORATION) => {
+            layer_shell::on_get_toplevel_decoration(conn, msg)
+        }
+        (Iface::XdgToplevelIconManager, REQ_SET_ICON) => layer_shell::on_set_icon(conn, msg),
+        // The role is assigned here, so this is also where a layer-shell
+        // declaration is consumed.
+        (Iface::XdgSurface, REQ_GET_TOPLEVEL) => layer_shell::on_get_toplevel(fd, conn, msg, fx),
         (Iface::XdgToplevel, REQ_SET_TITLE) => title::on_set_title(fd, conn, msg),
         (Iface::WlSurface | Iface::XdgSurface | Iface::XdgToplevel, REQ_DESTROY) => {
             objects::on_destroy(fd, conn, msg)
@@ -66,6 +91,24 @@ pub(crate) fn dispatch_request(
 pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut Effects) -> Action {
     if msg.object_id == 1 && msg.opcode == EVT_DELETE_ID {
         return objects::on_delete_id(conn, msg);
+    }
+
+    // Events for objects the proxy created for itself are not the client's
+    // business (a reserved id answers with a callback `done`).
+    if conn.injected_ids.contains(&msg.object_id) {
+        return Action::Suppress;
+    }
+
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlRegistry) {
+        return match msg.opcode {
+            EVT_GLOBAL => layer_shell::on_registry_global(conn, msg),
+            EVT_GLOBAL_REMOVE => layer_shell::on_registry_global_remove(conn, msg),
+            _ => Action::Forward,
+        };
+    }
+
+    if conn.layer_windows.contains_key(&msg.object_id) {
+        return layer_shell::on_layer_event(conn, msg);
     }
 
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlPointer) {
@@ -82,7 +125,7 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
 #[cfg(test)]
 mod tests {
     use super::super::codec::{
-        BTN_PRESSED, CUSTOM_ID_PREFIX, EVT_BUTTON, EVT_ENTER, EVT_LEAVE, EVT_TOUCH_DOWN,
+        BTN_PRESSED, EVT_BUTTON, EVT_ENTER, EVT_LEAVE, EVT_TOUCH_DOWN, decorate_title,
     };
     use super::super::state::{CUSTOM_ID_MAP, WaylandConn, init_state};
     use super::super::test_support::{message, wl_string, word};
@@ -213,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn a_custom_title_is_swallowed() {
+    fn a_custom_title_is_recorded_and_stripped() {
         init_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(30, Iface::XdgToplevel);
@@ -232,21 +275,36 @@ mod tests {
             Action::Forward
         ));
 
+        // A decorated title names the window and reaches the compositor as the
+        // real title only.
         let secret = "window-42";
-        let mut args = wl_string(&format!("{CUSTOM_ID_PREFIX}{secret}"));
+        let mut args = wl_string(&decorate_title(secret, "Real Title"));
         args.extend_from_slice(&[0, 0, 0, 0]);
-        assert!(matches!(
-            dispatch_request(
-                FD,
-                &mut conn,
-                &message(30, REQ_SET_TITLE, &args),
-                &mut Effects::default()
-            ),
-            Action::Suppress
-        ));
+        let action = dispatch_request(
+            FD,
+            &mut conn,
+            &message(30, REQ_SET_TITLE, &args),
+            &mut Effects::default(),
+        );
+
+        let Action::Replace(messages) = action else {
+            panic!("expected the title to be rewritten");
+        };
+        let rewritten = &messages[0];
+        let len = u32::from_ne_bytes(rewritten[8..12].try_into().unwrap()) as usize;
+        assert_eq!(
+            std::str::from_utf8(&rewritten[12..12 + len - 1]).unwrap(),
+            "Real Title"
+        );
 
         let map = CUSTOM_ID_MAP.get().expect("initialised").lock().unwrap();
         assert_eq!(map.get(secret).copied(), Some((FD, 10)));
+        drop(map);
+        if let Some(m) = CUSTOM_ID_MAP.get()
+            && let Ok(mut map) = m.lock()
+        {
+            map.remove(secret);
+        }
     }
 
     #[test]

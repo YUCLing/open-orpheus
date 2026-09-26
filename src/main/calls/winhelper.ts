@@ -72,7 +72,12 @@ registerCallHandler<
 registerCallHandler<[string], void>(
   "winhelper.setWindowTitle",
   (event, title) => {
-    BrowserWindow.fromWebContents(event.sender)?.setTitle(title);
+    // Through the wrapper: the native layer keys the window on the id that
+    // rides in its title, so a title written straight to the window would drop
+    // the name the window is known by.
+    const wnd = BrowserWindow.fromWebContents(event.sender);
+    const managed = wnd ? ManagedWindow.fromBrowserWindow(wnd) : null;
+    managed?.setTitle(title);
   }
 );
 

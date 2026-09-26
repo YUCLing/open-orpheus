@@ -1,12 +1,24 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     os::fd::RawFd,
-    sync::{Mutex, OnceLock},
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
 use super::codec::Iface;
+use super::layer_shell::LayerShellOptions;
 
 // ── Per-connection tracking state ──────────────────────────────────────────
+
+/// A window the proxy converted into a layer surface on the compositor side.
+#[derive(Clone, Debug)]
+pub(crate) struct LayerWindow {
+    pub(crate) wl_surface: u32,
+    pub(crate) xdg_surface: u32,
+}
 
 pub(crate) struct WaylandConn {
     pub(crate) ifaces: HashMap<u32, Iface>,
@@ -19,6 +31,37 @@ pub(crate) struct WaylandConn {
     pub(crate) compositor_id: Option<u32>,
     pub(crate) injected_ids: HashSet<u32>,
     pub(crate) stolen_ids: Vec<u32>,
+    /// Interfaces the compositor advertised: global name → (interface, version).
+    pub(crate) globals: HashMap<u32, (String, u32)>,
+    pub(crate) registry_id: Option<u32>,
+    /// The `zwlr_layer_shell_v1` global as (global name, advertised version).
+    pub(crate) layer_shell_global: Option<(u32, u32)>,
+    /// The shell object the proxy bound for itself, once it was first needed.
+    pub(crate) layer_shell_id: Option<u32>,
+    /// Converted windows, keyed by the id the client uses for its toplevel.
+    pub(crate) layer_windows: HashMap<u32, LayerWindow>,
+    /// Surfaces that have taken the layer role, with the declaration that put
+    /// them there.
+    ///
+    /// The compositor keeps the role on the `wl_surface` after the role object
+    /// is gone (KWin answers a later `get_toplevel` on that surface with
+    /// `already_constructed`), so this outlives the window: a surface that asks
+    /// for a toplevel again has to be converted again. It is dropped with the
+    /// surface, so a genuinely new surface starts out ordinary.
+    pub(crate) layer_surfaces: HashMap<u32, LayerShellOptions>,
+    /// Surfaces that have been given the ordinary `xdg_toplevel` role.
+    ///
+    /// A compositor never releases a surface's role while the surface lives,
+    /// and unlike the layer role this one cannot be replaced by a layer surface:
+    /// asking is a fatal protocol error (`the wl_surface already has a role
+    /// assigned xdg_toplevel`). Remembered for the life of the surface so the
+    /// proxy can refuse instead of killing the connection.
+    pub(crate) toplevel_surfaces: HashSet<u32>,
+    pub(crate) wl_to_layer: HashMap<u32, u32>,
+    pub(crate) xdg_to_layer: HashMap<u32, u32>,
+    /// Messages the proxy owes the client, queued by a request handler and
+    /// flushed on the next inbound chunk.
+    pub(crate) pending_to_client: Vec<Vec<u8>>,
 }
 
 impl WaylandConn {
@@ -36,6 +79,16 @@ impl WaylandConn {
             compositor_id: None,
             injected_ids: HashSet::new(),
             stolen_ids: Vec::new(),
+            globals: HashMap::new(),
+            registry_id: None,
+            layer_shell_global: None,
+            layer_shell_id: None,
+            layer_windows: HashMap::new(),
+            layer_surfaces: HashMap::new(),
+            toplevel_surfaces: HashSet::new(),
+            wl_to_layer: HashMap::new(),
+            xdg_to_layer: HashMap::new(),
+            pending_to_client: Vec::new(),
         }
     }
 
@@ -51,6 +104,18 @@ impl WaylandConn {
         self.compositor_id = None;
         self.injected_ids.clear();
         self.stolen_ids.clear();
+        self.globals.clear();
+        self.registry_id = None;
+        self.layer_shell_global = None;
+        // The layer shell object belongs to the client namespace, so it has to
+        // be re-bound after a resync.
+        self.layer_shell_id = None;
+        self.layer_windows.clear();
+        self.layer_surfaces.clear();
+        self.toplevel_surfaces.clear();
+        self.wl_to_layer.clear();
+        self.xdg_to_layer.clear();
+        self.pending_to_client.clear();
     }
 
     pub(crate) fn alloc_injected_id(&mut self) -> Option<u32> {
@@ -69,11 +134,20 @@ impl WaylandConn {
                 self.touch_seat.remove(&id);
             }
             Some(Iface::WlSurface) => {
+                if let Some(layer_id) = self.wl_to_layer.remove(&id) {
+                    self.purge(layer_id);
+                }
+                // The role dies with the surface it was assigned to.
+                self.layer_surfaces.remove(&id);
+                self.toplevel_surfaces.remove(&id);
                 self.xdg_to_wl.retain(|_, v| *v != id);
                 self.wl_to_top.remove(&id);
                 self.pointer_focus.retain(|_, v| *v != id);
             }
             Some(Iface::XdgSurface) => {
+                if let Some(layer_id) = self.xdg_to_layer.remove(&id) {
+                    self.purge(layer_id);
+                }
                 let owned_top = self
                     .top_to_xdg
                     .iter()
@@ -87,6 +161,17 @@ impl WaylandConn {
             Some(Iface::XdgToplevel) => {
                 self.top_to_xdg.remove(&id);
                 self.wl_to_top.retain(|_, v| *v != id);
+            }
+            Some(Iface::ZwlrLayerShell) => {
+                if self.layer_shell_id == Some(id) {
+                    self.layer_shell_id = None;
+                }
+            }
+            Some(Iface::ZwlrLayerSurface) => {
+                if let Some(window) = self.layer_windows.remove(&id) {
+                    self.wl_to_layer.remove(&window.wl_surface);
+                    self.xdg_to_layer.remove(&window.xdg_surface);
+                }
             }
             Some(Iface::WlSeat) => {
                 self.pointer_seat.retain(|_, v| *v != id);
@@ -106,8 +191,21 @@ impl WaylandConn {
                 .get(&id)
                 .and_then(|xdg_id| self.xdg_to_wl.get(xdg_id))
                 .copied(),
+            Iface::ZwlrLayerSurface => self.layer_windows.get(&id).map(|w| w.wl_surface),
             _ => None,
         }
+    }
+
+    /// The `wl_surface` behind a toplevel-like object.
+    ///
+    /// Covers both an ordinary `xdg_toplevel` and a window the proxy converted
+    /// into a layer surface, which the client still addresses as a toplevel.
+    pub(crate) fn toplevel_wl_surface(&self, toplevel_id: u32) -> Option<u32> {
+        if let Some(layer) = self.layer_windows.get(&toplevel_id) {
+            return Some(layer.wl_surface);
+        }
+        let xdg_id = self.top_to_xdg.get(&toplevel_id)?;
+        self.xdg_to_wl.get(xdg_id).copied()
     }
 }
 
@@ -288,6 +386,70 @@ pub(crate) static TX_PENDING_CTRL: OnceLock<Mutex<HashMap<RawFd, PendingControl>
 // Custom window ID map tracking user-assigned IDs via setTitle("\u{200B}\u{200C}<id>")
 pub(crate) static CUSTOM_ID_MAP: OnceLock<Mutex<HashMap<String, (RawFd, u32)>>> = OnceLock::new();
 
+// ── Layer shell ────────────────────────────────────────────────────────────
+
+/// Set once a compositor connection advertises `zwlr_layer_shell_v1`.
+pub(crate) static LAYER_SHELL_AVAILABLE: AtomicBool = AtomicBool::new(false);
+
+/// How long an unconsumed layer-shell declaration stays valid.
+const LAYER_DECLARATION_TTL: Duration = Duration::from_secs(2);
+
+/// Windows declared as layer surfaces before they exist, oldest first.
+static PENDING_LAYER_WINDOWS: OnceLock<Mutex<VecDeque<(LayerShellOptions, Instant)>>> =
+    OnceLock::new();
+
+pub(crate) fn mark_layer_shell_available() {
+    LAYER_SHELL_AVAILABLE.store(true, Ordering::Relaxed);
+}
+
+pub(crate) fn is_layer_shell_available() -> bool {
+    LAYER_SHELL_AVAILABLE.load(Ordering::Relaxed)
+}
+
+/// Queue `options` for the next toplevel the client creates.
+pub(crate) fn declare_layer_window(options: LayerShellOptions) -> bool {
+    // Saying nothing about size or anchors means "cover the output"; only
+    // combinations that cannot be sent are refused.
+    let options = options.with_defaults();
+    if options.validate().is_err() {
+        return false;
+    }
+    let Some(queue) = PENDING_LAYER_WINDOWS.get() else {
+        return false;
+    };
+    let Ok(mut queue) = queue.lock() else {
+        return false;
+    };
+    queue.push_back((options, Instant::now()));
+    true
+}
+
+/// Drop the newest declaration that has not been consumed yet.
+pub(crate) fn cancel_layer_window() -> bool {
+    let Some(queue) = PENDING_LAYER_WINDOWS.get() else {
+        return false;
+    };
+    let Ok(mut queue) = queue.lock() else {
+        return false;
+    };
+    queue.pop_back().is_some()
+}
+
+/// Take the oldest live declaration, discarding stale ones.
+pub(crate) fn take_layer_window_declaration() -> Option<LayerShellOptions> {
+    let queue = PENDING_LAYER_WINDOWS.get()?;
+    let Ok(mut queue) = queue.lock() else {
+        return None;
+    };
+    let now = Instant::now();
+    while let Some((options, declared_at)) = queue.pop_front() {
+        if now.duration_since(declared_at) <= LAYER_DECLARATION_TTL {
+            return Some(options);
+        }
+    }
+    None
+}
+
 pub(crate) type CursorEnterCb = Box<dyn FnOnce(i32, i32) + Send>;
 pub(crate) type CursorEnterWatcherKey = (RawFd, u32);
 pub(crate) type CursorEnterWatcherMap = HashMap<CursorEnterWatcherKey, Vec<CursorEnterCb>>;
@@ -340,6 +502,49 @@ pub(crate) fn clear_first_cursor_enter_watchers_for_fd(fd: RawFd) {
         && let Ok(mut watchers) = watchers.lock()
     {
         watchers.retain(|(watch_fd, _), _| *watch_fd != fd);
+    }
+}
+
+// ── Refused layer-shell roles ─────────────────────────────────────────────
+
+/// Reports a window whose surface could not take the layer role, by the custom
+/// window id the application knows it under.
+///
+/// The role cannot be applied to an existing surface, so the application has to
+/// re-create the window; without this the failure is silent.
+pub(crate) type LayerShellRefusedCb = Box<dyn Fn(String) + Send + Sync>;
+
+pub(crate) static LAYER_SHELL_REFUSED: OnceLock<Mutex<Option<LayerShellRefusedCb>>> =
+    OnceLock::new();
+
+/// Register the one listener for refused roles.
+pub(crate) fn on_layer_shell_refused(cb: LayerShellRefusedCb) -> bool {
+    let slot = LAYER_SHELL_REFUSED.get_or_init(|| Mutex::new(None));
+    let Ok(mut slot) = slot.lock() else {
+        return false;
+    };
+    *slot = Some(cb);
+    true
+}
+
+/// The window id behind a surface, if the application has named it yet.
+pub(crate) fn window_id_for_surface(fd: RawFd, wl_surface_id: u32) -> Option<String> {
+    let map = CUSTOM_ID_MAP.get()?;
+    let map = map.lock().ok()?;
+    map.iter()
+        .find(|(_, (surface_fd, surface))| *surface_fd == fd && *surface == wl_surface_id)
+        .map(|(id, _)| id.clone())
+}
+
+pub(crate) fn fire_layer_shell_refused(window_id: String) {
+    let Some(slot) = LAYER_SHELL_REFUSED.get() else {
+        return;
+    };
+    let Ok(slot) = slot.lock() else {
+        return;
+    };
+    if let Some(callback) = slot.as_ref() {
+        callback(window_id);
     }
 }
 
@@ -397,6 +602,7 @@ pub(crate) fn init_state() {
     TX_PENDING_CTRL.get_or_init(|| Mutex::new(HashMap::new()));
     NEXT_TOPLEVEL_CURSOR_ENTER.get_or_init(|| Mutex::new(Vec::new()));
     CURSOR_ENTER_WATCHERS.get_or_init(|| Mutex::new(HashMap::new()));
+    PENDING_LAYER_WINDOWS.get_or_init(|| Mutex::new(VecDeque::new()));
 }
 
 pub(crate) fn clear_state() {
@@ -449,4 +655,10 @@ pub(crate) fn clear_state() {
     {
         watchers.clear();
     }
+    if let Some(m) = PENDING_LAYER_WINDOWS.get()
+        && let Ok(mut queue) = m.lock()
+    {
+        queue.clear();
+    }
+    LAYER_SHELL_AVAILABLE.store(false, Ordering::Relaxed);
 }

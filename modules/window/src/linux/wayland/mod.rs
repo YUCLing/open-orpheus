@@ -2,6 +2,7 @@ mod codec;
 mod filter;
 mod handlers;
 mod inject;
+mod layer_shell;
 mod state;
 
 #[cfg(test)]
@@ -13,8 +14,46 @@ use crate::linux::Rect;
 
 use super::proxy::{Cmsg, ConnectionHandler, Direction, Filtered, Protocol};
 
+pub(super) use layer_shell::{
+    ANCHOR_BOTTOM, ANCHOR_LEFT, ANCHOR_RIGHT, ANCHOR_TOP, KEYBOARD_NONE, LAYER_BACKGROUND,
+    LAYER_BOTTOM, LAYER_OVERLAY, LAYER_TOP, LayerShellOptions,
+};
+
 pub(super) fn is_wayland() -> bool {
     state::is_wayland()
+}
+
+pub(super) fn is_layer_shell_available() -> bool {
+    state::is_layer_shell_available()
+}
+
+/// Queue `options` for the next toplevel the client creates.
+pub(super) fn declare_layer_window(options: LayerShellOptions) -> bool {
+    state::declare_layer_window(options)
+}
+
+/// Whether `options` survive the defaults and the protocol's rules.
+///
+/// The same checks `declare_layer_window` applies, without taking a place in
+/// the queue: a caller can be told its declaration is unsendable before a
+/// window exists to attach it to.
+pub(super) fn validate_layer_window(options: LayerShellOptions) -> bool {
+    options.with_defaults().validate().is_ok()
+}
+
+/// Withdraw the newest declaration that has not been consumed yet.
+pub(super) fn cancel_layer_window() -> bool {
+    state::cancel_layer_window()
+}
+
+/// Decorate a title with the managed window id the proxy keys windows on.
+pub(super) fn decorate_title(id: &str, title: &str) -> String {
+    codec::decorate_title(id, title)
+}
+
+/// Register the listener that hears about windows whose layer role was refused.
+pub(super) fn on_layer_shell_refused(cb: state::LayerShellRefusedCb) -> bool {
+    state::on_layer_shell_refused(cb)
 }
 
 pub(super) fn send_xdg_toplevel_move() -> bool {
