@@ -5,10 +5,17 @@ import type { BrowserWindowConstructorOptions } from "electron";
 import Emittery from "emittery";
 
 import {
+  cancelLayerShellForNextWindow,
   getDesktopEnvironment,
+  isLayerShellAvailable,
   setInputRegion,
+  useLayerShellForNextWindow,
+  validateLayerShellOptions,
   DesktopEnvironment,
 } from "@open-orpheus/window";
+import type { LayerShellOptions } from "@open-orpheus/window";
+
+export type { LayerShellOptions };
 
 import type AppMenu from "./menu";
 import { LifecycleState, state as lifecycleState } from "./lifecycle";
@@ -106,6 +113,13 @@ interface NativeWindowState {
     /** `null` = never managed, `[]` = explicitly cleared. */
     inputRegions: InputRegion[] | null;
   };
+  /**
+   * State that has to be armed before the surface exists, because a compositor
+   * assigns a surface's role once and never lets it change.
+   */
+  preCreate: {
+    layerShell: LayerShellOptions | null;
+  };
 }
 
 export abstract class ManagedWindow<
@@ -119,10 +133,20 @@ export abstract class ManagedWindow<
 
   private readonly _nativeState: NativeWindowState = {
     postShow: { inputRegions: null },
+    preCreate: { layerShell: null },
   };
   /** Bumped whenever the platform surface may have been replaced. */
   private _surfaceGeneration = 0;
   private _reapplyTimer: NodeJS.Timeout | null = null;
+  /**
+   * A layer-shell declaration is in flight for this window's next surface.
+   *
+   * The native queue is positional and hands declarations out oldest first, so
+   * exactly one may be outstanding per surface: a second one would be claimed
+   * by whichever window creates the next surface instead. Cleared by the next
+   * visibility change, which is when the surface exists or is gone.
+   */
+  private _layerShellDeclared = false;
 
   /**
    * The window this wrapper owns.
@@ -174,6 +198,8 @@ export abstract class ManagedWindow<
     if (!wnd) return;
     // A new show may bring a new platform surface with it.
     this._surfaceGeneration++;
+    // Whatever was declared for this surface has been claimed by now.
+    this._layerShellDeclared = false;
     this.reapplyNativeState();
     this.emit("show", wnd);
   };
@@ -181,6 +207,8 @@ export abstract class ManagedWindow<
     const wnd = this._window;
     if (!wnd) return;
     this._surfaceGeneration++;
+    // The next show brings a new surface, which needs its own declaration.
+    this._layerShellDeclared = false;
     this.cancelReapply();
     this.onWindowHidden();
     this.emit("hide", wnd);
@@ -253,14 +281,100 @@ export abstract class ManagedWindow<
    * The only place a `BrowserWindow` is constructed.
    *
    * Subclasses call this instead of `new BrowserWindow` so that ownership,
-   * lifetime and native state all stay in one place.
+   * lifetime and native state all stay in one place. A window created shown
+   * brings its surface with it, so the layer-shell declaration is armed here;
+   * one created hidden has no surface until its first show, which arms it.
    */
   protected createBrowserWindow(
     options: BrowserWindowConstructorOptions
   ): BrowserWindow {
+    // A new window is a new surface: nothing is in flight for it.
+    this._layerShellDeclared = false;
+    this.beforeSurfaceCreated();
+    if (options.show !== false) this.armLayerShell();
     const wnd = new BrowserWindow(options);
     this.window = wnd;
     return wnd;
+  }
+
+  /** Whether the compositor can take layer surfaces at all. */
+  static isLayerShellAvailable(): boolean {
+    return (
+      os.platform() === "linux" &&
+      getDesktopEnvironment() === DesktopEnvironment.Wayland &&
+      typeof isLayerShellAvailable === "function" &&
+      isLayerShellAvailable()
+    );
+  }
+
+  /**
+   * Record the layer-shell state this window should take, or clear it with
+   * `null`.
+   *
+   * Nothing is sent to the compositor here. A declaration can only be honoured
+   * while a surface is being created, because a compositor assigns a surface's
+   * role once and never changes it: the recorded state is armed for the
+   * creation itself, or for the show that brings the surface, and nowhere else.
+   * A window that is already a layer surface stays one for as long as its
+   * surface lives, so `null` only takes effect once the window is recreated.
+   *
+   * Returns whether the declaration could be sent at all; `false` means the
+   * compositor cannot take layer surfaces or the options are unsendable, and
+   * this window will be an ordinary toplevel.
+   */
+  setLayerShell(options: LayerShellOptions | null): boolean {
+    this._nativeState.preCreate.layerShell = options;
+    if (options === null) {
+      // Withdraw a declaration that is still in flight, so it cannot convert a
+      // surface this window no longer wants.
+      if (this._layerShellDeclared) this.cancelLayerShell();
+      this._layerShellDeclared = false;
+      return true;
+    }
+    return (
+      ManagedWindow.isLayerShellAvailable() &&
+      validateLayerShellOptions(options)
+    );
+  }
+
+  /** The layer-shell state this window declares, if any. */
+  get layerShell(): LayerShellOptions | null {
+    return this._nativeState.preCreate.layerShell;
+  }
+
+  /**
+   * Declare layer-shell state for the surface this window is about to create.
+   *
+   * Called by [`createBrowserWindow`] immediately before the `BrowserWindow`
+   * exists, which is the only moment a role can be taken. Subclasses that are
+   * layer surfaces override this and call [`setLayerShell`], so the state is
+   * recorded no matter whether the surface arrives with the creation or with
+   * the first show — the declaration queue is positional, and it is only ever
+   * armed for a surface that is about to be created.
+   */
+  protected beforeSurfaceCreated(): void {}
+
+  /**
+   * Arm the recorded layer-shell state for the surface about to be created.
+   *
+   * Called immediately before an action that brings a surface with it — a
+   * creation, or the show of a hidden window — and nowhere else. The queue is
+   * positional, so a declaration armed while no surface follows is handed to
+   * whichever window creates the next one.
+   */
+  protected armLayerShell(): boolean {
+    const options = this._nativeState.preCreate.layerShell;
+    if (!options) return false;
+    if (this._layerShellDeclared) return true;
+    const accepted = useLayerShellForNextWindow(options);
+    this._layerShellDeclared = accepted;
+    return accepted;
+  }
+
+  private cancelLayerShell(): void {
+    if (typeof cancelLayerShellForNextWindow === "function") {
+      cancelLayerShellForNextWindow();
+    }
   }
 
   /** The bound window, or `null` once it is gone. Never a destroyed window. */
@@ -466,7 +580,11 @@ export abstract class ManagedWindow<
   }
 
   show(): void | Promise<void> {
-    this.liveWindow()?.show();
+    const wnd = this.liveWindow();
+    if (!wnd) return;
+    // A hidden window brings its surface — or a fresh one — with this show.
+    if (!wnd.isVisible()) this.armLayerShell();
+    wnd.show();
   }
 
   hide(): void | Promise<void> {
@@ -491,8 +609,10 @@ export abstract class ManagedWindow<
     Object.assign(merged, target._data, this._data);
     target._data = merged;
     target._nativeState.postShow = this._nativeState.postShow;
+    target._nativeState.preCreate = this._nativeState.preCreate;
     this._data = Object.create(null);
     this._nativeState.postShow = { inputRegions: null };
+    this._nativeState.preCreate = { layerShell: null };
   }
 
   static fromBrowserWindow(browserWindow: BrowserWindow) {
@@ -565,6 +685,8 @@ export abstract class OnDemandWindow<
     this.windowState = {
       alive: true,
     };
+    // This show creates the surface, and `createWindow` declares the role for
+    // it through `createBrowserWindow`.
     const wnd = this.createWindow(this.windowState);
     if (this.window !== wnd) this.window = wnd;
     return new Promise<void>((resolve) => {
@@ -574,6 +696,8 @@ export abstract class OnDemandWindow<
       wnd.once("closed", closedHandler);
       wnd.once("ready-to-show", () => {
         wnd.off("closed", closedHandler);
+        // This show is what creates the surface.
+        if (!wnd.isVisible()) this.armLayerShell();
         wnd.show();
         resolve();
       });
@@ -596,6 +720,13 @@ export abstract class OnDemandWindow<
  * wrapper recorded (`name`, size limits, always-on-top, native input regions)
  * moves to the replacement. A window that was on screen is shown again, so the
  * switch is only visible as a re-created window, not as a disappearing one.
+ *
+ * Pre-create state (a layer-shell declaration) moves too. A window class that
+ * declares its own layer-shell state does it for the surface it creates, so the
+ * replacement is a layer surface right away; state recorded by a caller on the
+ * discarded wrapper can only take effect on the surface the replacement creates
+ * afterwards, because `create` has already built one by the time the hand-off
+ * happens.
  */
 export function switchWindowPolicy(
   current: ManagedWindow | null,

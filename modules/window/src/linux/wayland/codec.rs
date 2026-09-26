@@ -16,6 +16,18 @@ pub(crate) enum Iface {
     XdgWmBase,
     XdgSurface,
     XdgToplevel,
+    /// A `zwlr_layer_shell_v1` object the proxy bound for itself.
+    ZwlrLayerShell,
+    /// A layer surface the client believes is an `xdg_toplevel`. Requests it
+    /// sends use xdg-toplevel opcodes; events it receives use layer opcodes.
+    ZwlrLayerSurface,
+    /// The client's `zxdg_decoration_manager_v1`.
+    ZxdgDecorationManager,
+    /// A decoration object the compositor never created, because the toplevel
+    /// it names does not exist there.
+    ZxdgToplevelDecoration,
+    /// The client's `xdg_toplevel_icon_manager_v1`.
+    XdgToplevelIconManager,
 }
 
 // ── Message opcodes ────────────────────────────────────────────────────────
@@ -35,6 +47,9 @@ pub(crate) const EVT_TOUCH_DOWN: u16 = 0;
 pub(crate) const WL_TOUCH_RELEASE: u16 = 0;
 pub(crate) const REQ_GET_XDG_SURFACE: u16 = 2;
 pub(crate) const REQ_GET_TOPLEVEL: u16 = 1;
+pub(crate) const REQ_GET_POPUP: u16 = 2;
+pub(crate) const REQ_SET_WINDOW_GEOMETRY: u16 = 3;
+pub(crate) const REQ_ACK_CONFIGURE: u16 = 4;
 pub(crate) const REQ_SET_TITLE: u16 = 2;
 pub(crate) const REQ_MOVE: u16 = 5;
 pub(crate) const REQ_SET_INPUT_REGION: u16 = 5;
@@ -42,6 +57,42 @@ pub(crate) const WL_POINTER_RELEASE: u16 = 1;
 pub(crate) const REQ_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_ADD: u16 = 1;
+
+// wl_registry events
+pub(crate) const EVT_GLOBAL: u16 = 0;
+pub(crate) const EVT_GLOBAL_REMOVE: u16 = 1;
+
+// xdg_toplevel events
+pub(crate) const EVT_TOPLEVEL_CONFIGURE: u16 = 0;
+pub(crate) const EVT_TOPLEVEL_CLOSE: u16 = 1;
+
+// zwlr_layer_shell_v1 requests
+pub(crate) const REQ_GET_LAYER_SURFACE: u16 = 0;
+
+// zwlr_layer_surface_v1 requests
+pub(crate) const REQ_LAYER_SET_SIZE: u16 = 0;
+pub(crate) const REQ_LAYER_SET_ANCHOR: u16 = 1;
+pub(crate) const REQ_LAYER_SET_EXCLUSIVE_ZONE: u16 = 2;
+pub(crate) const REQ_LAYER_SET_MARGIN: u16 = 3;
+pub(crate) const REQ_LAYER_SET_KEYBOARD_INTERACTIVITY: u16 = 4;
+pub(crate) const REQ_LAYER_GET_POPUP: u16 = 5;
+pub(crate) const REQ_LAYER_ACK_CONFIGURE: u16 = 6;
+pub(crate) const REQ_LAYER_DESTROY: u16 = 7;
+
+// zwlr_layer_surface_v1 events
+pub(crate) const EVT_LAYER_CONFIGURE: u16 = 0;
+pub(crate) const EVT_LAYER_CLOSED: u16 = 1;
+
+// zxdg_decoration_manager_v1 requests
+pub(crate) const REQ_GET_TOPLEVEL_DECORATION: u16 = 1;
+
+// zxdg_toplevel_decoration_v1 requests and events
+pub(crate) const REQ_DECORATION_DESTROY: u16 = 0;
+pub(crate) const EVT_DECORATION_CONFIGURE: u16 = 0;
+pub(crate) const DECORATION_CLIENT_SIDE: u32 = 1;
+
+// xdg_toplevel_icon_manager_v1 requests
+pub(crate) const REQ_SET_ICON: u16 = 2;
 
 // U+200B (Zero Width Space) and U+200C (Zero Width Non-Joiner)
 pub(crate) const CUSTOM_ID_PREFIX: &str = "\u{200B}\u{200C}";

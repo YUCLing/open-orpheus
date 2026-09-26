@@ -24,6 +24,44 @@ pub enum DesktopEnvironment {
     Unknown,
 }
 
+/// The stacking layer a layer surface is placed in, bottom-most first.
+#[napi]
+pub enum LayerShellLayer {
+    Background,
+    Bottom,
+    Top,
+    Overlay,
+}
+
+/// Layer-shell state for a window the application is about to create.
+///
+/// Applied to the next toplevel the display connection creates, so it has to be
+/// declared before the window (or its surface) is brought into existence. A
+/// declaration that says nothing about size or anchors covers the output.
+#[napi(object)]
+pub struct LayerShellOptions {
+    /// Purpose of the surface, e.g. `"open-orpheus-menu"`. Required.
+    pub namespace: String,
+    /// Defaults to the top layer.
+    pub layer: Option<LayerShellLayer>,
+    pub anchor_top: Option<bool>,
+    pub anchor_bottom: Option<bool>,
+    pub anchor_left: Option<bool>,
+    pub anchor_right: Option<bool>,
+    /// Surface size in surface-local coordinates. `0` lets the compositor
+    /// decide, which requires the two opposite anchors on that axis.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub margin_top: Option<i32>,
+    pub margin_right: Option<i32>,
+    pub margin_bottom: Option<i32>,
+    pub margin_left: Option<i32>,
+    /// `-1` ignore other surfaces, `0` avoid them, `>0` reserve space.
+    pub exclusive_zone: Option<i32>,
+    /// `0` none, `1` exclusive, `2` on demand (needs layer shell v4).
+    pub keyboard_interactivity: Option<u32>,
+}
+
 /// Get current detected desktop environment.
 ///
 /// Mostly for Linux to use, on Windows/macOS, returns hardcoded values.
@@ -114,6 +152,76 @@ pub fn get_cursor_position() -> Result<Option<(f64, f64)>> {
         use napi::Error;
 
         Err(Error::from_reason("Only supports Linux"))
+    }
+}
+
+/// Whether the compositor advertises `zwlr_layer_shell_v1`.
+///
+/// Only meaningful for Wayland on Linux; everywhere else it is `false`.
+#[napi]
+pub fn is_layer_shell_available() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::is_layer_shell_available()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
+/// Make the next window a layer surface.
+///
+/// Must be called before the window — or, for an existing window, its surface —
+/// is created: a compositor assigns a surface's role once and never changes it.
+/// Returns whether the declaration was accepted; when it is refused the window
+/// is still created as an ordinary one.
+#[napi]
+pub fn use_layer_shell_for_next_window(options: LayerShellOptions) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::declare_layer_window(&options)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = options;
+        false
+    }
+}
+
+/// Whether a layer-shell declaration would be accepted.
+///
+/// The same validation `useLayerShellForNextWindow` applies, without queueing
+/// anything: callers can report a declaration that could never be sent, and a
+/// settings UI can check a choice before anything is created. `false` also
+/// means the compositor cannot take layer surfaces at all.
+#[napi]
+pub fn validate_layer_shell_options(options: LayerShellOptions) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::validate_layer_window(&options)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = options;
+        false
+    }
+}
+
+/// Withdraw a layer-shell declaration that has not been consumed yet.
+#[napi]
+pub fn cancel_layer_shell_for_next_window() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::cancel_layer_window()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
     }
 }
 

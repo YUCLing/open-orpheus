@@ -29,6 +29,12 @@ const hoisted = vi.hoisted(() => ({
   platform: vi.fn(() => "linux" as NodeJS.Platform),
   desktop: vi.fn(() => 0),
   setInputRegion: vi.fn(() => true),
+  useLayerShell: vi.fn(() => true),
+  cancelLayerShell: vi.fn(() => true),
+  validateLayerShell: vi.fn(() => true),
+  layerShellAvailable: vi.fn(() => true),
+  /** Layer-shell declarations made by the time a window was constructed. */
+  layerCallsAtConstruction: [] as number[],
   lifecycle: { state: 0 },
   appOn: vi.fn(),
 }));
@@ -37,8 +43,13 @@ vi.mock("node:os", () => ({ default: { platform: hoisted.platform } }));
 
 vi.mock("@open-orpheus/window", () => ({
   DesktopEnvironment: { Wayland: 0, X11: 1, Windows: 2, Darwin: 3, Unknown: 4 },
+  LayerShellLayer: { Background: 0, Bottom: 1, Top: 2, Overlay: 3 },
   getDesktopEnvironment: hoisted.desktop,
   setInputRegion: hoisted.setInputRegion,
+  useLayerShellForNextWindow: hoisted.useLayerShell,
+  cancelLayerShellForNextWindow: hoisted.cancelLayerShell,
+  validateLayerShellOptions: hoisted.validateLayerShell,
+  isLayerShellAvailable: hoisted.layerShellAvailable,
 }));
 
 vi.mock("../../src/main/lifecycle", () => ({
@@ -77,7 +88,11 @@ vi.mock("electron", () => {
     webContents = new FakeWebContents();
     private listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
-    constructor(readonly options: unknown) {}
+    constructor(readonly options: unknown) {
+      hoisted.layerCallsAtConstruction.push(
+        hoisted.useLayerShell.mock.calls.length
+      );
+    }
 
     on(event: string, listener: (...args: unknown[]) => void) {
       let set = this.listeners.get(event);
@@ -171,6 +186,7 @@ import {
   OnDemandWindow,
   switchWindowPolicy,
 } from "../../src/main/window";
+import { LayerShellLayer } from "@open-orpheus/window";
 
 const WAYLAND = 0;
 const X11 = 1;
@@ -187,6 +203,11 @@ class TestWindow extends ManagedWindow {
     super();
     this.createBrowserWindow({});
   }
+
+  /** Create another surface, the way a policy switch or a re-show would. */
+  createSurface(): BrowserWindow {
+    return this.createBrowserWindow({});
+  }
 }
 
 class TestOnDemandWindow extends OnDemandWindow {
@@ -201,6 +222,15 @@ beforeEach(() => {
   hoisted.desktop.mockReturnValue(WAYLAND);
   hoisted.setInputRegion.mockReset();
   hoisted.setInputRegion.mockReturnValue(true);
+  hoisted.useLayerShell.mockReset();
+  hoisted.useLayerShell.mockReturnValue(true);
+  hoisted.cancelLayerShell.mockReset();
+  hoisted.cancelLayerShell.mockReturnValue(true);
+  hoisted.validateLayerShell.mockReset();
+  hoisted.validateLayerShell.mockReturnValue(true);
+  hoisted.layerShellAvailable.mockReset();
+  hoisted.layerShellAvailable.mockReturnValue(true);
+  hoisted.layerCallsAtConstruction.length = 0;
   hoisted.lifecycle.state = 0;
 });
 
@@ -552,5 +582,201 @@ describe("switchWindowPolicy", () => {
       String(recreated.id),
       [{ x: 0, y: 0, w: 10, h: 10 }]
     );
+  });
+});
+
+describe("ManagedWindow layer shell", () => {
+  const options = {
+    namespace: "open-orpheus-test",
+    layer: LayerShellLayer.Overlay,
+    anchorTop: true,
+    anchorBottom: true,
+    anchorLeft: true,
+    anchorRight: true,
+  };
+
+  it("declares the role before the surface is created", () => {
+    class LayerWindow extends ManagedWindow {
+      constructor() {
+        super();
+        this.setLayerShell(options);
+        this.createBrowserWindow({});
+      }
+    }
+
+    const managed = new LayerWindow();
+
+    expect(managed.window).not.toBeNull();
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.layerCallsAtConstruction.at(-1)).toBeGreaterThan(0);
+  });
+
+  it("declares from the pre-create hook, without ordering requirements", () => {
+    class HookWindow extends ManagedWindow {
+      constructor() {
+        super();
+        this.createBrowserWindow({});
+      }
+
+      protected beforeSurfaceCreated(): void {
+        this.setLayerShell(options);
+      }
+    }
+
+    const managed = new HookWindow();
+
+    expect(managed.window).not.toBeNull();
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.layerCallsAtConstruction.at(-1)).toBeGreaterThan(0);
+  });
+
+  it("records the state without arming a declaration", () => {
+    const managed = new TestWindow();
+    hoisted.useLayerShell.mockClear();
+    hoisted.cancelLayerShell.mockClear();
+
+    expect(managed.setLayerShell(options)).toBe(true);
+
+    expect(managed.layerShell).toEqual(options);
+    expect(
+      hoisted.useLayerShell,
+      "a declaration may only be in flight while a surface is being created"
+    ).not.toHaveBeenCalled();
+  });
+
+  it("arms for the show of a hidden window, which is what creates the surface", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    hoisted.useLayerShell.mockClear();
+
+    managed.show();
+
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+  });
+
+  it("arms once per surface, not once per show", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    hoisted.useLayerShell.mockClear();
+
+    managed.show();
+    managed.show();
+
+    expect(hoisted.useLayerShell).toHaveBeenCalledTimes(1);
+  });
+
+  it("arms again after a hide, which takes the surface away", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    managed.show();
+    managed.hide();
+    hoisted.useLayerShell.mockClear();
+
+    managed.show();
+
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+  });
+
+  it("leaves a hidden window's surface to its first show", () => {
+    class HiddenWindow extends ManagedWindow {
+      constructor() {
+        super();
+        this.setLayerShell(options);
+        this.createBrowserWindow({ show: false });
+      }
+    }
+
+    const managed = new HiddenWindow();
+
+    expect(
+      hoisted.useLayerShell,
+      "a hidden window has no surface yet"
+    ).not.toHaveBeenCalled();
+
+    managed.show();
+
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+  });
+
+  it("arms for an on-demand window's first show", () => {
+    class OnDemandLayerWindow extends TestOnDemandWindow {
+      protected beforeSurfaceCreated(): void {
+        this.setLayerShell(options);
+      }
+    }
+
+    const managed = new OnDemandLayerWindow();
+    hoisted.useLayerShell.mockClear();
+
+    void managed.show();
+    // The window is created hidden and shown once it can be displayed.
+    asFake(managed.window).emit("ready-to-show");
+
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(asFake(managed.window).isVisible()).toBe(true);
+  });
+
+  it("leaves another window's declaration in the queue", () => {
+    const layer = new TestWindow();
+    layer.setLayerShell(options);
+    layer.createSurface();
+    hoisted.useLayerShell.mockClear();
+    hoisted.cancelLayerShell.mockClear();
+
+    // Declarations are handed out oldest first, so a window that declares
+    // nothing must neither arm one nor withdraw one that is not its own.
+    const ordinary = new TestWindow();
+
+    expect(ordinary.layerShell).toBeNull();
+    expect(hoisted.useLayerShell).not.toHaveBeenCalled();
+    expect(hoisted.cancelLayerShell).not.toHaveBeenCalled();
+  });
+
+  it("withdraws its own declaration when the state is cleared", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    managed.show();
+    // The surface exists, so nothing is in flight any more.
+    hoisted.cancelLayerShell.mockClear();
+
+    expect(managed.setLayerShell(null)).toBe(true);
+
+    expect(managed.layerShell).toBeNull();
+    expect(hoisted.cancelLayerShell).not.toHaveBeenCalled();
+  });
+
+  it("reports state it cannot send", () => {
+    hoisted.validateLayerShell.mockReturnValue(false);
+    const managed = new TestWindow();
+
+    expect(managed.setLayerShell(options)).toBe(false);
+    expect(hoisted.useLayerShell).not.toHaveBeenCalled();
+  });
+
+  it("clears the recorded state", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+
+    expect(managed.setLayerShell(null)).toBe(true);
+
+    expect(managed.layerShell).toBeNull();
+  });
+
+  it("refuses when the compositor has no layer shell", () => {
+    hoisted.layerShellAvailable.mockReturnValue(false);
+    const managed = new TestWindow();
+    hoisted.useLayerShell.mockClear();
+
+    expect(managed.setLayerShell(options)).toBe(false);
+    expect(hoisted.useLayerShell).not.toHaveBeenCalled();
+    expect(managed.layerShell).toEqual(options);
+  });
+
+  it("reports availability only on Wayland", () => {
+    expect(ManagedWindow.isLayerShellAvailable()).toBe(true);
+
+    hoisted.desktop.mockReturnValue(X11);
+
+    expect(ManagedWindow.isLayerShellAvailable()).toBe(false);
   });
 });

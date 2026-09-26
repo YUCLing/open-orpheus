@@ -11,8 +11,9 @@ pub(crate) fn on_set_title(fd: RawFd, conn: &mut WaylandConn, msg: &WlMessage) -
     if let Some(title) = msg.str_text(8)
         && let Some(custom_id) = title.strip_prefix(CUSTOM_ID_PREFIX)
     {
-        let xdg_id = conn.top_to_xdg.get(&msg.object_id).copied();
-        let wl_surf = xdg_id.and_then(|xid| conn.xdg_to_wl.get(&xid).copied());
+        // Works for ordinary toplevels and for windows the proxy converted to
+        // layer surfaces, which the client still addresses as toplevels.
+        let wl_surf = conn.toplevel_wl_surface(msg.object_id);
 
         if let Some(wl_surf) = wl_surf
             && let Some(m) = CUSTOM_ID_MAP.get()

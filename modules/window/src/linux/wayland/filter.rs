@@ -77,6 +77,13 @@ pub(crate) fn filter(
     {
         let conns = CONNS.get();
         let mut guard = conns.and_then(|m| m.lock().ok());
+        // Answers a request handler owes the client (a decoration configure for
+        // a window the compositor has no toplevel for) go out first.
+        if is_event && let Some(conn) = guard.as_mut().and_then(|g| g.get_mut(&fd)) {
+            for message in std::mem::take(&mut conn.pending_to_client) {
+                out.extend_from_slice(&message);
+            }
+        }
         for msg in &msgs {
             let action = if let Some(conn) = guard.as_mut().and_then(|g| g.get_mut(&fd)) {
                 if is_event {
@@ -91,6 +98,12 @@ pub(crate) fn filter(
             match action {
                 Action::Forward => out.extend_from_slice(msg.raw()),
                 Action::Suppress => {}
+                // Emitted in the original's place, so ordering is exact.
+                Action::Replace(messages) => {
+                    for message in messages {
+                        out.extend_from_slice(&message);
+                    }
+                }
             }
         }
     }

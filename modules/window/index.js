@@ -700,9 +700,14 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.cancelLayerShellForNextWindow = nativeBinding.cancelLayerShellForNextWindow
 module.exports.captureNextWindowFirstCursorEnter = nativeBinding.captureNextWindowFirstCursorEnter
 module.exports.DesktopEnvironment = nativeBinding.DesktopEnvironment
 module.exports.dragWindow = nativeBinding.dragWindow
 module.exports.getCursorPosition = nativeBinding.getCursorPosition
 module.exports.getDesktopEnvironment = nativeBinding.getDesktopEnvironment
+module.exports.isLayerShellAvailable = nativeBinding.isLayerShellAvailable
+module.exports.LayerShellLayer = nativeBinding.LayerShellLayer
 module.exports.setInputRegion = nativeBinding.setInputRegion
+module.exports.useLayerShellForNextWindow = nativeBinding.useLayerShellForNextWindow
+module.exports.validateLayerShellOptions = nativeBinding.validateLayerShellOptions
