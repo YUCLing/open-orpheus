@@ -37,6 +37,8 @@ pub(crate) struct Effects {
     pub(crate) button: Option<(u32, u32, u32)>,
     pub(crate) entered: Option<(u32, i32, i32)>,
     pub(crate) arm_watchers_for: Option<u32>,
+    /// A window whose surface could not take the layer role, by custom id.
+    pub(crate) layer_shell_refused: Option<String>,
 }
 
 pub(crate) fn dispatch_request(
@@ -123,7 +125,7 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
 #[cfg(test)]
 mod tests {
     use super::super::codec::{
-        BTN_PRESSED, CUSTOM_ID_PREFIX, EVT_BUTTON, EVT_ENTER, EVT_LEAVE, EVT_TOUCH_DOWN,
+        BTN_PRESSED, EVT_BUTTON, EVT_ENTER, EVT_LEAVE, EVT_TOUCH_DOWN, decorate_title,
     };
     use super::super::state::{CUSTOM_ID_MAP, WaylandConn, init_state};
     use super::super::test_support::{message, wl_string, word};
@@ -254,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn a_custom_title_is_swallowed() {
+    fn a_custom_title_is_recorded_and_stripped() {
         init_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(30, Iface::XdgToplevel);
@@ -273,21 +275,36 @@ mod tests {
             Action::Forward
         ));
 
+        // A decorated title names the window and reaches the compositor as the
+        // real title only.
         let secret = "window-42";
-        let mut args = wl_string(&format!("{CUSTOM_ID_PREFIX}{secret}"));
+        let mut args = wl_string(&decorate_title(secret, "Real Title"));
         args.extend_from_slice(&[0, 0, 0, 0]);
-        assert!(matches!(
-            dispatch_request(
-                FD,
-                &mut conn,
-                &message(30, REQ_SET_TITLE, &args),
-                &mut Effects::default()
-            ),
-            Action::Suppress
-        ));
+        let action = dispatch_request(
+            FD,
+            &mut conn,
+            &message(30, REQ_SET_TITLE, &args),
+            &mut Effects::default(),
+        );
+
+        let Action::Replace(messages) = action else {
+            panic!("expected the title to be rewritten");
+        };
+        let rewritten = &messages[0];
+        let len = u32::from_ne_bytes(rewritten[8..12].try_into().unwrap()) as usize;
+        assert_eq!(
+            std::str::from_utf8(&rewritten[12..12 + len - 1]).unwrap(),
+            "Real Title"
+        );
 
         let map = CUSTOM_ID_MAP.get().expect("initialised").lock().unwrap();
         assert_eq!(map.get(secret).copied(), Some((FD, 10)));
+        drop(map);
+        if let Some(m) = CUSTOM_ID_MAP.get()
+            && let Ok(mut map) = m.lock()
+        {
+            map.remove(secret);
+        }
     }
 
     #[test]

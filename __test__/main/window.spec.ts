@@ -23,6 +23,8 @@ async function collectSourceFiles(dir: string): Promise<string[]> {
 interface FakeWindowHandle {
   emit(event: string, ...args: unknown[]): void;
   destroyed: boolean;
+  /** What the window was constructed with. */
+  options: unknown;
 }
 
 const hoisted = vi.hoisted(() => ({
@@ -32,6 +34,10 @@ const hoisted = vi.hoisted(() => ({
   useLayerShell: vi.fn(() => true),
   cancelLayerShell: vi.fn(() => true),
   validateLayerShell: vi.fn(() => true),
+  onLayerShellRefused: vi.fn(),
+  whenReady: vi.fn(() => Promise.resolve()),
+  /** Stands in for the native decoration of a managed title. */
+  decorateTitle: vi.fn((id: string, title: string) => `#${id}#${title}`),
   layerShellAvailable: vi.fn(() => true),
   /** Layer-shell declarations made by the time a window was constructed. */
   layerCallsAtConstruction: [] as number[],
@@ -49,6 +55,8 @@ vi.mock("@open-orpheus/window", () => ({
   useLayerShellForNextWindow: hoisted.useLayerShell,
   cancelLayerShellForNextWindow: hoisted.cancelLayerShell,
   validateLayerShellOptions: hoisted.validateLayerShell,
+  onLayerShellRoleRefused: hoisted.onLayerShellRefused,
+  decorateWindowTitle: hoisted.decorateTitle,
   isLayerShellAvailable: hoisted.layerShellAvailable,
 }));
 
@@ -81,6 +89,10 @@ vi.mock("electron", () => {
 
   class FakeBrowserWindow {
     static nextId = 1;
+    static byId = new Map<number, FakeBrowserWindow>();
+    static fromId(id: number) {
+      return FakeBrowserWindow.byId.get(id) ?? null;
+    }
     readonly id = FakeBrowserWindow.nextId++;
     title = "";
     destroyed = false;
@@ -89,6 +101,7 @@ vi.mock("electron", () => {
     private listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
     constructor(readonly options: unknown) {
+      FakeBrowserWindow.byId.set(this.id, this);
       hoisted.layerCallsAtConstruction.push(
         hoisted.useLayerShell.mock.calls.length
       );
@@ -151,6 +164,10 @@ vi.mock("electron", () => {
       this.visible = true;
       this.emit("show");
     }
+    showInactive() {
+      this.visible = true;
+      this.emit("show");
+    }
     hide() {
       this.visible = false;
       this.emit("hide");
@@ -175,7 +192,7 @@ vi.mock("electron", () => {
   }
 
   return {
-    app: { on: hoisted.appOn },
+    app: { on: hoisted.appOn, whenReady: hoisted.whenReady },
     BrowserWindow: FakeBrowserWindow,
     shell: { openExternal: vi.fn() },
   };
@@ -194,6 +211,13 @@ const X11 = 1;
 function asFake(wnd: BrowserWindow | null): FakeWindowHandle & BrowserWindow {
   if (!wnd) throw new Error("expected a bound window");
   return wnd as unknown as FakeWindowHandle & BrowserWindow;
+}
+
+/** The name the native layer knows the window by, from its bound window. */
+function managedId(wnd: BrowserWindow): string {
+  const managed = ManagedWindow.fromBrowserWindow(wnd);
+  if (!managed) throw new Error("expected a managed window");
+  return managed.id;
 }
 
 const regions = [{ x: 0, y: 0, width: 10, height: 10 }];
@@ -228,6 +252,7 @@ beforeEach(() => {
   hoisted.cancelLayerShell.mockReturnValue(true);
   hoisted.validateLayerShell.mockReset();
   hoisted.validateLayerShell.mockReturnValue(true);
+  hoisted.decorateTitle.mockClear();
   hoisted.layerShellAvailable.mockReset();
   hoisted.layerShellAvailable.mockReturnValue(true);
   hoisted.layerCallsAtConstruction.length = 0;
@@ -386,14 +411,14 @@ describe("ManagedWindow native state", () => {
 
     expect(managed.setWindowInputRegion(regions)).toBe(true);
     expect(hoisted.setInputRegion).toHaveBeenCalledTimes(1);
-    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(String(wnd.id), [
+    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(managedId(wnd), [
       { x: 0, y: 0, w: 10, h: 10 },
     ]);
 
     wnd.emit("show");
 
     expect(hoisted.setInputRegion).toHaveBeenCalledTimes(2);
-    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(String(wnd.id), [
+    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(managedId(wnd), [
       { x: 0, y: 0, w: 10, h: 10 },
     ]);
   });
@@ -449,7 +474,7 @@ describe("ManagedWindow native state", () => {
     wnd.emit("show");
 
     expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(
-      String(wnd.id),
+      managedId(wnd),
       null
     );
   });
@@ -488,7 +513,7 @@ describe("OnDemandWindow recreation", () => {
     first.emit("ready-to-show");
     await firstShow;
 
-    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(String(first.id), [
+    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(managedId(first), [
       { x: 0, y: 0, w: 10, h: 10 },
     ]);
 
@@ -503,7 +528,7 @@ describe("OnDemandWindow recreation", () => {
 
     expect(second).not.toBe(first);
     expect(second.id).not.toBe(first.id);
-    expect(hoisted.setInputRegion).toHaveBeenCalledWith(String(second.id), [
+    expect(hoisted.setInputRegion).toHaveBeenCalledWith(managedId(second), [
       { x: 0, y: 0, w: 10, h: 10 },
     ]);
   });
@@ -539,7 +564,7 @@ describe("switchWindowPolicy", () => {
     replacement.emit("show");
 
     expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(
-      String(replacement.id),
+      managedId(replacement),
       [{ x: 0, y: 0, w: 10, h: 10 }]
     );
   });
@@ -579,7 +604,7 @@ describe("switchWindowPolicy", () => {
     recreated.emit("ready-to-show");
     expect(recreated.isVisible()).toBe(true);
     expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(
-      String(recreated.id),
+      managedId(recreated),
       [{ x: 0, y: 0, w: 10, h: 10 }]
     );
   });
@@ -675,6 +700,47 @@ describe("ManagedWindow layer shell", () => {
     managed.show();
 
     expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+  });
+
+  it("arms when another module shows the window directly", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    hoisted.useLayerShell.mockClear();
+
+    // `menu.ts`, the `winhelper.*` calls and `app.ts` show the raw window.
+    asFake(managed.window).show();
+
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+  });
+
+  it("arms when another module shows the window without focus", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    hoisted.useLayerShell.mockClear();
+
+    asFake(managed.window).showInactive();
+
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+  });
+
+  it("surfaces a refused layer-shell role for its window", async () => {
+    // The listener is registered once the app is ready.
+    await hoisted.whenReady.mock.results.at(-1)?.value;
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    const refused = managed.once("layerShellRefused");
+    const reportRoleRefused = hoisted.onLayerShellRefused.mock.calls.at(
+      -1
+    )?.[0] as (windowId: string) => void;
+    expect(reportRoleRefused).toBeTypeOf("function");
+
+    // The native layer reports the managed id, not Electron's.
+    reportRoleRefused(managed.id);
+
+    // Emittery v2 hands listeners `{ name, data }`.
+    const event = await refused;
+    expect(event.name).toBe("layerShellRefused");
+    expect(event.data).toBe(managed.window);
   });
 
   it("leaves a hidden window's surface to its first show", () => {
@@ -778,5 +844,104 @@ describe("ManagedWindow layer shell", () => {
     hoisted.desktop.mockReturnValue(X11);
 
     expect(ManagedWindow.isLayerShellAvailable()).toBe(false);
+  });
+});
+
+describe("ManagedWindow title", () => {
+  it("owns the title and writes the managed id into it", () => {
+    class TitledWindow extends ManagedWindow {
+      constructor() {
+        super();
+        this.createBrowserWindow({ title: "Real Title" });
+      }
+    }
+
+    const managed = new TitledWindow();
+    const wnd = asFake(managed.window);
+
+    // The title never reaches the constructor: only this module writes it.
+    expect((wnd.options as { title?: string }).title).toBeUndefined();
+    expect(managed.title).toBe("Real Title");
+    expect(wnd.title).toBe(hoisted.decorateTitle(managed.id, "Real Title"));
+  });
+
+  it("writes the managed id again on every title change", () => {
+    const managed = new TestWindow();
+    const wnd = asFake(managed.window);
+
+    managed.setTitle("From the app");
+
+    expect(managed.title).toBe("From the app");
+    expect(wnd.title).toBe(hoisted.decorateTitle(managed.id, "From the app"));
+  });
+
+  it("takes the page title instead of letting the page write it", () => {
+    const managed = new TestWindow();
+    const wnd = asFake(managed.window);
+    const event = { preventDefault: vi.fn() };
+
+    wnd.emit("page-title-updated", event, "From the page");
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(managed.title).toBe("From the page");
+    expect(wnd.title).toBe(hoisted.decorateTitle(managed.id, "From the page"));
+  });
+
+  it("ignores its own write coming back from the page", () => {
+    const managed = new TestWindow();
+    const wnd = asFake(managed.window);
+    managed.setTitle("Once");
+    const written = wnd.title;
+    const event = { preventDefault: vi.fn() };
+
+    wnd.emit("page-title-updated", event, written);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(managed.title).toBe("Once");
+    expect(wnd.title).toBe(written);
+  });
+
+  it("writes the bare title where nothing strips the id", () => {
+    hoisted.desktop.mockReturnValue(X11);
+    const managed = new TestWindow();
+
+    managed.setTitle("Plain");
+
+    expect(managed.title).toBe("Plain");
+    expect(asFake(managed.window).title).toBe("Plain");
+    expect(hoisted.decorateTitle).not.toHaveBeenCalled();
+  });
+
+  it("leaves the page title alone where nothing decorates it", () => {
+    hoisted.desktop.mockReturnValue(X11);
+    const managed = new TestWindow();
+    const wnd = asFake(managed.window);
+    managed.setTitle("From the app");
+    const event = { preventDefault: vi.fn() };
+
+    wnd.emit("page-title-updated", event, "From the page");
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(wnd.title).toBe("From the app");
+  });
+
+  it("finds a window by the id the native layer reports", () => {
+    const managed = new TestWindow();
+
+    expect(ManagedWindow.fromId(managed.id)).toBe(managed);
+    expect(ManagedWindow.fromId("not-a-window")).toBeUndefined();
+  });
+
+  it("carries the title to a replacement window", () => {
+    const managed = new TestWindow();
+    managed.setTitle("Kept");
+    const next = new TestWindow();
+
+    managed.transferStateTo(next);
+
+    expect(next.title).toBe("Kept");
+    expect(asFake(next.window).title).toBe(
+      hoisted.decorateTitle(next.id, "Kept")
+    );
   });
 });

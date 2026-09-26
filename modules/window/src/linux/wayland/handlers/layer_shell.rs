@@ -62,7 +62,7 @@ pub(crate) fn on_registry_global_remove(conn: &mut WaylandConn, msg: &WlMessage)
 /// surface a different role while it lives — the client destroys and re-creates
 /// its `xdg_toplevel` whenever it hides and shows the window.
 pub(crate) fn on_get_toplevel(
-    _fd: RawFd,
+    fd: RawFd,
     conn: &mut WaylandConn,
     msg: &WlMessage,
     fx: &mut Effects,
@@ -73,6 +73,22 @@ pub(crate) fn on_get_toplevel(
     let previously = surface_id.is_some_and(|id| conn.layer_surfaces.contains_key(&id));
     let options =
         declaration.or_else(|| surface_id.and_then(|id| conn.layer_surfaces.get(&id).cloned()));
+
+    // A surface that has been an ordinary toplevel can never take the layer
+    // role: the compositor keeps the role for the surface's whole life, and it
+    // answers the attempt with a fatal protocol error. Refuse, and leave the
+    // window an ordinary toplevel; the application has to re-create the window
+    // (a new surface) for the role to apply.
+    if options.is_some()
+        && let Some(id) = surface_id
+        && conn.toplevel_surfaces.contains(&id)
+    {
+        eprintln!(
+            "[proxy:wayland] layer-shell refused: the window's surface is already an xdg_toplevel, so it cannot become a layer surface (re-create the window to apply it)"
+        );
+        fx.layer_shell_refused = state::window_id_for_surface(fd, id);
+        return objects::on_get_toplevel(conn, msg, fx);
+    }
 
     let Some(options) = options else {
         return objects::on_get_toplevel(conn, msg, fx);
@@ -556,11 +572,7 @@ mod tests {
 
         // A title is captured and swallowed rather than reaching a surface
         // that has no title.
-        let title = format!(
-            "{}{}",
-            super::super::super::codec::CUSTOM_ID_PREFIX,
-            "layer-window-99"
-        );
+        let title = super::super::super::codec::decorate_title("layer-window-99", "Real");
         let action = on_client_toplevel_request(
             7,
             &mut conn,
@@ -840,5 +852,73 @@ mod tests {
         conn.purge(10);
 
         assert!(conn.layer_surfaces.is_empty(), "a new surface starts clean");
+    }
+
+    /// A surface that has been an ordinary toplevel can never take the layer
+    /// role — the compositor keeps the role for the surface's whole life and
+    /// answers the attempt with a fatal protocol error.
+    #[test]
+    fn a_surface_that_is_already_a_toplevel_is_not_converted() {
+        let (_guard, mut conn) = fixture();
+        conn.toplevel_surfaces.insert(10);
+        assert!(state::declare_layer_window(options()));
+
+        let mut fx = Effects::default();
+        let action = on_get_toplevel(
+            7,
+            &mut conn,
+            &message(20, super::super::super::codec::REQ_GET_TOPLEVEL, &word(30)),
+            &mut fx,
+        );
+
+        assert!(
+            matches!(action, Action::Forward),
+            "left as an ordinary toplevel"
+        );
+        assert!(!conn.layer_windows.contains_key(&30));
+        assert!(conn.layer_surfaces.is_empty());
+    }
+
+    /// The refusal is reported by the name the application knows the window
+    /// under, which is what lets it re-create the window.
+    #[test]
+    fn a_refused_role_is_reported_by_window_id() {
+        let (_guard, mut conn) = fixture();
+        conn.toplevel_surfaces.insert(10);
+        assert!(state::declare_layer_window(options()));
+
+        let map = CUSTOM_ID_MAP.get().expect("initialized by the fixture");
+        map.lock().unwrap().insert("4711".into(), (7, 10));
+
+        let mut fx = Effects::default();
+        on_get_toplevel(
+            7,
+            &mut conn,
+            &message(20, super::super::super::codec::REQ_GET_TOPLEVEL, &word(30)),
+            &mut fx,
+        );
+        map.lock().unwrap().remove("4711");
+
+        assert_eq!(fx.layer_shell_refused.as_deref(), Some("4711"));
+    }
+
+    /// A surface that was never a toplevel is still converted when a
+    /// declaration is waiting, so the guard cannot regress the normal path.
+    #[test]
+    fn an_unknown_surface_is_still_converted() {
+        let (_guard, mut conn) = fixture();
+        assert!(state::declare_layer_window(options()));
+
+        let mut fx = Effects::default();
+        let action = on_get_toplevel(
+            7,
+            &mut conn,
+            &message(20, super::super::super::codec::REQ_GET_TOPLEVEL, &word(30)),
+            &mut fx,
+        );
+
+        assert!(matches!(action, Action::Replace(_)));
+        assert!(conn.layer_surfaces.contains_key(&10));
+        assert!(fx.layer_shell_refused.is_none());
     }
 }

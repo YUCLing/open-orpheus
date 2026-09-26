@@ -10,6 +10,16 @@ export declare function cancelLayerShellForNextWindow(): boolean
  */
 export declare function captureNextWindowFirstCursorEnter(callback: (x: number, y: number) => void): void
 
+/**
+ * Attach the managed window id to a title, the way the proxy expects it.
+ *
+ * The window id rides in front of the real title, separated from it by
+ * invisible characters, so the proxy can name the window on the wire while the
+ * compositor is shown only the title. `ManagedWindow` writes titles through
+ * this and nothing else writes them at all.
+ */
+export declare function decorateWindowTitle(id: string, title: string): string
+
 export declare const enum DesktopEnvironment {
   Wayland = 0,
   X11 = 1,
@@ -80,6 +90,18 @@ export interface LayerShellOptions {
   /** `0` none, `1` exclusive, `2` on demand (needs layer shell v4). */
   keyboardInteractivity?: number
 }
+
+/**
+ * Listen for windows whose layer-shell role was refused.
+ *
+ * A compositor never releases a surface's role, so a window whose surface is
+ * already an ordinary toplevel can never become a layer surface. The callback
+ * gets the custom window id that was refused; the application has to re-create
+ * that window (a new surface) for the role to apply.
+ *
+ * Only for Wayland on Linux.
+ */
+export declare function onLayerShellRoleRefused(callback: (windowId: string) => void): void
 
 /**
  * Set regions that the window is used to receive inputs.

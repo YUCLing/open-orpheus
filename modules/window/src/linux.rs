@@ -60,6 +60,11 @@ pub fn declare_layer_window(options: &crate::LayerShellOptions) -> bool {
     wayland::declare_layer_window(to_wayland_options(options))
 }
 
+/// Decorate a title with the managed window id the proxy keys windows on.
+pub fn decorate_title(id: &str, title: &str) -> String {
+    wayland::decorate_title(id, title)
+}
+
 /// Whether these options could be handed to the compositor at all.
 pub fn validate_layer_window(options: &crate::LayerShellOptions) -> bool {
     if disable_display_server_hooks() {
@@ -186,6 +191,26 @@ pub fn get_cursor_position() -> Option<(i32, i32)> {
         return None;
     }
     x11::query_pointer(0).map(|(x, y)| (x as i32, y as i32))
+}
+
+pub fn on_layer_shell_role_refused(env: Env, callback: Function<String, ()>) -> Result<()> {
+    if disable_display_server_hooks() {
+        return env.throw("onLayerShellRoleRefused is unavailable when Wayland hooks are disabled");
+    }
+
+    let callback = callback
+        .build_threadsafe_function()
+        .build_callback(|ctx: ThreadsafeCallContext<String>| Ok(ctx.value))?;
+
+    if !wayland::on_layer_shell_refused(Box::new(move |window_id: String| {
+        callback.call(window_id, ThreadsafeFunctionCallMode::NonBlocking);
+    })) {
+        return env.throw(
+            "onLayerShellRoleRefused is unavailable because Wayland hooks are not initialized",
+        );
+    }
+
+    Ok(())
 }
 
 pub fn capture_next_window_first_cursor_enter(

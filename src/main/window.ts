@@ -1,13 +1,13 @@
-import os from "node:os";
-
 import { app, BrowserWindow, shell } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
 import Emittery from "emittery";
 
 import {
   cancelLayerShellForNextWindow,
+  decorateWindowTitle,
   getDesktopEnvironment,
   isLayerShellAvailable,
+  onLayerShellRoleRefused,
   setInputRegion,
   useLayerShellForNextWindow,
   validateLayerShellOptions,
@@ -23,6 +23,13 @@ import { LifecycleState, state as lifecycleState } from "./lifecycle";
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
 const managedBrowserWindows = new Set<BrowserWindow>();
 const managedWindows = new Set<WeakRef<ManagedWindow>>();
+/**
+ * Names managed windows for the native layer.
+ *
+ * Generated here rather than taken from Electron, because it has to be known
+ * before the window — and therefore before its surface — exists.
+ */
+let nextManagedWindowId = 1;
 const finalizationRegistry = new FinalizationRegistry<WeakRef<ManagedWindow>>(
   (held) => {
     managedWindows.delete(held);
@@ -58,6 +65,15 @@ export interface WindowEvents {
   unbind: BrowserWindow;
   show: BrowserWindow;
   hide: BrowserWindow;
+  /**
+   * The compositor refused the layer-shell role for this window.
+   *
+   * A surface's role is never released, so this happens when the window was
+   * already an ordinary toplevel when the declaration reached it. It cannot be
+   * fixed on that surface: whatever handles this has to re-create the window,
+   * which is the only way to get a surface that can still take the role.
+   */
+  layerShellRefused: BrowserWindow;
 }
 
 export type WindowData = {
@@ -100,6 +116,18 @@ app.on("browser-window-created", (event, wnd) => {
   });
 });
 
+// A window whose layer-shell role was refused can only be fixed by re-creating
+// it, so the native layer's report has to reach the application. Registered
+// once, when the session is known.
+app.whenReady().then(() => {
+  if (getDesktopEnvironment() !== DesktopEnvironment.Wayland) return;
+  onLayerShellRoleRefused((windowId: string) => {
+    const managed = ManagedWindow.fromId(windowId);
+    const wnd = managed?.window;
+    if (managed && wnd) managed.emit("layerShellRefused", wnd);
+  });
+});
+
 /**
  * State the native module owns for a window.
  *
@@ -125,8 +153,12 @@ interface NativeWindowState {
 export abstract class ManagedWindow<
   Data extends WindowData = WindowData,
 > extends Emittery<WindowEvents> {
+  /** The name the native layer knows this window by. */
+  readonly id = String(nextManagedWindowId++);
+
   private _window: BrowserWindow | null = null;
   private _data: Record<string, unknown> = Object.create(null);
+  private _title = "";
 
   private _lastOnClosedListener: (() => void) | null = null;
   private _closeNotifier: (() => void) | null = null;
@@ -135,6 +167,9 @@ export abstract class ManagedWindow<
     postShow: { inputRegions: null },
     preCreate: { layerShell: null },
   };
+  /** The window's own show methods, while this wrapper has them wrapped. */
+  private _originalShow: (() => void) | null = null;
+  private _originalShowInactive: (() => void) | null = null;
   /** Bumped whenever the platform surface may have been replaced. */
   private _surfaceGeneration = 0;
   private _reapplyTimer: NodeJS.Timeout | null = null;
@@ -180,6 +215,52 @@ export abstract class ManagedWindow<
   get window(): BrowserWindow | null {
     return this._window;
   }
+
+  /** The window's title. The window itself is never asked for it. */
+  get title(): string {
+    return this._title;
+  }
+
+  /**
+   * Set the window's title.
+   *
+   * This is the only way the title is ever written: the native layer keys the
+   * window on the id that rides in front of it, so a title written straight to
+   * the `BrowserWindow` would drop that id and with it the window's name.
+   */
+  setTitle(title: string): void {
+    this._title = title;
+    this.applyTitle();
+  }
+
+  /** What the native layer expects to see on the wire for this window. */
+  private decoratedTitle(): string {
+    // Only Wayland strips the id out again; elsewhere the decoration would show
+    // up in the window title (invisible characters plus a visible number).
+    return this.isWayland()
+      ? decorateWindowTitle(this.id, this._title)
+      : this._title;
+  }
+
+  private applyTitle(): void {
+    this.liveWindow()?.setTitle(this.decoratedTitle());
+  }
+
+  /**
+   * The page must not write the window title on Wayland.
+   *
+   * The managed id rides in the title, so a page title would either carry no id
+   * or carry someone else's; it is taken, prevented, and written back by this
+   * module instead. Attached only where the title is decorated.
+   */
+  private readonly _pageTitleListener = (
+    event: { preventDefault(): void },
+    title: string
+  ) => {
+    event.preventDefault();
+    if (title === this.decoratedTitle()) return;
+    this.setTitle(title);
+  };
 
   private readonly _maximizeListener = () => {
     this.disableSizeConstraints();
@@ -246,6 +327,28 @@ export abstract class ManagedWindow<
     wnd.on("show", this._showListener);
     wnd.on("hide", this._hideListener);
     wnd.on("close", this._closeListener);
+    // Only Wayland puts the managed id in the title, so only there does the page
+    // have to be kept from writing it. Elsewhere the title stays Electron's.
+    if (this.isWayland()) {
+      wnd.on("page-title-updated", this._pageTitleListener);
+    }
+
+    // A window's role is taken from whichever show creates (or re-creates) its
+    // surface, and other modules show windows straight through the
+    // `BrowserWindow` — `menu.ts`, the `winhelper.*` calls, `app.ts`. Wrapping
+    // the two show methods here is what makes the layer-shell declaration
+    // unmissable, instead of depending on every caller going through this
+    // wrapper.
+    this._originalShow = wnd.show.bind(wnd);
+    wnd.show = () => {
+      this.armLayerShellForShow(wnd);
+      this._originalShow?.();
+    };
+    this._originalShowInactive = wnd.showInactive.bind(wnd);
+    wnd.showInactive = () => {
+      this.armLayerShellForShow(wnd);
+      this._originalShowInactive?.();
+    };
 
     wnd.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith("http://") || url.startsWith("https://")) {
@@ -275,6 +378,13 @@ export abstract class ManagedWindow<
     wnd.off("show", this._showListener);
     wnd.off("hide", this._hideListener);
     wnd.off("close", this._closeListener);
+    wnd.off("page-title-updated", this._pageTitleListener);
+
+    if (this._originalShow) wnd.show = this._originalShow;
+    if (this._originalShowInactive)
+      wnd.showInactive = this._originalShowInactive;
+    this._originalShow = null;
+    this._originalShowInactive = null;
   }
 
   /**
@@ -292,17 +402,20 @@ export abstract class ManagedWindow<
     this._layerShellDeclared = false;
     this.beforeSurfaceCreated();
     if (options.show !== false) this.armLayerShell();
-    const wnd = new BrowserWindow(options);
+    // The title is ours to write, because the managed id rides in it: it is
+    // never handed to the constructor, where nothing would decorate it.
+    const { title, ...rest } = options;
+    if (title !== undefined) this._title = title;
+    const wnd = new BrowserWindow(rest);
     this.window = wnd;
+    this.applyTitle();
     return wnd;
   }
 
   /** Whether the compositor can take layer surfaces at all. */
   static isLayerShellAvailable(): boolean {
     return (
-      os.platform() === "linux" &&
       getDesktopEnvironment() === DesktopEnvironment.Wayland &&
-      typeof isLayerShellAvailable === "function" &&
       isLayerShellAvailable()
     );
   }
@@ -355,10 +468,20 @@ export abstract class ManagedWindow<
   protected beforeSurfaceCreated(): void {}
 
   /**
+   * Arm the recorded state before a show that may bring a surface.
+   *
+   * Called from the wrapped `show`/`showInactive`, so it does not matter which
+   * module asks for the window to appear.
+   */
+  private armLayerShellForShow(wnd: BrowserWindow): void {
+    if (!wnd.isVisible()) this.armLayerShell();
+  }
+
+  /**
    * Arm the recorded layer-shell state for the surface about to be created.
    *
    * Called immediately before an action that brings a surface with it — a
-   * creation, or the show of a hidden window — and nowhere else. The queue is
+   * creation, or a show of a hidden window — and nowhere else. The queue is
    * positional, so a declaration armed while no surface follows is handed to
    * whichever window creates the next one.
    */
@@ -372,9 +495,7 @@ export abstract class ManagedWindow<
   }
 
   private cancelLayerShell(): void {
-    if (typeof cancelLayerShellForNextWindow === "function") {
-      cancelLayerShellForNextWindow();
-    }
+    cancelLayerShellForNextWindow();
   }
 
   /** The bound window, or `null` once it is gone. Never a destroyed window. */
@@ -436,11 +557,11 @@ export abstract class ManagedWindow<
     }
   }
 
+  /**
+   * Whether the session is Wayland.
+   */
   private isWayland(): boolean {
-    return (
-      os.platform() === "linux" &&
-      getDesktopEnvironment() === DesktopEnvironment.Wayland
-    );
+    return getDesktopEnvironment() === DesktopEnvironment.Wayland;
   }
 
   /**
@@ -459,7 +580,7 @@ export abstract class ManagedWindow<
       if (generation !== this._surfaceGeneration) return;
       const wnd = this.liveWindow();
       if (!wnd) return;
-      if (this.applyPostShowState(wnd)) return;
+      if (this.applyPostShowState()) return;
       if (attempt >= REAPPLY_DELAYS_MS.length) {
         console.warn(
           `[window] gave up re-applying native state for window ${wnd.id}`
@@ -472,20 +593,13 @@ export abstract class ManagedWindow<
   }
 
   /** Returns whether the surface was ready to accept the state. */
-  private applyPostShowState(wnd: BrowserWindow): boolean {
-    // On Wayland windows are not preserved across show / hide, so the custom id
-    // the native module uses to name this window has to be re-sent each time.
-    const originalTitle = wnd.title;
-    wnd.setTitle("\u200B\u200C" + wnd.id);
-    // Chromium/Electron store the title internally, we will be resetting the title,
-    // thus Electron can remember the correct title.
-    wnd.setTitle(originalTitle);
-
+  private applyPostShowState(): boolean {
     const regions = this._nativeState.postShow.inputRegions;
     if (regions === null) return true;
-    // A known window id is what makes the input region land; the native module
-    // reports failure until the surface exists, which is our readiness probe.
-    return setInputRegion(wnd.id.toString(), toNativeRegions(regions));
+    // The managed id is on the wire from the prologue on, so this lands as soon
+    // as the surface exists; the native module reports failure until then,
+    // which is our readiness probe.
+    return setInputRegion(this.id, toNativeRegions(regions));
   }
 
   setData<K extends keyof Data>(key: K, data: Data[K]): void;
@@ -560,14 +674,13 @@ export abstract class ManagedWindow<
    * @returns
    */
   setWindowInputRegion(regions: InputRegion[]): boolean {
-    if (os.platform() !== "linux") return false;
     this._nativeState.postShow.inputRegions = regions;
 
     const wnd = this.liveWindow();
     if (!wnd) return false;
     const native = toNativeRegions(regions);
     if (this.isWayland()) {
-      return setInputRegion(wnd.id.toString(), native);
+      return setInputRegion(this.id, native);
     }
     return setInputRegion(wnd.getNativeWindowHandle(), native);
   }
@@ -580,11 +693,9 @@ export abstract class ManagedWindow<
   }
 
   show(): void | Promise<void> {
-    const wnd = this.liveWindow();
-    if (!wnd) return;
-    // A hidden window brings its surface — or a fresh one — with this show.
-    if (!wnd.isVisible()) this.armLayerShell();
-    wnd.show();
+    // The window's own `show` arms the declaration first (see
+    // `attachWindowListeners`), so this stays a plain forward.
+    this.liveWindow()?.show();
   }
 
   hide(): void | Promise<void> {
@@ -610,6 +721,7 @@ export abstract class ManagedWindow<
     target._data = merged;
     target._nativeState.postShow = this._nativeState.postShow;
     target._nativeState.preCreate = this._nativeState.preCreate;
+    target.setTitle(this._title);
     this._data = Object.create(null);
     this._nativeState.postShow = { inputRegions: null };
     this._nativeState.preCreate = { layerShell: null };
@@ -617,6 +729,12 @@ export abstract class ManagedWindow<
 
   static fromBrowserWindow(browserWindow: BrowserWindow) {
     return browserManagedWindowMap.get(browserWindow);
+  }
+  static fromId(id: string) {
+    for (const ref of managedWindows) {
+      const managed = ref.deref();
+      if (managed?.id === id) return managed;
+    }
   }
   static fromName(name: string) {
     for (const ref of managedWindows) {
@@ -696,8 +814,8 @@ export abstract class OnDemandWindow<
       wnd.once("closed", closedHandler);
       wnd.once("ready-to-show", () => {
         wnd.off("closed", closedHandler);
-        // This show is what creates the surface.
-        if (!wnd.isVisible()) this.armLayerShell();
+        // This show is what creates the surface, and the window's own `show`
+        // arms the declaration for it.
         wnd.show();
         resolve();
       });

@@ -121,6 +121,9 @@ pub(crate) fn filter(
     if let Some(wl_surface_id) = fx.arm_watchers_for {
         arm_first_cursor_enter_watchers(fd, wl_surface_id);
     }
+    if let Some(window_id) = fx.layer_shell_refused {
+        fire_layer_shell_refused(window_id);
+    }
 
     // ── Ancillary data + output assembly (unchanged semantics) ──
     pending_ctrl.bytes.extend_from_slice(&new_ctrl_bytes);

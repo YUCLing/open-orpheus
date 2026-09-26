@@ -46,6 +46,16 @@ pub(super) fn cancel_layer_window() -> bool {
     state::cancel_layer_window()
 }
 
+/// Decorate a title with the managed window id the proxy keys windows on.
+pub(super) fn decorate_title(id: &str, title: &str) -> String {
+    codec::decorate_title(id, title)
+}
+
+/// Register the listener that hears about windows whose layer role was refused.
+pub(super) fn on_layer_shell_refused(cb: state::LayerShellRefusedCb) -> bool {
+    state::on_layer_shell_refused(cb)
+}
+
 pub(super) fn send_xdg_toplevel_move() -> bool {
     inject::send_xdg_toplevel_move()
 }

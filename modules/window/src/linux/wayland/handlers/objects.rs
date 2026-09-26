@@ -74,6 +74,9 @@ pub(crate) fn on_get_toplevel(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut 
         conn.top_to_xdg.insert(top_id, msg.object_id);
         if let Some(wl_id) = conn.xdg_to_wl.get(&msg.object_id).copied() {
             conn.wl_to_top.insert(wl_id, top_id);
+            // The surface is a toplevel for good: a compositor never releases
+            // the role, so it can never become a layer surface.
+            conn.toplevel_surfaces.insert(wl_id);
             fx.arm_watchers_for = Some(wl_id);
         }
     }

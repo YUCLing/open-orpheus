@@ -112,6 +112,52 @@ pub fn set_input_region(
     }
 }
 
+/// Attach the managed window id to a title, the way the proxy expects it.
+///
+/// The window id rides in front of the real title, separated from it by
+/// invisible characters, so the proxy can name the window on the wire while the
+/// compositor is shown only the title. `ManagedWindow` writes titles through
+/// this and nothing else writes them at all.
+#[napi]
+pub fn decorate_window_title(id: String, title: String) -> String {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::decorate_title(&id, &title)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = id;
+        title
+    }
+}
+
+/// Listen for windows whose layer-shell role was refused.
+///
+/// A compositor never releases a surface's role, so a window whose surface is
+/// already an ordinary toplevel can never become a layer surface. The callback
+/// gets the custom window id that was refused; the application has to re-create
+/// that window (a new surface) for the role to apply.
+///
+/// Only for Wayland on Linux.
+#[napi]
+pub fn on_layer_shell_role_refused(
+    env: Env,
+    #[napi(ts_arg_type = "(windowId: string) => void")] callback: Function<String, ()>,
+) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::linux::on_layer_shell_role_refused as on_layer_shell_role_refused_impl;
+        on_layer_shell_role_refused_impl(env, callback)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = callback;
+        env.throw("Only supports Linux")
+    }
+}
+
 /// Listen for first CursorEnter event of the next created window.
 ///
 /// Only for Wayland on Linux.

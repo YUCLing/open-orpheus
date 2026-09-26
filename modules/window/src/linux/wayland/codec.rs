@@ -96,6 +96,26 @@ pub(crate) const REQ_SET_ICON: u16 = 2;
 
 // U+200B (Zero Width Space) and U+200C (Zero Width Non-Joiner)
 pub(crate) const CUSTOM_ID_PREFIX: &str = "\u{200B}\u{200C}";
+// U+200D (Zero Width Joiner) closes the id, so the real title can be anything.
+pub(crate) const CUSTOM_ID_SEPARATOR: char = '\u{200D}';
+
+/// Decorate a title with the managed window id the native layer keys on.
+pub(crate) fn decorate_title(id: &str, title: &str) -> String {
+    format!("{CUSTOM_ID_PREFIX}{id}{CUSTOM_ID_SEPARATOR}{title}")
+}
+
+/// Split a decorated title into its managed window id and the real title.
+///
+/// The application writes `prefix + id + separator + title`; everything from
+/// the separator on is what the compositor is allowed to see.
+pub(crate) fn parse_custom_title(title: &str) -> Option<(&str, &str)> {
+    let rest = title.strip_prefix(CUSTOM_ID_PREFIX)?;
+    let (id, real_title) = rest.split_once(CUSTOM_ID_SEPARATOR)?;
+    if id.is_empty() {
+        return None;
+    }
+    Some((id, real_title))
+}
 
 // ── Wire helpers ──────────────────────────────────────────────────────────
 
@@ -268,7 +288,8 @@ mod tests {
 
     use super::super::test_support::{declared_message, header, wl_string};
     use super::{
-        WlMessage, decode, is_wayland_socket, parse_header, parse_wl_str, rfixed_i32, ru32,
+        WlMessage, decode, is_wayland_socket, parse_custom_title, parse_header, parse_wl_str,
+        rfixed_i32, ru32,
     };
 
     fn fixed_bytes(value: i32) -> [u8; 4] {
@@ -483,5 +504,27 @@ mod tests {
             Some(value) => unsafe { std::env::set_var("WAYLAND_DISPLAY", value) },
             None => unsafe { std::env::remove_var("WAYLAND_DISPLAY") },
         }
+    }
+
+    #[test]
+    fn a_decorated_title_splits_into_its_id_and_the_real_title() {
+        let decorated = super::decorate_title("17", "Now Playing");
+        assert_eq!(parse_custom_title(&decorated), Some(("17", "Now Playing")));
+    }
+
+    #[test]
+    fn a_title_that_is_only_an_id_has_an_empty_real_title() {
+        let decorated = super::decorate_title("17", "");
+        assert_eq!(parse_custom_title(&decorated), Some(("17", "")));
+    }
+
+    #[test]
+    fn an_undecorated_title_is_not_claimed() {
+        // The compositor's own titles must never be rewritten.
+        assert_eq!(parse_custom_title("Now Playing"), None);
+        assert_eq!(parse_custom_title(""), None);
+        // A prefix without an id is not a decoration either.
+        assert_eq!(parse_custom_title("\u{200B}\u{200C}"), None);
+        assert_eq!(parse_custom_title("\u{200B}\u{200C}17"), None);
     }
 }
