@@ -2,14 +2,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { BrowserWindow, screen } from "electron";
+import type { BrowserWindowConstructorOptions } from "electron";
 
-import { setMainWindow } from "../window";
+import { ManagedWindow, setMainWindow } from "../window";
 import { window as miniPlayerWindow } from "./mini-player";
-import {
-  LifecycleState,
-  state as lifecycleState,
-  setLifecycleState,
-} from "../lifecycle";
+import { LifecycleState, setLifecycleState } from "../lifecycle";
 
 function getWindowState(
   wnd: BrowserWindow
@@ -36,19 +33,19 @@ function getWindowSizeStatus(
   ];
 }
 
-export default async function createMainWindow() {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 720,
-    show: false,
-    frame: false,
-    webPreferences: {
-      preload: path.join(import.meta.dirname, "preload.js"),
-      additionalArguments: ["--preload-channel=main"],
-    },
-  });
+const mainWindowOptions = {
+  width: 1280,
+  height: 720,
+  show: false,
+  frame: false,
+  webPreferences: {
+    preload: path.join(import.meta.dirname, "preload.js"),
+    additionalArguments: ["--preload-channel=main"],
+  },
+} satisfies BrowserWindowConstructorOptions;
 
+/** Wire the main window's cross-window behaviour and lifecycle. */
+function setupMainWindow(mainWindow: BrowserWindow) {
   [
     "maximize",
     "minimize",
@@ -103,16 +100,25 @@ export default async function createMainWindow() {
     miniPlayerWindow.hide();
   });
 
-  mainWindow.on("close", (e) => {
-    if (lifecycleState === LifecycleState.Quitting) return;
-    mainWindow.webContents.send("channel.call", "winhelper.onclose");
-    e.preventDefault();
-  });
-
   setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);
 
   // Load App URL
-  mainWindow.loadURL("orpheus://orpheus/pub/app.html");
+  void mainWindow.loadURL("orpheus://orpheus/pub/app.html");
 
   setMainWindow(mainWindow);
+}
+
+class MainWindow extends ManagedWindow {
+  constructor() {
+    super();
+    // Closing the main window asks the app to shut down; quitting closes it.
+    this.requestCloseApproval(() =>
+      this.send("channel.call", "winhelper.onclose")
+    );
+    setupMainWindow(this.createBrowserWindow(mainWindowOptions));
+  }
+}
+
+export default async function createMainWindow() {
+  return new MainWindow();
 }

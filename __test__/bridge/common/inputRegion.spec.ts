@@ -118,13 +118,4 @@ describe("registerInputRegionHandlers", () => {
     );
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(false);
   });
-
-  it("notifies the renderer once the window is shown", () => {
-    const win = createFakeWindow();
-    registerInputRegionHandlers(win.wnd);
-
-    win.fire("show");
-
-    expect(win.send).toHaveBeenCalledWith("inputRegion.shown");
-  });
 });

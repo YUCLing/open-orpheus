@@ -1,5 +1,5 @@
-import { BrowserWindow, screen } from "electron";
-import { join, normalize } from "node:path";
+import { screen } from "electron";
+import { normalize } from "node:path";
 
 import Emittery from "emittery";
 import {
@@ -19,6 +19,7 @@ import {
   destroyOverlayWindow,
   getMenuWindow,
   getOverlayWindow,
+  SubmenuWindow,
 } from "./menu/windows";
 import packManager from "./pack";
 import SkinPack from "./packs/SkinPack";
@@ -53,7 +54,7 @@ export type AppMenuEvents = {
 export default class AppMenu extends Emittery<AppMenuEvents> {
   private onClick: MenuClickHandler | null = null;
   private closed = false;
-  private submenuWindow: BrowserWindow | null = null;
+  private submenuWindow: SubmenuWindow | null = null;
   /** style path → parsed template, preloaded from skin pack */
   templates: Record<string, ElementTemplate> = {};
 
@@ -114,10 +115,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   close() {
     this.closed = true;
 
-    if (this.submenuWindow && !this.submenuWindow.isDestroyed()) {
-      this.submenuWindow.destroy();
-      this.submenuWindow = null;
-    }
+    this.submenuWindow?.browserWindow.destroy();
+    this.submenuWindow = null;
 
     if (getDesktopEnvironment() === DesktopEnvironment.Wayland) {
       destroyOverlayWindow();
@@ -247,10 +246,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     const display = screen.getDisplayNearestPoint(cursor);
 
     const closeSubmenuWindow = () => {
-      if (this.submenuWindow && !this.submenuWindow.isDestroyed()) {
-        this.submenuWindow.destroy();
-        this.submenuWindow = null;
-      }
+      this.submenuWindow?.browserWindow.destroy();
+      this.submenuWindow = null;
     };
 
     const openSubmenuWindow = (
@@ -268,36 +265,15 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         y: screenY,
       });
 
-      const sub = new BrowserWindow({
-        title: "Open Orpheus Menu",
-        show: false,
-        frame: false,
-        transparent: true,
-        backgroundColor: "#00000000",
-        hasShadow: true,
-        skipTaskbar: true,
-        resizable: false,
-        alwaysOnTop: true,
-        focusable: true,
-        webPreferences: {
-          partition: "open-orpheus",
-          preload: join(import.meta.dirname, "menu.js"),
-          additionalArguments: ["--submenu"],
-        },
-      });
+      const sub = new SubmenuWindow();
       this.submenuWindow = sub;
+      const subWnd = sub.browserWindow;
 
-      if (GUI_VITE_DEV_SERVER_URL) {
-        sub.loadURL(`${GUI_VITE_DEV_SERVER_URL}/menu`);
-      } else {
-        sub.loadURL("gui://frontend/menu");
-      }
-
-      sub.on("closed", () => {
+      subWnd.on("closed", () => {
         if (this.submenuWindow === sub) this.submenuWindow = null;
       });
 
-      registerIpcHandlers<MenuContract>(sub.webContents, "menu", {
+      registerIpcHandlers<MenuContract>(subWnd.webContents, "menu", {
         getFont: async () => font,
         pull: async () => {
           return { items, templates, colors: menuSkin };
@@ -310,7 +286,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           this.onClick?.(btnId);
         },
         reportSize: async (_event, width, height) => {
-          if (sub.isDestroyed()) return;
+          if (subWnd.isDestroyed()) return;
           const { x: dx, y: dy, width: dw, height: dh } = subDisplay.workArea;
           let x = screenX;
           let y = screenY;
@@ -318,20 +294,20 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           if (y + height > dy + dh) y = dy + dh - height;
           if (x < dx) x = dx;
           if (y < dy) y = dy;
-          sub.setBounds({
+          subWnd.setBounds({
             x: Math.round(x),
             y: Math.round(y),
             width: Math.round(width),
             height: Math.round(height),
           });
-          sub.showInactive();
+          subWnd.showInactive();
         },
         close: async () => {},
         openSubmenu: async () => {},
         closeSubmenu: async () => {},
       });
 
-      sub.on("blur", () => {
+      subWnd.on("blur", () => {
         setTimeout(() => {
           // If focus went back to the main menu, keep open
           if (!wnd.isDestroyed() && wnd.isFocused()) return;
@@ -391,11 +367,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     const blurCheck = () => {
       // If focus moved to the submenu window, keep the menu open
-      if (
-        this.submenuWindow &&
-        !this.submenuWindow.isDestroyed() &&
-        this.submenuWindow.isFocused()
-      ) {
+      const submenuWnd = this.submenuWindow?.browserWindow;
+      if (submenuWnd && !submenuWnd.isDestroyed() && submenuWnd.isFocused()) {
         return;
       }
       // If the main window regained focus (e.g. brief WM focus shuffle), keep open
