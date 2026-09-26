@@ -7,7 +7,13 @@ import psd from "@webtoon/psd";
 import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
-import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow } from "../window";
+import {
+  guiUrl,
+  mainWindow,
+  ManagedWindow,
+  OnDemandWindow,
+  switchWindowPolicy,
+} from "../window";
 import { registerIpcHandlers } from "../../bridge/register";
 import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
 import type { BtnImages, BtnState } from "../../../types/dui";
@@ -27,7 +33,7 @@ import type {
 } from "$sharedTypes/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { font } from "../gui";
-import { kv as settings } from "../settings";
+import { events as settingsEvents, kv as settings } from "../settings";
 
 // State
 let playInfo: MiniPlayerPlayInfo | null = null;
@@ -492,10 +498,35 @@ class MiniPlayerOnDemandWindow extends OnDemandWindow {
   }
 }
 
+/** `"on-demand"` destroys the window when hidden; anything else keeps it. */
+function createWindowForLifecycle(value: unknown): ManagedWindow {
+  return value === "on-demand"
+    ? new MiniPlayerOnDemandWindow()
+    : new MiniPlayerWindow();
+}
+
+let lifecycleSwitchRegistered = false;
+
+/**
+ * React to lifecycle changes without a restart.
+ *
+ * Registered from the startup path rather than at module scope: this module is
+ * evaluated before `settings.initialize()` creates the settings emitter.
+ */
+function registerLifecycleSwitch() {
+  if (lifecycleSwitchRegistered) return;
+  lifecycleSwitchRegistered = true;
+
+  settingsEvents.on("change", (e) => {
+    if (e.data.key !== "window.lifecycle" || !window) return;
+    window = switchWindowPolicy(window, () =>
+      createWindowForLifecycle(e.data.value)
+    );
+  });
+}
+
 export let window: ManagedWindow;
 export default async function createMiniPlayerWindow() {
-  window =
-    (await settings.get("window.lifecycle")) !== "on-demand"
-      ? new MiniPlayerWindow()
-      : new MiniPlayerOnDemandWindow();
+  window = createWindowForLifecycle(await settings.get("window.lifecycle"));
+  registerLifecycleSwitch();
 }

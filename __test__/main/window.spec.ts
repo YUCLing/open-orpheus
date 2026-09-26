@@ -73,6 +73,7 @@ vi.mock("electron", () => {
     readonly id = FakeBrowserWindow.nextId++;
     title = "";
     destroyed = false;
+    visible = false;
     webContents = new FakeWebContents();
     private listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
@@ -116,6 +117,9 @@ vi.mock("electron", () => {
     isFullScreen() {
       return false;
     }
+    isVisible() {
+      return this.visible;
+    }
     setMaximumSize = vi.fn();
     setMinimumSize = vi.fn();
     setAlwaysOnTop = vi.fn();
@@ -129,9 +133,11 @@ vi.mock("electron", () => {
       return Buffer.from([this.id, 0, 0, 0]);
     }
     show() {
+      this.visible = true;
       this.emit("show");
     }
     hide() {
+      this.visible = false;
       this.emit("hide");
     }
     close() {
@@ -148,6 +154,7 @@ vi.mock("electron", () => {
     destroy() {
       if (this.destroyed) return;
       this.destroyed = true;
+      this.visible = false;
       this.emit("closed");
     }
   }
@@ -159,7 +166,11 @@ vi.mock("electron", () => {
   };
 });
 
-import { ManagedWindow, OnDemandWindow } from "../../src/main/window";
+import {
+  ManagedWindow,
+  OnDemandWindow,
+  switchWindowPolicy,
+} from "../../src/main/window";
 
 const WAYLAND = 0;
 const X11 = 1;
@@ -207,6 +218,25 @@ describe("window ownership", () => {
       const text = await readFile(file, "utf8");
       if (/\bnew BrowserWindow\b/.test(text)) {
         offenders.push(file.slice(src.length));
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("does not touch the settings emitter while the module is evaluated", async () => {
+    // `settings.events` only exists after `settings.initialize()`, and these
+    // modules are imported before that runs. Subscribing at module scope would
+    // throw on startup, so registration has to happen from the startup path.
+    const src = fileURLToPath(new URL("../../src", import.meta.url));
+    const offenders: string[] = [];
+
+    for (const name of ["mini-player.ts", "desktop-lyrics.ts"]) {
+      const text = await readFile(join(src, "main", "windows", name), "utf8");
+      for (const [index, line] of text.split("\n").entries()) {
+        if (/^(?:settingsEvents|settings\.events)\.on\(/.test(line)) {
+          offenders.push(`${name}:${index + 1}`);
+        }
       }
     }
 
@@ -446,5 +476,81 @@ describe("OnDemandWindow recreation", () => {
     expect(hoisted.setInputRegion).toHaveBeenCalledWith(String(second.id), [
       { x: 0, y: 0, w: 10, h: 10 },
     ]);
+  });
+});
+
+describe("switchWindowPolicy", () => {
+  it("dismisses the old window and moves the recorded state", () => {
+    const managed = new TestWindow();
+    const previous = asFake(managed.window);
+    managed.setData("name", "test_window");
+    managed.setMinimumSize(320, 200);
+    managed.setWindowInputRegion(regions);
+
+    const next = switchWindowPolicy(managed, () => new TestWindow());
+    const replacement = asFake(next.window);
+
+    expect(previous.destroyed).toBe(true);
+    expect(replacement).not.toBe(previous);
+    expect(next.getData("name")).toBe("test_window");
+    expect(next.getData("minimumSize")).toEqual({ x: 320, y: 200 });
+    // The discarded wrapper keeps nothing, so `fromName` cannot find it.
+    expect(managed.getData("name")).toBeUndefined();
+    expect(ManagedWindow.fromName("test_window")).toBe(next);
+  });
+
+  it("re-applies the moved input region to the replacement", () => {
+    const managed = new TestWindow();
+    managed.setWindowInputRegion(regions);
+    hoisted.setInputRegion.mockClear();
+
+    const next = switchWindowPolicy(managed, () => new TestWindow());
+    const replacement = asFake(next.window);
+    replacement.emit("show");
+
+    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(
+      String(replacement.id),
+      [{ x: 0, y: 0, w: 10, h: 10 }]
+    );
+  });
+
+  it("keeps a visible window visible after the switch", () => {
+    const managed = new TestWindow();
+    asFake(managed.window).show();
+
+    const next = switchWindowPolicy(managed, () => new TestWindow());
+
+    expect(asFake(next.window).isVisible()).toBe(true);
+  });
+
+  it("leaves a hidden window to the new policy", () => {
+    const managed = new TestWindow();
+
+    const next = switchWindowPolicy(managed, () => new TestOnDemandWindow());
+
+    // On-demand starts dismissed: no window until `show()`.
+    expect(next).toBeInstanceOf(TestOnDemandWindow);
+    expect(next.window).toBeNull();
+  });
+
+  it("recreates a visible on-demand window under the new policy", () => {
+    const managed = new TestWindow();
+    const previous = asFake(managed.window);
+    previous.show();
+    managed.setWindowInputRegion(regions);
+    hoisted.setInputRegion.mockClear();
+
+    const next = switchWindowPolicy(managed, () => new TestOnDemandWindow());
+    const recreated = asFake(next.window);
+
+    expect(previous.destroyed).toBe(true);
+    expect(recreated).not.toBe(previous);
+
+    recreated.emit("ready-to-show");
+    expect(recreated.isVisible()).toBe(true);
+    expect(hoisted.setInputRegion).toHaveBeenLastCalledWith(
+      String(recreated.id),
+      [{ x: 0, y: 0, w: 10, h: 10 }]
+    );
   });
 });

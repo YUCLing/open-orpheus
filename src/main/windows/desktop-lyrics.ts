@@ -17,7 +17,13 @@ import {
   TextAlignType,
 } from "$sharedTypes/desktop-lyrics";
 
-import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow } from "../window";
+import {
+  guiUrl,
+  mainWindow,
+  ManagedWindow,
+  OnDemandWindow,
+  switchWindowPolicy,
+} from "../window";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
   DesktopLyricsContract,
@@ -26,7 +32,7 @@ import type {
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-import { kv as settings } from "../settings";
+import { events as settingsEvents, kv as settings } from "../settings";
 
 export const lyricsStyle: LyricsStyle = {
   font: {
@@ -195,12 +201,37 @@ class DesktopLyricsOnDemandWindow extends OnDemandWindow {
   }
 }
 
+/** `"on-demand"` destroys the window when hidden; anything else keeps it. */
+function createWindowForLifecycle(value: unknown): ManagedWindow {
+  return value === "on-demand"
+    ? new DesktopLyricsOnDemandWindow()
+    : new DesktopLyricsWindow();
+}
+
+let lifecycleSwitchRegistered = false;
+
+/**
+ * React to lifecycle changes without a restart.
+ *
+ * Registered from the startup path rather than at module scope: this module can
+ * be evaluated before `settings.initialize()` creates the settings emitter.
+ */
+function registerLifecycleSwitch() {
+  if (lifecycleSwitchRegistered) return;
+  lifecycleSwitchRegistered = true;
+
+  settingsEvents.on("change", (e) => {
+    if (e.data.key !== "window.lifecycle" || !window) return;
+    window = switchWindowPolicy(window, () =>
+      createWindowForLifecycle(e.data.value)
+    );
+  });
+}
+
 export let window: ManagedWindow;
 export default async function createDesktopLyricsWindow() {
-  window =
-    (await settings.get("window.lifecycle")) !== "on-demand"
-      ? new DesktopLyricsWindow()
-      : new DesktopLyricsOnDemandWindow();
+  window = createWindowForLifecycle(await settings.get("window.lifecycle"));
+  registerLifecycleSwitch();
 }
 
 // --- Preview ---

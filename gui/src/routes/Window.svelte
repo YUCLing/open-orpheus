@@ -57,7 +57,7 @@
 <div class="my-4">
   <h2 class="text-lg font-bold">窗口生命周期</h2>
   <p class="mt-2 text-sm text-gray-700">
-    非必要窗口（如桌面歌词、迷你播放器）在后台隐藏时仍会占用内存，你可以在这里调整这些窗口的生命周期管理模式。修改此设置需要重启应用才能生效。
+    非必要窗口（如桌面歌词、迷你播放器）在后台隐藏时仍会占用内存，你可以在这里调整这些窗口的生命周期管理模式。修改后立即生效（窗口会重新创建）。
   </p>
 
   {#await windowLifecyclePromise then value}

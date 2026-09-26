@@ -473,6 +473,28 @@ export abstract class ManagedWindow<
     this.liveWindow()?.hide();
   }
 
+  /** Dismiss the bound window, bypassing the close policy. */
+  destroy(): void {
+    this.liveWindow()?.destroy();
+  }
+
+  /**
+   * Hand everything this wrapper recorded to `target`.
+   *
+   * Move semantics: the source keeps nothing, so a discarded wrapper can no
+   * longer be found by [`ManagedWindow.fromName`] or re-apply stale state.
+   * Event subscribers are not carried over; consumers follow the module's live
+   * `window` binding instead.
+   */
+  transferStateTo(target: ManagedWindow): void {
+    const merged: Record<string, unknown> = Object.create(null);
+    Object.assign(merged, target._data, this._data);
+    target._data = merged;
+    target._nativeState.postShow = this._nativeState.postShow;
+    this._data = Object.create(null);
+    this._nativeState.postShow = { inputRegions: null };
+  }
+
   static fromBrowserWindow(browserWindow: BrowserWindow) {
     return browserManagedWindowMap.get(browserWindow);
   }
@@ -565,4 +587,26 @@ export abstract class OnDemandWindow<
   }
 
   abstract createWindow(state: OnDemandWindowState): BrowserWindow;
+}
+
+/**
+ * Move a window to the other lifecycle policy.
+ *
+ * The bound window is dismissed and recreated by `create`; everything the
+ * wrapper recorded (`name`, size limits, always-on-top, native input regions)
+ * moves to the replacement. A window that was on screen is shown again, so the
+ * switch is only visible as a re-created window, not as a disappearing one.
+ */
+export function switchWindowPolicy(
+  current: ManagedWindow | null,
+  create: () => ManagedWindow
+): ManagedWindow {
+  const wasVisible = current?.window?.isVisible() ?? false;
+  current?.destroy();
+  const next = create();
+  current?.transferStateTo(next);
+  if (wasVisible) {
+    void next.show();
+  }
+  return next;
 }
