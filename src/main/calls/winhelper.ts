@@ -18,6 +18,7 @@ import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
 import * as settings from "../settings";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
 import showManageWindow from "../windows/manage";
+import MusicDesktopWindow from "../windows/music-desktop";
 
 function shouldApplyScaleFactor() {
   const de = getDesktopEnvironment();
@@ -117,6 +118,9 @@ registerCallHandler<[WindowPosition], void>(
   (event, { width, height, x, y, topmost }) => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
     if (!wnd) return;
+    const managedWindow = ManagedWindow.fromBrowserWindow(wnd);
+    // Ignore requests from music desktop window
+    if (managedWindow instanceof MusicDesktopWindow) return;
     const scaleFactor = shouldApplyScaleFactor()
       ? getWindowScaleFactor(wnd)
       : 1;
