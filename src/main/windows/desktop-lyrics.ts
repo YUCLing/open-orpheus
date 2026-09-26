@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import { BrowserWindow, screen } from "electron";
+import type { BrowserWindowConstructorOptions } from "electron";
 import photon from "@silvia-odwyer/photon-node";
 import {
   DesktopEnvironment,
@@ -17,13 +18,12 @@ import {
 } from "$sharedTypes/desktop-lyrics";
 
 import {
+  guiUrl,
   mainWindow,
   ManagedWindow,
   OnDemandWindow,
-  OnDemandWindowState,
-  SimpleManagedWindow,
+  switchWindowPolicy,
 } from "../window";
-import { LifecycleState, state as lifecycleState } from "../lifecycle";
 import { registerIpcHandlers } from "../../bridge/register";
 import type {
   DesktopLyricsContract,
@@ -32,7 +32,7 @@ import type {
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
-import { kv as settings } from "../settings";
+import { events as settingsEvents, kv as settings } from "../settings";
 
 export const lyricsStyle: LyricsStyle = {
   font: {
@@ -92,116 +92,157 @@ function performAction(action: string) {
   }
 }
 
-function createWindow(state?: OnDemandWindowState): BrowserWindow {
-  const desktopLyricsWindow = new BrowserWindow({
-    width: 800, // TODO: Proper sizes
-    height: 225,
-    skipTaskbar: true,
-    transparent: true,
-    hasShadow: false,
-    frame: false,
-    resizable: true,
-    show: false,
-    title: "Open Orpheus Lyrics",
-    webPreferences: {
-      partition: "open-orpheus",
-      preload: join(import.meta.dirname, "desktop-lyrics.js"),
-    },
-  });
-  if (GUI_VITE_DEV_SERVER_URL) {
-    desktopLyricsWindow.loadURL(`${GUI_VITE_DEV_SERVER_URL}/desktop-lyrics`);
-  } else {
-    desktopLyricsWindow.loadURL("gui://frontend/desktop-lyrics");
-  }
+const desktopLyricsWindowOptions = {
+  width: 800, // TODO: Proper sizes
+  height: 225,
+  skipTaskbar: true,
+  transparent: true,
+  hasShadow: false,
+  frame: false,
+  resizable: true,
+  show: false,
+  title: "Open Orpheus Lyrics",
+  webPreferences: {
+    partition: "open-orpheus",
+    preload: join(import.meta.dirname, "desktop-lyrics.js"),
+  },
+} satisfies BrowserWindowConstructorOptions;
 
-  desktopLyricsWindow.on("blur", () => {
-    if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-    desktopLyricsWindow.webContents.send("desktopLyrics.blur");
-  });
+function setupDesktopLyricsWindow(wnd: BrowserWindow): BrowserWindow {
+  void wnd.loadURL(guiUrl("/desktop-lyrics"));
 
-  desktopLyricsWindow.on("close", (e) => {
-    if ((state && !state.alive) || lifecycleState === LifecycleState.Quitting)
-      return; // Only allow direct close when not triggered externally or quitting
-    // Not closing, but telling NCM to hide.
-    e.preventDefault();
-    performAction("close");
+  wnd.on("blur", () => {
+    if (wnd.isDestroyed()) return;
+    wnd.webContents.send("desktopLyrics.blur");
   });
 
   const de = getDesktopEnvironment();
 
-  registerIpcHandlers<DesktopLyricsContract>(
-    desktopLyricsWindow.webContents,
-    "desktopLyrics",
-    {
-      requestFullUpdate: async () => {
-        if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-        // Can trigger updates
-        refreshLyricsStyle();
-        setLyricsOffset(lyricsOffset);
-        setLyricsLocked(lyricsLocked);
-        updateLyricsPlayInfo(lyricsPlayInfo);
-      },
-      performAction: async (_event, action: string) => {
-        performAction(action);
-      },
-      onMouseWheel: async (
-        _event,
-        pageX: number,
-        pageY: number,
-        delta: number,
-        modifier = 0
-      ) => {
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        let x = pageX;
-        let y = pageY;
-        if (de !== DesktopEnvironment.Wayland) {
-          const scrCursor = screen.getCursorScreenPoint();
-          [x, y] = [scrCursor.x, scrCursor.y];
-        }
-        mainWindow.webContents.send(
-          "channel.call",
-          "player.ondesktopmousewheel",
-          modifier,
-          delta,
-          x,
-          y
-        );
-      },
-      changeOrientation: async () => {
-        if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-        const sz = desktopLyricsWindow.getSize();
-        desktopLyricsWindow.setSize(sz[1], sz[0]);
-      },
-      dragWindow: async () => {
-        if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-        const hwnd = desktopLyricsWindow.getNativeWindowHandle();
-        dragWindow(hwnd);
-      },
-    }
-  );
-  registerInputRegionHandlers(desktopLyricsWindow);
-  registerLyricsHandlers(desktopLyricsWindow);
-  registerSettingsHandlers(desktopLyricsWindow);
+  registerIpcHandlers<DesktopLyricsContract>(wnd.webContents, "desktopLyrics", {
+    requestFullUpdate: async () => {
+      if (wnd.isDestroyed()) return;
+      // Can trigger updates
+      refreshLyricsStyle();
+      setLyricsOffset(lyricsOffset);
+      setLyricsLocked(lyricsLocked);
+      updateLyricsPlayInfo(lyricsPlayInfo);
+    },
+    performAction: async (_event, action: string) => {
+      performAction(action);
+    },
+    onMouseWheel: async (
+      _event,
+      pageX: number,
+      pageY: number,
+      delta: number,
+      modifier = 0
+    ) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      let x = pageX;
+      let y = pageY;
+      if (de !== DesktopEnvironment.Wayland) {
+        const scrCursor = screen.getCursorScreenPoint();
+        [x, y] = [scrCursor.x, scrCursor.y];
+      }
+      mainWindow.webContents.send(
+        "channel.call",
+        "player.ondesktopmousewheel",
+        modifier,
+        delta,
+        x,
+        y
+      );
+    },
+    changeOrientation: async () => {
+      if (wnd.isDestroyed()) return;
+      const sz = wnd.getSize();
+      wnd.setSize(sz[1], sz[0]);
+    },
+    dragWindow: async () => {
+      if (wnd.isDestroyed()) return;
+      const hwnd = wnd.getNativeWindowHandle();
+      dragWindow(hwnd);
+    },
+  });
+  registerInputRegionHandlers(wnd);
+  registerLyricsHandlers(wnd);
+  registerSettingsHandlers(wnd);
 
-  return desktopLyricsWindow;
+  return wnd;
+}
+
+/** Closing the window tells the player to hide the lyrics instead. */
+function notifyDesktopLyricsClose() {
+  performAction("close");
+}
+
+class DesktopLyricsWindow extends ManagedWindow {
+  constructor() {
+    super();
+    this.setData("name", "desktop_lyrics");
+    this.requestCloseApproval(notifyDesktopLyricsClose);
+    setupDesktopLyricsWindow(
+      this.createBrowserWindow(desktopLyricsWindowOptions)
+    );
+  }
 }
 
 class DesktopLyricsOnDemandWindow extends OnDemandWindow {
-  createWindow(state: OnDemandWindowState): BrowserWindow {
-    return createWindow(state);
+  constructor() {
+    super();
+    this.setData("name", "desktop_lyrics");
+    this.requestCloseApproval(notifyDesktopLyricsClose);
   }
+
+  createWindow(): BrowserWindow {
+    return setupDesktopLyricsWindow(
+      this.createBrowserWindow(desktopLyricsWindowOptions)
+    );
+  }
+}
+
+/** `"on-demand"` destroys the window when hidden; anything else keeps it. */
+function createWindowForLifecycle(value: unknown): ManagedWindow {
+  return value === "on-demand"
+    ? new DesktopLyricsOnDemandWindow()
+    : new DesktopLyricsWindow();
+}
+
+let lifecycleSwitchRegistered = false;
+
+/**
+ * React to lifecycle changes without a restart.
+ *
+ * Registered from the startup path rather than at module scope: this module can
+ * be evaluated before `settings.initialize()` creates the settings emitter.
+ */
+function registerLifecycleSwitch() {
+  if (lifecycleSwitchRegistered) return;
+  lifecycleSwitchRegistered = true;
+
+  settingsEvents.on("change", (e) => {
+    if (e.data.key !== "window.lifecycle" || !window) return;
+    window = switchWindowPolicy(window, () =>
+      createWindowForLifecycle(e.data.value)
+    );
+  });
 }
 
 export let window: ManagedWindow;
 export default async function createDesktopLyricsWindow() {
-  window =
-    (await settings.get("window.lifecycle")) !== "on-demand"
-      ? new SimpleManagedWindow(createWindow())
-      : new DesktopLyricsOnDemandWindow();
-  window.setData("name", "desktop_lyrics");
+  window = createWindowForLifecycle(await settings.get("window.lifecycle"));
+  registerLifecycleSwitch();
 }
 
 // --- Preview ---
+
+/** Offscreen window used only to rasterise a lyrics preview. */
+class LyricsPreviewWindow extends ManagedWindow {
+  constructor(options: BrowserWindowConstructorOptions) {
+    super();
+    this.createBrowserWindow(options);
+  }
+}
 
 export async function createDesktopLyricsPreview(
   style: LyricsStyle,
@@ -209,7 +250,7 @@ export async function createDesktopLyricsPreview(
 ): Promise<[Buffer, [number, number]]> {
   const [width, height] = style.vertical ? [124, 310] : [310, 124];
 
-  const previewWindow = new BrowserWindow({
+  const previewWindow = new LyricsPreviewWindow({
     width,
     height,
     show: false,
@@ -223,7 +264,10 @@ export async function createDesktopLyricsPreview(
       partition: "open-orpheus",
       preload: join(import.meta.dirname, "desktop-lyrics-preview.js"),
     },
-  });
+  }).window;
+  if (!previewWindow) {
+    throw new Error("Preview window was not created");
+  }
 
   return new Promise<[Buffer, [number, number]]>((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -261,12 +305,6 @@ export async function createDesktopLyricsPreview(
       }
     );
 
-    if (GUI_VITE_DEV_SERVER_URL) {
-      previewWindow.loadURL(
-        `${GUI_VITE_DEV_SERVER_URL}/desktop-lyrics-preview`
-      );
-    } else {
-      previewWindow.loadURL("gui://frontend/desktop-lyrics-preview");
-    }
+    void previewWindow.loadURL(guiUrl("/desktop-lyrics-preview"));
   });
 }

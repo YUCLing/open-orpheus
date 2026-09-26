@@ -12,7 +12,7 @@ import {
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
-import { mainWindow, ManagedWindow } from "../window";
+import { BasicManagedWindow, mainWindow, ManagedWindow } from "../window";
 import AppMenu from "../menu";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
 import * as settings from "../settings";
@@ -245,7 +245,7 @@ type WindowAttributes = {
 registerCallHandler<[string, WindowDimensions, WindowAttributes], [boolean]>(
   "winhelper.launchWindow",
   (event, url, dimensions, attributes) => {
-    const wnd = new BrowserWindow({
+    const wnd = new BasicManagedWindow({
       width: dimensions.width,
       height: dimensions.height,
       resizable: attributes.resizable,
@@ -256,8 +256,8 @@ registerCallHandler<[string, WindowDimensions, WindowAttributes], [boolean]>(
       webPreferences: {
         preload: path.join(import.meta.dirname, "preload.js"),
       },
-    });
-    wnd.loadURL(url);
+    }).window;
+    if (wnd) void wnd.loadURL(url);
     return [true];
   }
 );
