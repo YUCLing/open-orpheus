@@ -93,10 +93,7 @@ export class PackManager extends Emittery<PackManagerEvents> {
     return p as T;
   }
 
-  async getOrWaitPack<T extends Pack>(
-    pack: string,
-    signal?: AbortSignal
-  ): Promise<T> {
+  async getOrWaitPack<T extends Pack>(pack: string, signal?: AbortSignal): Promise<T> {
     const p = this.packs.get(pack);
     if (p?.isLoaded) {
       return p as T;
