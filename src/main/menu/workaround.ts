@@ -1,4 +1,5 @@
 import { checkEnvFlagPresent } from "../util";
+import { getOverlayPolicy } from "./overlay-policy";
 
 export let workaroundFlags = 0;
 
@@ -11,11 +12,21 @@ export enum WorkaroundFlags {
   OverlayNoMaximize = 1 << 1,
 }
 
-const de = process.env.XDG_CURRENT_DESKTOP ? process.env.XDG_CURRENT_DESKTOP.split(":") : [];
+const desktopName =
+  process.env.XDG_CURRENT_DESKTOP ??
+  process.env.XDG_SESSION_DESKTOP ??
+  process.env.DESKTOP_SESSION ??
+  "";
+const desktopTokens = desktopName
+  .split(":")
+  .map((value) => value.trim().toLowerCase())
+  .filter(Boolean);
+
+export const overlayPolicy = getOverlayPolicy(desktopName);
 
 // Only KDE allows fullscreen transparent windows, see https://gitlab.freedesktop.org/wayland/wayland-protocols/-/issues/116
 if (
-  (!de.includes("KDE") || checkEnvFlagPresent("MENU_OVERLAY_NO_FULLSCREEN")) &&
+  (!desktopTokens.includes("kde") || checkEnvFlagPresent("MENU_OVERLAY_NO_FULLSCREEN")) &&
   !checkEnvFlagPresent("MENU_OVERLAY_FORCE_FULLSCREEN")
 ) {
   workaroundFlags |= WorkaroundFlags.OverlayNoFullscreen;
@@ -23,7 +34,7 @@ if (
 
 // For niri (tiling wm), we need to disable maximize for floating rules to work
 if (
-  (de.includes("niri") || checkEnvFlagPresent("MENU_OVERLAY_NO_MAXIMIZE")) &&
+  (desktopTokens.includes("niri") || checkEnvFlagPresent("MENU_OVERLAY_NO_MAXIMIZE")) &&
   !checkEnvFlagPresent("MENU_OVERLAY_FORCE_MAXIMIZE")
 ) {
   workaroundFlags |= WorkaroundFlags.OverlayNoMaximize;

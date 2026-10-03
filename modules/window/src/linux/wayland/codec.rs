@@ -14,6 +14,7 @@ pub(crate) enum Iface {
     WlTouch,
     WlSurface,
     XdgWmBase,
+    XdgPositioner,
     XdgSurface,
     XdgToplevel,
     /// A `zwlr_layer_shell_v1` object the proxy bound for itself.
@@ -28,6 +29,8 @@ pub(crate) enum Iface {
     ZxdgToplevelDecoration,
     /// The client's `xdg_toplevel_icon_manager_v1`.
     XdgToplevelIconManager,
+    /// An xdg_popup presented to Chromium as if it were an xdg_toplevel.
+    XdgPopupShim,
 }
 
 // ── Message opcodes ────────────────────────────────────────────────────────
@@ -42,6 +45,8 @@ pub(crate) const REQ_GET_TOUCH: u16 = 2;
 pub(crate) const EVT_ENTER: u16 = 0;
 pub(crate) const EVT_LEAVE: u16 = 1;
 pub(crate) const EVT_BUTTON: u16 = 3;
+pub(crate) const EVT_AXIS: u16 = 4;
+pub(crate) const EVT_MOTION: u16 = 2;
 pub(crate) const BTN_PRESSED: u32 = 1;
 pub(crate) const EVT_TOUCH_DOWN: u16 = 0;
 pub(crate) const WL_TOUCH_RELEASE: u16 = 0;
@@ -50,10 +55,12 @@ pub(crate) const REQ_GET_TOPLEVEL: u16 = 1;
 pub(crate) const REQ_GET_POPUP: u16 = 2;
 pub(crate) const REQ_SET_WINDOW_GEOMETRY: u16 = 3;
 pub(crate) const REQ_ACK_CONFIGURE: u16 = 4;
+pub(crate) const REQ_CREATE_POSITIONER: u16 = 1;
 pub(crate) const REQ_SET_TITLE: u16 = 2;
 pub(crate) const REQ_MOVE: u16 = 5;
 pub(crate) const REQ_SET_INPUT_REGION: u16 = 5;
 pub(crate) const WL_POINTER_RELEASE: u16 = 1;
+pub(crate) const WL_SEAT_RELEASE: u16 = 3;
 pub(crate) const REQ_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_ADD: u16 = 1;
