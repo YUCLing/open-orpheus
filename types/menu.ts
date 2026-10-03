@@ -36,4 +36,6 @@ export interface MenuPullResult {
   colors: MenuSkin;
   cursorX?: number;
   cursorY?: number;
+  /** Transparent margin around a native popup, excluded from its window geometry. */
+  shadowInset?: number;
 }

@@ -3,9 +3,9 @@
 
 use std::os::fd::RawFd;
 
-use super::super::codec::{Iface, WlMessage};
+use super::super::codec::{Iface, REQ_SET_WINDOW_GEOMETRY, WlMessage};
 use super::super::state::{
-    CUSTOM_ID_MAP, WaylandConn, cancel_pending_popup_for_connection,
+    CUSTOM_ID_MAP, PopupGeometry, WaylandConn, cancel_pending_popup_for_connection,
     cancel_pending_popup_for_parent, take_pending_popup,
 };
 use super::{Action, Effects};
@@ -28,7 +28,6 @@ pub(crate) fn on_bind(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
                 Some(Iface::WlCompositor)
             }
             "wl_seat" => Some(Iface::WlSeat),
-            "xdg_wm_base" => Some(Iface::XdgWmBase),
             "zxdg_decoration_manager_v1" => Some(Iface::ZxdgDecorationManager),
             "xdg_toplevel_icon_manager_v1" => Some(Iface::XdgToplevelIconManager),
             "xdg_wm_base" => {
@@ -92,9 +91,15 @@ pub(crate) fn on_get_toplevel(
 ) -> Action {
     if let Some(top_id) = msg.u32_arg(8) {
         if let Some(wm_base_id) = conn.xdg_wm_base_id
-            && let Some(popup) = take_pending_popup(fd)
+            && let Some(popup) =
+                take_pending_popup(fd, conn.role_window_id.as_deref().unwrap_or(""))
         {
             let positioner_id = popup.positioner_id;
+            let geometry = PopupGeometry {
+                inset: popup.shadow_inset,
+                width: popup.width - popup.shadow_inset * 2,
+                height: popup.height - popup.shadow_inset * 2,
+            };
             let mut replacement = Vec::with_capacity(128);
             // xdg_wm_base.create_positioner(new_id)
             push_message(
@@ -108,7 +113,7 @@ pub(crate) fn on_get_toplevel(
                 &mut replacement,
                 positioner_id,
                 1,
-                &[popup.width, popup.height],
+                &[geometry.width, geometry.height],
             );
             push_message(
                 &mut replacement,
@@ -131,6 +136,21 @@ pub(crate) fn on_get_toplevel(
                 ],
             );
             push_message(&mut replacement, positioner_id, 0, &[]);
+            // Position the menu itself, not the transparent shadow buffer.
+            if geometry.inset > 0 {
+                push_message(
+                    &mut replacement,
+                    msg.object_id,
+                    REQ_SET_WINDOW_GEOMETRY,
+                    &[
+                        geometry.inset,
+                        geometry.inset,
+                        geometry.width,
+                        geometry.height,
+                    ],
+                );
+                conn.popup_geometries.insert(msg.object_id, geometry);
+            }
 
             conn.ifaces.insert(positioner_id, Iface::XdgPositioner);
             conn.ifaces.insert(top_id, Iface::XdgPopupShim);
@@ -139,7 +159,7 @@ pub(crate) fn on_get_toplevel(
                 conn.wl_to_top.insert(wl_id, top_id);
                 fx.arm_watchers_for.push(wl_id);
             }
-            return Action::Replace(replacement);
+            return Action::Replace(vec![replacement]);
         }
         conn.ifaces.insert(top_id, Iface::XdgToplevel);
         conn.top_to_xdg.insert(top_id, msg.object_id);
@@ -148,14 +168,32 @@ pub(crate) fn on_get_toplevel(
             // The surface is a toplevel for good: a compositor never releases
             // the role, so it can never become a layer surface.
             conn.toplevel_surfaces.insert(wl_id);
-            fx.arm_watchers_for = Some(wl_id);
             fx.arm_watchers_for.push(wl_id);
         }
     }
     Action::Forward
 }
 
-pub(crate) fn on_popup_event(msg: &WlMessage) -> Action {
+pub(crate) fn on_popup_geometry(conn: &WaylandConn, msg: &WlMessage) -> Action {
+    let Some(geometry) = conn.popup_geometries.get(&msg.object_id) else {
+        return Action::Forward;
+    };
+    let mut replacement = Vec::new();
+    push_message(
+        &mut replacement,
+        msg.object_id,
+        REQ_SET_WINDOW_GEOMETRY,
+        &[
+            geometry.inset,
+            geometry.inset,
+            geometry.width,
+            geometry.height,
+        ],
+    );
+    Action::Replace(vec![replacement])
+}
+
+pub(crate) fn on_popup_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
     match msg.opcode {
         // Translate xdg_popup.configure(x, y, width, height) into the
         // xdg_toplevel.configure(width, height, states[]) Chromium expects.
@@ -163,14 +201,24 @@ pub(crate) fn on_popup_event(msg: &WlMessage) -> Action {
             let (Some(width), Some(height)) = (msg.u32_arg(16), msg.u32_arg(20)) else {
                 return Action::Suppress;
             };
+            let inset = conn
+                .top_to_xdg
+                .get(&msg.object_id)
+                .and_then(|xdg| conn.popup_geometries.get_mut(xdg))
+                .map(|geometry| {
+                    geometry.width = width as i32;
+                    geometry.height = height as i32;
+                    geometry.inset
+                })
+                .unwrap_or(0);
             let mut replacement = Vec::with_capacity(20);
             push_message(
                 &mut replacement,
                 msg.object_id,
                 0,
-                &[width as i32, height as i32, 0],
+                &[width as i32 + inset * 2, height as i32 + inset * 2, 0],
             );
-            Action::Replace(replacement)
+            Action::Replace(vec![replacement])
         }
         1 => Action::Forward,
         _ => Action::Suppress,
@@ -248,7 +296,6 @@ pub(crate) fn on_delete_id(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
         conn.purge(dead);
 
         // Otherwise steal up to 32 deleted IDs from the client for our own use.
-        if conn.stolen_ids.len() < 32 && !conn.stolen_ids.contains(&dead) {
         // Reserve a small pool of compositor-confirmed client IDs for injected
         // region/positioner objects. Arbitrary fresh IDs are not accepted by
         // every Wayland compositor.
@@ -258,4 +305,117 @@ pub(crate) fn on_delete_id(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
         }
     }
     Action::Forward
+}
+
+#[cfg(test)]
+mod popup_shadow_tests {
+    use super::super::super::test_support::{message, request};
+    use super::*;
+
+    #[test]
+    fn positioner_uses_content_size_and_preserves_the_anchor() {
+        use super::super::super::{
+            codec::{REQ_GET_TOPLEVEL, decode},
+            state::{self, PENDING_POPUPS, PendingPopup},
+        };
+        state::init_state();
+        let fd = 94_101;
+        PENDING_POPUPS.get().unwrap().lock().unwrap().insert(
+            fd,
+            PendingPopup {
+                token: 101,
+                parent_xdg_surface_id: 20,
+                width: 280,
+                height: 329,
+                shadow_inset: 24,
+                anchor_x: 70,
+                anchor_y: 80,
+                positioner_id: 900,
+                target_window_id: "shadow-menu".into(),
+            },
+        );
+        let mut conn = WaylandConn::new();
+        conn.xdg_wm_base_id = Some(2);
+        conn.role_window_id = Some("shadow-menu".into());
+        let msg = WlMessage::new(
+            40,
+            REQ_GET_TOPLEVEL,
+            request(40, REQ_GET_TOPLEVEL, 12, &[50]),
+        );
+        let Action::Replace(out) = on_get_toplevel(fd, &mut conn, &msg, &mut Effects::default())
+        else {
+            panic!("popup not converted")
+        };
+        let (messages, _) = decode(&out.concat());
+        let size = messages
+            .iter()
+            .find(|m| m.object_id == 900 && m.opcode == 1)
+            .unwrap();
+        assert_eq!(size.raw(), request(900, 1, 16, &[232, 281]));
+        let anchor = messages
+            .iter()
+            .find(|m| m.object_id == 900 && m.opcode == 2)
+            .unwrap();
+        assert_eq!(anchor.raw(), request(900, 2, 24, &[70, 80, 1, 1]));
+        let geometry = messages
+            .iter()
+            .find(|m| m.object_id == 40 && m.opcode == REQ_SET_WINDOW_GEOMETRY)
+            .unwrap();
+        assert_eq!(
+            geometry.raw(),
+            request(40, REQ_SET_WINDOW_GEOMETRY, 24, &[24, 24, 232, 281])
+        );
+        state::clear_runtime_state_for_fd(fd);
+    }
+
+    fn padded_connection() -> WaylandConn {
+        let mut conn = WaylandConn::new();
+        conn.ifaces.insert(40, Iface::XdgSurface);
+        conn.ifaces.insert(50, Iface::XdgPopupShim);
+        conn.ifaces.insert(10, Iface::WlSurface);
+        conn.xdg_to_wl.insert(40, 10);
+        conn.top_to_xdg.insert(50, 40);
+        conn.popup_geometries.insert(
+            40,
+            PopupGeometry {
+                inset: 24,
+                width: 232,
+                height: 281,
+            },
+        );
+        conn
+    }
+
+    #[test]
+    fn geometry_excludes_shadow_and_configure_restores_buffer_size() {
+        let mut conn = padded_connection();
+        let raw = request(40, 3, 24, &[0, 0, 280, 329]);
+        let msg = WlMessage::new(40, 3, raw);
+        let Action::Replace(out) = on_popup_geometry(&conn, &msg) else {
+            panic!("geometry not rewritten")
+        };
+        assert_eq!(out, vec![request(40, 3, 24, &[24, 24, 232, 281])]);
+        let configure = WlMessage::new(50, 0, request(50, 0, 24, &[10, 20, 232, 281]));
+        let Action::Replace(out) = on_popup_event(&mut conn, &configure) else {
+            panic!("configure not translated")
+        };
+        assert_eq!(out, vec![request(50, 0, 20, &[280, 329, 0])]);
+        // Non-popup windows must retain their original geometry.
+        assert!(matches!(
+            on_popup_geometry(&conn, &message(41, 3, &[])),
+            Action::Forward
+        ));
+    }
+
+    #[test]
+    fn shadow_state_dies_with_role_surface_and_connection() {
+        for id in [10, 40, 50] {
+            let mut conn = padded_connection();
+            conn.purge(id);
+            assert!(conn.popup_geometries.is_empty(), "object {id}");
+        }
+        let mut conn = padded_connection();
+        conn.reset_tracking();
+        assert!(conn.popup_geometries.is_empty());
+    }
 }

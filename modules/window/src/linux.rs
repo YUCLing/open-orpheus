@@ -1,4 +1,7 @@
-use std::{mem::ManuallyDrop, sync::OnceLock};
+use std::{
+    mem::ManuallyDrop,
+    sync::{Mutex, OnceLock},
+};
 
 use napi::{
     Env, Error, Result, Unknown, ValueType,
@@ -12,6 +15,31 @@ mod wayland;
 mod x11;
 
 static DISABLE_DISPLAY_SERVER_HOOKS: OnceLock<bool> = OnceLock::new();
+
+// Watchers run on the Wayland thread. Retain their N-API handles until a
+// main-thread API call can release them, including the final cancellation.
+type RetiredRelease = Box<dyn FnOnce() + Send>;
+static RETIRED_RELEASES: OnceLock<Mutex<Vec<RetiredRelease>>> = OnceLock::new();
+
+fn retire_release(release: impl FnOnce() + Send + 'static) {
+    RETIRED_RELEASES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .push(Box::new(release));
+}
+
+pub fn reap_retired_releases() {
+    let pending = std::mem::take(
+        &mut *RETIRED_RELEASES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()),
+    );
+    for release in pending {
+        release();
+    }
+}
 
 fn disable_display_server_hooks() -> bool {
     *DISABLE_DISPLAY_SERVER_HOOKS.get_or_init(|| {
@@ -32,7 +60,17 @@ fn desktop_name_is_gnome(value: &str) -> bool {
     })
 }
 
-fn is_gnome_desktop() -> bool {
+fn desktop_name_is_niri(value: &str) -> bool {
+    value
+        .split(':')
+        .any(|desktop| desktop.trim().eq_ignore_ascii_case("niri"))
+}
+
+fn desktop_name_supports_native_popup(value: &str) -> bool {
+    desktop_name_is_gnome(value) || desktop_name_is_niri(value)
+}
+
+fn is_native_popup_desktop() -> bool {
     [
         "XDG_CURRENT_DESKTOP",
         "XDG_SESSION_DESKTOP",
@@ -40,11 +78,11 @@ fn is_gnome_desktop() -> bool {
     ]
     .into_iter()
     .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
-    .is_some_and(|value| desktop_name_is_gnome(&value))
+    .is_some_and(|value| desktop_name_supports_native_popup(&value))
 }
 
-pub fn supports_gnome_wayland_popup() -> bool {
-    !disable_display_server_hooks() && wayland::is_wayland() && is_gnome_desktop()
+pub fn supports_native_wayland_popup() -> bool {
+    !disable_display_server_hooks() && wayland::is_wayland() && is_native_popup_desktop()
 }
 
 #[derive(Clone, Copy)]
@@ -74,12 +112,12 @@ pub fn is_layer_shell_available() -> bool {
 /// the next toplevel on any Wayland connection gets the declaration. Invalid
 /// options are refused here, because a protocol error would take the whole
 /// display connection down.
-pub fn declare_layer_window(options: &crate::LayerShellOptions) -> bool {
+pub fn declare_layer_window(options: &crate::LayerShellOptions, owner: Option<String>) -> bool {
     if disable_display_server_hooks() {
         return false;
     }
 
-    wayland::declare_layer_window(to_wayland_options(options))
+    wayland::declare_layer_window(to_wayland_options(options), owner)
 }
 
 /// Decorate a title with the managed window id the proxy keys windows on.
@@ -136,8 +174,8 @@ fn to_wayland_options(options: &crate::LayerShellOptions) -> wayland::LayerShell
 }
 
 /// Withdraw the newest layer-shell declaration that is still pending.
-pub fn cancel_layer_window() -> bool {
-    wayland::cancel_layer_window()
+pub fn cancel_layer_window(owner: Option<&str>) -> bool {
+    wayland::cancel_layer_window(owner)
 }
 
 #[napi]
@@ -259,9 +297,9 @@ pub fn on_layer_shell_role_refused(env: Env, callback: Function<String, ()>) -> 
 }
 
 pub fn capture_next_window_first_cursor_enter(
-    _env: Env,
     callback: Function<FnArgs<(i32, i32)>, ()>,
 ) -> Result<u32> {
+    reap_retired_releases();
     if disable_display_server_hooks() || !wayland::is_wayland() {
         return Err(Error::from_reason(
             "captureNextWindowFirstCursorEnter requires active Wayland hooks",
@@ -291,8 +329,7 @@ pub fn capture_next_window_first_cursor_enter(
                 ThreadsafeFunctionCallMode::NonBlocking,
             );
         }
-        // Now we can safely drop it only once
-        ManuallyDrop::into_inner(cb);
+        retire_release(move || drop(ManuallyDrop::into_inner(cb)));
     });
     token.ok_or_else(|| {
         Error::from_reason(
@@ -302,21 +339,33 @@ pub fn capture_next_window_first_cursor_enter(
 }
 
 pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
-    wayland::cancel_cursor_enter_watcher(token)
+    reap_retired_releases();
+    let cancelled = wayland::cancel_cursor_enter_watcher(token);
+    reap_retired_releases();
+    cancelled
 }
 
 pub fn arm_next_window_as_popup(
     parent_window_id: String,
+    target_window_id: String,
     width: i32,
     height: i32,
     anchor_x: Option<i32>,
     anchor_y: Option<i32>,
+    shadow_inset: Option<i32>,
 ) -> Option<u32> {
-    if !supports_gnome_wayland_popup() {
+    if !supports_native_wayland_popup() {
         return None;
     }
     let anchor = anchor_x.zip(anchor_y);
-    wayland::arm_next_window_as_popup(&parent_window_id, width, height, anchor)
+    wayland::arm_next_window_as_popup(
+        &parent_window_id,
+        &target_window_id,
+        width,
+        height,
+        anchor,
+        shadow_inset.unwrap_or(0),
+    )
 }
 
 pub fn cancel_pending_popup(token: u32) -> bool {
@@ -328,10 +377,10 @@ pub fn is_window_wayland_popup(window_id: String) -> bool {
 }
 
 pub fn capture_window_next_pointer_axis(
-    _env: Env,
     window_id: String,
     callback: Function<FnArgs<(u32,)>, ()>,
 ) -> Result<u32> {
+    reap_retired_releases();
     if disable_display_server_hooks() || !wayland::is_wayland() {
         return Err(Error::from_reason(
             "captureWindowNextPointerAxis requires active Wayland hooks",
@@ -351,13 +400,16 @@ pub fn capture_window_next_pointer_axis(
         if let Some(axis) = axis {
             cb.call(axis, ThreadsafeFunctionCallMode::NonBlocking);
         }
-        ManuallyDrop::into_inner(cb);
+        retire_release(move || drop(ManuallyDrop::into_inner(cb)));
     });
     token.ok_or_else(|| Error::from_reason("Unable to watch pointer axis for this Wayland window"))
 }
 
 pub fn cancel_window_pointer_axis_capture(token: u32) -> bool {
-    wayland::cancel_pointer_axis_watcher(token)
+    reap_retired_releases();
+    let cancelled = wayland::cancel_pointer_axis_watcher(token);
+    reap_retired_releases();
+    cancelled
 }
 
 #[napi_derive::module_init]
@@ -380,7 +432,27 @@ static DESTRUCTOR: extern "C" fn() = on_unload;
 
 #[cfg(test)]
 mod tests {
-    use super::desktop_name_is_gnome;
+    use super::{
+        desktop_name_is_gnome, desktop_name_is_niri, desktop_name_supports_native_popup,
+        reap_retired_releases, retire_release,
+    };
+
+    #[test]
+    fn watcher_release_is_deferred_to_the_reaping_thread() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            retire_release(move || {
+                sender.send(std::thread::current().id()).unwrap();
+            });
+        })
+        .join()
+        .unwrap();
+        assert!(receiver.try_recv().is_err());
+        reap_retired_releases();
+        assert_eq!(receiver.recv().unwrap(), std::thread::current().id());
+        reap_retired_releases();
+        assert!(receiver.try_recv().is_err());
+    }
 
     #[test]
     fn recognizes_only_gnome_desktop_names() {
@@ -390,5 +462,33 @@ mod tests {
         assert!(!desktop_name_is_gnome("KDE"));
         assert!(!desktop_name_is_gnome("plasma"));
         assert!(!desktop_name_is_gnome("niri"));
+    }
+
+    #[test]
+    fn recognizes_niri_separately_without_broadening_other_desktops() {
+        assert!(desktop_name_is_niri("niri"));
+        assert!(desktop_name_is_niri(" NIRI :other"));
+        assert!(!desktop_name_is_niri("GNOME"));
+        assert!(!desktop_name_is_niri("niri-like"));
+        for desktop in [
+            "GNOME",
+            "ubuntu:GNOME",
+            "GNOME-Classic",
+            "niri",
+            "other:NIRI",
+        ] {
+            assert!(desktop_name_supports_native_popup(desktop), "{desktop}");
+        }
+        for desktop in [
+            "KDE",
+            "plasma",
+            "sway",
+            "Hyprland",
+            "",
+            "not-gnome",
+            "niri-like",
+        ] {
+            assert!(!desktop_name_supports_native_popup(desktop), "{desktop}");
+        }
     }
 }

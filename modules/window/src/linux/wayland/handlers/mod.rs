@@ -7,6 +7,7 @@
 mod layer_shell;
 mod objects;
 mod pointer;
+pub(crate) mod roles;
 mod title;
 mod touch;
 
@@ -15,11 +16,8 @@ use std::os::fd::RawFd;
 use super::codec::{
     EVT_DELETE_ID, EVT_GLOBAL, EVT_GLOBAL_REMOVE, Iface, REQ_BIND, REQ_CREATE_SURFACE, REQ_DESTROY,
     REQ_GET_POINTER, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_TOPLEVEL_DECORATION,
-    REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE, WL_POINTER_RELEASE,
-    WL_TOUCH_RELEASE, WlMessage,
-    EVT_DELETE_ID, Iface, REQ_BIND, REQ_CREATE_SURFACE, REQ_DESTROY, REQ_GET_POINTER,
-    REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_XDG_SURFACE, REQ_SET_TITLE, WL_POINTER_RELEASE,
-    WL_SEAT_RELEASE, WlMessage,
+    REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE, REQ_SET_WINDOW_GEOMETRY,
+    WL_POINTER_RELEASE, WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
 };
 use super::state::WaylandConn;
 
@@ -31,8 +29,6 @@ pub(crate) enum Action {
     Suppress,
     /// Emit these messages in the original's place, in order.
     Replace(Vec<Vec<u8>>),
-    /// Replace the message with protocol-compatible synthesized bytes.
-    Replace(Vec<u8>),
 }
 
 /// Side effects a handler wants applied *after* the connection lock is
@@ -40,11 +36,8 @@ pub(crate) enum Action {
 #[derive(Default)]
 pub(crate) struct Effects {
     pub(crate) button: Option<(u32, u32, u32, i32, i32)>,
-    pub(crate) entered: Option<(u32, i32, i32)>,
-    pub(crate) arm_watchers_for: Option<u32>,
     /// A window whose surface could not take the layer role, by custom id.
     pub(crate) layer_shell_refused: Option<String>,
-    pub(crate) pointer_axis: bool,
     pub(crate) entered: Vec<(u32, i32, i32)>,
     pub(crate) arm_watchers_for: Vec<u32>,
     pub(crate) pointer_axes: Vec<(u32, u32)>,
@@ -52,6 +45,15 @@ pub(crate) struct Effects {
 }
 
 pub(crate) fn dispatch_request(
+    fd: RawFd,
+    conn: &mut WaylandConn,
+    msg: &WlMessage,
+    fx: &mut Effects,
+) -> Action {
+    roles::dispatch(fd, conn, msg, fx)
+}
+
+fn dispatch_request_inner(
     fd: RawFd,
     conn: &mut WaylandConn,
     msg: &WlMessage,
@@ -88,10 +90,9 @@ pub(crate) fn dispatch_request(
         // The role is assigned here, so this is also where a layer-shell
         // declaration is consumed.
         (Iface::XdgSurface, REQ_GET_TOPLEVEL) => layer_shell::on_get_toplevel(fd, conn, msg, fx),
+        (Iface::XdgSurface, REQ_SET_WINDOW_GEOMETRY) => objects::on_popup_geometry(conn, msg),
         (Iface::WlSeat, WL_SEAT_RELEASE) => objects::on_destroy(fd, conn, msg, fx),
-        (Iface::XdgWmBase, REQ_GET_XDG_SURFACE) => objects::on_get_xdg_surface(conn, msg),
         (Iface::XdgWmBase, REQ_DESTROY) => objects::on_destroy(fd, conn, msg, fx),
-        (Iface::XdgSurface, REQ_GET_TOPLEVEL) => objects::on_get_toplevel(fd, conn, msg, fx),
         (Iface::XdgToplevel, REQ_SET_TITLE) => title::on_set_title(fd, conn, msg),
         (Iface::XdgPopupShim, REQ_SET_TITLE) => {
             let _ = title::on_set_title(fd, conn, msg);
@@ -137,8 +138,9 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
 
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlTouch) {
         return touch::on_touch_event(conn, msg, fx);
+    }
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::XdgPopupShim) {
-        return objects::on_popup_event(msg);
+        return objects::on_popup_event(conn, msg);
     }
 
     Action::Forward
@@ -185,7 +187,7 @@ mod tests {
             dispatch_request(FD, &mut conn, &unrelated, &mut fx),
             Action::Forward
         ));
-        assert!(fx.button.is_none() && fx.entered.is_none());
+        assert!(fx.button.is_none() && fx.entered.is_empty());
     }
 
     #[test]
@@ -274,7 +276,7 @@ mod tests {
         assert_eq!(conn.ifaces.get(&30), Some(&Iface::XdgToplevel));
         assert_eq!(conn.top_to_xdg.get(&30), Some(&20));
         assert_eq!(conn.wl_to_top.get(&10), Some(&30));
-        assert_eq!(fx.arm_watchers_for, Some(10), "cursor watchers arm on bind");
+        assert_eq!(fx.arm_watchers_for, vec![10], "cursor watchers arm on bind");
     }
 
     #[test]
@@ -345,7 +347,7 @@ mod tests {
         args.extend_from_slice(&(-32i32 << 8).to_ne_bytes());
         dispatch_event(&mut conn, &message(6, EVT_ENTER, &args), &mut fx);
         assert_eq!(conn.pointer_focus.get(&6), Some(&10));
-        assert_eq!(fx.entered, Some((10, 64, -32)));
+        assert_eq!(fx.entered, vec![(10, 64, -32)]);
 
         // button(serial, time, button, state) with the pressed state
         let mut fx = Effects::default();
@@ -354,7 +356,7 @@ mod tests {
         args.extend_from_slice(&word(0x110));
         args.extend_from_slice(&word(BTN_PRESSED));
         dispatch_event(&mut conn, &message(6, EVT_BUTTON, &args), &mut fx);
-        assert_eq!(fx.button, Some((3, 77, 10)));
+        assert_eq!(fx.button, Some((3, 77, 10, 64, -32)));
 
         // A release does not start a drag.
         let mut fx = Effects::default();
@@ -396,7 +398,7 @@ mod tests {
         args.extend_from_slice(&(32i32 << 8).to_ne_bytes());
         let mut fx = Effects::default();
         dispatch_event(&mut conn, &message(7, EVT_TOUCH_DOWN, &args), &mut fx);
-        assert_eq!(fx.button, Some((3, 21, 10)));
+        assert_eq!(fx.button, Some((3, 21, 10, 16, 32)));
 
         // Any other touch event (wl_touch.up is opcode 1) is passed through.
         let mut fx = Effects::default();

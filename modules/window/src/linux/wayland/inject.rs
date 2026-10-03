@@ -226,11 +226,7 @@ mod tests {
     impl Fixture {
         fn new() -> Self {
             init_state();
-            LAST_BUTTON
-                .get_or_init(Default::default)
-                .lock()
-                .unwrap()
-                .take();
+            *LAST_BUTTON.get_or_init(Default::default).lock().unwrap() = LastButtonState::default();
 
             let (app, peer) = UnixStream::pair().expect("socketpair");
             let fd = app.as_raw_fd();
@@ -437,7 +433,21 @@ mod tests {
             conn.ifaces.insert(9, Iface::XdgToplevel);
             conn.wl_to_top.insert(7, 9);
         });
-        *LAST_BUTTON.get().unwrap().lock().unwrap() = Some((fixture.fd, 4, 77, 7));
+        {
+            let mut buttons = LAST_BUTTON.get().unwrap().lock().unwrap();
+            buttons.by_surface.insert(
+                (fixture.fd, 7),
+                LastButton {
+                    fd: fixture.fd,
+                    seat_id: 4,
+                    serial: 77,
+                    wl_surface_id: 7,
+                    x: 0,
+                    y: 0,
+                },
+            );
+            buttons.latest = Some((fixture.fd, 7));
+        }
 
         assert!(send_xdg_toplevel_move());
 
@@ -456,7 +466,21 @@ mod tests {
             conn.ifaces.insert(30, Iface::XdgToplevel);
             conn.ifaces.insert(40, Iface::XdgToplevel);
         });
-        *LAST_BUTTON.get().unwrap().lock().unwrap() = Some((fixture.fd, 4, 77, 7));
+        {
+            let mut buttons = LAST_BUTTON.get().unwrap().lock().unwrap();
+            buttons.by_surface.insert(
+                (fixture.fd, 7),
+                LastButton {
+                    fd: fixture.fd,
+                    seat_id: 4,
+                    serial: 77,
+                    wl_surface_id: 7,
+                    x: 0,
+                    y: 0,
+                },
+            );
+            buttons.latest = Some((fixture.fd, 7));
+        }
 
         assert!(send_xdg_toplevel_move());
 
@@ -477,7 +501,21 @@ mod tests {
         assert!(!send_xdg_toplevel_move());
 
         // A press, but the focused surface is not a toplevel.
-        *LAST_BUTTON.get().unwrap().lock().unwrap() = Some((fixture.fd, 4, 77, 7));
+        {
+            let mut buttons = LAST_BUTTON.get().unwrap().lock().unwrap();
+            buttons.by_surface.insert(
+                (fixture.fd, 7),
+                LastButton {
+                    fd: fixture.fd,
+                    seat_id: 4,
+                    serial: 77,
+                    wl_surface_id: 7,
+                    x: 0,
+                    y: 0,
+                },
+            );
+            buttons.latest = Some((fixture.fd, 7));
+        }
         fixture.with_conn(|conn| {
             conn.ifaces.insert(7, Iface::WlSurface);
             conn.wl_to_top.insert(7, 9);

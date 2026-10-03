@@ -12,7 +12,12 @@
 
   const api = getBridge<MenuContract>("menu");
 
-  api.getFont().then(setFont);
+  // Both the measuring window and the actual popup must use settled fonts.
+  // Reporting a fallback-font size first permanently undersizes an xdg_popup.
+  const fontReady = api
+    .getFont()
+    .then(setFont)
+    .then(() => document.fonts.ready);
 
   let items: MenuItem[] = $state([]);
   let cursorX = $state(0);
@@ -25,6 +30,15 @@
   let waylandMode = $state(api.wayland);
   let rawTemplates: Record<string, ElementTemplate> = {};
   let isSubmenuMode = api.submenu;
+  let shadowInset = $state(0);
+  const menuShadowClass = "shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]";
+
+  function reportMenuSize(rect: DOMRect) {
+    api.reportSize(
+      Math.ceil(rect.width) + shadowInset * 2,
+      Math.ceil(rect.height) + shadowInset * 2
+    );
+  }
 
   // Submenu state
   let submenuItems: MenuItem[] | null = $state(null);
@@ -45,7 +59,8 @@
 
   /** Once we know the cursor position, clamp the menu and make it visible. */
   function commitMenuPosition() {
-    tick().then(() => {
+    tick().then(async () => {
+      await document.fonts.ready;
       if (!menuEl) {
         return;
       }
@@ -65,7 +80,7 @@
         menuTop = top;
       } else {
         const rect = menuEl.getBoundingClientRect();
-        api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
+        reportMenuSize(rect);
       }
       tick().then(() => {
         menuReady = true;
@@ -74,8 +89,12 @@
   }
 
   onMount(() => {
+    const root = document.documentElement;
+    const previousOverflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    let observer: ResizeObserver | null = null;
     if (waylandMode) {
-      api.pull().then((data) => {
+      Promise.all([api.pull(), fontReady]).then(([data]) => {
         applyColors(data.colors);
         loadTemplates(data.templates);
         items = data.items as MenuItem[];
@@ -94,7 +113,8 @@
         items = rawItems as MenuItem[];
       });
     } else if (isSubmenuMode) {
-      api.pull().then((data) => {
+      Promise.all([api.pull(), fontReady]).then(([data]) => {
+        shadowInset = data.shadowInset ?? 0;
         applyColors(data.colors);
         rawTemplates = data.templates;
         loadTemplates(data.templates);
@@ -102,13 +122,15 @@
         hoveredIndex = -1;
         visible = true;
         menuReady = true;
-        tick().then(() => {
+        tick().then(async () => {
+          await document.fonts.ready;
           if (!menuEl) return;
           const ro = new ResizeObserver(() => {
             if (!menuEl) return;
             const rect = menuEl.getBoundingClientRect();
-            api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
+            reportMenuSize(rect);
           });
+          observer = ro;
           ro.observe(menuEl);
         });
       });
@@ -120,12 +142,14 @@
         ro = new ResizeObserver(() => {
           if (!menuEl) return;
           const rect = menuEl.getBoundingClientRect();
-          api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
+          reportMenuSize(rect);
         });
+        observer = ro;
         ro.observe(menuEl);
       };
 
-      api.pull().then((data) => {
+      Promise.all([api.pull(), fontReady]).then(([data]) => {
+        shadowInset = data.shadowInset ?? 0;
         applyColors(data.colors);
         rawTemplates = data.templates;
         loadTemplates(data.templates);
@@ -136,14 +160,21 @@
         submenuHoveredIndex = -1;
         visible = true;
         menuReady = true;
-        tick().then(startObserver);
-        commitMenuPosition();
+        tick().then(async () => {
+          await document.fonts.ready;
+          startObserver();
+          commitMenuPosition();
+        });
       });
 
       api.events.update((rawItems) => {
         items = rawItems as MenuItem[];
       });
     }
+    return () => {
+      observer?.disconnect();
+      root.style.overflow = previousOverflow;
+    };
   });
 
   function handleItemClick(item: MenuItem) {
@@ -232,7 +263,7 @@
         onbtnclick={handleBtnClick}
         bind:el={menuEl}
         style="left: {cursorX}px; top: {menuTop}px; visibility: {menuReady ? 'visible' : 'hidden'};"
-        class="shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]"
+        class={menuShadowClass}
         {@attach inputRegionAttachment}
       />
 
@@ -251,7 +282,7 @@
           showSubmenuArrows={false}
           bind:el={submenuEl}
           style="left: {submenuX}px; top: {submenuY}px;"
-          class="shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]"
+          class={menuShadowClass}
           {@attach inputRegionAttachment}
         />
       {/if}
@@ -266,6 +297,8 @@
       onitemleave={handleItemLeave}
       onbtnclick={handleBtnClick}
       bind:el={menuEl}
+      style={shadowInset ? `left: ${shadowInset}px; top: ${shadowInset}px;` : undefined}
+      class={shadowInset ? menuShadowClass : undefined}
     />
   {/if}
 {/if}

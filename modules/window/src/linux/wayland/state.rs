@@ -1,18 +1,24 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     os::fd::RawFd,
-    sync::{Mutex, OnceLock},
-    time::{Duration, Instant},
     sync::{
         Mutex, OnceLock,
         atomic::{AtomicU32, Ordering},
     },
+    time::{Duration, Instant},
 };
 
 use super::codec::Iface;
 use super::layer_shell::LayerShellOptions;
 
 const MAX_POPUP_DIMENSION: i32 = 8_192;
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PopupGeometry {
+    pub(crate) inset: i32,
+    pub(crate) width: i32,
+    pub(crate) height: i32,
+}
 
 // ── Per-connection tracking state ──────────────────────────────────────────
 
@@ -32,6 +38,8 @@ pub(crate) struct WaylandConn {
     pub(crate) xdg_to_wl: HashMap<u32, u32>,
     pub(crate) wl_to_top: HashMap<u32, u32>,
     pub(crate) top_to_xdg: HashMap<u32, u32>,
+    /// Client-side shadow margins, owned by the converted xdg_surface.
+    pub(crate) popup_geometries: HashMap<u32, PopupGeometry>,
     pub(crate) compositor_id: Option<u32>,
     pub(crate) xdg_wm_base_id: Option<u32>,
     pub(crate) injected_ids: HashSet<u32>,
@@ -76,6 +84,8 @@ pub(crate) struct WaylandConn {
     /// Messages the proxy owes the client, queued by a request handler and
     /// flushed on the next inbound chunk.
     pub(crate) pending_to_client: Vec<Vec<u8>>,
+    pub(crate) deferred_role: Option<super::handlers::roles::DeferredRole>,
+    pub(crate) role_window_id: Option<String>,
 }
 
 impl WaylandConn {
@@ -91,6 +101,7 @@ impl WaylandConn {
             xdg_to_wl: HashMap::new(),
             wl_to_top: HashMap::new(),
             top_to_xdg: HashMap::new(),
+            popup_geometries: HashMap::new(),
             compositor_id: None,
             xdg_wm_base_id: None,
             injected_ids: HashSet::new(),
@@ -106,6 +117,8 @@ impl WaylandConn {
             wl_to_layer: HashMap::new(),
             xdg_to_layer: HashMap::new(),
             pending_to_client: Vec::new(),
+            deferred_role: None,
+            role_window_id: None,
         }
     }
 
@@ -119,6 +132,7 @@ impl WaylandConn {
         self.xdg_to_wl.clear();
         self.wl_to_top.clear();
         self.top_to_xdg.clear();
+        self.popup_geometries.clear();
         self.compositor_id = None;
         self.xdg_wm_base_id = None;
         self.injected_ids.clear();
@@ -136,6 +150,8 @@ impl WaylandConn {
         self.wl_to_layer.clear();
         self.xdg_to_layer.clear();
         self.pending_to_client.clear();
+        self.deferred_role = None;
+        self.role_window_id = None;
     }
 
     pub(crate) fn alloc_injected_id(&mut self) -> Option<u32> {
@@ -162,6 +178,8 @@ impl WaylandConn {
                 self.layer_surfaces.remove(&id);
                 self.toplevel_surfaces.remove(&id);
                 self.surface_ids.remove(&id);
+                self.popup_geometries
+                    .retain(|xdg, _| self.xdg_to_wl.get(xdg) != Some(&id));
                 self.xdg_to_wl.retain(|_, v| *v != id);
                 self.wl_to_top.remove(&id);
                 let focused_pointers: Vec<u32> = self
@@ -175,6 +193,7 @@ impl WaylandConn {
                 }
             }
             Some(Iface::XdgSurface) => {
+                self.popup_geometries.remove(&id);
                 if let Some(layer_id) = self.xdg_to_layer.remove(&id) {
                     self.purge(layer_id);
                 }
@@ -189,6 +208,9 @@ impl WaylandConn {
                 self.xdg_to_wl.remove(&id);
             }
             Some(Iface::XdgToplevel | Iface::XdgPopupShim) => {
+                if let Some(xdg) = self.top_to_xdg.get(&id) {
+                    self.popup_geometries.remove(xdg);
+                }
                 self.top_to_xdg.remove(&id);
                 self.wl_to_top.retain(|_, v| *v != id);
             }
@@ -416,9 +438,11 @@ pub(crate) struct PendingPopup {
     pub(crate) parent_xdg_surface_id: u32,
     pub(crate) width: i32,
     pub(crate) height: i32,
+    pub(crate) shadow_inset: i32,
     pub(crate) anchor_x: i32,
     pub(crate) anchor_y: i32,
     pub(crate) positioner_id: u32,
+    pub(crate) target_window_id: String,
 }
 
 pub(crate) static LAST_BUTTON: OnceLock<Mutex<LastButtonState>> = OnceLock::new();
@@ -466,8 +490,8 @@ pub(crate) static CUSTOM_ID_MAP: OnceLock<Mutex<HashMap<String, (RawFd, u32)>>> 
 const LAYER_DECLARATION_TTL: Duration = Duration::from_secs(2);
 
 /// Windows declared as layer surfaces before they exist, oldest first.
-static PENDING_LAYER_WINDOWS: OnceLock<Mutex<VecDeque<(LayerShellOptions, Instant)>>> =
-    OnceLock::new();
+type LayerDeclaration = (LayerShellOptions, Instant, Option<String>);
+static PENDING_LAYER_WINDOWS: OnceLock<Mutex<VecDeque<LayerDeclaration>>> = OnceLock::new();
 
 /// Whether a connection knows a compositor that takes layer surfaces.
 ///
@@ -484,7 +508,15 @@ pub(crate) fn is_layer_shell_available() -> bool {
 }
 
 /// Queue `options` for the next toplevel the client creates.
+#[cfg(test)]
 pub(crate) fn declare_layer_window(options: LayerShellOptions) -> bool {
+    declare_named_layer_window(options, None)
+}
+
+pub(crate) fn declare_named_layer_window(
+    options: LayerShellOptions,
+    owner: Option<String>,
+) -> bool {
     // Saying nothing about size or anchors means "cover the output"; only
     // combinations that cannot be sent are refused.
     let options = options.with_defaults();
@@ -497,37 +529,72 @@ pub(crate) fn declare_layer_window(options: LayerShellOptions) -> bool {
     let Ok(mut queue) = queue.lock() else {
         return false;
     };
-    queue.push_back((options, Instant::now()));
+    if let Some(owner) = &owner {
+        queue.retain(|(_, _, existing)| existing.as_ref() != Some(owner));
+    }
+    queue.push_back((options, Instant::now(), owner));
     true
 }
 
 /// Drop the newest declaration that has not been consumed yet.
+#[cfg(test)]
 pub(crate) fn cancel_layer_window() -> bool {
+    cancel_named_layer_window(None)
+}
+
+pub(crate) fn cancel_named_layer_window(owner: Option<&str>) -> bool {
     let Some(queue) = PENDING_LAYER_WINDOWS.get() else {
         return false;
     };
     let Ok(mut queue) = queue.lock() else {
         return false;
     };
-    queue.pop_back().is_some()
+    let index = queue
+        .iter()
+        .rposition(|(_, _, existing)| existing.as_deref() == owner);
+    index.is_some_and(|index| queue.remove(index).is_some())
 }
 
 /// Take the oldest live declaration, discarding stale ones.
+#[cfg(test)]
 pub(crate) fn take_layer_window_declaration() -> Option<LayerShellOptions> {
+    take_named_layer_window_declaration(None)
+}
+
+pub(crate) fn take_named_layer_window_declaration(
+    owner: Option<&str>,
+) -> Option<LayerShellOptions> {
     let queue = PENDING_LAYER_WINDOWS.get()?;
     let Ok(mut queue) = queue.lock() else {
         return None;
     };
     let now = Instant::now();
-    while let Some((options, declared_at)) = queue.pop_front() {
-        if now.duration_since(declared_at) <= LAYER_DECLARATION_TTL {
-            return Some(options);
-        }
-    }
-    None
+    queue.retain(|(_, declared_at, _)| now.duration_since(*declared_at) <= LAYER_DECLARATION_TTL);
+    let index = owner
+        .and_then(|owner| {
+            queue
+                .iter()
+                .position(|(_, _, existing)| existing.as_deref() == Some(owner))
+        })
+        .or_else(|| queue.iter().position(|(_, _, existing)| existing.is_none()))?;
+    queue.remove(index).map(|(options, _, _)| options)
 }
 
-pub(crate) type CursorEnterCb = Box<dyn FnOnce(i32, i32) + Send>;
+pub(crate) fn has_named_role_pending(fd: RawFd) -> bool {
+    PENDING_POPUPS
+        .get()
+        .and_then(|pending| pending.lock().ok())
+        .is_some_and(|pending| pending.contains_key(&fd))
+        || PENDING_LAYER_WINDOWS
+            .get()
+            .and_then(|queue| queue.lock().ok())
+            .is_some_and(|queue| {
+                queue
+                    .iter()
+                    .any(|(_, at, owner)| owner.is_some() && at.elapsed() <= LAYER_DECLARATION_TTL)
+            })
+}
+
 pub(crate) type CursorEnterCb = Box<dyn FnOnce(Option<(i32, i32)>) + Send>;
 pub(crate) struct CursorEnterWatcher {
     pub(crate) token: u32,
@@ -562,7 +629,8 @@ pub(crate) fn arm_first_cursor_enter_watchers(fd: RawFd, wl_surface_id: u32) {
         return;
     }
     let mut callbacks: Vec<_> = pending.drain(..).collect();
-    drop(pending);
+    // Keep pending locked until transfer finishes so cancellation cannot miss
+    // a watcher between the pending and armed collections.
     if let Some(watchers) = CURSOR_ENTER_WATCHERS.get()
         && let Ok(mut watchers) = watchers.lock()
     {
@@ -572,6 +640,7 @@ pub(crate) fn arm_first_cursor_enter_watchers(fd: RawFd, wl_surface_id: u32) {
             .append(&mut callbacks);
         return;
     }
+    drop(pending);
     for watcher in callbacks {
         (watcher.callback)(None);
     }
@@ -725,30 +794,60 @@ pub(crate) fn fire_layer_shell_refused(window_id: String) {
     };
     if let Some(callback) = slot.as_ref() {
         callback(window_id);
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn arm_next_popup(
     parent_window_id: &str,
+    target_window_id: &str,
     width: i32,
     height: i32,
     anchor: Option<(i32, i32)>,
 ) -> Option<u32> {
+    arm_next_popup_with_inset(parent_window_id, target_window_id, width, height, anchor, 0)
+}
+
+pub(crate) fn arm_next_popup_with_inset(
+    parent_window_id: &str,
+    target_window_id: &str,
+    width: i32,
+    height: i32,
+    anchor: Option<(i32, i32)>,
+    shadow_inset: i32,
+) -> Option<u32> {
     if width <= 0 || height <= 0 || width > MAX_POPUP_DIMENSION || height > MAX_POPUP_DIMENSION {
         return None;
     }
+    if shadow_inset < 0 || shadow_inset > (width.min(height) - 1) / 2 {
+        return None;
+    }
+    // Match the filter's lock order: CONNS, then window mapping/pending state.
+    // Keep the connection alive through allocation AND publication so close
+    // cannot leave a pending request on a reused descriptor.
+    let mut conns = CONNS.get()?.lock().ok()?;
     let parent_mapping = CUSTOM_ID_MAP
         .get()
         .and_then(|map| map.lock().ok()?.get(parent_window_id).copied());
     let (fd, parent_wl_surface_id) = parent_mapping?;
-    let parent_xdg_surface_id = CONNS
-        .get()
-        .and_then(|conns| conns.lock().ok())
-        .and_then(|conns| {
-            conns
-                .get(&fd)?
-                .xdg_to_wl
-                .iter()
-                .find_map(|(xdg, wl)| (*wl == parent_wl_surface_id).then_some(*xdg))
-        });
-    let parent_xdg_surface_id = parent_xdg_surface_id?;
+    let conn = conns.get_mut(&fd)?;
+    // A layer surface cannot be used as xdg_popup's xdg parent. Leave these
+    // windows on the existing overlay path instead of sending an invalid role.
+    if conn.layer_surfaces.contains_key(&parent_wl_surface_id) {
+        return None;
+    }
+    if conn
+        .surface_ids
+        .get(&parent_wl_surface_id)
+        .map(String::as_str)
+        != Some(parent_window_id)
+    {
+        return None;
+    }
+    let parent_xdg_surface_id = conn
+        .xdg_to_wl
+        .iter()
+        .find_map(|(xdg, wl)| (*wl == parent_wl_surface_id).then_some(*xdg))?;
 
     let (anchor_x, anchor_y) = if let Some((x, y)) = anchor {
         (x, y)
@@ -761,42 +860,11 @@ pub(crate) fn arm_next_popup(
         (button.x, button.y)
     };
 
-    let pending = PENDING_POPUPS.get()?;
-    let already_pending = pending
-        .lock()
-        .ok()
-        .is_some_and(|pending| pending.contains_key(&fd));
-    if already_pending {
-        return None;
-    }
-
-    let positioner_id = CONNS
-        .get()
-        .and_then(|conns| conns.lock().ok())
-        .and_then(|mut conns| conns.get_mut(&fd)?.alloc_injected_id());
-    let positioner_id = positioner_id?;
-
-    let Ok(mut pending) = pending.lock() else {
-        if let Some(conns) = CONNS.get()
-            && let Ok(mut conns) = conns.lock()
-            && let Some(conn) = conns.get_mut(&fd)
-        {
-            conn.injected_ids.remove(&positioner_id);
-            conn.stolen_ids.push(positioner_id);
-        }
-        return None;
-    };
+    let mut pending = PENDING_POPUPS.get()?.lock().ok()?;
     if pending.contains_key(&fd) {
-        drop(pending);
-        if let Some(conns) = CONNS.get()
-            && let Ok(mut conns) = conns.lock()
-            && let Some(conn) = conns.get_mut(&fd)
-            && conn.injected_ids.remove(&positioner_id)
-        {
-            conn.stolen_ids.push(positioner_id);
-        }
         return None;
     }
+    let positioner_id = conn.alloc_injected_id()?;
     let token = next_unused_token(&NEXT_POPUP_TOKEN, |candidate| {
         pending.values().any(|popup| popup.token == candidate)
     });
@@ -807,9 +875,11 @@ pub(crate) fn arm_next_popup(
             parent_xdg_surface_id,
             width,
             height,
+            shadow_inset,
             anchor_x,
             anchor_y,
             positioner_id,
+            target_window_id: target_window_id.into(),
         },
     );
     Some(token)
@@ -834,6 +904,13 @@ pub(crate) fn window_is_popup(window_id: &str) -> bool {
 }
 
 pub(crate) fn cancel_pending_popup(token: u32) -> bool {
+    // Allocation, cancellation and close all use CONNS -> PENDING_POPUPS.
+    let Some(conns) = CONNS.get() else {
+        return false;
+    };
+    let Ok(mut conns) = conns.lock() else {
+        return false;
+    };
     let Some(pending) = PENDING_POPUPS.get() else {
         return false;
     };
@@ -852,9 +929,7 @@ pub(crate) fn cancel_pending_popup(token: u32) -> bool {
         };
         (fd, popup)
     };
-    if let Some(conns) = CONNS.get()
-        && let Ok(mut conns) = conns.lock()
-        && let Some(conn) = conns.get_mut(&fd)
+    if let Some(conn) = conns.get_mut(&fd)
         && conn.injected_ids.remove(&popup.positioner_id)
     {
         conn.stolen_ids.push(popup.positioner_id);
@@ -862,9 +937,16 @@ pub(crate) fn cancel_pending_popup(token: u32) -> bool {
     true
 }
 
-pub(crate) fn take_pending_popup(fd: RawFd) -> Option<PendingPopup> {
+pub(crate) fn take_pending_popup(fd: RawFd, target_window_id: &str) -> Option<PendingPopup> {
     let mut pending = PENDING_POPUPS.get()?.lock().ok()?;
-    pending.remove(&fd)
+    if pending
+        .get(&fd)
+        .is_some_and(|popup| popup.target_window_id == target_window_id)
+    {
+        pending.remove(&fd)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn cancel_pending_popup_for_parent(
@@ -902,18 +984,28 @@ pub(crate) fn cancel_pending_popup_for_connection(fd: RawFd, conn: &mut WaylandC
 }
 
 pub(crate) fn watch_next_pointer_axis(window_id: &str, callback: PointerAxisCb) -> Option<u32> {
-    let Some((fd, wl_surface_id)) = CUSTOM_ID_MAP
-        .get()
-        .and_then(|map| map.lock().ok()?.get(window_id).copied())
-    else {
+    let registration = (|| {
+        let conns = CONNS.get()?.lock().ok()?;
+        let (fd, wl_surface_id) = CUSTOM_ID_MAP
+            .get()
+            .and_then(|map| map.lock().ok()?.get(window_id).copied())?;
+        let conn = conns.get(&fd)?;
+        if conn.surface_ids.get(&wl_surface_id).map(String::as_str) != Some(window_id) {
+            return None;
+        }
+        Some((conns, fd, wl_surface_id))
+    })();
+    let Some((conns, fd, wl_surface_id)) = registration else {
         callback(None);
         return None;
     };
     let Some(watchers) = NEXT_POINTER_AXIS.get() else {
+        drop(conns);
         callback(None);
         return None;
     };
     let Ok(mut watchers) = watchers.lock() else {
+        drop(conns);
         callback(None);
         return None;
     };
@@ -927,6 +1019,8 @@ pub(crate) fn watch_next_pointer_axis(window_id: &str, callback: PointerAxisCb) 
         .entry((fd, wl_surface_id))
         .or_default()
         .push(PointerAxisWatcher { token, callback });
+    drop(watchers);
+    drop(conns);
     Some(token)
 }
 
@@ -1050,6 +1144,11 @@ pub(crate) fn on_close(fd: RawFd) {
     if let Some(m) = CONNS.get()
         && let Ok(mut map) = m.lock()
     {
+        if let Some(pending) = PENDING_POPUPS.get()
+            && let Ok(mut pending) = pending.lock()
+        {
+            pending.remove(&fd);
+        }
         map.remove(&fd);
     }
     clear_runtime_state_for_fd(fd);
@@ -1158,10 +1257,15 @@ pub(crate) fn clear_state() {
             (watcher.callback)(None);
         }
     }
+    if let Some(m) = PENDING_LAYER_WINDOWS.get()
+        && let Ok(mut queue) = m.lock()
+    {
+        queue.clear();
+    }
 }
 
 #[cfg(test)]
-mod tests {
+mod popup_tests {
     use std::sync::{
         Arc,
         atomic::{AtomicU32, Ordering},
@@ -1169,11 +1273,246 @@ mod tests {
 
     use super::*;
 
+    fn wait_for_connection_lock() {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if matches!(
+                CONNS.get().unwrap().try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ) {
+                return;
+            }
+            assert!(Instant::now() < deadline, "operation did not acquire CONNS");
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn cancellation_holds_connection_until_reserved_id_is_recycled() {
+        init_state();
+        let fd = 93_601;
+        let mut conn = WaylandConn::new();
+        conn.injected_ids.insert(900);
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+        PENDING_POPUPS.get().unwrap().lock().unwrap().insert(
+            fd,
+            PendingPopup {
+                token: fd as u32,
+                parent_xdg_surface_id: 20,
+                width: 100,
+                height: 80,
+                shadow_inset: 0,
+                anchor_x: 0,
+                anchor_y: 0,
+                positioner_id: 900,
+                target_window_id: "target".into(),
+            },
+        );
+        let pending = PENDING_POPUPS.get().unwrap().lock().unwrap();
+        let cancelling = std::thread::spawn(move || cancel_pending_popup(fd as u32));
+        wait_for_connection_lock();
+        let closing = std::thread::spawn(move || on_close(fd));
+        drop(pending);
+        assert!(cancelling.join().unwrap());
+        closing.join().unwrap();
+        let mut replacement = WaylandConn::new();
+        replacement.injected_ids.insert(900);
+        CONNS.get().unwrap().lock().unwrap().insert(fd, replacement);
+        assert!(!cancel_pending_popup(fd as u32));
+        assert!(
+            CONNS
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .get(&fd)
+                .unwrap()
+                .injected_ids
+                .contains(&900)
+        );
+        on_close(fd);
+    }
+
+    #[test]
+    fn axis_registration_is_atomic_with_close_and_rejects_stale_identity() {
+        init_state();
+        let fd = 93_602;
+        let mut conn = WaylandConn::new();
+        conn.surface_ids.insert(10, "axis-owner".into());
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+        CUSTOM_ID_MAP
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert("axis-owner".into(), (fd, 10));
+        let callbacks = Arc::new(AtomicU32::new(0));
+        let counter = callbacks.clone();
+        let watchers = NEXT_POINTER_AXIS.get().unwrap().lock().unwrap();
+        let registering = std::thread::spawn(move || {
+            watch_next_pointer_axis(
+                "axis-owner",
+                Box::new(move |axis| {
+                    assert!(axis.is_none());
+                    counter.fetch_add(1, Ordering::Relaxed);
+                }),
+            )
+        });
+        wait_for_connection_lock();
+        let closing = std::thread::spawn(move || on_close(fd));
+        drop(watchers);
+        assert!(registering.join().unwrap().is_some());
+        closing.join().unwrap();
+        assert_eq!(callbacks.load(Ordering::Relaxed), 1);
+        assert!(
+            !NEXT_POINTER_AXIS
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .contains_key(&(fd, 10))
+        );
+        let mut replacement = WaylandConn::new();
+        replacement.surface_ids.insert(10, "other-owner".into());
+        CONNS.get().unwrap().lock().unwrap().insert(fd, replacement);
+        CUSTOM_ID_MAP
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert("axis-owner".into(), (fd, 10));
+        assert!(
+            watch_next_pointer_axis("axis-owner", Box::new(|axis| assert!(axis.is_none())))
+                .is_none()
+        );
+        on_close(fd);
+    }
+
+    #[test]
+    fn popup_publication_is_atomic_with_close_and_fd_reuse() {
+        use std::sync::{TryLockError, mpsc};
+        use std::thread;
+
+        init_state();
+        let fd = 93_001;
+        let window_id = "popup-close-race";
+        let mut conn = WaylandConn::new();
+        conn.xdg_to_wl.insert(20, 10);
+        conn.surface_ids.insert(10, window_id.into());
+        conn.stolen_ids.push(900);
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+        CUSTOM_ID_MAP
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert(window_id.into(), (fd, 10));
+
+        // Stop publication at the pending lock. Arming must retain CONNS while
+        // blocked here; close must not pass it and remove the old connection.
+        let pending = PENDING_POPUPS.get().unwrap().lock().unwrap();
+        let arming =
+            thread::spawn(move || arm_next_popup(window_id, "target", 100, 80, Some((4, 5))));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match CONNS.get().unwrap().try_lock() {
+                Err(TryLockError::WouldBlock) => break,
+                Err(TryLockError::Poisoned(_)) => panic!("poisoned connection map"),
+                Ok(guard) => drop(guard),
+            }
+            assert!(Instant::now() < deadline, "arming did not acquire CONNS");
+            thread::yield_now();
+        }
+        let (started_tx, started_rx) = mpsc::channel();
+        let (closed_tx, closed_rx) = mpsc::channel();
+        let closing = thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            on_close(fd);
+            closed_tx.send(()).unwrap();
+        });
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(
+            closed_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+        drop(pending);
+        assert!(arming.join().unwrap().is_some());
+        closed_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        closing.join().unwrap();
+
+        // The descriptor can now be reused, but not the pending positioner.
+        CONNS
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert(fd, WaylandConn::new());
+        assert!(take_pending_popup(fd, "target").is_none());
+        assert!(arm_next_popup(window_id, "target", 100, 80, Some((4, 5))).is_none());
+        on_close(fd);
+    }
+
+    #[test]
+    fn stale_window_mapping_does_not_allocate_on_reused_fd() {
+        init_state();
+        let fd = 93_002;
+        let mut replacement = WaylandConn::new();
+        replacement.xdg_to_wl.insert(20, 10);
+        replacement.surface_ids.insert(10, "new-window".into());
+        replacement.stolen_ids.push(901);
+        CONNS.get().unwrap().lock().unwrap().insert(fd, replacement);
+        CUSTOM_ID_MAP
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert("old-window".into(), (fd, 10));
+        assert!(arm_next_popup("old-window", "target", 100, 80, Some((0, 0))).is_none());
+        assert_eq!(
+            CONNS
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .get(&fd)
+                .unwrap()
+                .stolen_ids,
+            vec![901]
+        );
+        on_close(fd);
+    }
+
     #[test]
     fn token_allocation_skips_zero_and_live_tokens_after_wrap() {
         let counter = AtomicU32::new(u32::MAX);
         let token = next_unused_token(&counter, |candidate| candidate == u32::MAX);
         assert_eq!(token, 1);
+    }
+
+    #[test]
+    fn popup_reservation_only_accepts_its_managed_window() {
+        init_state();
+        let fd = 93_501;
+        clear_runtime_state_for_fd(fd);
+        PENDING_POPUPS.get().unwrap().lock().unwrap().insert(
+            fd,
+            PendingPopup {
+                token: 7,
+                parent_xdg_surface_id: 20,
+                width: 100,
+                height: 80,
+                shadow_inset: 0,
+                anchor_x: 4,
+                anchor_y: 5,
+                positioner_id: 30,
+                target_window_id: "target".into(),
+            },
+        );
+        assert!(take_pending_popup(fd, "old-window").is_none());
+        assert!(take_pending_popup(fd, "unrelated-new-window").is_none());
+        assert_eq!(take_pending_popup(fd, "target").unwrap().token, 7);
+        assert!(take_pending_popup(fd, "target").is_none());
+        clear_runtime_state_for_fd(fd);
     }
 
     #[test]
@@ -1191,9 +1530,11 @@ mod tests {
                 parent_xdg_surface_id: 20,
                 width: 10,
                 height: 10,
+                shadow_inset: 0,
                 anchor_x: 0,
                 anchor_y: 0,
                 positioner_id: 30,
+                target_window_id: "target".into(),
             },
         );
         CUSTOM_ID_MAP
@@ -1297,9 +1638,11 @@ mod tests {
                 parent_xdg_surface_id: 21,
                 width: 10,
                 height: 10,
+                shadow_inset: 0,
                 anchor_x: 0,
                 anchor_y: 0,
                 positioner_id: 40,
+                target_window_id: "target".into(),
             },
         );
 
@@ -1315,10 +1658,5 @@ mod tests {
         );
         assert!(!conn.injected_ids.contains(&40));
         assert_eq!(conn.stolen_ids, vec![40]);
-    }
-    if let Some(m) = PENDING_LAYER_WINDOWS.get()
-        && let Ok(mut queue) = m.lock()
-    {
-        queue.clear();
     }
 }

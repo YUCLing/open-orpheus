@@ -88,6 +88,13 @@ pub fn get_desktop_environment() -> DesktopEnvironment {
 
 // region: Linux methods
 
+/// Release completed native input callbacks on the JavaScript thread.
+#[napi]
+pub fn drain_window_callbacks() {
+    #[cfg(target_os = "linux")]
+    linux::reap_retired_releases();
+}
+
 /// Set regions that the window is used to receive inputs.
 ///
 /// Only for Linux.
@@ -163,7 +170,6 @@ pub fn on_layer_shell_role_refused(
 /// Only for Wayland on Linux.
 #[napi]
 pub fn capture_next_window_first_cursor_enter(
-    env: Env,
     #[napi(ts_arg_type = "(x: number, y: number) => void")] callback: Function<
         FnArgs<(i32, i32)>,
         (),
@@ -172,12 +178,12 @@ pub fn capture_next_window_first_cursor_enter(
     #[cfg(target_os = "linux")]
     {
         use crate::linux::capture_next_window_first_cursor_enter as capture_next_window_first_cursor_enter_impl;
-        capture_next_window_first_cursor_enter_impl(env, callback)
+        capture_next_window_first_cursor_enter_impl(callback)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (env, callback);
+        let _ = callback;
         Err(napi::Error::from_reason("Only supports Linux"))
     }
 }
@@ -199,22 +205,41 @@ pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
 
 /// Make the next Electron window on this Wayland connection an xdg_popup.
 /// Omit anchor coordinates to use the last pointer-button position on parent.
+/// shadow_inset excludes transparent client-side shadow margins from geometry.
 #[napi]
 pub fn arm_next_window_as_popup(
     parent_window_id: String,
+    target_window_id: String,
     width: i32,
     height: i32,
     anchor_x: Option<i32>,
     anchor_y: Option<i32>,
+    shadow_inset: Option<i32>,
 ) -> Option<u32> {
     #[cfg(target_os = "linux")]
     {
-        linux::arm_next_window_as_popup(parent_window_id, width, height, anchor_x, anchor_y)
+        linux::arm_next_window_as_popup(
+            parent_window_id,
+            target_window_id,
+            width,
+            height,
+            anchor_x,
+            anchor_y,
+            shadow_inset,
+        )
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (parent_window_id, width, height, anchor_x, anchor_y);
+        let _ = (
+            parent_window_id,
+            target_window_id,
+            width,
+            height,
+            anchor_x,
+            anchor_y,
+            shadow_inset,
+        );
         None
     }
 }
@@ -249,12 +274,12 @@ pub fn is_window_wayland_popup(window_id: String) -> bool {
     }
 }
 
-/// Whether native GNOME Wayland popup conversion is available.
+/// Whether native Wayland popup conversion is available (GNOME or niri).
 #[napi]
-pub fn supports_gnome_wayland_popup() -> bool {
+pub fn supports_native_wayland_popup() -> bool {
     #[cfg(target_os = "linux")]
     {
-        linux::supports_gnome_wayland_popup()
+        linux::supports_native_wayland_popup()
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -266,18 +291,17 @@ pub fn supports_gnome_wayland_popup() -> bool {
 /// Invoke once when a Wayland pointer-axis event reaches this window's client.
 #[napi]
 pub fn capture_window_next_pointer_axis(
-    env: Env,
     window_id: String,
     #[napi(ts_arg_type = "(axis: number) => void")] callback: Function<FnArgs<(u32,)>, ()>,
 ) -> Result<u32> {
     #[cfg(target_os = "linux")]
     {
-        linux::capture_window_next_pointer_axis(env, window_id, callback)
+        linux::capture_window_next_pointer_axis(window_id, callback)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (env, window_id, callback);
+        let _ = (window_id, callback);
         Err(napi::Error::from_reason("Only supports Linux"))
     }
 }
@@ -339,15 +363,16 @@ pub fn is_layer_shell_available() -> bool {
 /// Returns whether the declaration was accepted; when it is refused the window
 /// is still created as an ordinary one.
 #[napi]
-pub fn use_layer_shell_for_next_window(options: LayerShellOptions) -> bool {
+pub fn use_layer_shell_for_next_window(options: LayerShellOptions, owner: Option<String>) -> bool {
     #[cfg(target_os = "linux")]
     {
-        crate::linux::declare_layer_window(&options)
+        crate::linux::declare_layer_window(&options, owner)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         let _ = options;
+        let _ = owner;
         false
     }
 }
@@ -377,14 +402,15 @@ pub fn validate_layer_shell_options(options: LayerShellOptions) -> bool {
 
 /// Withdraw a layer-shell declaration that has not been consumed yet.
 #[napi]
-pub fn cancel_layer_shell_for_next_window() -> bool {
+pub fn cancel_layer_shell_for_next_window(owner: Option<String>) -> bool {
     #[cfg(target_os = "linux")]
     {
-        crate::linux::cancel_layer_window()
+        crate::linux::cancel_layer_window(owner.as_deref())
     }
 
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = owner;
         false
     }
 }

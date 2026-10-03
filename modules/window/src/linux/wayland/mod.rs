@@ -28,8 +28,8 @@ pub(super) fn is_layer_shell_available() -> bool {
 }
 
 /// Queue `options` for the next toplevel the client creates.
-pub(super) fn declare_layer_window(options: LayerShellOptions) -> bool {
-    state::declare_layer_window(options)
+pub(super) fn declare_layer_window(options: LayerShellOptions, owner: Option<String>) -> bool {
+    state::declare_named_layer_window(options, owner)
 }
 
 /// Whether `options` survive the defaults and the protocol's rules.
@@ -42,8 +42,8 @@ pub(super) fn validate_layer_window(options: LayerShellOptions) -> bool {
 }
 
 /// Withdraw the newest declaration that has not been consumed yet.
-pub(super) fn cancel_layer_window() -> bool {
-    state::cancel_layer_window()
+pub(super) fn cancel_layer_window(owner: Option<&str>) -> bool {
+    state::cancel_named_layer_window(owner)
 }
 
 /// Decorate a title with the managed window id the proxy keys windows on.
@@ -66,11 +66,20 @@ pub(super) fn set_input_region_rects(window_id: &str, rects: Option<&[Rect]>) ->
 
 pub(super) fn arm_next_window_as_popup(
     parent_window_id: &str,
+    target_window_id: &str,
     width: i32,
     height: i32,
     anchor: Option<(i32, i32)>,
+    shadow_inset: i32,
 ) -> Option<u32> {
-    state::arm_next_popup(parent_window_id, width, height, anchor)
+    state::arm_next_popup_with_inset(
+        parent_window_id,
+        target_window_id,
+        width,
+        height,
+        anchor,
+        shadow_inset,
+    )
 }
 
 pub(super) fn cancel_pending_popup(token: u32) -> bool {

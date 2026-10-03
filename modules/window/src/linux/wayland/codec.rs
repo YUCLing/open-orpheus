@@ -56,7 +56,6 @@ pub(crate) const REQ_GET_POPUP: u16 = 2;
 pub(crate) const REQ_SET_WINDOW_GEOMETRY: u16 = 3;
 pub(crate) const REQ_ACK_CONFIGURE: u16 = 4;
 pub(crate) const REQ_CREATE_POSITIONER: u16 = 1;
-pub(crate) const REQ_GET_POPUP: u16 = 2;
 pub(crate) const REQ_SET_TITLE: u16 = 2;
 pub(crate) const REQ_MOVE: u16 = 5;
 pub(crate) const REQ_SET_INPUT_REGION: u16 = 5;

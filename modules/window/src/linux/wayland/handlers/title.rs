@@ -49,9 +49,8 @@ pub(crate) fn on_set_title(fd: RawFd, conn: &mut WaylandConn, msg: &WlMessage) -
         if let Some(m) = CUSTOM_ID_MAP.get()
             && let Ok(mut map) = m.lock()
         {
-            map.insert(managed_id.to_string(), (fd, wl_surf));
             map.retain(|_, mapped| *mapped != (fd, wl_surf));
-            map.insert(custom_id.to_string(), (fd, wl_surf));
+            map.insert(managed_id.to_string(), (fd, wl_surf));
         }
     }
 

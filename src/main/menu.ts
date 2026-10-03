@@ -13,7 +13,7 @@ import {
   getCursorPosition,
   getDesktopEnvironment,
   isWindowWaylandPopup,
-  supportsGnomeWaylandPopup,
+  supportsNativeWaylandPopup,
 } from "@open-orpheus/window";
 
 import { menuSkin, registerMenuSkinUpdater } from "./menu/skin";
@@ -27,7 +27,6 @@ import {
   destroyOverlayWindow,
   getMenuWindow,
   getOverlayWindow,
-  SubmenuWindow,
 } from "./menu/windows";
 import packManager from "./pack";
 import SkinPack from "./packs/SkinPack";
@@ -38,6 +37,16 @@ import type { ElementTemplate } from "./skin/dui";
 import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
 import type { AppMenuItem } from "$sharedTypes/menu";
 import { font } from "./gui";
+import { ManagedWindow } from "./window";
+import logger from "./logger";
+import { isLiveFocusedWindow, runMenuCallbacks, scheduleMenuTask } from "./menu/lifecycle";
+import { overlayPolicy, workaroundEnabled, WorkaroundFlags } from "./menu/workaround";
+
+function waylandWindowId(wnd: BrowserWindow): string {
+  const managed = ManagedWindow.fromBrowserWindow(wnd);
+  if (!managed) throw new Error("popup requires a managed window");
+  return managed.id;
+}
 
 registerMenuSkinUpdater();
 
@@ -47,11 +56,10 @@ const WAYLAND_POPUP_ID_RETRY_MS = 5;
 const WAYLAND_POPUP_ARM_EXPIRY_MS = 5_000;
 const MENU_RENDER_READY_TIMEOUT_MS = 10_000;
 const MAX_MENU_DIMENSION = 8_192;
+// Room for the same 16px blur / 4px vertical offset used by overlay menus.
+const NATIVE_MENU_SHADOW_INSET = 24;
 
-function waitWithAbort<T>(
-  promise: Promise<T>,
-  signal: AbortSignal
-): Promise<T> {
+function waitWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(signal.reason);
@@ -80,16 +88,10 @@ function normalizeMenuSize(rawWidth: number, rawHeight: number) {
 
 function normalizeMenuCoordinate(value: number) {
   if (!Number.isFinite(value)) return 0;
-  return Math.min(
-    MAX_MENU_DIMENSION,
-    Math.max(-MAX_MENU_DIMENSION, Math.round(value))
-  );
+  return Math.min(MAX_MENU_DIMENSION, Math.max(-MAX_MENU_DIMENSION, Math.round(value)));
 }
 
-async function waitForWaylandPopup(
-  windowId: string,
-  isCancelled: () => boolean
-) {
+async function waitForWaylandPopup(windowId: string, isCancelled: () => boolean) {
   const deadline = Date.now() + WAYLAND_POPUP_ID_WAIT_MS;
   while (!isCancelled()) {
     const isPopup = isWindowWaylandPopup(windowId);
@@ -97,20 +99,19 @@ async function waitForWaylandPopup(
     if (Date.now() >= deadline) {
       return false;
     }
-    await new Promise<void>((resolve) =>
-      setTimeout(resolve, WAYLAND_POPUP_ID_RETRY_MS)
-    );
+    await new Promise<void>((resolve) => setTimeout(resolve, WAYLAND_POPUP_ID_RETRY_MS));
   }
   return false;
 }
 
-function armGnomeWaylandPopupWhenReady(
+function armNativeWaylandPopupWhenReady(
   parentWindowId: string,
+  targetWindowId: string,
   width: number,
   height: number,
   anchor: { x: number; y: number } | undefined,
   isCancelled: () => boolean,
-  onArmed: (token: number, disposePending: () => void) => void,
+  onArmed: (disposePending: () => void) => void,
   onUnavailable: () => void
 ) {
   const deadline = Date.now() + WAYLAND_POPUP_ID_WAIT_MS;
@@ -120,9 +121,15 @@ function armGnomeWaylandPopupWhenReady(
     if (cancelled || isCancelled()) {
       return;
     }
-    const token = anchor
-      ? armNextWindowAsPopup(parentWindowId, width, height, anchor.x, anchor.y)
-      : armNextWindowAsPopup(parentWindowId, width, height);
+    const token = armNextWindowAsPopup(
+      parentWindowId,
+      targetWindowId,
+      width,
+      height,
+      anchor?.x,
+      anchor?.y,
+      NATIVE_MENU_SHADOW_INSET
+    );
     if (token !== null) {
       let pending = true;
       const expiryTimer = setTimeout(() => {
@@ -140,7 +147,7 @@ function armGnomeWaylandPopupWhenReady(
         cancelPendingPopup(token);
       };
       try {
-        onArmed(token, disposePending);
+        onArmed(disposePending);
       } catch (error) {
         disposePending();
         throw error;
@@ -189,7 +196,6 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   private showPromise: Promise<void> | null = null;
   private readonly lifetimeAbort = new AbortController();
   private submenuWindow: BrowserWindow | null = null;
-  private submenuMeasureWindow: BrowserWindow | null = null;
   private submenuGeneration = 0;
   private submenuCleanups: Array<() => void> = [];
   private dismissCleanups: Array<() => void> = [];
@@ -219,10 +225,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     if (styles.size === 0) return;
 
-    const skinPack = await packManager.getOrWaitPack<SkinPack>(
-      "skin",
-      this.lifetimeAbort.signal
-    );
+    const skinPack = await packManager.getOrWaitPack<SkinPack>("skin", this.lifetimeAbort.signal);
     const entries = await waitWithAbort(
       Promise.all(
         [...styles].map(async (style) => {
@@ -257,13 +260,17 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     const opening = this.open(parentWindow);
     this.showPromise = opening;
-    const openingDeadline = setTimeout(() => {
-      if (!this.closed) this.close();
-    }, MENU_RENDER_READY_TIMEOUT_MS);
+    const cancelOpeningDeadline = scheduleMenuTask(
+      () => {
+        if (!this.closed) this.close();
+      },
+      MENU_RENDER_READY_TIMEOUT_MS,
+      this.dismissCleanups
+    );
     try {
       await opening;
     } finally {
-      clearTimeout(openingDeadline);
+      cancelOpeningDeadline();
       if (this.showPromise === opening) this.showPromise = null;
     }
   }
@@ -282,7 +289,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     try {
       const desktopEnvironment = getDesktopEnvironment();
-      const supportsPopup = supportsGnomeWaylandPopup();
+      const supportsPopup = supportsNativeWaylandPopup();
       if (desktopEnvironment === DesktopEnvironment.Wayland) {
         if (parentWindow && supportsPopup) {
           this.showWaylandPopup(parentWindow);
@@ -324,7 +331,24 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   }
 
   private clearDismissResources() {
-    for (const cleanup of this.dismissCleanups.splice(0)) cleanup();
+    this.clearResources(this.dismissCleanups);
+  }
+
+  private clearResources(resources: Array<() => void>) {
+    runMenuCallbacks(resources.splice(0), (err) => {
+      logger.warn({ name: "menu.cleanup", err }, "Menu dismiss cleanup failed");
+    });
+  }
+
+  private scheduleDismiss(resources: Array<() => void>, callback: () => void, delay: number) {
+    if (this.closed) return;
+    scheduleMenuTask(
+      () => {
+        if (!this.closed) callback();
+      },
+      delay,
+      resources
+    );
   }
 
   update(patchItems: AppMenuItem[]) {
@@ -355,17 +379,20 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   }
 
   /**
-   * Measure the existing Svelte menu in an unmapped window, then create the
-   * visible BrowserWindow as a real xdg_popup through the Wayland proxy.
+   * Measure the existing Svelte menu while hidden, then map that same window
+   * as a real xdg_popup through the Wayland proxy without loading it twice.
    */
   private showWaylandPopup(parentWindow: BrowserWindow) {
-    let measurementHandled = false;
     let activePopup: BrowserWindow | null = null;
     const dismiss = () => {
       if (!this.closed) this.close();
     };
     const fallbackToOverlay = () => {
       if (this.closed) return;
+      logger.warn(
+        { name: "menu.waylandPopup" },
+        "Wayland popup unavailable; falling back to overlay"
+      );
       // Clear the identity first so destroying an unconverted toplevel cannot
       // make its `closed` handler close the whole menu.
       activePopup = null;
@@ -379,51 +406,45 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       }
     };
     try {
-      const token = captureWindowNextPointerAxis(
-        parentWindow.id.toString(),
-        () => dismiss()
-      );
+      const token = captureWindowNextPointerAxis(waylandWindowId(parentWindow), () => {
+        // Exceptions must not escape a native threadsafe-function callback.
+        try {
+          dismiss();
+        } catch (err) {
+          logger.warn({ name: "menu.axisDismiss", err }, "Menu axis dismissal failed");
+        }
+      });
       this.dismissCleanups.push(() => cancelWindowPointerAxisCapture(token));
     } catch {
       // Keep the Electron event fallback below when the native hook is absent.
     }
 
-    const dismissOnWheel = (
-      _event: Electron.Event,
-      input: Electron.MouseInputEvent
-    ) => {
+    const dismissOnWheel = (_event: Electron.Event, input: Electron.MouseInputEvent) => {
       if (input.type === "mouseWheel") dismiss();
     };
-    const dismissOnParentInput = (
-      _event: Electron.Event,
-      input: Electron.MouseInputEvent
-    ) => {
+    const dismissOnParentInput = (_event: Electron.Event, input: Electron.MouseInputEvent) => {
       if (input.type === "mouseDown" || input.type === "mouseWheel") {
         dismiss();
       }
     };
     const dismissOnParentBlur = () => {
-      setTimeout(() => {
-        if (
-          activePopup &&
-          !activePopup.isDestroyed() &&
-          activePopup.isFocused()
-        )
-          return;
-        if (this.submenuWindow?.isFocused()) return;
-        dismiss();
-      }, 50);
+      this.scheduleDismiss(
+        this.dismissCleanups,
+        () => {
+          if (activePopup && !activePopup.isDestroyed() && activePopup.isFocused()) return;
+          if (isLiveFocusedWindow(this.submenuWindow)) return;
+          dismiss();
+        },
+        50
+      );
     };
     parentWindow.webContents.on("before-mouse-event", dismissOnParentInput);
     parentWindow.on("blur", dismissOnParentBlur);
     parentWindow.once("closed", dismiss);
     this.dismissCleanups.push(() => {
       parentWindow.off("closed", dismiss);
-      if (!parentWindow.webContents.isDestroyed()) {
-        parentWindow.webContents.off(
-          "before-mouse-event",
-          dismissOnParentInput
-        );
+      if (!parentWindow.isDestroyed() && !parentWindow.webContents.isDestroyed()) {
+        parentWindow.webContents.off("before-mouse-event", dismissOnParentInput);
       }
       parentWindow.off("blur", dismissOnParentBlur);
     });
@@ -437,9 +458,13 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         // before showInactive() asks Chromium to create the Wayland role.
         popup = createMenuWindow(width, height);
         activePopup = popup;
-        const showAsPopup = () => {
-          const cancelArm = armGnomeWaylandPopupWhenReady(
-            parentWindow.id.toString(),
+        const showAsPopup = (actualWidth: number, actualHeight: number) => {
+          width = actualWidth;
+          height = actualHeight;
+          popup?.setSize(width, height);
+          const cancelArm = armNativeWaylandPopupWhenReady(
+            waylandWindowId(parentWindow),
+            waylandWindowId(popup!),
             width,
             height,
             undefined,
@@ -448,13 +473,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
               parentWindow.isDestroyed() ||
               popup?.isDestroyed() !== false ||
               activePopup !== popup,
-            (_token, disposePending) => {
-              if (
-                this.closed ||
-                !popup ||
-                popup.isDestroyed() ||
-                activePopup !== popup
-              ) {
+            (disposePending) => {
+              if (this.closed || !popup || popup.isDestroyed() || activePopup !== popup) {
                 disposePending();
                 return;
               }
@@ -466,48 +486,36 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                 fallbackToOverlay();
                 return;
               }
-              void waitForWaylandPopup(popup.id.toString(), () =>
-                Boolean(
-                  this.closed ||
-                  !popup ||
-                  popup.isDestroyed() ||
-                  activePopup !== popup
-                )
+              void waitForWaylandPopup(waylandWindowId(popup), () =>
+                Boolean(this.closed || !popup || popup.isDestroyed() || activePopup !== popup)
               ).then(
                 (converted) => {
                   disposePending();
+                  if (this.closed || activePopup !== popup) return;
                   if (!converted) {
                     fallbackToOverlay();
                     return;
                   }
-                  if (
-                    !this.closed &&
-                    popup &&
-                    !popup.isDestroyed() &&
-                    activePopup === popup
-                  ) {
+                  if (!this.closed && popup && !popup.isDestroyed() && activePopup === popup) {
                     popup.focus();
                   }
                 },
                 () => {
                   disposePending();
+                  if (this.closed || activePopup !== popup) return;
                   fallbackToOverlay();
                 }
               );
             },
             fallbackToOverlay
           );
-          if (
-            !this.closed &&
-            popup?.isDestroyed() === false &&
-            activePopup === popup
-          ) {
+          if (!this.closed && popup?.isDestroyed() === false && activePopup === popup) {
             this.dismissCleanups.push(cancelArm);
           } else {
             cancelArm();
           }
         };
-        bindWindow(popup, false, showAsPopup);
+        bindWindow(popup, showAsPopup);
         popup.webContents.on("before-mouse-event", dismissOnWheel);
         this.dismissCleanups.push(() => {
           if (popup && !popup.isDestroyed()) {
@@ -515,10 +523,15 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           }
         });
         popup.on("blur", () => {
-          setTimeout(() => {
-            if (this.submenuWindow?.isFocused()) return;
-            dismiss();
-          }, 100);
+          this.scheduleDismiss(
+            this.dismissCleanups,
+            () => {
+              if (activePopup !== popup) return;
+              if (isLiveFocusedWindow(this.submenuWindow)) return;
+              dismiss();
+            },
+            100
+          );
         });
         popup.on("closed", () => {
           if (activePopup !== popup) return;
@@ -534,16 +547,23 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     const bindWindow = (
       wnd: BrowserWindow,
-      measuring: boolean,
-      showAsPopup: () => void = () => {}
+      showAsPopup: (width: number, height: number) => void
     ) => {
       let displayHandled = false;
+      const cancelMeasurementDeadline = scheduleMenuTask(
+        () => {
+          if (!displayHandled && activePopup === wnd && !this.closed) dismiss();
+        },
+        MENU_RENDER_READY_TIMEOUT_MS,
+        this.dismissCleanups
+      );
       registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
         getFont: async () => font,
         pull: async () => ({
           items: this.items,
           templates: this.templates,
           colors: menuSkin,
+          shadowInset: NATIVE_MENU_SHADOW_INSET,
         }),
         itemClick: async (_event, menuId) => {
           try {
@@ -561,47 +581,33 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           const size = normalizeMenuSize(rawWidth, rawHeight);
           const { width, height } = size;
 
-          if (!measuring) {
-            if (displayHandled) return;
-            displayHandled = true;
-            showAsPopup();
-            return;
+          if (displayHandled || activePopup !== wnd) return;
+          displayHandled = true;
+          cancelMeasurementDeadline();
+          try {
+            showAsPopup(width, height);
+          } catch {
+            fallbackToOverlay();
           }
-          if (measurementHandled) return;
-          measurementHandled = true;
-          clearTimeout(measurementDeadline);
-          wnd.destroy();
-          openPopup(width, height);
         },
         openSubmenu: async (_event, items, templates, x, y) => {
-          if (!measuring) {
+          if (displayHandled && activePopup === wnd && !this.closed) {
             this.openWaylandSubmenu(wnd, items, templates, x, y);
           }
         },
         closeSubmenu: async () => {
-          if (!measuring) this.closeSubmenuWindow();
+          if (activePopup === wnd) this.closeSubmenuWindow();
         },
       });
       registerInputRegionHandlers(wnd);
     };
 
-    const measureWindow = createMenuWindow();
-    const measurementDeadline = setTimeout(() => {
-      if (!measurementHandled && !this.closed) dismiss();
-    }, MENU_RENDER_READY_TIMEOUT_MS);
-    this.dismissCleanups.push(() => clearTimeout(measurementDeadline));
-    measureWindow.on("closed", () => {
-      if (!measurementHandled && !this.closed) dismiss();
-    });
-    bindWindow(measureWindow, true);
+    openPopup(300, 400);
   }
 
   private closeSubmenuWindow() {
     this.submenuGeneration++;
-    for (const cleanup of this.submenuCleanups.splice(0)) cleanup();
-    const measureWindow = this.submenuMeasureWindow;
-    this.submenuMeasureWindow = null;
-    if (measureWindow && !measureWindow.isDestroyed()) measureWindow.destroy();
+    this.clearResources(this.submenuCleanups);
     const submenuWindow = this.submenuWindow;
     this.submenuWindow = null;
     if (submenuWindow && !submenuWindow.isDestroyed()) submenuWindow.destroy();
@@ -615,35 +621,40 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     relY: number
   ) {
     this.closeSubmenuWindow();
-    let measure: BrowserWindow;
+    if (this.closed || parent.isDestroyed()) return;
+    let popup: BrowserWindow;
     try {
-      measure = createSubmenuWindow();
+      popup = createSubmenuWindow();
     } catch {
       return;
     }
-    this.submenuMeasureWindow = measure;
+    this.submenuWindow = popup;
     const generation = this.submenuGeneration;
-    let measurementHandled = false;
-    const measurementDeadline = setTimeout(() => {
+    const isCurrent = () =>
+      !this.closed &&
+      generation === this.submenuGeneration &&
+      this.submenuWindow === popup &&
+      !popup.isDestroyed() &&
+      !parent.isDestroyed();
+    const closeUnavailable = () => {
       if (generation === this.submenuGeneration) this.closeSubmenuWindow();
-    }, MENU_RENDER_READY_TIMEOUT_MS);
-    this.submenuCleanups.push(() => clearTimeout(measurementDeadline));
-    measure.on("closed", () => {
-      if (this.submenuMeasureWindow !== measure) return;
-      this.submenuMeasureWindow = null;
-      this.submenuGeneration++;
-      for (const cleanup of this.submenuCleanups.splice(0)) cleanup();
-    });
+    };
+    let displayHandled = false;
+    const cancelMeasurementDeadline = scheduleMenuTask(
+      closeUnavailable,
+      MENU_RENDER_READY_TIMEOUT_MS,
+      this.submenuCleanups
+    );
 
-    const bind = (
-      wnd: BrowserWindow,
-      measuring: boolean,
-      showAsPopup: () => void = () => {}
-    ) => {
-      let displayHandled = false;
-      registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+    try {
+      registerIpcHandlers<MenuContract>(popup.webContents, "menu", {
         getFont: async () => font,
-        pull: async () => ({ items, templates, colors: menuSkin }),
+        pull: async () => ({
+          items,
+          templates,
+          colors: menuSkin,
+          shadowInset: NATIVE_MENU_SHADOW_INSET,
+        }),
         itemClick: async (_event, menuId) => {
           try {
             this.onClick?.(menuId);
@@ -654,164 +665,89 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         btnClick: async (_event, btnId) => this.onClick?.(btnId),
         close: async () => {},
         reportSize: async (_event, rawWidth, rawHeight) => {
-          if (
-            this.closed ||
-            generation !== this.submenuGeneration ||
-            wnd.isDestroyed()
-          )
-            return;
-          const size = normalizeMenuSize(rawWidth, rawHeight);
-          const { width, height } = size;
-          if (!measuring) {
-            if (displayHandled) return;
-            displayHandled = true;
-            showAsPopup();
-            return;
-          }
-          if (measurementHandled) return;
-          measurementHandled = true;
-          clearTimeout(measurementDeadline);
-          if (this.submenuMeasureWindow === wnd) {
-            this.submenuMeasureWindow = null;
-          }
-          wnd.destroy();
-
-          const anchorX = Math.max(0, normalizeMenuCoordinate(relX) - 1);
-          const anchorY = Math.max(0, normalizeMenuCoordinate(relY));
-          let popup: BrowserWindow | null = null;
+          if (!isCurrent() || displayHandled) return;
+          displayHandled = true;
+          cancelMeasurementDeadline();
+          const { width, height } = normalizeMenuSize(rawWidth, rawHeight);
           try {
-            popup = createSubmenuWindow(width, height);
-            this.submenuWindow = popup;
-            const closeUnavailable = () => {
-              if (generation === this.submenuGeneration) {
-                this.closeSubmenuWindow();
-              }
-            };
-            const showAsPopup = () => {
-              const cancelArm = armGnomeWaylandPopupWhenReady(
-                parent.id.toString(),
-                width,
-                height,
-                { x: anchorX, y: anchorY },
-                () =>
-                  this.closed ||
-                  generation !== this.submenuGeneration ||
-                  parent.isDestroyed() ||
-                  popup?.isDestroyed() !== false ||
-                  this.submenuWindow !== popup,
-                (_token, disposePending) => {
-                  if (
-                    this.closed ||
-                    generation !== this.submenuGeneration ||
-                    !popup ||
-                    popup.isDestroyed() ||
-                    this.submenuWindow !== popup
-                  ) {
+            // Keep the already-rendered window; only its native role is mapped.
+            popup.setSize(width, height);
+            const cancelArm = armNativeWaylandPopupWhenReady(
+              waylandWindowId(parent),
+              waylandWindowId(popup),
+              width,
+              height,
+              {
+                // DOM coordinates include the parent's shadow margin;
+                // xdg_positioner anchors are relative to its window geometry.
+                x: Math.max(0, normalizeMenuCoordinate(relX) - NATIVE_MENU_SHADOW_INSET - 1),
+                y: Math.max(0, normalizeMenuCoordinate(relY) - NATIVE_MENU_SHADOW_INSET),
+              },
+              () => !isCurrent(),
+              (disposePending) => {
+                if (!isCurrent()) {
+                  disposePending();
+                  return;
+                }
+                this.submenuCleanups.push(disposePending);
+                try {
+                  popup.showInactive();
+                } catch {
+                  disposePending();
+                  closeUnavailable();
+                  return;
+                }
+                void waitForWaylandPopup(waylandWindowId(popup), () => !isCurrent()).then(
+                  (converted) => {
                     disposePending();
-                    return;
-                  }
-                  this.submenuCleanups.push(disposePending);
-                  try {
-                    popup.showInactive();
-                  } catch {
+                    if (!converted) {
+                      closeUnavailable();
+                    } else if (isCurrent()) {
+                      popup.focus();
+                    }
+                  },
+                  () => {
                     disposePending();
                     closeUnavailable();
-                    return;
                   }
-                  void waitForWaylandPopup(popup.id.toString(), () =>
-                    Boolean(
-                      this.closed ||
-                      generation !== this.submenuGeneration ||
-                      !popup ||
-                      popup.isDestroyed() ||
-                      this.submenuWindow !== popup
-                    )
-                  ).then(
-                    (converted) => {
-                      disposePending();
-                      if (!converted) {
-                        closeUnavailable();
-                        return;
-                      }
-                      if (
-                        !this.closed &&
-                        generation === this.submenuGeneration &&
-                        popup &&
-                        !popup.isDestroyed() &&
-                        this.submenuWindow === popup
-                      ) {
-                        popup.focus();
-                      }
-                    },
-                    () => {
-                      disposePending();
-                      closeUnavailable();
-                    }
-                  );
-                },
-                closeUnavailable
-              );
-              if (
-                !this.closed &&
-                generation === this.submenuGeneration &&
-                popup?.isDestroyed() === false &&
-                this.submenuWindow === popup
-              ) {
-                this.submenuCleanups.push(cancelArm);
-              } else {
-                cancelArm();
-              }
-            };
-            bind(popup, false, showAsPopup);
-            const dismissOnSubmenuWheel = (
-              _event: Electron.Event,
-              input: Electron.MouseInputEvent
-            ) => {
-              if (input.type === "mouseWheel") this.close();
-            };
-            popup.webContents.on("before-mouse-event", dismissOnSubmenuWheel);
-            this.submenuCleanups.push(() => {
-              if (popup && !popup.isDestroyed()) {
-                popup.webContents.off(
-                  "before-mouse-event",
-                  dismissOnSubmenuWheel
                 );
-              }
-            });
-            popup.on("closed", () => {
-              if (this.submenuWindow !== popup) return;
-              this.submenuWindow = null;
-              this.submenuGeneration++;
-              for (const cleanup of this.submenuCleanups.splice(0)) cleanup();
-            });
-            popup.on("blur", () => {
-              setTimeout(() => {
-                if (generation !== this.submenuGeneration) return;
-                if (!parent.isDestroyed() && parent.isFocused()) return;
-                if (!this.closed) this.close();
-              }, 100);
-            });
+              },
+              closeUnavailable
+            );
+            if (isCurrent()) this.submenuCleanups.push(cancelArm);
+            else cancelArm();
           } catch {
-            if (popup && !popup.isDestroyed()) popup.destroy();
-            if (generation === this.submenuGeneration) {
-              this.closeSubmenuWindow();
-            }
+            closeUnavailable();
           }
         },
         openSubmenu: async () => {},
         closeSubmenu: async () => {},
       });
-    };
-
-    try {
-      bind(measure, true);
-    } catch {
-      if (this.submenuMeasureWindow === measure) {
-        this.submenuMeasureWindow = null;
+      const dismissOnWheel = (_event: Electron.Event, input: Electron.MouseInputEvent) => {
+        if (input.type === "mouseWheel" && isCurrent()) this.close();
+      };
+      popup.webContents.on("before-mouse-event", dismissOnWheel);
+      this.submenuCleanups.push(() => {
+        if (!popup.isDestroyed()) popup.webContents.off("before-mouse-event", dismissOnWheel);
+      });
+      popup.on("closed", () => {
+        if (this.submenuWindow !== popup) return;
+        this.submenuWindow = null;
         this.submenuGeneration++;
-      }
-      if (!measure.isDestroyed()) measure.destroy();
-      for (const cleanup of this.submenuCleanups.splice(0)) cleanup();
+        this.clearResources(this.submenuCleanups);
+      });
+      popup.on("blur", () => {
+        this.scheduleDismiss(
+          this.submenuCleanups,
+          () => {
+            if (!isCurrent() || parent.isFocused()) return;
+            this.close();
+          },
+          100
+        );
+      });
+    } catch {
+      closeUnavailable();
     }
   }
 
@@ -819,54 +755,61 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   // Created fresh each time so the compositor sends pointer-enter,
   // which the renderer uses to capture the real cursor position.
   private showOverlay() {
+    // Even a forced fullscreen overlay can acquire its role at construction.
+    const captureBeforeCreate =
+      overlayPolicy.capturePhase === "before-create" ||
+      !workaroundEnabled(WorkaroundFlags.OverlayNoFullscreen);
     let cancelCursorCapture = () => {};
     let finishCursorCapture = () => {};
     let startCursorCapture = () => {};
-    const cursorPosition = new Promise<{ cursorX: number; cursorY: number }>(
-      (resolve) => {
-        let settled = false;
-        let started = false;
-        let deadline: ReturnType<typeof setTimeout> | undefined;
-        const finish = (cursorX = 0, cursorY = 0) => {
-          if (settled) return;
-          settled = true;
-          if (deadline) clearTimeout(deadline);
-          cancelCursorCapture();
-          resolve({ cursorX, cursorY });
-        };
-        finishCursorCapture = finish;
-        startCursorCapture = () => {
-          if (started || settled) return;
-          started = true;
-          deadline = setTimeout(
-            () => finish(),
-            WAYLAND_CURSOR_CAPTURE_DEADLINE_MS
-          );
-          try {
-            const token = captureNextWindowFirstCursorEnter(
-              (cursorX, cursorY) => {
-                finish(cursorX, cursorY);
-              }
-            );
-            cancelCursorCapture = () => {
-              cancelNextWindowFirstCursorEnter(token);
-            };
-          } catch {
-            finish();
-          }
-        };
-      }
-    );
+    const cursorPosition = new Promise<{ cursorX: number; cursorY: number }>((resolve) => {
+      let settled = false;
+      let started = false;
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const finish = (cursorX = 0, cursorY = 0) => {
+        if (settled) return;
+        settled = true;
+        if (deadline) clearTimeout(deadline);
+        cancelCursorCapture();
+        resolve({ cursorX, cursorY });
+      };
+      finishCursorCapture = finish;
+      startCursorCapture = () => {
+        if (started || settled) return;
+        started = true;
+        deadline = setTimeout(() => finish(), WAYLAND_CURSOR_CAPTURE_DEADLINE_MS);
+        try {
+          const token = captureNextWindowFirstCursorEnter((cursorX, cursorY) => {
+            runMenuCallbacks([() => finish(cursorX, cursorY)], (err) => {
+              logger.warn({ name: "menu.cursorCapture", err }, "Menu cursor capture failed");
+            });
+          });
+          cancelCursorCapture = () => {
+            cancelNextWindowFirstCursorEnter(token);
+          };
+          // A native callback can settle synchronously during registration.
+          if (settled) cancelCursorCapture();
+        } catch {
+          finish();
+        }
+      };
+    });
     this.dismissCleanups.push(() => {
       finishCursorCapture();
     });
 
+    // KDE (and legacy desktop paths) must observe surface creation, not wait
+    // for renderer pull: the first enter can already have happened by then.
+    if (captureBeforeCreate) startCursorCapture();
     const wnd = createOverlayWindow();
     let rendererReady = false;
-    const rendererDeadline = setTimeout(() => {
-      if (!rendererReady && !this.closed) this.close();
-    }, MENU_RENDER_READY_TIMEOUT_MS);
-    this.dismissCleanups.push(() => clearTimeout(rendererDeadline));
+    const cancelRendererDeadline = scheduleMenuTask(
+      () => {
+        if (!rendererReady && !this.closed) this.close();
+      },
+      MENU_RENDER_READY_TIMEOUT_MS,
+      this.dismissCleanups
+    );
 
     const dismiss = () => {
       if (this.closed) return;
@@ -888,11 +831,11 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       // (or a short timeout fallback) before returning the initial cursor anchor.
       pull: async () => {
         rendererReady = true;
-        clearTimeout(rendererDeadline);
+        cancelRendererDeadline();
         if (!this.closed && !wnd.isDestroyed()) {
-          // Arm the global "next toplevel" watcher immediately before mapping
-          // the already-created target, minimizing the ownership window.
-          startCursorCapture();
+          // Hidden GNOME/niri fallback overlays map on show; arm as late as
+          // possible there without changing KDE's capture-before-create path.
+          if (!captureBeforeCreate) startCursorCapture();
           wnd.show();
         } else {
           finishCursorCapture();
@@ -932,10 +875,13 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     const wnd = createMenuWindow();
     let rendererReady = false;
-    const rendererDeadline = setTimeout(() => {
-      if (!rendererReady && !this.closed) this.close();
-    }, MENU_RENDER_READY_TIMEOUT_MS);
-    this.dismissCleanups.push(() => clearTimeout(rendererDeadline));
+    const cancelRendererDeadline = scheduleMenuTask(
+      () => {
+        if (!rendererReady && !this.closed) this.close();
+      },
+      MENU_RENDER_READY_TIMEOUT_MS,
+      this.dismissCleanups
+    );
     wnd.once("closed", () => {
       if (!this.closed) this.close();
     });
@@ -959,10 +905,13 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     ) => {
       this.closeSubmenuWindow();
       const generation = this.submenuGeneration;
-      const rendererDeadline = setTimeout(() => {
-        if (generation === this.submenuGeneration) this.closeSubmenuWindow();
-      }, MENU_RENDER_READY_TIMEOUT_MS);
-      this.submenuCleanups.push(() => clearTimeout(rendererDeadline));
+      const cancelRendererDeadline = scheduleMenuTask(
+        () => {
+          if (generation === this.submenuGeneration) this.closeSubmenuWindow();
+        },
+        MENU_RENDER_READY_TIMEOUT_MS,
+        this.submenuCleanups
+      );
       const bounds = wnd.getBounds();
       const screenX = bounds.x + normalizeMenuCoordinate(relX);
       const screenY = bounds.y + normalizeMenuCoordinate(relY);
@@ -981,7 +930,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           if (this.submenuWindow !== sub) return;
           this.submenuWindow = null;
           this.submenuGeneration++;
-          for (const cleanup of this.submenuCleanups.splice(0)) cleanup();
+          this.clearResources(this.submenuCleanups);
         });
 
         registerIpcHandlers<MenuContract>(sub.webContents, "menu", {
@@ -1001,7 +950,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           },
           reportSize: async (_event, width, height) => {
             if (sub.isDestroyed()) return;
-            clearTimeout(rendererDeadline);
+            cancelRendererDeadline();
             const size = normalizeMenuSize(width, height);
             ({ width, height } = size);
             const { x: dx, y: dy, width: dw, height: dh } = subDisplay.workArea;
@@ -1025,14 +974,16 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         });
 
         sub.on("blur", () => {
-          setTimeout(() => {
-            if (generation !== this.submenuGeneration) return;
-            // If focus went back to the main menu, keep open
-            if (!wnd.isDestroyed() && wnd.isFocused()) return;
-            if (!this.closed) {
+          this.scheduleDismiss(
+            this.submenuCleanups,
+            () => {
+              if (generation !== this.submenuGeneration) return;
+              // If focus went back to the main menu, keep open.
+              if (isLiveFocusedWindow(wnd)) return;
               this.close();
-            }
-          }, 100);
+            },
+            100
+          );
         });
       } catch {
         if (createdSubmenu && !createdSubmenu.isDestroyed()) {
@@ -1057,7 +1008,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       reportSize: async (_event, width, height) => {
         if (this.closed || wnd.isDestroyed()) return;
         rendererReady = true;
-        clearTimeout(rendererDeadline);
+        cancelRendererDeadline();
         const size = normalizeMenuSize(width, height);
         ({ width, height } = size);
         const { x: dx, y: dy, width: dw, height: dh } = display.workArea;
@@ -1114,7 +1065,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     };
 
     wnd.on("blur", () => {
-      setTimeout(blurCheck, 100);
+      this.scheduleDismiss(this.dismissCleanups, blurCheck, 100);
     });
   }
 }

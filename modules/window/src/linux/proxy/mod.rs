@@ -117,7 +117,6 @@ static CONNECTIONS: OnceLock<Mutex<HashMap<RawFd, Box<dyn ConnectionHandler>>>> 
 /// Injection handles keyed by the application fd. `pub(crate)` so the protocol
 /// modules (and their tests) can drive injection directly.
 pub(crate) static SINKS: OnceLock<Mutex<HashMap<RawFd, Sink>>> = OnceLock::new();
-static SINKS: OnceLock<Mutex<HashMap<RawFd, Sink>>> = OnceLock::new();
 /// Serializes installation/removal so an old proxy thread cannot delete state
 /// belonging to a newly-reused application fd.
 static CONNECTION_LIFECYCLE: OnceLock<Mutex<()>> = OnceLock::new();

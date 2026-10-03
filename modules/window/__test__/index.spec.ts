@@ -11,6 +11,6 @@ test("module can load", async (t) => {
     t.is(typeof window.captureNextWindowFirstCursorEnter, "function");
     t.is(typeof window.captureWindowNextPointerAxis, "function");
     t.is(typeof window.isWindowWaylandPopup, "function");
-    t.is(typeof window.supportsGnomeWaylandPopup, "function");
+    t.is(typeof window.supportsNativeWaylandPopup, "function");
   });
 });

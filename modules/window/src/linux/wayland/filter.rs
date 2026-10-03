@@ -110,7 +110,6 @@ pub(crate) fn filter(
                         out.extend_from_slice(&message);
                     }
                 }
-                Action::Replace(bytes) => out.extend_from_slice(&bytes),
             }
         }
     }
@@ -141,8 +140,7 @@ pub(crate) fn filter(
     }
     if let Some(window_id) = fx.layer_shell_refused {
         fire_layer_shell_refused(window_id);
-    if fx.pointer_axis {
-        fire_next_pointer_axis(fd);
+    }
     for (wl_surface_id, axis) in fx.pointer_axes {
         fire_next_pointer_axis(fd, wl_surface_id, axis);
     }
