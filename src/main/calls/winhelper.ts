@@ -391,9 +391,9 @@ registerCallHandler<MenuRequest, void>("winhelper.popupMenu", async (event, data
     event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
   };
   const menu = new AppMenu(parsedMenuData.content);
-  managed.setData("menu", menu);
+  managed.setMenu(menu);
   menu.setClickHandler(onClick);
-  void menu.show();
+  await menu.show(wnd);
 });
 
 registerCallHandler<[string], void>("winhelper.setClipBoardData", (event, data) => {

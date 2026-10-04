@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
 
 /** Every TypeScript source file under `dir`, recursively. */
 async function collectSourceFiles(dir: string): Promise<string[]> {
@@ -42,6 +42,7 @@ const hoisted = vi.hoisted(() => {
     desktop: vi.fn(() => 0),
     setInputRegion: vi.fn(() => true),
     useLayerShell: vi.fn(() => true),
+    showFailure: null as Error | null,
     cancelLayerShell: vi.fn(() => true),
     validateLayerShell: vi.fn(() => true),
     layerShellRefusedCallbacks,
@@ -60,6 +61,8 @@ const hoisted = vi.hoisted(() => {
     /** Layer-shell declarations made by the time a window was constructed. */
     layerCallsAtConstruction: [] as number[],
     lifecycle: { state: 0 },
+    shutdownFinalizers: [] as Array<{ name: string; run: () => void }>,
+    drainWindowCallbacks: vi.fn(),
     appOnCalls,
     appOn: vi.fn((event: string, handler: unknown) => {
       appOnCalls.push([event, handler]);
@@ -79,6 +82,7 @@ vi.mock("@open-orpheus/window", () => ({
   validateLayerShellOptions: hoisted.validateLayerShell,
   onLayerShellRoleRefused: hoisted.onLayerShellRefused,
   decorateWindowTitle: hoisted.decorateTitle,
+  drainWindowCallbacks: hoisted.drainWindowCallbacks,
   isLayerShellAvailable: hoisted.layerShellAvailable,
 }));
 
@@ -95,6 +99,9 @@ vi.mock("../../src/main/lifecycle", () => ({
   },
   events: { on: vi.fn() },
   setLifecycleState: vi.fn(),
+  registerShutdownFinalizer: (finalizer: { name: string; run: () => void }) => {
+    hoisted.shutdownFinalizers.push(finalizer);
+  },
 }));
 
 vi.mock("electron", () => {
@@ -201,10 +208,12 @@ vi.mock("electron", () => {
       return Buffer.from([this.id, 0, 0, 0]);
     }
     show() {
+      if (hoisted.showFailure) throw hoisted.showFailure;
       this.visible = true;
       this.emit("show");
     }
     showInactive() {
+      if (hoisted.showFailure) throw hoisted.showFailure;
       this.visible = true;
       this.emit("show");
     }
@@ -240,6 +249,7 @@ vi.mock("electron", () => {
 
 import { ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../../src/main/window";
 import { LayerShellLayer } from "@open-orpheus/window";
+import type AppMenu from "../../src/main/menu";
 
 const WAYLAND = 0;
 const X11 = 1;
@@ -257,6 +267,13 @@ function managedId(wnd: BrowserWindow): string {
 }
 
 const regions = [{ x: 0, y: 0, width: 10, height: 10 }];
+
+function fakeMenu() {
+  const unsubscribe = vi.fn();
+  const close = vi.fn();
+  const on = vi.fn(() => unsubscribe);
+  return { menu: { close, on } as unknown as AppMenu, close, unsubscribe };
+}
 
 class TestWindow extends ManagedWindow {
   constructor() {
@@ -277,6 +294,7 @@ class TestOnDemandWindow extends OnDemandWindow {
 }
 
 beforeEach(() => {
+  hoisted.showFailure = null;
   vi.useRealTimers();
   hoisted.platform.mockReturnValue("linux");
   hoisted.desktop.mockReturnValue(WAYLAND);
@@ -300,6 +318,23 @@ afterEach(() => {
 });
 
 describe("window ownership", () => {
+  it("retires callback reaping through the shared shutdown finalizer", () => {
+    const finalizers = hoisted.shutdownFinalizers.filter(
+      (entry) => entry.name === "window-callbacks"
+    );
+    expect(finalizers).toHaveLength(1);
+    expect(hoisted.appOnCalls.some(([event]) => event === "will-quit")).toBe(false);
+    const clear = vi.spyOn(globalThis, "clearInterval");
+    hoisted.drainWindowCallbacks.mockClear();
+    try {
+      finalizers[0].run();
+      expect(clear).toHaveBeenCalledOnce();
+      expect(hoisted.drainWindowCallbacks).toHaveBeenCalledOnce();
+    } finally {
+      clear.mockRestore();
+    }
+  });
+
   it("constructs every BrowserWindow inside the wrapper", async () => {
     const src = fileURLToPath(new URL("../../src", import.meta.url));
     const offenders: string[] = [];
@@ -332,6 +367,85 @@ describe("window ownership", () => {
     }
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("ManagedWindow menu ownership", () => {
+  it("detaches old geometry listeners when rebinding the managed window", () => {
+    const managed = new TestWindow();
+    const old = asFake(managed.window);
+    managed.createSurface();
+    const menu = fakeMenu();
+    managed.setMenu(menu.menu);
+    for (const event of [
+      "resize",
+      "maximize",
+      "unmaximize",
+      "enter-full-screen",
+      "leave-full-screen",
+    ]) {
+      old.emit(event);
+    }
+    expect(menu.close).not.toHaveBeenCalled();
+    expect(managed.getData("menu")).toBe(menu.menu);
+    asFake(managed.window).emit("resize");
+    expect(menu.close).toHaveBeenCalledOnce();
+    managed.destroy();
+    old.destroy();
+  });
+
+  it.each(["resize", "maximize", "unmaximize", "enter-full-screen", "leave-full-screen"])(
+    "closes only its parent's menu on %s and tolerates repeated geometry events",
+    (event) => {
+      const first = new TestWindow();
+      const second = new TestWindow();
+      const a = fakeMenu();
+      const b = fakeMenu();
+      first.setMenu(a.menu);
+      second.setMenu(b.menu);
+      (first.window as unknown as FakeWindowHandle).emit(event);
+      (first.window as unknown as FakeWindowHandle).emit("resize");
+      expect(a.close).toHaveBeenCalledOnce();
+      expect(a.unsubscribe).toHaveBeenCalledOnce();
+      expect(first.getData("menu")).toBeUndefined();
+      expect(b.close).not.toHaveBeenCalled();
+      expect(second.getData("menu")).toBe(b.menu);
+      first.destroy();
+      second.destroy();
+    }
+  );
+
+  it("keeps different windows' menu lifetimes separate", () => {
+    const first = new TestWindow();
+    const second = new TestWindow();
+    const a = fakeMenu();
+    const b = fakeMenu();
+    first.setMenu(a.menu);
+    second.setMenu(b.menu);
+    asFake(first.window).destroy();
+    expect(a.close).toHaveBeenCalledOnce();
+    expect(a.unsubscribe).toHaveBeenCalledOnce();
+    expect(b.close).not.toHaveBeenCalled();
+    expect(second.getData("menu")).toBe(b.menu);
+  });
+
+  it("closes the menu when its parent is hidden", () => {
+    const managed = new TestWindow();
+    const menu = fakeMenu();
+    managed.setMenu(menu.menu);
+    void managed.hide();
+    expect(menu.close).toHaveBeenCalledOnce();
+    expect(managed.getData("menu")).toBeUndefined();
+  });
+
+  it("does not carry a popup over to a replacement surface", () => {
+    const managed = new TestWindow();
+    const next = new TestWindow();
+    const menu = fakeMenu();
+    managed.setMenu(menu.menu);
+    managed.transferStateTo(next);
+    expect(menu.close).toHaveBeenCalledOnce();
+    expect(next.getData("menu")).toBeUndefined();
   });
 });
 
@@ -375,6 +489,42 @@ describe("ManagedWindow lifetime", () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(ManagedWindow.fromBrowserWindow(wnd)).toBe(managed);
+  });
+
+  it.each(["managed", "external"] as const)(
+    "does not bind a destroyed %s window during deferred registration",
+    async (kind) => {
+      const managed = kind === "managed" ? new TestWindow() : null;
+      const wnd = managed ? asFake(managed.window) : asFake(new BrowserWindow({}));
+      const handler = hoisted.appOnCalls.find(
+        ([event]) => event === "browser-window-created"
+      )?.[1] as (event: unknown, wnd: unknown) => void;
+      const on = vi.spyOn(wnd, "on");
+
+      handler({}, wnd);
+      wnd.destroy();
+      on.mockClear();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(ManagedWindow.fromBrowserWindow(wnd)).toBeUndefined();
+      expect(on).not.toHaveBeenCalled();
+      if (managed) expect(managed.window).toBeNull();
+    }
+  );
+
+  it("still binds a live external window through deferred registration", async () => {
+    const wnd = new BrowserWindow({});
+    const handler = hoisted.appOnCalls.find(
+      ([event]) => event === "browser-window-created"
+    )?.[1] as (event: unknown, wnd: unknown) => void;
+
+    handler({}, wnd);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const managed = ManagedWindow.fromBrowserWindow(wnd);
+    expect(managed?.window).toBe(wnd);
+    wnd.destroy();
+    expect(managed?.window).toBeNull();
   });
 });
 
@@ -741,7 +891,7 @@ describe("ManagedWindow layer shell", () => {
     const managed = new LayerWindow();
 
     expect(managed.window).not.toBeNull();
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
     expect(hoisted.layerCallsAtConstruction.at(-1)).toBeGreaterThan(0);
   });
 
@@ -760,7 +910,7 @@ describe("ManagedWindow layer shell", () => {
     const managed = new HookWindow();
 
     expect(managed.window).not.toBeNull();
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
     expect(hoisted.layerCallsAtConstruction.at(-1)).toBeGreaterThan(0);
   });
 
@@ -785,7 +935,7 @@ describe("ManagedWindow layer shell", () => {
 
     void managed.show();
 
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
   });
 
   it("arms once per surface, not once per show", () => {
@@ -799,6 +949,29 @@ describe("ManagedWindow layer shell", () => {
     expect(hoisted.useLayerShell).toHaveBeenCalledTimes(1);
   });
 
+  it("does not withdraw the native declaration when Electron emits show", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    hoisted.cancelLayerShell.mockClear();
+    void managed.show();
+    expect(hoisted.cancelLayerShell).not.toHaveBeenCalled();
+    asFake(managed.window).emit("hide");
+    expect(hoisted.cancelLayerShell).toHaveBeenCalledWith(managed.id);
+  });
+
+  it("withdraws by owner after a failed showInactive and can retry", () => {
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    const wnd = asFake(managed.window);
+    hoisted.showFailure = new Error("show failed");
+    expect(() => wnd.showInactive()).toThrow("show failed");
+    expect(hoisted.cancelLayerShell).toHaveBeenCalledWith(managed.id);
+    hoisted.showFailure = null;
+    expect(() => wnd.showInactive()).not.toThrow();
+    wnd.destroy();
+    expect(hoisted.cancelLayerShell).toHaveBeenCalledWith(managed.id);
+  });
+
   it("arms again after a hide, which takes the surface away", () => {
     const managed = new TestWindow();
     managed.setLayerShell(options);
@@ -808,7 +981,7 @@ describe("ManagedWindow layer shell", () => {
 
     void managed.show();
 
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
   });
 
   it("arms when another module shows the window directly", () => {
@@ -819,7 +992,7 @@ describe("ManagedWindow layer shell", () => {
     // `menu.ts`, the `winhelper.*` calls and `app.ts` show the raw window.
     asFake(managed.window).show();
 
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
   });
 
   it("arms when another module shows the window without focus", () => {
@@ -829,7 +1002,7 @@ describe("ManagedWindow layer shell", () => {
 
     asFake(managed.window).showInactive();
 
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
   });
 
   it("surfaces a refused layer-shell role for its window", async () => {
@@ -867,7 +1040,7 @@ describe("ManagedWindow layer shell", () => {
 
     void managed.show();
 
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
   });
 
   it("arms for an on-demand window's first show", () => {
@@ -884,7 +1057,7 @@ describe("ManagedWindow layer shell", () => {
     // The window is created hidden and shown once it can be displayed.
     asFake(managed.window).emit("ready-to-show");
 
-    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options);
+    expect(hoisted.useLayerShell).toHaveBeenCalledWith(options, managed.id);
     expect(asFake(managed.window).isVisible()).toBe(true);
   });
 
@@ -908,13 +1081,13 @@ describe("ManagedWindow layer shell", () => {
     const managed = new TestWindow();
     managed.setLayerShell(options);
     void managed.show();
-    // The surface exists, so nothing is in flight any more.
+    // A show event is not proof the native thread consumed the declaration.
     hoisted.cancelLayerShell.mockClear();
 
     expect(managed.setLayerShell(null)).toBe(true);
 
     expect(managed.layerShell).toBeNull();
-    expect(hoisted.cancelLayerShell).not.toHaveBeenCalled();
+    expect(hoisted.cancelLayerShell).toHaveBeenCalledWith(managed.id);
   });
 
   it("reports state it cannot send", () => {
@@ -965,8 +1138,10 @@ describe("ManagedWindow title", () => {
     const managed = new TitledWindow();
     const wnd = asFake(managed.window);
 
-    // The title never reaches the constructor: only this module writes it.
-    expect((wnd.options as { title?: string }).title).toBeUndefined();
+    // The initial native role must already carry the managed id.
+    expect((wnd.options as { title?: string }).title).toBe(
+      hoisted.decorateTitle(managed.id, "Real Title")
+    );
     expect(managed.title).toBe("Real Title");
     expect(wnd.title).toBe(hoisted.decorateTitle(managed.id, "Real Title"));
   });

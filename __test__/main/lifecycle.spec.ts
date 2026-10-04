@@ -372,6 +372,29 @@ describe("shutdown tasks", () => {
 // and some work is the point of the shutdown rather than cleanup: skipping it
 // silently leaves the user's request unfulfilled.
 describe("shutdown finalizers", () => {
+  it.each(["SIGINT", "SIGTERM"])("runs callback finalization before %s exits", async (signal) => {
+    const lifecycle = await freshLifecycle();
+    const order: string[] = [];
+    lifecycle.registerShutdownTask({
+      name: "dispose",
+      run: () => {
+        order.push("dispose");
+      },
+    });
+    lifecycle.registerShutdownFinalizer({
+      name: "window-callbacks",
+      run: () => {
+        order.push("reap");
+      },
+    });
+    hoisted.app.exit.mockImplementation(() => {
+      order.push("exit");
+    });
+    fireSignal(signal);
+    await vi.waitFor(() => expect(hoisted.app.exit).toHaveBeenCalled());
+    expect(order).toEqual(["dispose", "reap", "exit"]);
+  });
+
   it("runs finalizers even when the deadline skipped the tasks", async () => {
     const ran: string[] = [];
     const lifecycle = await freshLifecycle({

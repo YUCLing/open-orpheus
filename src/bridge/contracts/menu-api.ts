@@ -12,6 +12,7 @@ export interface MenuContract {
 
   events: {
     update(callback: (items: unknown[]) => void): void;
+    popupReady(callback: () => void): void;
   };
 
   getFont(): Promise<string | null>;
