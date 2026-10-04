@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { fork } from "node:child_process";
 
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
@@ -36,6 +37,21 @@ const config: ForgeConfig = {
     asar: {
       unpack: "**/*.{so*,dylib,dll}",
     },
+
+    // Deploy our modules as published version, so source code of modules will not be bundled
+    // into the final packaged app.
+    beforeCopy: [
+      async () => {
+        await new Promise<void>((resolve, reject) => {
+          const proc = fork("scripts/deploy-deps.ts");
+          proc.on("error", reject);
+          proc.on("exit", (code) => {
+            if (code !== 0) reject(code);
+            resolve();
+          });
+        });
+      },
+    ],
 
     afterExtract: [
       async ({ buildPath, platform }) => {
