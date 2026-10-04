@@ -79,6 +79,7 @@
     "proxy-agent": "^8.0.2",
     "semver": "^7.8.5",
     "socks-proxy-agent": "^10.1.0",
+    "tar": "^7.5.22",
     "typescript": "catalog:",
     "unzipper": "^0.12.5",
     "vite": "^8.3.1",
@@ -99,5 +100,5 @@
     "@open-orpheus/nowplaying": "workspace:*",
     "@open-orpheus/system-win32": "workspace:*"
   },
-  "packageManager": "pnpm@12.8.1+sha512.f64ba907507f5ceafe06c8d38e6052d0179444580ec1279ddd5bfc11cb48aa8a2644b66598e07e761da84872a9fc57d5f902b87fa49d024198d558612aabbe45"
+  "packageManager": "pnpm@12.9.1+sha512.06b055fff5cd20dc12781de173ced3310ce0951bf2ec620211a16045d5444d5c93a663210764ef29a653a610459ba0368f0e74f84d80c54723cf95aae7bc0d6d"
 }
