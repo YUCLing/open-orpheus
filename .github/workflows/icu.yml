@@ -1,0 +1,169 @@
+name: Build ICU data
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - packaging/resources/icu-filters.json
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ICU data
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      OUTPUT_DAT: packaging/resources/icudtl.dat
+      FILTER_FILE: packaging/resources/icu-filters.json
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # A manual dispatch always rebuilds. A push rebuilds when either the
+      # Electron version in package.json changes (which can move the ICU
+      # version Electron expects) or the ICU filter file changes.
+      - name: Check whether inputs changed
+        id: inputs
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch — rebuilding."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "force=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          before="${{ github.event.before }}"
+          if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "No previous revision to compare against; skipping."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "force=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          current=$(jq -r '.devDependencies.electron' package.json)
+          previous=$(git show "$before:package.json" 2>/dev/null | jq -r '.devDependencies.electron' 2>/dev/null || echo unknown)
+          if [ "$previous" = "$current" ]; then
+            echo "Electron version unchanged ($current)."
+            electron_changed=false
+          else
+            echo "Electron version changed: $previous -> $current"
+            electron_changed=true
+          fi
+
+          if git diff --quiet "$before" HEAD -- "$FILTER_FILE"; then
+            filters_changed=false
+          else
+            echo "ICU filter file changed: $FILTER_FILE"
+            filters_changed=true
+          fi
+
+          if [ "$electron_changed" = "true" ] || [ "$filters_changed" = "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing relevant changed; skipping."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # A filter change invalidates the committed data outright; the ICU
+          # version comparison is only meaningful when Electron moved.
+          if [ "$filters_changed" = "true" ]; then
+            echo "force=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "force=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.inputs.outputs.changed == 'true'
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        if: steps.inputs.outputs.changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.inputs.outputs.changed == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Importing the electron package resolves the bundled binary path,
+      # downloading it on demand. icudtl.dat ships next to that binary.
+      - name: Locate Electron's icudtl.dat
+        id: electron
+        if: steps.inputs.outputs.changed == 'true'
+        run: |
+          node -e '
+            const path = require("node:path");
+            const fs = require("node:fs");
+            const dat = path.join(path.dirname(require("electron")), "icudtl.dat");
+            if (!fs.existsSync(dat)) throw new Error(`icudtl.dat not found at ${dat}`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `dat=${dat}\n`);
+          '
+
+      - name: Decide whether to rebuild
+        id: decide
+        if: steps.inputs.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch — rebuilding."
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ steps.inputs.outputs.force }}" = "true" ]; then
+            echo "ICU filter file changed; rebuilding."
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -f "$OUTPUT_DAT" ]; then
+            echo "No committed $OUTPUT_DAT to compare against; rebuilding."
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          required=$(node scripts/icu-data.ts version --input "${{ steps.electron.outputs.dat }}")
+          committed=$(node scripts/icu-data.ts version --input "$OUTPUT_DAT")
+          if [ "$required" = "$committed" ]; then
+            echo "ICU data version unchanged ($committed); skipping rebuild."
+            echo "rebuild=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ICU data version changed: $committed -> $required"
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build icudtl.dat
+        if: steps.decide.outputs.rebuild == 'true'
+        run: |
+          node scripts/icu-data.ts build \
+            --input "${{ steps.electron.outputs.dat }}" \
+            --filter "$FILTER_FILE" \
+            --output "$OUTPUT_DAT"
+
+      - name: Commit and push
+        if: steps.decide.outputs.rebuild == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$OUTPUT_DAT"
+          if git diff --cached --quiet; then
+            echo "$OUTPUT_DAT is unchanged; nothing to commit."
+            exit 0
+          fi
+          electron=$(jq -r '.devDependencies.electron' package.json)
+          git commit -m "chore: rebuild icudtl.dat for Electron $electron"
+          git push origin main

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
@@ -90,6 +91,21 @@ const config: ForgeConfig = {
           await copyFile(src, dest);
           await rm(src);
         }
+      },
+      // Replace icudtl.dat with our smaller, filtered build.
+      async ({ buildPath, platform }) => {
+        const source = resolve("packaging/resources/icudtl.dat");
+        if (!existsSync(source)) return;
+
+        const target =
+          platform === "mas" || platform === "darwin"
+            ? resolve(
+                buildPath,
+                "Electron.app/Contents/Frameworks/Electron Framework.framework/Resources/icudtl.dat"
+              )
+            : resolve(buildPath, "icudtl.dat");
+
+        await copyFile(source, target);
       },
     ],
 
