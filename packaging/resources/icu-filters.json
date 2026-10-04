@@ -1,0 +1,289 @@
+{
+  "// Use implicit-Han ordering for collation (178 KiB vs 511 KiB)": "",
+  "collationUCAData": "implicithan",
+
+  "// Include only en_US, zh_Hans, zh_Hant and their parent chains.": "",
+  "// Using 'locale' + 'includeChildren: false' prevents expansion into": "",
+  "// every regional variant (en_AE, en_AG, ..., zh_HK, zh_MO, ...).": "",
+  "localeFilter": {
+    "filterType": "locale",
+    "includeChildren": false,
+    "includelist": ["en_US", "zh_Hans", "zh_Hant"]
+  },
+
+  "featureFilters": {
+    "// ---------- Features we drop entirely ----------": "",
+    "stringprep": { "filterType": "exclude" },
+    "unames": { "filterType": "exclude" },
+
+    "// ---------- Features we trim by file name ----------": "",
+    "normalization": {
+      "excludelist": ["nfkc_scf"]
+    },
+
+    "brkitr_rules": {
+      "excludelist": ["line_cj", "title", "word_POSIX", "word_ja"]
+    },
+    "brkitr_tree": {
+      "excludelist": ["en_US_POSIX"]
+    },
+
+    "// Keep only the charset converters commonly needed for legacy web content.": "",
+    "conversion_mappings": {
+      "includelist": [
+        "iso-8859-2-html",
+        "iso-8859-3-html",
+        "iso-8859-4-html",
+        "iso-8859-5-html",
+        "iso-8859-6-html",
+        "iso-8859-7-html",
+        "iso-8859-8-html",
+        "iso-8859-10-html",
+        "iso-8859-13-html",
+        "iso-8859-14-html",
+        "iso-8859-15-html",
+        "iso-8859-16-html",
+        "windows-1250-html",
+        "windows-1251-html",
+        "windows-1252-html",
+        "windows-1253-html",
+        "windows-1254-html",
+        "windows-1255-html",
+        "windows-1256-html",
+        "windows-1257-html",
+        "windows-1258-html",
+        "windows-936-2000",
+        "gb18030",
+        "big5-html",
+        "shift_jis-html",
+        "euc-jp-html",
+        "euc-kr-html",
+        "windows-874-html",
+        "macintosh-html",
+        "x-mac-cyrillic-html",
+        "ibm866-html",
+        "koi8-r-html",
+        "koi8-u-html"
+      ]
+    },
+
+    "// ---------- Locale-tree categories ----------": "",
+    "// These inherit localeFilter by default, so we only override when": "",
+    "// the tree needs a different locale set than locales_tree.": "",
+
+    "// zone_tree needs tzdbNames in addition to the locale filter.": "",
+    "zone_tree": {
+      "filterType": "union",
+      "unionOf": [
+        {
+          "filterType": "locale",
+          "includeChildren": false,
+          "includelist": ["en_US", "zh_Hans", "zh_Hant"]
+        },
+        {
+          "includelist": ["tzdbNames"]
+        }
+      ]
+    },
+
+    "// rbnf is only needed by zh (hanidays) — Chromium ships ja too, but": "",
+    "// we're not shipping ja, so zh alone is enough.": "",
+    "rbnf_tree": {
+      "includelist": ["zh"]
+    },
+
+    "// Collation: en_US and the Chinese tailorings.": "",
+    "coll_tree": {
+      "filterType": "union",
+      "unionOf": [
+        { "filterType": "locale", "includeChildren": false, "includelist": ["en_US"] },
+        { "filterType": "locale", "includeChildren": false, "includelist": ["zh_Hans", "zh_Hant"] }
+      ]
+    },
+
+    "// translit is NOT a locale tree — 'filterType: locale' raises": "",
+    "// KeyError: 'translit'. Use 'language' here, and prune the actual": "",
+    "// rules in resourceFilters below.": "",
+    "translit": {
+      "filterType": "language",
+      "includelist": ["en", "zh"]
+    }
+  },
+
+  "resourceFilters": [
+    {
+      "// Strip redundant resource strings from locale bundles (same as Chromium).": "",
+      "categories": ["locales_tree"],
+      "rules": [
+        "-/*/mon",
+        "-/*/mon-short",
+        "-/*/mon-narrow",
+        "-/*/tue",
+        "-/*/tue-short",
+        "-/*/tue-narrow",
+        "-/*/wed",
+        "-/*/wed-short",
+        "-/*/wed-narrow",
+        "-/*/thu",
+        "-/*/thu-short",
+        "-/*/thu-narrow",
+        "-/*/fri",
+        "-/*/fri-short",
+        "-/*/fri-narrow",
+        "-/*/sat",
+        "-/*/sat-short",
+        "-/*/sat-narrow",
+        "-/*/sun",
+        "-/*/sun-short",
+        "-/*/sun-narrow",
+        "-/*/mon-short:alias",
+        "-/*/mon-narrow:alias",
+        "-/*/tue-short:alias",
+        "-/*/tue-narrow:alias",
+        "-/*/wed-short:alias",
+        "-/*/wed-narrow:alias",
+        "-/*/thu-short:alias",
+        "-/*/thu-narrow:alias",
+        "-/*/fri-short:alias",
+        "-/*/fri-narrow:alias",
+        "-/*/sat-short:alias",
+        "-/*/sat-narrow:alias",
+        "-/*/sun-short:alias",
+        "-/*/sun-narrow:alias",
+        "-/characterLabel",
+        "-/AuxExemplarCharacters",
+        "-/ExemplarCharacters",
+        "-/ExemplarCharactersNumbers",
+        "-/ExemplarCharactersPunctuation",
+        "-/measurementSystemNames",
+        "-/NumberElements/minimalPairs",
+        "-/personNames"
+      ]
+    },
+    {
+      "// Keep only the display-language names we can actually show.": "",
+      "categories": ["lang_tree"],
+      "rules": [
+        "-/Languages",
+        "-/Languages%long",
+        "-/Languages%menu",
+        "-/Languages%variant",
+        "+/*/en",
+        "+/*/zh",
+        "+/*/zh_Hans",
+        "+/*/zh_Hant",
+        "-/Keys",
+        "-/Types",
+        "-/Types%short",
+        "+/Types/calendar",
+        "-/characterLabelPattern",
+        "-/Variants"
+      ]
+    },
+    {
+      "// Drop currency plurals and narrow forms — we keep the currency codes themselves.": "",
+      "categories": ["curr_tree"],
+      "rules": [
+        "-/Currencies%narrow",
+        "-/CurrencyPlurals",
+        "-/Currencies%formal",
+        "-/Currencies%variant"
+      ]
+    },
+    {
+      "// Region: drop numeric groupings other than 419 (Latin America).": "",
+      "categories": ["region_tree"],
+      "rules": [
+        "-/*/001",
+        "-/*/002",
+        "-/*/003",
+        "-/*/005",
+        "-/*/009",
+        "-/*/011",
+        "-/*/013",
+        "-/*/014",
+        "-/*/015",
+        "-/*/017",
+        "-/*/018",
+        "-/*/019",
+        "-/*/021",
+        "-/*/029",
+        "-/*/030",
+        "-/*/034",
+        "-/*/035",
+        "-/*/039",
+        "-/*/053",
+        "-/*/054",
+        "-/*/057",
+        "-/*/061",
+        "-/*/142",
+        "-/*/143",
+        "-/*/145",
+        "-/*/150",
+        "-/*/151",
+        "-/*/154",
+        "-/*/155",
+        "-/*/202"
+      ]
+    },
+    {
+      "// Collation: keep compiled binary binaries, drop uncompiled rule text.": "",
+      "categories": ["coll_tree"],
+      "rules": ["-/UCARules", "-/collations/*/Sequence"]
+    },
+    {
+      "// Chinese collation: drop the legacy char-code orderings.": "",
+      "// (big5han/gb2312han are already excluded by default since ICU 73.": "",
+      "//  unihan is still shipped, but we don't need it.)": "",
+      "categories": ["coll_tree"],
+      "files": {
+        "includelist": ["zh"]
+      },
+      "rules": ["-/*/unihan", "-/*/big5han", "-/*/gb2312han"]
+    },
+    {
+      "// Supplemental data: keep only the subtrees needed at runtime.": "",
+      "categories": ["misc"],
+      "files": { "includelist": ["supplementalData"] },
+      "rules": [
+        "-/*",
+        "+/calendarData",
+        "+/calendarPreferenceData",
+        "+/cldrVersion",
+        "+/codeMappings",
+        "+/idValidity",
+        "+/measurementData",
+        "+/territoryContainment",
+        "+/timeData",
+        "+/weekData",
+        "+/weekData%variant"
+      ]
+    },
+    {
+      "// Transliteration: keep only the handful of rules used at runtime.": "",
+      "// This prunes the file-level result of the 'language' filter above.": "",
+      "categories": ["translit"],
+      "rules": [
+        "-/*",
+        "+/RuleBasedTransliteratorIDs/Latin-ASCII",
+        "+/RuleBasedTransliteratorIDs/Katakana-Hiragana",
+        "+/RuleBasedTransliteratorIDs/Hiragana-Katakana",
+        "+/RuleBasedTransliteratorIDs/Hira-Kana",
+        "+/RuleBasedTransliteratorIDs/Kana-Hira"
+      ]
+    },
+    {
+      "// Drop Version fields — small size win, no functional impact.": "",
+      "categories": [
+        "brkitr_tree",
+        "coll_tree",
+        "curr_tree",
+        "lang_tree",
+        "region_tree",
+        "unit_tree",
+        "zone_tree"
+      ],
+      "rules": ["-/Version"]
+    }
+  ]
+}
