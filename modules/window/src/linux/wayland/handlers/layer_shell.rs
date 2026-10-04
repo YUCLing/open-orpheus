@@ -1,5 +1,5 @@
-//! Layer-shell functionality: registry tracking, the positional declaration
-//! that picks a window, and the xdg-shell ⇄ layer-shell translation.
+//! Layer-shell functionality: registry tracking, declarations that pick their
+//! managed window (or the next unnamed role), and xdg-shell ⇄ layer-shell translation.
 //!
 //! The compositor sees a layer surface where the client believes it has an
 //! `xdg_toplevel`. The client's toplevel id is reused as the layer surface id,
@@ -52,9 +52,9 @@ pub(crate) fn on_registry_global_remove(conn: &mut WaylandConn, msg: &WlMessage)
 /// Consume a declaration and, when it applies, replace `get_toplevel`.
 ///
 /// This is the only place a window takes on the layer-shell role: the
-/// declaration is positional, so the next toplevel the client creates is the
-/// one it describes. Any missing precondition leaves the window an ordinary
-/// toplevel rather than risking a protocol error.
+/// declaration is selected by the managed id resolved by `roles`, with unnamed
+/// declarations as a positional fallback. Missing preconditions leave the
+/// window an ordinary toplevel rather than risking a protocol error.
 ///
 /// A surface that already holds the role is converted again with the
 /// declaration that put it there, because the compositor will not hand the

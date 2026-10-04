@@ -49,9 +49,12 @@ const finalizationRegistry = new FinalizationRegistry<WeakRef<ManagedWindow>>((h
  */
 const REAPPLY_DELAYS_MS = [0, 50, 100, 200, 400] as const;
 
+/** Reap completed native callbacks on the JS thread, including while idle. */
+const CALLBACK_REAP_INTERVAL_MS = 50;
+
 // A callback can retire just after its final cancellation. Reap independently
 // of new menu activity; this timer must not keep the application alive.
-const callbackReaper = setInterval(() => drainWindowCallbacks(), 50);
+const callbackReaper = setInterval(() => drainWindowCallbacks(), CALLBACK_REAP_INTERVAL_MS);
 callbackReaper.unref();
 // Keep reaping while shutdown tasks dispose their resources. A finalizer also
 // runs on signal-driven app.exit(), and cannot be skipped by the task deadline.
@@ -139,7 +142,8 @@ export function guiUrl(route = "/"): string {
 
 app.on("browser-window-created", (event, wnd) => {
   setImmediate(() => {
-    if (managedBrowserWindows.has(wnd)) return;
+    // A short-lived probe may already have closed and released its binding.
+    if (wnd.isDestroyed() || managedBrowserWindows.has(wnd)) return;
     // A window this module did not create. Managed windows are bound
     // synchronously by `createBrowserWindow`, so this is only a safety net.
     new SimpleManagedWindow(wnd);

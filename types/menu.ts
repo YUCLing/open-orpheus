@@ -38,4 +38,6 @@ export interface MenuPullResult {
   cursorY?: number;
   /** Transparent margin around a native popup, excluded from its window geometry. */
   shadowInset?: number;
+  /** Measure while hidden until main confirms the native popup role. */
+  pendingPopup?: boolean;
 }

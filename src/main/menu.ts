@@ -3,17 +3,13 @@ import { normalize } from "node:path";
 
 import Emittery from "emittery";
 import {
-  armNextWindowAsPopup,
   cancelNextWindowFirstCursorEnter,
-  cancelPendingPopup,
   cancelWindowPointerAxisCapture,
   captureNextWindowFirstCursorEnter,
   captureWindowNextPointerAxis,
   DesktopEnvironment,
   getCursorPosition,
   getDesktopEnvironment,
-  isWindowWaylandPopup,
-  supportsNativeWaylandPopup,
 } from "@open-orpheus/window";
 
 import { menuSkin, registerMenuSkinUpdater } from "./menu/skin";
@@ -37,27 +33,22 @@ import type { ElementTemplate } from "./skin/dui";
 import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
 import type { AppMenuItem } from "$sharedTypes/menu";
 import { font } from "./gui";
-import { ManagedWindow } from "./window";
-import logger from "./logger";
+import { toError } from "../util";
 import { isLiveFocusedWindow, runMenuCallbacks, scheduleMenuTask } from "./menu/lifecycle";
 import { overlayPolicy, workaroundEnabled, WorkaroundFlags } from "./menu/workaround";
-
-function waylandWindowId(wnd: BrowserWindow): string {
-  const managed = ManagedWindow.fromBrowserWindow(wnd);
-  if (!managed) throw new Error("popup requires a managed window");
-  return managed.id;
-}
+import {
+  armNativeWaylandPopupWhenReady,
+  NATIVE_MENU_SHADOW_INSET,
+  waitForWaylandPopup,
+  waylandWindowId,
+} from "./menu/native-popup";
+import { initializeWaylandPopupSupport } from "./menu/popup-support";
 
 registerMenuSkinUpdater();
 
 const WAYLAND_CURSOR_CAPTURE_DEADLINE_MS = 200;
-const WAYLAND_POPUP_ID_WAIT_MS = 200;
-const WAYLAND_POPUP_ID_RETRY_MS = 5;
-const WAYLAND_POPUP_ARM_EXPIRY_MS = 5_000;
 const MENU_RENDER_READY_TIMEOUT_MS = 10_000;
 const MAX_MENU_DIMENSION = 8_192;
-// Room for the same 16px blur / 4px vertical offset used by overlay menus.
-const NATIVE_MENU_SHADOW_INSET = 24;
 
 function waitWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
@@ -89,80 +80,6 @@ function normalizeMenuSize(rawWidth: number, rawHeight: number) {
 function normalizeMenuCoordinate(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.min(MAX_MENU_DIMENSION, Math.max(-MAX_MENU_DIMENSION, Math.round(value)));
-}
-
-async function waitForWaylandPopup(windowId: string, isCancelled: () => boolean) {
-  const deadline = Date.now() + WAYLAND_POPUP_ID_WAIT_MS;
-  while (!isCancelled()) {
-    const isPopup = isWindowWaylandPopup(windowId);
-    if (isPopup) return true;
-    if (Date.now() >= deadline) {
-      return false;
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, WAYLAND_POPUP_ID_RETRY_MS));
-  }
-  return false;
-}
-
-function armNativeWaylandPopupWhenReady(
-  parentWindowId: string,
-  targetWindowId: string,
-  width: number,
-  height: number,
-  anchor: { x: number; y: number } | undefined,
-  isCancelled: () => boolean,
-  onArmed: (disposePending: () => void) => void,
-  onUnavailable: () => void
-) {
-  const deadline = Date.now() + WAYLAND_POPUP_ID_WAIT_MS;
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  let cancelled = false;
-  const attempt = () => {
-    if (cancelled || isCancelled()) {
-      return;
-    }
-    const token = armNextWindowAsPopup(
-      parentWindowId,
-      targetWindowId,
-      width,
-      height,
-      anchor?.x,
-      anchor?.y,
-      NATIVE_MENU_SHADOW_INSET
-    );
-    if (token !== null) {
-      let pending = true;
-      const expiryTimer = setTimeout(() => {
-        if (!pending) return;
-        pending = false;
-        cancelPendingPopup(token);
-        if (!cancelled && !isCancelled()) {
-          onUnavailable();
-        }
-      }, WAYLAND_POPUP_ARM_EXPIRY_MS);
-      const disposePending = () => {
-        if (!pending) return;
-        pending = false;
-        clearTimeout(expiryTimer);
-        cancelPendingPopup(token);
-      };
-      try {
-        onArmed(disposePending);
-      } catch (error) {
-        disposePending();
-        throw error;
-      }
-    } else if (Date.now() < deadline) {
-      retryTimer = setTimeout(attempt, WAYLAND_POPUP_ID_RETRY_MS);
-    } else {
-      onUnavailable();
-    }
-  };
-  attempt();
-  return () => {
-    cancelled = true;
-    if (retryTimer) clearTimeout(retryTimer);
-  };
 }
 
 /** Recursively parse btn.url → btn.images for every menu item. */
@@ -289,8 +206,20 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     try {
       const desktopEnvironment = getDesktopEnvironment();
-      const supportsPopup = supportsNativeWaylandPopup();
       if (desktopEnvironment === DesktopEnvironment.Wayland) {
+        let supportsPopup = false;
+        if (parentWindow) {
+          try {
+            supportsPopup = await waitWithAbort(
+              initializeWaylandPopupSupport(parentWindow),
+              this.lifetimeAbort.signal
+            );
+          } catch (error) {
+            if (this.closed && this.lifetimeAbort.signal.aborted) return;
+            LOGGER.warn({ err: toError(error) }, "Wayland popup availability check failed");
+          }
+        }
+        if (this.closed) return;
         if (parentWindow && supportsPopup) {
           this.showWaylandPopup(parentWindow);
         } else {
@@ -324,10 +253,9 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     }
     const closeEvent = this.emit("close");
     this.onClick = null;
-    void closeEvent.then(
-      () => this.clearListeners(),
-      () => this.clearListeners()
-    );
+    void closeEvent
+      .catch((err) => LOGGER.warn({ err: toError(err) }, "Menu close listener failed"))
+      .finally(() => this.clearListeners());
   }
 
   private clearDismissResources() {
@@ -336,7 +264,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
   private clearResources(resources: Array<() => void>) {
     runMenuCallbacks(resources.splice(0), (err) => {
-      logger.warn({ name: "menu.cleanup", err }, "Menu dismiss cleanup failed");
+      LOGGER.warn({ err: toError(err) }, "Menu dismiss cleanup failed");
     });
   }
 
@@ -384,13 +312,14 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
    */
   private showWaylandPopup(parentWindow: BrowserWindow) {
     let activePopup: BrowserWindow | null = null;
+    let popupMapped = false;
     const dismiss = () => {
       if (!this.closed) this.close();
     };
-    const fallbackToOverlay = () => {
+    const fallbackToOverlay = (reason = "popup reservation unavailable", error?: unknown) => {
       if (this.closed) return;
-      logger.warn(
-        { name: "menu.waylandPopup" },
+      LOGGER.warn(
+        { reason, ...(error === undefined ? {} : { err: toError(error) }) },
         "Wayland popup unavailable; falling back to overlay"
       );
       // Clear the identity first so destroying an unconverted toplevel cannot
@@ -401,7 +330,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       if (this.closed) return;
       try {
         this.showOverlay();
-      } catch {
+      } catch (err) {
+        LOGGER.warn({ err: toError(err) }, "Menu overlay fallback failed");
         this.close();
       }
     };
@@ -411,7 +341,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         try {
           dismiss();
         } catch (err) {
-          logger.warn({ name: "menu.axisDismiss", err }, "Menu axis dismissal failed");
+          LOGGER.warn({ err: toError(err) }, "Menu axis dismissal failed");
         }
       });
       this.dismissCleanups.push(() => cancelWindowPointerAxisCapture(token));
@@ -481,9 +411,9 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
               this.dismissCleanups.push(disposePending);
               try {
                 popup.showInactive();
-              } catch {
+              } catch (err) {
                 disposePending();
-                fallbackToOverlay();
+                fallbackToOverlay("popup show failed", err);
                 return;
               }
               void waitForWaylandPopup(waylandWindowId(popup), () =>
@@ -493,17 +423,19 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                   disposePending();
                   if (this.closed || activePopup !== popup) return;
                   if (!converted) {
-                    fallbackToOverlay();
+                    fallbackToOverlay("popup conversion timed out");
                     return;
                   }
                   if (!this.closed && popup && !popup.isDestroyed() && activePopup === popup) {
+                    popupMapped = true;
+                    popup.webContents.send("menu.popupReady");
                     popup.focus();
                   }
                 },
-                () => {
+                (err) => {
                   disposePending();
                   if (this.closed || activePopup !== popup) return;
-                  fallbackToOverlay();
+                  fallbackToOverlay("popup conversion failed", err);
                 }
               );
             },
@@ -538,10 +470,10 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           activePopup = null;
           if (!this.closed) dismiss();
         });
-      } catch {
+      } catch (err) {
         activePopup = null;
         if (popup && !popup.isDestroyed()) popup.destroy();
-        fallbackToOverlay();
+        fallbackToOverlay("popup initialization failed", err);
       }
     };
 
@@ -564,6 +496,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           templates: this.templates,
           colors: menuSkin,
           shadowInset: NATIVE_MENU_SHADOW_INSET,
+          pendingPopup: !popupMapped,
         }),
         itemClick: async (_event, menuId) => {
           try {
@@ -586,8 +519,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           cancelMeasurementDeadline();
           try {
             showAsPopup(width, height);
-          } catch {
-            fallbackToOverlay();
+          } catch (err) {
+            fallbackToOverlay("popup arming failed", err);
           }
         },
         openSubmenu: async (_event, items, templates, x, y) => {
@@ -625,10 +558,12 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     let popup: BrowserWindow;
     try {
       popup = createSubmenuWindow();
-    } catch {
+    } catch (error) {
+      LOGGER.warn({ err: toError(error) }, "Wayland submenu creation failed");
       return;
     }
     this.submenuWindow = popup;
+    let popupMapped = false;
     const generation = this.submenuGeneration;
     const isCurrent = () =>
       !this.closed &&
@@ -654,6 +589,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           templates,
           colors: menuSkin,
           shadowInset: NATIVE_MENU_SHADOW_INSET,
+          pendingPopup: !popupMapped,
         }),
         itemClick: async (_event, menuId) => {
           try {
@@ -663,7 +599,9 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           }
         },
         btnClick: async (_event, btnId) => this.onClick?.(btnId),
-        close: async () => {},
+        close: async () => {
+          if (isCurrent()) this.close();
+        },
         reportSize: async (_event, rawWidth, rawHeight) => {
           if (!isCurrent() || displayHandled) return;
           displayHandled = true;
@@ -692,7 +630,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                 this.submenuCleanups.push(disposePending);
                 try {
                   popup.showInactive();
-                } catch {
+                } catch (error) {
+                  LOGGER.warn({ err: toError(error) }, "Wayland submenu show failed");
                   disposePending();
                   closeUnavailable();
                   return;
@@ -703,10 +642,13 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                     if (!converted) {
                       closeUnavailable();
                     } else if (isCurrent()) {
+                      popupMapped = true;
+                      popup.webContents.send("menu.popupReady");
                       popup.focus();
                     }
                   },
-                  () => {
+                  (error) => {
+                    LOGGER.warn({ err: toError(error) }, "Wayland submenu conversion failed");
                     disposePending();
                     closeUnavailable();
                   }
@@ -716,7 +658,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
             );
             if (isCurrent()) this.submenuCleanups.push(cancelArm);
             else cancelArm();
-          } catch {
+          } catch (error) {
+            LOGGER.warn({ err: toError(error) }, "Wayland submenu arming failed");
             closeUnavailable();
           }
         },
@@ -746,7 +689,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           100
         );
       });
-    } catch {
+    } catch (error) {
+      LOGGER.warn({ err: toError(error) }, "Wayland submenu initialization failed");
       closeUnavailable();
     }
   }
@@ -781,7 +725,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         try {
           const token = captureNextWindowFirstCursorEnter((cursorX, cursorY) => {
             runMenuCallbacks([() => finish(cursorX, cursorY)], (err) => {
-              logger.warn({ name: "menu.cursorCapture", err }, "Menu cursor capture failed");
+              LOGGER.warn({ err: toError(err) }, "Menu cursor capture failed");
             });
           });
           cancelCursorCapture = () => {

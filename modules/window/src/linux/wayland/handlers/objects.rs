@@ -3,12 +3,26 @@
 
 use std::os::fd::RawFd;
 
-use super::super::codec::{Iface, REQ_SET_WINDOW_GEOMETRY, WlMessage};
+use super::super::codec::{
+    EVT_POPUP_CONFIGURE, EVT_POPUP_DONE, Iface, REQ_CREATE_POSITIONER, REQ_DESTROY, REQ_GET_POPUP,
+    REQ_POSITIONER_SET_ANCHOR, REQ_POSITIONER_SET_ANCHOR_RECT,
+    REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT, REQ_POSITIONER_SET_GRAVITY, REQ_POSITIONER_SET_SIZE,
+    REQ_SET_WINDOW_GEOMETRY, WlMessage,
+};
+use super::super::layer_shell::xdg_toplevel_configure;
 use super::super::state::{
     CUSTOM_ID_MAP, PopupGeometry, WaylandConn, cancel_pending_popup_for_connection,
     cancel_pending_popup_for_parent, take_pending_popup,
 };
 use super::{Action, Effects};
+
+// xdg_positioner enums, distinct from layer-shell's anchor bitmask.
+const POSITIONER_TOP_LEFT: i32 = 5;
+const POSITIONER_BOTTOM_RIGHT: i32 = 8;
+const POSITIONER_SLIDE_X: i32 = 1;
+const POSITIONER_SLIDE_Y: i32 = 2;
+const POSITIONER_FLIP_X: i32 = 4;
+const POSITIONER_FLIP_Y: i32 = 8;
 
 pub(crate) fn on_get_registry(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
     if let Some(new_id) = msg.u32_arg(8) {
@@ -105,37 +119,52 @@ pub(crate) fn on_get_toplevel(
             push_message(
                 &mut replacement,
                 wm_base_id,
-                super::super::codec::REQ_CREATE_POSITIONER,
+                REQ_CREATE_POSITIONER,
                 &[positioner_id as i32],
             );
             // xdg_positioner: size, anchor rect, anchor, gravity, constraints.
             push_message(
                 &mut replacement,
                 positioner_id,
-                1,
+                REQ_POSITIONER_SET_SIZE,
                 &[geometry.width, geometry.height],
             );
             push_message(
                 &mut replacement,
                 positioner_id,
-                super::super::codec::REQ_GET_POPUP,
+                REQ_POSITIONER_SET_ANCHOR_RECT,
                 &[popup.anchor_x, popup.anchor_y, 1, 1],
             );
-            push_message(&mut replacement, positioner_id, 3, &[5]); // top_left
-            push_message(&mut replacement, positioner_id, 4, &[8]); // bottom_right
-            push_message(&mut replacement, positioner_id, 5, &[15]); // slide + flip
+            push_message(
+                &mut replacement,
+                positioner_id,
+                REQ_POSITIONER_SET_ANCHOR,
+                &[POSITIONER_TOP_LEFT],
+            );
+            push_message(
+                &mut replacement,
+                positioner_id,
+                REQ_POSITIONER_SET_GRAVITY,
+                &[POSITIONER_BOTTOM_RIGHT],
+            );
+            push_message(
+                &mut replacement,
+                positioner_id,
+                REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT,
+                &[POSITIONER_SLIDE_X | POSITIONER_SLIDE_Y | POSITIONER_FLIP_X | POSITIONER_FLIP_Y],
+            );
             // xdg_surface.get_popup(new_id, parent, positioner)
             push_message(
                 &mut replacement,
                 msg.object_id,
-                2,
+                REQ_GET_POPUP,
                 &[
                     top_id as i32,
                     popup.parent_xdg_surface_id as i32,
                     positioner_id as i32,
                 ],
             );
-            push_message(&mut replacement, positioner_id, 0, &[]);
+            push_message(&mut replacement, positioner_id, REQ_DESTROY, &[]);
             // Position the menu itself, not the transparent shadow buffer.
             if geometry.inset > 0 {
                 push_message(
@@ -197,7 +226,7 @@ pub(crate) fn on_popup_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action 
     match msg.opcode {
         // Translate xdg_popup.configure(x, y, width, height) into the
         // xdg_toplevel.configure(width, height, states[]) Chromium expects.
-        0 => {
+        EVT_POPUP_CONFIGURE => {
             let (Some(width), Some(height)) = (msg.u32_arg(16), msg.u32_arg(20)) else {
                 return Action::Suppress;
             };
@@ -211,16 +240,13 @@ pub(crate) fn on_popup_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action 
                     geometry.inset
                 })
                 .unwrap_or(0);
-            let mut replacement = Vec::with_capacity(20);
-            push_message(
-                &mut replacement,
+            Action::Replace(vec![xdg_toplevel_configure(
                 msg.object_id,
-                0,
-                &[width as i32 + inset * 2, height as i32 + inset * 2, 0],
-            );
-            Action::Replace(vec![replacement])
+                width as i32 + inset * 2,
+                height as i32 + inset * 2,
+            )])
         }
-        1 => Action::Forward,
+        EVT_POPUP_DONE => Action::Forward,
         _ => Action::Suppress,
     }
 }
@@ -299,12 +325,51 @@ pub(crate) fn on_delete_id(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
         // Reserve a small pool of compositor-confirmed client IDs for injected
         // region/positioner objects. Arbitrary fresh IDs are not accepted by
         // every Wayland compositor.
+        if conn.stolen_ids.contains(&dead) {
+            // Keep reserved IDs hidden from the client without recycling twice.
+            return Action::Suppress;
+        }
         if conn.stolen_ids.len() < 32 {
             conn.stolen_ids.push(dead);
             return Action::Suppress;
         }
     }
     Action::Forward
+}
+
+#[cfg(test)]
+mod deleted_id_tests {
+    use super::super::super::test_support::message;
+    use super::*;
+
+    #[test]
+    fn a_reserved_id_is_not_recycled_twice_or_returned_to_the_client() {
+        let mut conn = WaylandConn::new();
+        let deleted = message(1, 1, &42_u32.to_ne_bytes());
+        assert!(matches!(
+            on_delete_id(&mut conn, &deleted),
+            Action::Suppress
+        ));
+        assert!(matches!(
+            on_delete_id(&mut conn, &deleted),
+            Action::Suppress
+        ));
+        assert_eq!(conn.stolen_ids, vec![42]);
+    }
+
+    #[test]
+    fn a_full_pool_still_suppresses_duplicates_but_forwards_new_ids() {
+        let mut conn = WaylandConn::new();
+        conn.stolen_ids = (10..42).collect();
+        let duplicate = message(1, 1, &10_u32.to_ne_bytes());
+        assert!(matches!(
+            on_delete_id(&mut conn, &duplicate),
+            Action::Suppress
+        ));
+        let new_id = message(1, 1, &42_u32.to_ne_bytes());
+        assert!(matches!(on_delete_id(&mut conn, &new_id), Action::Forward));
+        assert_eq!(conn.stolen_ids.len(), 32);
+    }
 }
 
 #[cfg(test)]

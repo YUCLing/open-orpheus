@@ -53,36 +53,8 @@ fn disable_display_server_hooks() -> bool {
     })
 }
 
-fn desktop_name_is_gnome(value: &str) -> bool {
-    value.split(':').any(|desktop| {
-        let desktop = desktop.trim().to_ascii_lowercase();
-        desktop == "gnome" || desktop.starts_with("gnome-")
-    })
-}
-
-fn desktop_name_is_niri(value: &str) -> bool {
-    value
-        .split(':')
-        .any(|desktop| desktop.trim().eq_ignore_ascii_case("niri"))
-}
-
-fn desktop_name_supports_native_popup(value: &str) -> bool {
-    desktop_name_is_gnome(value) || desktop_name_is_niri(value)
-}
-
-fn is_native_popup_desktop() -> bool {
-    [
-        "XDG_CURRENT_DESKTOP",
-        "XDG_SESSION_DESKTOP",
-        "DESKTOP_SESSION",
-    ]
-    .into_iter()
-    .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
-    .is_some_and(|value| desktop_name_supports_native_popup(&value))
-}
-
 pub fn supports_native_wayland_popup() -> bool {
-    !disable_display_server_hooks() && wayland::is_wayland() && is_native_popup_desktop()
+    !disable_display_server_hooks() && wayland::is_wayland()
 }
 
 #[derive(Clone, Copy)]
@@ -106,12 +78,11 @@ pub fn is_layer_shell_available() -> bool {
     wayland::is_layer_shell_available()
 }
 
-/// Queue a layer-shell declaration for the next toplevel the client creates.
+/// Declare layer-shell state before a window's surface takes its role.
 ///
-/// The window is identified by position rather than by name: whoever creates
-/// the next toplevel on any Wayland connection gets the declaration. Invalid
-/// options are refused here, because a protocol error would take the whole
-/// display connection down.
+/// A named declaration is consumed only by that managed window; an unnamed
+/// declaration applies to the next eligible toplevel. Invalid options are
+/// refused here because a protocol error would close the display connection.
 pub fn declare_layer_window(options: &crate::LayerShellOptions, owner: Option<String>) -> bool {
     if disable_display_server_hooks() {
         return false;
@@ -173,7 +144,8 @@ fn to_wayland_options(options: &crate::LayerShellOptions) -> wayland::LayerShell
     }
 }
 
-/// Withdraw the newest layer-shell declaration that is still pending.
+/// Withdraw the newest pending declaration for `owner`, or the newest unnamed
+/// declaration when no owner is provided.
 pub fn cancel_layer_window(owner: Option<&str>) -> bool {
     wayland::cancel_layer_window(owner)
 }
@@ -432,10 +404,7 @@ static DESTRUCTOR: extern "C" fn() = on_unload;
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        desktop_name_is_gnome, desktop_name_is_niri, desktop_name_supports_native_popup,
-        reap_retired_releases, retire_release,
-    };
+    use super::{reap_retired_releases, retire_release};
 
     #[test]
     fn watcher_release_is_deferred_to_the_reaping_thread() {
@@ -452,43 +421,5 @@ mod tests {
         assert_eq!(receiver.recv().unwrap(), std::thread::current().id());
         reap_retired_releases();
         assert!(receiver.try_recv().is_err());
-    }
-
-    #[test]
-    fn recognizes_only_gnome_desktop_names() {
-        assert!(desktop_name_is_gnome("GNOME"));
-        assert!(desktop_name_is_gnome("ubuntu:GNOME"));
-        assert!(desktop_name_is_gnome("GNOME-Classic"));
-        assert!(!desktop_name_is_gnome("KDE"));
-        assert!(!desktop_name_is_gnome("plasma"));
-        assert!(!desktop_name_is_gnome("niri"));
-    }
-
-    #[test]
-    fn recognizes_niri_separately_without_broadening_other_desktops() {
-        assert!(desktop_name_is_niri("niri"));
-        assert!(desktop_name_is_niri(" NIRI :other"));
-        assert!(!desktop_name_is_niri("GNOME"));
-        assert!(!desktop_name_is_niri("niri-like"));
-        for desktop in [
-            "GNOME",
-            "ubuntu:GNOME",
-            "GNOME-Classic",
-            "niri",
-            "other:NIRI",
-        ] {
-            assert!(desktop_name_supports_native_popup(desktop), "{desktop}");
-        }
-        for desktop in [
-            "KDE",
-            "plasma",
-            "sway",
-            "Hyprland",
-            "",
-            "not-gnome",
-            "niri-like",
-        ] {
-            assert!(!desktop_name_supports_native_popup(desktop), "{desktop}");
-        }
     }
 }

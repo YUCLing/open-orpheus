@@ -31,6 +31,8 @@
   let rawTemplates: Record<string, ElementTemplate> = {};
   let isSubmenuMode = api.submenu;
   let shadowInset = $state(0);
+  let pendingPopup = $state(false);
+  let popupReady = $state(false);
   const menuShadowClass = "shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]";
 
   function reportMenuSize(rect: DOMRect) {
@@ -93,8 +95,15 @@
     const previousOverflow = root.style.overflow;
     root.style.overflow = "hidden";
     let observer: ResizeObserver | null = null;
+    let disposed = false;
+    // Listen before pull/measurement so a fast native conversion cannot race
+    // the renderer's async bootstrap. Keep layout measurable while hidden.
+    api.events.popupReady(() => {
+      if (!disposed) popupReady = true;
+    });
     if (waylandMode) {
       Promise.all([api.pull(), fontReady]).then(([data]) => {
+        if (disposed) return;
         applyColors(data.colors);
         loadTemplates(data.templates);
         items = data.items as MenuItem[];
@@ -114,7 +123,9 @@
       });
     } else if (isSubmenuMode) {
       Promise.all([api.pull(), fontReady]).then(([data]) => {
+        if (disposed) return;
         shadowInset = data.shadowInset ?? 0;
+        pendingPopup = data.pendingPopup ?? false;
         applyColors(data.colors);
         rawTemplates = data.templates;
         loadTemplates(data.templates);
@@ -124,32 +135,31 @@
         menuReady = true;
         tick().then(async () => {
           await document.fonts.ready;
-          if (!menuEl) return;
-          const ro = new ResizeObserver(() => {
+          if (disposed || !menuEl) return;
+          observer = new ResizeObserver(() => {
             if (!menuEl) return;
             const rect = menuEl.getBoundingClientRect();
             reportMenuSize(rect);
           });
-          observer = ro;
-          ro.observe(menuEl);
+          observer.observe(menuEl);
         });
       });
     } else {
       // Non-Wayland: use ResizeObserver to keep the window sized to the menu
-      let ro: ResizeObserver | null = null;
       const startObserver = () => {
-        if (!menuEl || ro) return;
-        ro = new ResizeObserver(() => {
+        if (disposed || !menuEl || observer) return;
+        observer = new ResizeObserver(() => {
           if (!menuEl) return;
           const rect = menuEl.getBoundingClientRect();
           reportMenuSize(rect);
         });
-        observer = ro;
-        ro.observe(menuEl);
+        observer.observe(menuEl);
       };
 
       Promise.all([api.pull(), fontReady]).then(([data]) => {
+        if (disposed) return;
         shadowInset = data.shadowInset ?? 0;
+        pendingPopup = data.pendingPopup ?? false;
         applyColors(data.colors);
         rawTemplates = data.templates;
         loadTemplates(data.templates);
@@ -162,6 +172,7 @@
         menuReady = true;
         tick().then(async () => {
           await document.fonts.ready;
+          if (disposed) return;
           startObserver();
           commitMenuPosition();
         });
@@ -172,6 +183,7 @@
       });
     }
     return () => {
+      disposed = true;
       observer?.disconnect();
       root.style.overflow = previousOverflow;
     };
@@ -297,7 +309,7 @@
       onitemleave={handleItemLeave}
       onbtnclick={handleBtnClick}
       bind:el={menuEl}
-      style={shadowInset ? `left: ${shadowInset}px; top: ${shadowInset}px;` : undefined}
+      style={`left: ${shadowInset}px; top: ${shadowInset}px; visibility: ${!pendingPopup || popupReady ? "visible" : "hidden"};`}
       class={shadowInset ? menuShadowClass : undefined}
     />
   {/if}

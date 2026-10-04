@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
 
 /** Every TypeScript source file under `dir`, recursively. */
 async function collectSourceFiles(dir: string): Promise<string[]> {
@@ -489,6 +489,42 @@ describe("ManagedWindow lifetime", () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(ManagedWindow.fromBrowserWindow(wnd)).toBe(managed);
+  });
+
+  it.each(["managed", "external"] as const)(
+    "does not bind a destroyed %s window during deferred registration",
+    async (kind) => {
+      const managed = kind === "managed" ? new TestWindow() : null;
+      const wnd = managed ? asFake(managed.window) : asFake(new BrowserWindow({}));
+      const handler = hoisted.appOnCalls.find(
+        ([event]) => event === "browser-window-created"
+      )?.[1] as (event: unknown, wnd: unknown) => void;
+      const on = vi.spyOn(wnd, "on");
+
+      handler({}, wnd);
+      wnd.destroy();
+      on.mockClear();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(ManagedWindow.fromBrowserWindow(wnd)).toBeUndefined();
+      expect(on).not.toHaveBeenCalled();
+      if (managed) expect(managed.window).toBeNull();
+    }
+  );
+
+  it("still binds a live external window through deferred registration", async () => {
+    const wnd = new BrowserWindow({});
+    const handler = hoisted.appOnCalls.find(
+      ([event]) => event === "browser-window-created"
+    )?.[1] as (event: unknown, wnd: unknown) => void;
+
+    handler({}, wnd);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const managed = ManagedWindow.fromBrowserWindow(wnd);
+    expect(managed?.window).toBe(wnd);
+    wnd.destroy();
+    expect(managed?.window).toBeNull();
   });
 });
 

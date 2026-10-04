@@ -416,7 +416,6 @@ mod tests {
 
 pub(crate) static IS_WAYLAND: OnceLock<bool> = OnceLock::new();
 pub(crate) static CONNS: OnceLock<Mutex<HashMap<RawFd, WaylandConn>>> = OnceLock::new();
-#[allow(clippy::type_complexity)]
 #[derive(Clone, Copy)]
 pub(crate) struct LastButton {
     pub(crate) fd: RawFd,
@@ -454,9 +453,8 @@ pub(crate) struct PointerAxisWatcher {
     pub(crate) token: u32,
     pub(crate) callback: PointerAxisCb,
 }
-pub(crate) static NEXT_POINTER_AXIS: OnceLock<
-    Mutex<HashMap<PointerAxisWatcherKey, Vec<PointerAxisWatcher>>>,
-> = OnceLock::new();
+pub(crate) type PointerAxisWatcherMap = HashMap<PointerAxisWatcherKey, Vec<PointerAxisWatcher>>;
+pub(crate) static NEXT_POINTER_AXIS: OnceLock<Mutex<PointerAxisWatcherMap>> = OnceLock::new();
 static NEXT_POINTER_AXIS_TOKEN: AtomicU32 = AtomicU32::new(1);
 pub(crate) static RX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
 pub(crate) static TX_BUFS: OnceLock<Mutex<HashMap<RawFd, Vec<u8>>>> = OnceLock::new();
@@ -507,12 +505,16 @@ pub(crate) fn is_layer_shell_available() -> bool {
     conns.values().any(|conn| conn.layer_shell_global.is_some())
 }
 
-/// Queue `options` for the next toplevel the client creates.
+/// Test shorthand for queuing an unnamed layer-shell declaration.
 #[cfg(test)]
 pub(crate) fn declare_layer_window(options: LayerShellOptions) -> bool {
     declare_named_layer_window(options, None)
 }
 
+/// Queue `options` before a window's role is created.
+///
+/// Named declarations belong to one managed window and replace its previous
+/// pending declaration. Unnamed declarations retain the positional behaviour.
 pub(crate) fn declare_named_layer_window(
     options: LayerShellOptions,
     owner: Option<String>,
@@ -536,12 +538,14 @@ pub(crate) fn declare_named_layer_window(
     true
 }
 
-/// Drop the newest declaration that has not been consumed yet.
+/// Test shorthand for cancelling the newest unnamed declaration.
 #[cfg(test)]
 pub(crate) fn cancel_layer_window() -> bool {
     cancel_named_layer_window(None)
 }
 
+/// Drop the newest unconsumed declaration for `owner`, or the newest unnamed
+/// declaration when no owner is provided.
 pub(crate) fn cancel_named_layer_window(owner: Option<&str>) -> bool {
     let Some(queue) = PENDING_LAYER_WINDOWS.get() else {
         return false;
@@ -555,12 +559,14 @@ pub(crate) fn cancel_named_layer_window(owner: Option<&str>) -> bool {
     index.is_some_and(|index| queue.remove(index).is_some())
 }
 
-/// Take the oldest live declaration, discarding stale ones.
+/// Test shorthand for consuming the oldest live unnamed declaration.
 #[cfg(test)]
 pub(crate) fn take_layer_window_declaration() -> Option<LayerShellOptions> {
     take_named_layer_window_declaration(None)
 }
 
+/// Discard stale declarations and consume the oldest matching owner first,
+/// falling back to the oldest unnamed declaration without taking another owner.
 pub(crate) fn take_named_layer_window_declaration(
     owner: Option<&str>,
 ) -> Option<LayerShellOptions> {
@@ -830,6 +836,26 @@ pub(crate) fn arm_next_popup_with_inset(
         .get()
         .and_then(|map| map.lock().ok()?.get(parent_window_id).copied());
     let (fd, parent_wl_surface_id) = parent_mapping?;
+    if let Some((target_fd, target_surface)) = CUSTOM_ID_MAP
+        .get()
+        .and_then(|map| map.lock().ok()?.get(target_window_id).copied())
+    {
+        let target_conn = conns.get(&target_fd)?;
+        // Some compositors create the hidden window's role before show. That
+        // role is permanent: refuse before the caller shows an ordinary
+        // toplevel, instead of showing it and then replacing it with overlay.
+        if target_fd != fd
+            || target_conn
+                .surface_ids
+                .get(&target_surface)
+                .map(String::as_str)
+                != Some(target_window_id)
+            || target_conn.wl_to_top.contains_key(&target_surface)
+            || target_conn.layer_surfaces.contains_key(&target_surface)
+        {
+            return None;
+        }
+    }
     let conn = conns.get_mut(&fd)?;
     // A layer surface cannot be used as xdg_popup's xdg parent. Leave these
     // windows on the existing overlay path instead of sending an invalid role.
@@ -1273,6 +1299,11 @@ mod popup_tests {
 
     use super::*;
 
+    // These interleavings observe the same global connection lock. Serialize
+    // them, like the injection fixtures, so one race cannot satisfy another's
+    // "connection locked" checkpoint before its worker has reached it.
+    static CONNECTION_RACES: Mutex<()> = Mutex::new(());
+
     fn wait_for_connection_lock() {
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -1289,6 +1320,7 @@ mod popup_tests {
 
     #[test]
     fn cancellation_holds_connection_until_reserved_id_is_recycled() {
+        let _guard = CONNECTION_RACES.lock().unwrap();
         init_state();
         let fd = 93_601;
         let mut conn = WaylandConn::new();
@@ -1335,6 +1367,7 @@ mod popup_tests {
 
     #[test]
     fn axis_registration_is_atomic_with_close_and_rejects_stale_identity() {
+        let _guard = CONNECTION_RACES.lock().unwrap();
         init_state();
         let fd = 93_602;
         let mut conn = WaylandConn::new();
@@ -1393,6 +1426,8 @@ mod popup_tests {
         use std::sync::{TryLockError, mpsc};
         use std::thread;
 
+        let _guard = CONNECTION_RACES.lock().unwrap();
+
         init_state();
         let fd = 93_001;
         let window_id = "popup-close-race";
@@ -1449,6 +1484,86 @@ mod popup_tests {
             .insert(fd, WaylandConn::new());
         assert!(take_pending_popup(fd, "target").is_none());
         assert!(arm_next_popup(window_id, "target", 100, 80, Some((4, 5))).is_none());
+        on_close(fd);
+    }
+
+    #[test]
+    fn an_already_assigned_target_role_cannot_reserve_a_popup() {
+        let _guard = CONNECTION_RACES.lock().unwrap();
+        init_state();
+        let fd = 93_005;
+        let parent_id = "popup-assigned-parent";
+        let target_id = "popup-assigned-target";
+        let mut conn = WaylandConn::new();
+        conn.surface_ids.insert(10, parent_id.into());
+        conn.surface_ids.insert(11, target_id.into());
+        conn.xdg_to_wl.insert(20, 10);
+        conn.xdg_to_wl.insert(21, 11);
+        conn.wl_to_top.insert(11, 31);
+        conn.top_to_xdg.insert(31, 21);
+        conn.ifaces.insert(31, Iface::XdgToplevel);
+        conn.stolen_ids.push(900);
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+        {
+            let mut map = CUSTOM_ID_MAP.get().unwrap().lock().unwrap();
+            map.insert(parent_id.into(), (fd, 10));
+            map.insert(target_id.into(), (fd, 11));
+        }
+        assert!(arm_next_popup(parent_id, target_id, 100, 80, Some((4, 5))).is_none());
+        assert!(take_pending_popup(fd, target_id).is_none());
+        {
+            let conns = CONNS.get().unwrap().lock().unwrap();
+            let conn = conns.get(&fd).unwrap();
+            assert_eq!(conn.stolen_ids, vec![900]);
+            assert_eq!(conn.ifaces.get(&31), Some(&Iface::XdgToplevel));
+        }
+        on_close(fd);
+    }
+
+    #[test]
+    fn popup_reservation_requires_parent_anchor_and_object_id_data() {
+        let _guard = CONNECTION_RACES.lock().unwrap();
+        init_state();
+        let fd = 93_004;
+        let window_id = "popup-data-readiness";
+        let mut conn = WaylandConn::new();
+        conn.surface_ids.insert(10, window_id.into());
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+        CUSTOM_ID_MAP
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .insert(window_id.into(), (fd, 10));
+
+        // A tracked window alone is not enough: it needs an xdg parent.
+        assert!(arm_next_popup(window_id, "target", 100, 80, Some((4, 5))).is_none());
+        CONNS
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .get_mut(&fd)
+            .unwrap()
+            .xdg_to_wl
+            .insert(20, 10);
+        // Missing pointer data or a compositor-released ID also leaves the
+        // request unarmed, so the caller can fall back without showing it.
+        assert!(arm_next_popup(window_id, "target", 100, 80, None).is_none());
+        assert!(arm_next_popup(window_id, "target", 100, 80, Some((4, 5))).is_none());
+        assert!(take_pending_popup(fd, "target").is_none());
+        CONNS
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .get_mut(&fd)
+            .unwrap()
+            .stolen_ids
+            .push(900);
+        let token = arm_next_popup(window_id, "target", 100, 80, Some((4, 5))).unwrap();
+        assert_eq!(take_pending_popup(fd, "target").unwrap().token, token);
+        assert!(take_pending_popup(fd, "target").is_none());
         on_close(fd);
     }
 
@@ -1604,8 +1719,17 @@ mod popup_tests {
                 .contains_key("test-window")
         );
         let last_buttons = LAST_BUTTON.get().unwrap().lock().unwrap();
-        assert!(last_buttons.by_surface.is_empty());
-        assert!(last_buttons.latest.is_none());
+        assert!(
+            last_buttons
+                .by_surface
+                .keys()
+                .all(|(button_fd, _)| *button_fd != fd)
+        );
+        assert!(
+            last_buttons
+                .latest
+                .is_none_or(|(button_fd, _)| button_fd != fd)
+        );
 
         fire_next_pointer_axis(other_fd, 11, 1);
         assert_eq!(retained.load(Ordering::Relaxed), 1);

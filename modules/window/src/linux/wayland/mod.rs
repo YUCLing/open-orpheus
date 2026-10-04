@@ -27,7 +27,8 @@ pub(super) fn is_layer_shell_available() -> bool {
     state::is_layer_shell_available()
 }
 
-/// Queue `options` for the next toplevel the client creates.
+/// Queue `options` for the named managed window, or the next eligible toplevel
+/// when no owner is provided.
 pub(super) fn declare_layer_window(options: LayerShellOptions, owner: Option<String>) -> bool {
     state::declare_named_layer_window(options, owner)
 }
@@ -41,7 +42,8 @@ pub(super) fn validate_layer_window(options: LayerShellOptions) -> bool {
     options.with_defaults().validate().is_ok()
 }
 
-/// Withdraw the newest declaration that has not been consumed yet.
+/// Withdraw the newest pending declaration for the given owner, or the newest
+/// unnamed declaration when no owner is provided.
 pub(super) fn cancel_layer_window(owner: Option<&str>) -> bool {
     state::cancel_named_layer_window(owner)
 }

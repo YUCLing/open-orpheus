@@ -1,18 +1,25 @@
 //! A role must be assigned before its title can be sent. Hold only the role
-//! and its toplevel initialization requests until that title identifies the
+//! and its related initialization requests until that title identifies the
 //! managed window. An unrelated request (including commit/sync/destruction)
 //! flushes it as an ordinary role: never guess which window owns a reservation.
 use std::os::fd::RawFd;
 
 use super::super::{
-    codec::{Iface, REQ_GET_TOPLEVEL, REQ_SET_TITLE, WlMessage, parse_custom_title},
+    codec::{
+        Iface, REQ_DESTROY, REQ_GET_TOPLEVEL, REQ_GET_TOPLEVEL_DECORATION, REQ_SET_ICON,
+        REQ_SET_TITLE, WlMessage, parse_custom_title,
+    },
     state::{WaylandConn, has_named_role_pending},
 };
 use super::{Action, Effects, dispatch_request_inner};
 
+const MAX_DEFERRED_ROLE_REQUESTS: usize = 32;
+
 pub(crate) struct DeferredRole {
     top_id: u32,
     messages: Vec<WlMessage>,
+    /// Decoration objects introduced by this role's queued constructors.
+    decoration_ids: Vec<u32>,
 }
 
 fn append(out: &mut Vec<Vec<u8>>, msg: &WlMessage, action: Action) {
@@ -46,13 +53,30 @@ pub(crate) fn dispatch(
         } else {
             None
         };
-        // Bound memory and do not hold destroy or requests on other objects.
+        let decoration_id = (conn.ifaces.get(&msg.object_id)
+            == Some(&Iface::ZxdgDecorationManager)
+            && msg.opcode == REQ_GET_TOPLEVEL_DECORATION
+            && msg.u32_arg(12) == Some(held.top_id))
+        .then(|| msg.u32_arg(8))
+        .flatten();
+        let is_icon = conn.ifaces.get(&msg.object_id) == Some(&Iface::XdgToplevelIconManager)
+            && msg.opcode == REQ_SET_ICON
+            && msg.u32_arg(8) == Some(held.top_id);
+        let belongs_to_role = msg.object_id == held.top_id
+            || decoration_id.is_some()
+            || held.decoration_ids.contains(&msg.object_id)
+            || is_icon;
+        // Preserve wire order only for this role's initialization. Unrelated
+        // requests, sync/commit and destruction still flush without guessing.
         if managed_id.is_none()
-            && msg.object_id == held.top_id
-            && msg.opcode != 0
-            && held.messages.len() < 32
+            && belongs_to_role
+            && msg.opcode != REQ_DESTROY
+            && held.messages.len() < MAX_DEFERRED_ROLE_REQUESTS
             && has_named_role_pending(fd)
         {
+            if let Some(id) = decoration_id {
+                held.decoration_ids.push(id);
+            }
             held.messages.push(WlMessage::new(
                 msg.object_id,
                 msg.opcode,
@@ -71,6 +95,7 @@ pub(crate) fn dispatch(
     if defer_current && let Some(top_id) = msg.u32_arg(8) {
         conn.deferred_role = Some(DeferredRole {
             top_id,
+            decoration_ids: Vec::new(),
             messages: vec![WlMessage::new(
                 msg.object_id,
                 msg.opcode,
@@ -204,5 +229,151 @@ mod tests {
         );
         assert_eq!(conn.ifaces.get(&50), Some(&Iface::XdgToplevel));
         assert!(conn.deferred_role.is_none());
+    }
+
+    #[test]
+    fn related_decoration_and_icon_initialization_wait_for_window_identity() {
+        for (fd, owner, converted) in [(94_004, "menu-target", true), (94_005, "foreign", false)] {
+            let mut conn = reserved(fd);
+            conn.ifaces.insert(7, Iface::ZxdgDecorationManager);
+            conn.ifaces.insert(8, Iface::XdgToplevelIconManager);
+            let role = message(40, REQ_GET_TOPLEVEL, &word(50));
+            let decoration = message(
+                7,
+                REQ_GET_TOPLEVEL_DECORATION,
+                &[word(60), word(50)].concat(),
+            );
+            let mode = message(60, 1, &word(2));
+            let icon = message(8, REQ_SET_ICON, &[word(50), word(70)].concat());
+            for request in [&role, &decoration, &mode, &icon] {
+                assert!(send(fd, &mut conn, request).is_empty());
+            }
+            // An initial unadorned title must not assign the role prematurely.
+            assert!(send(fd, &mut conn, &message(50, REQ_SET_TITLE, &wl_string(""))).is_empty());
+            let out = send(
+                fd,
+                &mut conn,
+                &message(
+                    50,
+                    REQ_SET_TITLE,
+                    &wl_string(&decorate_title(owner, "Menu")),
+                ),
+            );
+            if converted {
+                assert_eq!(conn.ifaces.get(&50), Some(&Iface::XdgPopupShim));
+                assert_eq!(conn.ifaces.get(&60), Some(&Iface::ZxdgToplevelDecoration));
+                assert_eq!(conn.pending_to_client.len(), 1);
+                // No request typed as xdg_toplevel may reach the compositor
+                // after the role became a popup. Reuse the existing shim.
+                assert!(
+                    !out.iter().any(|raw| raw == decoration.raw()
+                        || raw == mode.raw()
+                        || raw == icon.raw())
+                );
+                assert!(send(fd, &mut conn, &message(60, REQ_DESTROY, &[])).is_empty());
+                assert!(!conn.ifaces.contains_key(&60));
+                assert!(!conn.injected_ids.contains(&60));
+            } else {
+                assert_eq!(conn.ifaces.get(&50), Some(&Iface::XdgToplevel));
+                assert_eq!(out.len(), 6);
+                for (actual, request) in out.iter().zip([&role, &decoration, &mode, &icon]) {
+                    assert_eq!(actual, request.raw());
+                }
+                assert!(conn.pending_to_client.is_empty());
+                assert!(
+                    PENDING_POPUPS
+                        .get()
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .contains_key(&fd)
+                );
+            }
+            assert!(conn.deferred_role.is_none());
+            state::clear_runtime_state_for_fd(fd);
+        }
+    }
+
+    #[test]
+    fn another_windows_decoration_flushes_without_consuming_the_popup() {
+        let fd = 94_006;
+        let mut conn = reserved(fd);
+        conn.ifaces.insert(7, Iface::ZxdgDecorationManager);
+        let role = message(40, REQ_GET_TOPLEVEL, &word(50));
+        assert!(send(fd, &mut conn, &role).is_empty());
+        let foreign = message(
+            7,
+            REQ_GET_TOPLEVEL_DECORATION,
+            &[word(60), word(51)].concat(),
+        );
+        let out = send(fd, &mut conn, &foreign);
+        assert_eq!(out, vec![role.raw().to_vec(), foreign.raw().to_vec()]);
+        assert_eq!(conn.ifaces.get(&50), Some(&Iface::XdgToplevel));
+        assert!(conn.deferred_role.is_none());
+        assert!(
+            PENDING_POPUPS
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .contains_key(&fd)
+        );
+        state::clear_runtime_state_for_fd(fd);
+    }
+
+    #[test]
+    fn decoration_destruction_flushes_queued_initialization_in_order() {
+        let fd = 94_007;
+        let mut conn = reserved(fd);
+        conn.ifaces.insert(7, Iface::ZxdgDecorationManager);
+        let role = message(40, REQ_GET_TOPLEVEL, &word(50));
+        let decoration = message(
+            7,
+            REQ_GET_TOPLEVEL_DECORATION,
+            &[word(60), word(50)].concat(),
+        );
+        assert!(send(fd, &mut conn, &role).is_empty());
+        assert!(send(fd, &mut conn, &decoration).is_empty());
+        let destroy = message(60, REQ_DESTROY, &[]);
+        let out = send(fd, &mut conn, &destroy);
+        assert_eq!(
+            out,
+            vec![
+                role.raw().to_vec(),
+                decoration.raw().to_vec(),
+                destroy.raw().to_vec()
+            ]
+        );
+        assert_eq!(conn.ifaces.get(&50), Some(&Iface::XdgToplevel));
+        assert!(conn.deferred_role.is_none());
+        state::clear_runtime_state_for_fd(fd);
+    }
+
+    #[test]
+    fn cancellation_with_queued_decoration_preserves_an_ordinary_window() {
+        let fd = 94_008;
+        let mut conn = reserved(fd);
+        conn.ifaces.insert(7, Iface::ZxdgDecorationManager);
+        let role = message(40, REQ_GET_TOPLEVEL, &word(50));
+        let decoration = message(
+            7,
+            REQ_GET_TOPLEVEL_DECORATION,
+            &[word(60), word(50)].concat(),
+        );
+        assert!(send(fd, &mut conn, &role).is_empty());
+        assert!(send(fd, &mut conn, &decoration).is_empty());
+        state::clear_runtime_state_for_fd(fd);
+        let title = message(
+            50,
+            REQ_SET_TITLE,
+            &wl_string(&decorate_title("menu-target", "Menu")),
+        );
+        let out = send(fd, &mut conn, &title);
+        assert_eq!(out[0], role.raw());
+        assert_eq!(out[1], decoration.raw());
+        assert_eq!(conn.ifaces.get(&50), Some(&Iface::XdgToplevel));
+        assert!(conn.deferred_role.is_none());
+        assert!(conn.pending_to_client.is_empty());
+        state::clear_runtime_state_for_fd(fd);
     }
 }

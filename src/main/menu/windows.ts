@@ -51,7 +51,7 @@ function unwrap(managed: ManagedWindow): BrowserWindow {
 }
 
 class MenuWindow extends ManagedWindow {
-  constructor(width = 300, height = 400) {
+  constructor(width = menuWindowOptions.width, height = menuWindowOptions.height) {
     super();
     this.createBrowserWindow({ ...menuWindowOptions, width, height });
     this.loadGuiRoute("/menu");
@@ -102,20 +102,44 @@ const submenuWindowOptions = {
 export class SubmenuWindow extends ManagedWindow {
   readonly browserWindow: BrowserWindow;
 
-  constructor(width = 300, height = 400) {
+  constructor(width = menuWindowOptions.width, height = menuWindowOptions.height) {
     super();
     this.browserWindow = this.createBrowserWindow({ ...submenuWindowOptions, width, height });
     this.loadGuiRoute("/menu");
   }
 }
 
-export function createMenuWindow(width = 300, height = 400): BrowserWindow {
+/** A transparent role probe, independent of the active menu's windows. */
+class PopupProbeWindow extends ManagedWindow {
+  constructor() {
+    super();
+    this.createBrowserWindow({
+      ...menuWindowOptions,
+      width: 1,
+      height: 1,
+      hasShadow: false,
+      backgroundColor: "#00000000",
+    });
+  }
+}
+
+export function createPopupProbeWindow(): BrowserWindow {
+  return unwrap(new PopupProbeWindow());
+}
+
+export function createMenuWindow(
+  width = menuWindowOptions.width,
+  height = menuWindowOptions.height
+): BrowserWindow {
   menuWindow?.window?.destroy();
   menuWindow = new MenuWindow(width, height);
   return unwrap(menuWindow);
 }
 
-export function createSubmenuWindow(width = 300, height = 400): BrowserWindow {
+export function createSubmenuWindow(
+  width = menuWindowOptions.width,
+  height = menuWindowOptions.height
+): BrowserWindow {
   return new SubmenuWindow(width, height).browserWindow;
 }
 

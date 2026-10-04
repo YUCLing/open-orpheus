@@ -65,6 +65,17 @@ pub(crate) const REQ_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_ADD: u16 = 1;
 
+// xdg_positioner requests
+pub(crate) const REQ_POSITIONER_SET_SIZE: u16 = 1;
+pub(crate) const REQ_POSITIONER_SET_ANCHOR_RECT: u16 = 2;
+pub(crate) const REQ_POSITIONER_SET_ANCHOR: u16 = 3;
+pub(crate) const REQ_POSITIONER_SET_GRAVITY: u16 = 4;
+pub(crate) const REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT: u16 = 5;
+
+// xdg_popup events
+pub(crate) const EVT_POPUP_CONFIGURE: u16 = 0;
+pub(crate) const EVT_POPUP_DONE: u16 = 1;
+
 // wl_registry events
 pub(crate) const EVT_GLOBAL: u16 = 0;
 pub(crate) const EVT_GLOBAL_REMOVE: u16 = 1;

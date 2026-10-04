@@ -13,9 +13,9 @@ export enum WorkaroundFlags {
 }
 
 const desktopName =
-  process.env.XDG_CURRENT_DESKTOP ??
-  process.env.XDG_SESSION_DESKTOP ??
-  process.env.DESKTOP_SESSION ??
+  process.env.XDG_CURRENT_DESKTOP ||
+  process.env.XDG_SESSION_DESKTOP ||
+  process.env.DESKTOP_SESSION ||
   "";
 const desktopTokens = desktopName
   .split(":")

@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MenuContract } from "../../src/bridge/contracts/menu-api";
+import type { registerIpcHandlers } from "../../src/bridge/register";
+import { installLoggerStub } from "../helpers/globals";
+import type { IpcMainInvokeEvent } from "electron";
+
+type MenuHandlers = Parameters<typeof registerIpcHandlers<MenuContract>>[2];
+const ipcEvent = {} as IpcMainInvokeEvent;
 
 const mocks = vi.hoisted(() => {
   class Window {
@@ -8,6 +15,7 @@ const mocks = vi.hoisted(() => {
     webContents = {
       on: vi.fn(),
       off: vi.fn(),
+      send: vi.fn(),
       isDestroyed: () => this.destroyed,
     };
     setSize = vi.fn();
@@ -48,16 +56,18 @@ const mocks = vi.hoisted(() => {
     Window,
     roots: [] as Window[],
     children: [] as Window[],
-    ipc: new Map<object, Record<string, (...args: any[]) => Promise<any>>>(),
+    ipc: new Map<object, MenuHandlers>(),
     arm: vi.fn(() => 1 as number | null),
     cancel: vi.fn(),
+    supportsPopup: vi.fn(() => true),
+    isPopup: vi.fn(() => true),
     desktop: "wayland",
     overlays: [] as Window[],
     overlayOrder: [] as string[],
     capture: vi.fn(),
     cancelCapture: vi.fn(),
     enter: undefined as ((x: number, y: number) => void) | undefined,
-    overlayPolicy: { platform: "kde", capturePhase: "before-create" },
+    overlayPolicy: { capturePhase: "before-create" },
     noFullscreen: true,
   };
 });
@@ -72,10 +82,10 @@ vi.mock("electron", () => ({
 vi.mock("@open-orpheus/window", () => ({
   DesktopEnvironment: { Wayland: "wayland", Windows: "windows" },
   getDesktopEnvironment: () => mocks.desktop,
-  supportsNativeWaylandPopup: () => true,
+  supportsNativeWaylandPopup: mocks.supportsPopup,
   armNextWindowAsPopup: mocks.arm,
   cancelPendingPopup: mocks.cancel,
-  isWindowWaylandPopup: () => true,
+  isWindowWaylandPopup: mocks.isPopup,
   captureWindowNextPointerAxis: () => 1,
   cancelWindowPointerAxisCapture: vi.fn(),
   captureNextWindowFirstCursorEnter: mocks.capture,
@@ -83,6 +93,9 @@ vi.mock("@open-orpheus/window", () => ({
   getCursorPosition: vi.fn(),
 }));
 vi.mock("../../src/main/menu/skin", () => ({ menuSkin: {}, registerMenuSkinUpdater: vi.fn() }));
+vi.mock("../../src/main/menu/popup-support", () => ({
+  initializeWaylandPopupSupport: () => Promise.resolve(mocks.supportsPopup()),
+}));
 vi.mock("../../src/main/window", () => ({
   ManagedWindow: { fromBrowserWindow: (wnd: { id: string }) => ({ id: wnd.id }) },
 }));
@@ -122,7 +135,7 @@ vi.mock("../../src/main/menu/workaround", () => ({
   workaroundEnabled: () => mocks.noFullscreen,
 }));
 vi.mock("../../src/bridge/register", () => ({
-  registerIpcHandlers: (contents: object, _name: string, handlers: any) => {
+  registerIpcHandlers: (contents: object, _name: string, handlers: MenuHandlers) => {
     mocks.ipc.set(contents, handlers);
   },
 }));
@@ -130,7 +143,7 @@ vi.mock("../../src/bridge/common/inputRegion", () => ({ registerInputRegionHandl
 vi.mock("../../src/main/pack", () => ({ default: {} }));
 vi.mock("../../src/main/skin/dui", () => ({ parseBtnUrl: vi.fn(), parseElementTemplate: vi.fn() }));
 vi.mock("../../src/main/gui", () => ({ font: "Sans" }));
-vi.mock("../../src/main/logger", () => ({ default: { warn: vi.fn(), debug: vi.fn() } }));
+const logger = installLoggerStub();
 
 import AppMenu from "../../src/main/menu";
 
@@ -152,7 +165,6 @@ describe("overlay cursor capture ordering", () => {
   afterEach(() => vi.useRealTimers());
 
   it.each(["kde", "other", "gnome", "niri"])("captures the first enter on %s", async (platform) => {
-    mocks.overlayPolicy.platform = platform;
     mocks.overlayPolicy.capturePhase = ["kde", "other"].includes(platform)
       ? "before-create"
       : "before-show";
@@ -160,7 +172,7 @@ describe("overlay cursor capture ordering", () => {
     try {
       await menu.show();
       const wnd = mocks.overlays[0];
-      const data = await mocks.ipc.get(wnd.webContents)!.pull();
+      const data = await mocks.ipc.get(wnd.webContents)!.pull(ipcEvent);
       expect([data.cursorX, data.cursorY]).toEqual([1200, 700]);
       expect(mocks.overlayOrder).toEqual(
         ["kde", "other"].includes(platform)
@@ -174,7 +186,6 @@ describe("overlay cursor capture ordering", () => {
   });
 
   it("arms before creation when fullscreen is forced on GNOME", async () => {
-    mocks.overlayPolicy.platform = "gnome";
     mocks.overlayPolicy.capturePhase = "before-show";
     mocks.noFullscreen = false;
     const menu = new AppMenu([]);
@@ -187,7 +198,6 @@ describe("overlay cursor capture ordering", () => {
   });
 
   it("cancels KDE capture when closed before renderer pull", async () => {
-    mocks.overlayPolicy.platform = "kde";
     mocks.overlayPolicy.capturePhase = "before-create";
     mocks.capture.mockImplementation(() => 88);
     const menu = new AppMenu([]);
@@ -199,15 +209,27 @@ describe("overlay cursor capture ordering", () => {
   });
 });
 
-describe("GNOME popup single-render opening", () => {
+describe("Wayland popup single-render opening", () => {
   let menu: AppMenu;
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mocks.arm.mockReturnValue(1);
+    mocks.supportsPopup.mockReturnValue(true);
+    mocks.isPopup.mockReturnValue(true);
     mocks.desktop = "wayland";
     mocks.roots.length = 0;
     mocks.children.length = 0;
+    mocks.overlays.length = 0;
+    mocks.overlayOrder.length = 0;
+    mocks.enter = undefined;
+    mocks.overlayPolicy.capturePhase = "before-create";
+    mocks.noFullscreen = false;
+    mocks.capture.mockImplementation((callback) => {
+      mocks.overlayOrder.push("capture");
+      mocks.enter = callback;
+      return 77;
+    });
     mocks.ipc.clear();
     menu = new AppMenu([]);
   });
@@ -223,63 +245,243 @@ describe("GNOME popup single-render opening", () => {
     return { root, handlers };
   }
 
-  it("measures and maps the same root window exactly once", async () => {
-    const { root, handlers } = await openRoot();
-    expect(root.showInactive).not.toHaveBeenCalled();
-    await handlers.reportSize(null, 232, 281);
-    await handlers.reportSize(null, 233, 282);
-    expect(mocks.roots).toHaveLength(1);
-    expect(root.destroyed).toBe(false);
-    expect(root.setSize).toHaveBeenCalledExactlyOnceWith(232, 281);
-    expect(root.showInactive).toHaveBeenCalledOnce();
-    expect(mocks.arm).toHaveBeenCalledExactlyOnceWith(
-      "parent",
-      root.id,
-      232,
-      281,
-      undefined,
-      undefined,
-      24
+  it.each(["gnome", "niri", "kde", "other"])(
+    "prefers the same native popup on %s",
+    async (platform) => {
+      mocks.overlayPolicy.capturePhase = ["kde", "other"].includes(platform)
+        ? "before-create"
+        : "before-show";
+      const { root, handlers } = await openRoot();
+      expect(root.showInactive).not.toHaveBeenCalled();
+      expect((await handlers.pull(ipcEvent)).pendingPopup).toBe(true);
+      expect(root.webContents.send).not.toHaveBeenCalled();
+      await handlers.reportSize(ipcEvent, 232, 281);
+      await handlers.reportSize(ipcEvent, 233, 282);
+      expect(mocks.roots).toHaveLength(1);
+      expect(root.destroyed).toBe(false);
+      expect(root.setSize).toHaveBeenCalledExactlyOnceWith(232, 281);
+      expect(root.showInactive).toHaveBeenCalledOnce();
+      expect(mocks.arm).toHaveBeenCalledExactlyOnceWith(
+        "parent",
+        root.id,
+        232,
+        281,
+        undefined,
+        undefined,
+        24
+      );
+      expect((await handlers.pull(ipcEvent)).shadowInset).toBe(24);
+      expect(mocks.overlays).toHaveLength(0);
+      expect(root.webContents.send).toHaveBeenCalledExactlyOnceWith("menu.popupReady");
+      expect((await handlers.pull(ipcEvent)).pendingPopup).toBe(false);
+    }
+  );
+
+  it("keeps unsupported Wayland sessions on the existing overlay path", async () => {
+    mocks.supportsPopup.mockReturnValue(false);
+    await menu.show(new mocks.Window("parent") as never);
+    expect(mocks.roots).toHaveLength(0);
+    expect(mocks.arm).not.toHaveBeenCalled();
+    expect(mocks.overlays.at(-1)?.destroyed).toBe(false);
+  });
+
+  it("falls back to the existing overlay when the availability check throws", async () => {
+    const error = new Error("native interface unavailable");
+    mocks.supportsPopup.mockImplementationOnce(() => {
+      throw error;
+    });
+    await menu.show(new mocks.Window("parent") as never);
+    expect(mocks.roots).toHaveLength(0);
+    expect(mocks.arm).not.toHaveBeenCalled();
+    expect(mocks.overlays).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      { err: error },
+      "Wayland popup availability check failed"
     );
-    expect((await handlers.pull()).shadowInset).toBe(24);
+  });
+
+  it.each(["kde", "gnome", "niri", "other"])(
+    "keeps the %s overlay policy when popup data is unavailable",
+    async (platform) => {
+      mocks.overlayPolicy.capturePhase = ["kde", "other"].includes(platform)
+        ? "before-create"
+        : "before-show";
+      mocks.noFullscreen = platform !== "kde";
+      mocks.arm.mockReturnValue(null);
+      const { root, handlers } = await openRoot();
+      await handlers.reportSize(ipcEvent, 232, 281);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(root.destroyed).toBe(true);
+      expect(root.showInactive).not.toHaveBeenCalled();
+      expect(mocks.cancel).not.toHaveBeenCalled();
+      expect(mocks.overlays).toHaveLength(1);
+      const overlay = mocks.overlays[0];
+      const data = await mocks.ipc.get(overlay.webContents)!.pull(ipcEvent);
+      expect([data.cursorX, data.cursorY]).toEqual([1200, 700]);
+      expect(data.shadowInset).toBeUndefined();
+      expect(mocks.overlayOrder).toEqual(
+        ["kde", "other"].includes(platform)
+          ? ["capture", "create", "show"]
+          : ["create", "capture", "show"]
+      );
+      const attempts = mocks.arm.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(mocks.arm).toHaveBeenCalledTimes(attempts);
+      menu.close();
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  );
+
+  it("falls back if a later popup data retry throws", async () => {
+    const error = new Error("connection closed during retry");
+    mocks.arm.mockReturnValueOnce(null).mockImplementationOnce(() => {
+      throw error;
+    });
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await vi.advanceTimersByTimeAsync(5);
+    expect(root.destroyed).toBe(true);
+    expect(root.showInactive).not.toHaveBeenCalled();
+    expect(mocks.overlays).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      { reason: "popup arming failed", err: error },
+      "Wayland popup unavailable; falling back to overlay"
+    );
+  });
+
+  it("logs the reason and releases the reservation when conversion times out", async () => {
+    mocks.isPopup.mockReturnValue(false);
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(root.destroyed).toBe(true);
+    expect(mocks.cancel).toHaveBeenCalledWith(1);
+    expect(root.webContents.send).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      { reason: "popup conversion timed out" },
+      "Wayland popup unavailable; falling back to overlay"
+    );
+    menu.close();
+    mocks.isPopup.mockReturnValue(true);
+    menu = new AppMenu([]);
+    await menu.show(new mocks.Window("parent") as never);
+    const retry = mocks.roots[1];
+    await mocks.ipc.get(retry.webContents)!.reportSize(ipcEvent, 232, 281);
+    expect(retry.webContents.send).toHaveBeenCalledWith("menu.popupReady");
+    expect(retry.destroyed).toBe(false);
+  });
+
+  it("does not reveal a closed popup when conversion finishes late", async () => {
+    mocks.isPopup.mockReturnValue(false);
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await vi.advanceTimersByTimeAsync(50);
+    menu.close();
+    mocks.isPopup.mockReturnValue(true);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(root.webContents.send).not.toHaveBeenCalled();
+    expect(mocks.overlays).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retains the exception when popup initialization falls back", async () => {
+    const { root, handlers } = await openRoot();
+    const error = new Error("show failed");
+    root.showInactive.mockImplementationOnce(() => {
+      throw error;
+    });
+    await handlers.reportSize(ipcEvent, 232, 281);
+    expect(root.destroyed).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith(
+      { reason: "popup show failed", err: error },
+      "Wayland popup unavailable; falling back to overlay"
+    );
+  });
+
+  it("reports rejected close listeners before releasing them", async () => {
+    const error = new Error("close listener failed");
+    menu.on("close", () => {
+      throw error;
+    });
+    menu.close();
+    await vi.waitFor(() =>
+      expect(logger.warn).toHaveBeenCalledWith(
+        { err: expect.objectContaining({ errors: [error] }) },
+        "Menu close listener failed"
+      )
+    );
   });
 
   it("maps each submenu without constructing a second renderer", async () => {
     const { root, handlers } = await openRoot();
-    await handlers.reportSize(null, 232, 281);
-    await handlers.openSubmenu(null, [], {}, 232, 40);
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 40);
     const child = mocks.children[0];
-    await mocks.ipc.get(child.webContents)!.reportSize(null, 120, 80);
+    expect((await mocks.ipc.get(child.webContents)!.pull(ipcEvent)).pendingPopup).toBe(true);
+    await mocks.ipc.get(child.webContents)!.reportSize(ipcEvent, 120, 80);
     expect(mocks.children).toHaveLength(1);
     expect(child.destroyed).toBe(false);
     expect(child.showInactive).toHaveBeenCalledOnce();
     expect(mocks.arm).toHaveBeenLastCalledWith(root.id, child.id, 120, 80, 207, 16, 24);
-    expect((await mocks.ipc.get(child.webContents)!.pull()).shadowInset).toBe(24);
+    expect((await mocks.ipc.get(child.webContents)!.pull(ipcEvent)).shadowInset).toBe(24);
+    expect(child.webContents.send).toHaveBeenCalledExactlyOnceWith("menu.popupReady");
+    expect((await mocks.ipc.get(child.webContents)!.pull(ipcEvent)).pendingPopup).toBe(false);
   });
 
-  it("does not add shadow margins to the Windows popup path", async () => {
-    mocks.desktop = "windows";
-    const { handlers } = await openRoot();
-    expect((await handlers.pull()).shadowInset).toBeUndefined();
-    await handlers.reportSize(null, 232, 281);
-    await handlers.openSubmenu(null, [], {}, 232, 40);
+  it.each(["windows", "x11", "macos"])(
+    "does not use the native Wayland interface on %s",
+    async (desktop) => {
+      mocks.desktop = desktop;
+      const { handlers } = await openRoot();
+      expect((await handlers.pull(ipcEvent)).shadowInset).toBeUndefined();
+      expect((await handlers.pull(ipcEvent)).pendingPopup).toBeUndefined();
+      await handlers.reportSize(ipcEvent, 232, 281);
+      await handlers.openSubmenu(ipcEvent, [], {}, 232, 40);
+      const child = mocks.children[0];
+      expect((await mocks.ipc.get(child.webContents)!.pull(ipcEvent)).shadowInset).toBeUndefined();
+      expect(mocks.arm).not.toHaveBeenCalled();
+      expect(mocks.supportsPopup).not.toHaveBeenCalled();
+      expect(mocks.roots[0].webContents.send).not.toHaveBeenCalled();
+    }
+  );
+
+  it("closes the native menu chain when the submenu requests close", async () => {
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 40);
     const child = mocks.children[0];
-    expect((await mocks.ipc.get(child.webContents)!.pull()).shadowInset).toBeUndefined();
-    expect(mocks.arm).not.toHaveBeenCalled();
+    const childHandlers = mocks.ipc.get(child.webContents)!;
+    await childHandlers.reportSize(ipcEvent, 120, 80);
+    await childHandlers.close(ipcEvent);
+    expect(child.destroyed).toBe(true);
+    expect(root.destroyed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(mocks.overlays).toHaveLength(0);
+  });
+
+  it("ignores close requests from a replaced native submenu", async () => {
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 40);
+    const oldHandlers = mocks.ipc.get(mocks.children[0].webContents)!;
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 60);
+    await oldHandlers.close(ipcEvent);
+    expect(root.destroyed).toBe(false);
+    expect(mocks.children[1].destroyed).toBe(false);
   });
 
   it("ignores late reports from a closed root or replaced submenu", async () => {
     const { root, handlers } = await openRoot();
-    await handlers.reportSize(null, 232, 281);
-    await handlers.openSubmenu(null, [], {}, 232, 40);
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 40);
     const old = mocks.children[0];
-    await handlers.openSubmenu(null, [], {}, 232, 60);
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 60);
     mocks.arm.mockClear();
-    await mocks.ipc.get(old.webContents)!.reportSize(null, 120, 80);
+    await mocks.ipc.get(old.webContents)!.reportSize(ipcEvent, 120, 80);
     expect(old.destroyed).toBe(true);
     expect(mocks.arm).not.toHaveBeenCalled();
     menu.close();
-    await handlers.reportSize(null, 232, 281);
+    await handlers.reportSize(ipcEvent, 232, 281);
     expect(root.destroyed).toBe(true);
     expect(mocks.arm).not.toHaveBeenCalled();
   });
@@ -294,7 +496,7 @@ describe("GNOME popup single-render opening", () => {
   it("cancels parent-readiness retries when closed before mapping", async () => {
     mocks.arm.mockReturnValue(null);
     const { root, handlers } = await openRoot();
-    await handlers.reportSize(null, 232, 281);
+    await handlers.reportSize(ipcEvent, 232, 281);
     menu.close();
     mocks.arm.mockClear();
     await vi.advanceTimersByTimeAsync(300);
@@ -305,10 +507,10 @@ describe("GNOME popup single-render opening", () => {
   it.each(["wayland", "windows"])("cancels root and submenu blur timers on %s", async (desktop) => {
     mocks.desktop = desktop;
     const { root, handlers } = await openRoot();
-    await handlers.reportSize(null, 232, 281);
-    await handlers.openSubmenu(null, [], {}, 232, 40);
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 40);
     const child = mocks.children[0];
-    await mocks.ipc.get(child.webContents)!.reportSize(null, 120, 80);
+    await mocks.ipc.get(child.webContents)!.reportSize(ipcEvent, 120, 80);
     root.emit("blur");
     child.emit("blur");
     expect(vi.getTimerCount()).toBe(2);
