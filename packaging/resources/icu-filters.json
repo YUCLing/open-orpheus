@@ -1,84 +1,62 @@
 {
-  "// Use implicit-Han ordering for collation (178 KiB vs 511 KiB)": "",
   "collationUCAData": "implicithan",
 
-  "// Include only en_US, zh_Hans, zh_Hant and their parent chains.": "",
-  "// Using 'locale' + 'includeChildren: false' prevents expansion into": "",
-  "// every regional variant (en_AE, en_AG, ..., zh_HK, zh_MO, ...).": "",
+  "// Locales: en_US plus Japanese, Korean, and both Chinese scripts.": "",
   "localeFilter": {
     "filterType": "locale",
     "includeChildren": false,
-    "includelist": ["en_US", "zh_Hans", "zh_Hant"]
+    "includelist": ["en_US", "ja", "ko", "zh_Hans", "zh_Hant"]
   },
 
   "featureFilters": {
-    "// ---------- Features we drop entirely ----------": "",
     "stringprep": { "filterType": "exclude" },
     "unames": { "filterType": "exclude" },
 
-    "// ---------- Features we trim by file name ----------": "",
     "normalization": {
       "excludelist": ["nfkc_scf"]
     },
 
+    "// Omitted rules: title (title-casing), word_POSIX (POSIX word rules),": "",
+    "// sent_el (Greek sentence rules).": "",
     "brkitr_rules": {
-      "excludelist": ["line_cj", "title", "word_POSIX", "word_ja"]
-    },
-    "brkitr_tree": {
-      "excludelist": ["en_US_POSIX"]
+      "excludelist": ["title", "word_POSIX", "sent_el"]
     },
 
-    "// Keep only the charset converters commonly needed for legacy web content.": "",
+    "// Dictionaries: cjdict covers Chinese and Japanese word segmentation.": "",
+    "// Thai, Lao, Khmer, and Burmese dictionaries are omitted.": "",
+    "brkitr_dictionaries": {
+      "includelist": ["cjdict"]
+    },
+
+    "// No brkitr_tree entry is set: any _tree filter overrides localeFilter": "",
+    "// for that tree and lifts the locale restriction.": "",
+
+    "// Charset converters: CJK legacy encodings plus common Western ones.": "",
     "conversion_mappings": {
       "includelist": [
-        "iso-8859-2-html",
-        "iso-8859-3-html",
-        "iso-8859-4-html",
-        "iso-8859-5-html",
-        "iso-8859-6-html",
-        "iso-8859-7-html",
-        "iso-8859-8-html",
-        "iso-8859-10-html",
-        "iso-8859-13-html",
-        "iso-8859-14-html",
-        "iso-8859-15-html",
-        "iso-8859-16-html",
-        "windows-1250-html",
-        "windows-1251-html",
-        "windows-1252-html",
-        "windows-1253-html",
-        "windows-1254-html",
-        "windows-1255-html",
-        "windows-1256-html",
-        "windows-1257-html",
-        "windows-1258-html",
-        "windows-936-2000",
         "gb18030",
+        "windows-936-2000",
         "big5-html",
         "shift_jis-html",
         "euc-jp-html",
         "euc-kr-html",
-        "windows-874-html",
-        "macintosh-html",
-        "x-mac-cyrillic-html",
-        "ibm866-html",
-        "koi8-r-html",
-        "koi8-u-html"
+        "windows-1252-html",
+        "iso-8859-1-html",
+        "iso-8859-15-html",
+        "utf-16",
+        "utf-32"
       ]
     },
 
-    "// ---------- Locale-tree categories ----------": "",
-    "// These inherit localeFilter by default, so we only override when": "",
-    "// the tree needs a different locale set than locales_tree.": "",
-
-    "// zone_tree needs tzdbNames in addition to the locale filter.": "",
+    "// Time zones: locale list plus tzdbNames, a non-locale supplemental": "",
+    "// file that is not covered by the locale filter.": "",
     "zone_tree": {
       "filterType": "union",
       "unionOf": [
         {
           "filterType": "locale",
           "includeChildren": false,
-          "includelist": ["en_US", "zh_Hans", "zh_Hant"]
+          "includelist": ["en_US", "ja", "ko", "zh_Hans", "zh_Hant"]
         },
         {
           "includelist": ["tzdbNames"]
@@ -86,33 +64,39 @@
       ]
     },
 
-    "// rbnf is only needed by zh (hanidays) — Chromium ships ja too, but": "",
-    "// we're not shipping ja, so zh alone is enough.": "",
+    "// Rule-based number formatting: ja supplies japanese-calendar digits;": "",
+    "// zh supplies hanidays.": "",
     "rbnf_tree": {
-      "includelist": ["zh"]
+      "includelist": ["ja", "zh"]
     },
 
-    "// Collation: en_US and the Chinese tailorings.": "",
+    "// Collation: default tailorings for en_US, ja, and ko; pinyin, stroke,": "",
+    "// and zhuyin for Chinese.": "",
     "coll_tree": {
       "filterType": "union",
       "unionOf": [
-        { "filterType": "locale", "includeChildren": false, "includelist": ["en_US"] },
-        { "filterType": "locale", "includeChildren": false, "includelist": ["zh_Hans", "zh_Hant"] }
+        {
+          "filterType": "locale",
+          "includeChildren": false,
+          "includelist": ["en_US", "ja", "ko"]
+        },
+        {
+          "filterType": "locale",
+          "includeChildren": false,
+          "includelist": ["zh_Hans", "zh_Hant"]
+        }
       ]
     },
 
-    "// translit is NOT a locale tree — 'filterType: locale' raises": "",
-    "// KeyError: 'translit'. Use 'language' here, and prune the actual": "",
-    "// rules in resourceFilters below.": "",
     "translit": {
       "filterType": "language",
-      "includelist": ["en", "zh"]
+      "includelist": ["en", "ja", "ko", "zh"]
     }
   },
 
   "resourceFilters": [
     {
-      "// Strip redundant resource strings from locale bundles (same as Chromium).": "",
+      "// Remove resource entries unused at runtime from each locale bundle.": "",
       "categories": ["locales_tree"],
       "rules": [
         "-/*/mon",
@@ -152,7 +136,6 @@
         "-/*/sun-narrow:alias",
         "-/characterLabel",
         "-/AuxExemplarCharacters",
-        "-/ExemplarCharacters",
         "-/ExemplarCharactersNumbers",
         "-/ExemplarCharactersPunctuation",
         "-/measurementSystemNames",
@@ -161,7 +144,7 @@
       ]
     },
     {
-      "// Keep only the display-language names we can actually show.": "",
+      "// Language display names: restricted to the included languages.": "",
       "categories": ["lang_tree"],
       "rules": [
         "-/Languages",
@@ -169,6 +152,8 @@
         "-/Languages%menu",
         "-/Languages%variant",
         "+/*/en",
+        "+/*/ja",
+        "+/*/ko",
         "+/*/zh",
         "+/*/zh_Hans",
         "+/*/zh_Hant",
@@ -181,7 +166,6 @@
       ]
     },
     {
-      "// Drop currency plurals and narrow forms — we keep the currency codes themselves.": "",
       "categories": ["curr_tree"],
       "rules": [
         "-/Currencies%narrow",
@@ -191,7 +175,7 @@
       ]
     },
     {
-      "// Region: drop numeric groupings other than 419 (Latin America).": "",
+      "// Region: numeric groupings other than 419 are removed.": "",
       "categories": ["region_tree"],
       "rules": [
         "-/*/001",
@@ -227,14 +211,12 @@
       ]
     },
     {
-      "// Collation: keep compiled binary binaries, drop uncompiled rule text.": "",
+      "// Collation: uncompiled rule text removed; compiled binaries kept.": "",
       "categories": ["coll_tree"],
       "rules": ["-/UCARules", "-/collations/*/Sequence"]
     },
     {
-      "// Chinese collation: drop the legacy char-code orderings.": "",
-      "// (big5han/gb2312han are already excluded by default since ICU 73.": "",
-      "//  unihan is still shipped, but we don't need it.)": "",
+      "// Chinese collation: unihan, big5han, and gb2312han removed.": "",
       "categories": ["coll_tree"],
       "files": {
         "includelist": ["zh"]
@@ -242,7 +224,6 @@
       "rules": ["-/*/unihan", "-/*/big5han", "-/*/gb2312han"]
     },
     {
-      "// Supplemental data: keep only the subtrees needed at runtime.": "",
       "categories": ["misc"],
       "files": { "includelist": ["supplementalData"] },
       "rules": [
@@ -260,20 +241,22 @@
       ]
     },
     {
-      "// Transliteration: keep only the handful of rules used at runtime.": "",
-      "// This prunes the file-level result of the 'language' filter above.": "",
+      "// Transliteration: romanization and Kana/Hangul conversion rules.": "",
       "categories": ["translit"],
       "rules": [
         "-/*",
         "+/RuleBasedTransliteratorIDs/Latin-ASCII",
+        "+/RuleBasedTransliteratorIDs/Han-Latin",
+        "+/RuleBasedTransliteratorIDs/Hiragana-Latin",
+        "+/RuleBasedTransliteratorIDs/Katakana-Latin",
         "+/RuleBasedTransliteratorIDs/Katakana-Hiragana",
         "+/RuleBasedTransliteratorIDs/Hiragana-Katakana",
         "+/RuleBasedTransliteratorIDs/Hira-Kana",
-        "+/RuleBasedTransliteratorIDs/Kana-Hira"
+        "+/RuleBasedTransliteratorIDs/Kana-Hira",
+        "+/RuleBasedTransliteratorIDs/Hangul-Latin"
       ]
     },
     {
-      "// Drop Version fields — small size win, no functional impact.": "",
       "categories": [
         "brkitr_tree",
         "coll_tree",
