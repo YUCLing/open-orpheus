@@ -106,4 +106,7 @@ export default defineConfig({
       input: { _sveltekit: "virtual:sveltekit-bridge" },
     },
   },
+  server: {
+    watch: null,
+  },
 });
