@@ -102,7 +102,7 @@ describe("createProjectTarball", () => {
       "packaging/resources/debian/control.ejs",
       "packaging/resources/debian/rules.ejs",
       "packaging/resources/misc/file",
-      "packaging/options.ts",
+      "packaging/resources/metadata.ts",
     ]);
     const child = nextTar();
 
@@ -111,7 +111,10 @@ describe("createProjectTarball", () => {
     ]);
     await settle();
 
-    expect(tarInput(child)).toEqual(["packaging/resources/misc/file", "packaging/options.ts"]);
+    expect(tarInput(child)).toEqual([
+      "packaging/resources/misc/file",
+      "packaging/resources/metadata.ts",
+    ]);
 
     child.emit("close", 0);
     await promise;

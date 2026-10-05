@@ -3,8 +3,6 @@ import { writeFile } from "node:fs/promises";
 
 import ejs from "ejs";
 
-import type { MakerDebOptions } from "../types.ts";
-
 const template = resolve(import.meta.dirname, "../resources/debian/control.ejs");
 
 export interface ControlOptions {
@@ -13,6 +11,25 @@ export interface ControlOptions {
   maintainer: string;
   homepage: string;
   description: string;
+}
+
+/**
+ * Overrides for the rendered `debian/control`. Every field is optional: unset
+ * ones fall back to `package.json` (or the Debian default), so callers only
+ * supply what npm cannot — currently the homepage and the long description,
+ * which live in the shared `packaging/resources/metadata.ts`.
+ */
+export interface ControlMetadata {
+  /** Package name. Defaults to package.json `name`. */
+  name?: string;
+  /** Debian section. Defaults to `"sound"`. */
+  section?: string;
+  /** Maintainer in `Name <email>` form. Defaults to package.json `author`. */
+  maintainer?: string;
+  /** Homepage URL. Defaults to package.json `homepage`. */
+  homepage?: string;
+  /** Short description (continuation lines are indented automatically). Defaults to package.json `description`. */
+  description?: string;
 }
 
 function formatMaintainer(author: unknown): string {
@@ -29,9 +46,9 @@ function normalizeDescription(description: string): string {
   return description.replace(/\n/g, "\n ");
 }
 
-/** Resolve the control fields from the deb options + package.json defaults. */
+/** Resolve the control fields from the metadata overrides + package.json defaults. */
 export function resolveControlOptions(
-  options: MakerDebOptions,
+  metadata: ControlMetadata,
   pkg: {
     name?: string;
     author?: unknown;
@@ -40,11 +57,11 @@ export function resolveControlOptions(
   }
 ): ControlOptions {
   return {
-    name: options.name ?? pkg.name ?? "open-orpheus",
-    section: options.section ?? "sound",
-    maintainer: options.maintainer ?? formatMaintainer(pkg.author),
-    homepage: options.homepage ?? pkg.homepage ?? "",
-    description: normalizeDescription(options.description ?? pkg.description ?? ""),
+    name: metadata.name ?? pkg.name ?? "open-orpheus",
+    section: metadata.section ?? "sound",
+    maintainer: metadata.maintainer ?? formatMaintainer(pkg.author),
+    homepage: metadata.homepage ?? pkg.homepage ?? "",
+    description: normalizeDescription(metadata.description ?? pkg.description ?? ""),
   };
 }
 

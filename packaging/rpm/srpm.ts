@@ -4,9 +4,11 @@ import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import { createProjectTarball } from "../common/archive.ts";
+import { readPackageJson } from "../common/package-json.ts";
 import { createPrebuiltBundle } from "../common/prebuilt.ts";
 import { CARGO_ZIGBUILD_VERSION, ZIG_VERSION } from "../common/toolchain.ts";
 import { cleanOutDir } from "../common/util.ts";
+import { metadata } from "../resources/metadata.ts";
 import { createSpecFile } from "./spec.ts";
 
 const execFile = promisify(execFileCb);
@@ -39,10 +41,8 @@ export async function buildSrpm(options: BuildSrpmOptions = {}): Promise<string[
   // older version) can't be mistaken for this build's output.
   await cleanOutDir(outDir, options.clean);
 
-  const pkg = JSON.parse(await readFile(resolve(projectRoot, "package.json"), "utf-8"));
-  const { rpm: rpmOptions } = await import(resolve(projectRoot, "packaging/options.ts"));
-
-  const name = rpmOptions.name;
+  const pkg = await readPackageJson(projectRoot);
+  const name = pkg.name;
   const version: string = pkg.version;
   const release = "1%{?dist}";
 
@@ -106,10 +106,12 @@ export async function buildSrpm(options: BuildSrpmOptions = {}): Promise<string[
     name,
     version,
     release,
-    summary: rpmOptions.description ?? pkg.description,
+    // Summary/license/homepage: the store supplies what package.json lacks
+    // (`homepage`) and the shorter one-line summary the spec wants.
+    summary: metadata.summary,
     description: pkg.description,
-    license: rpmOptions.license ?? pkg.license,
-    homepage: rpmOptions.homepage ?? pkg.homepage,
+    license: pkg.license,
+    homepage: metadata.homepage,
     nodeVersion,
     wasmBindgen,
     cargoZigbuild: CARGO_ZIGBUILD_VERSION,

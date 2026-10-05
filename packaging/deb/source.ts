@@ -5,10 +5,12 @@ import { promisify } from "node:util";
 
 import { nodeArch } from "../common/arch.ts";
 import { createProjectTarball } from "../common/archive.ts";
+import { readPackageJson } from "../common/package-json.ts";
 import { createPrebuiltBundle } from "../common/prebuilt.ts";
 import { runStreaming } from "../common/process.ts";
 import { CARGO_ZIGBUILD_VERSION, ZIG_VERSION } from "../common/toolchain.ts";
 import { cleanOutDir } from "../common/util.ts";
+import { metadata } from "../resources/metadata.ts";
 import { createControlFile, resolveControlOptions, type ControlOptions } from "./control.ts";
 import { createRulesFile } from "./rules.ts";
 
@@ -28,12 +30,6 @@ export interface DebOptions {
   nodeps?: boolean;
   /** Path to a prebuilt packaged app dir (out/<name>-linux-<arch>) to bundle instead of compiling. */
   prebuilt?: string;
-}
-
-async function resolveMeta(projectRoot: string) {
-  const pkg = JSON.parse(await readFile(resolve(projectRoot, "package.json"), "utf-8"));
-  const { deb: debOptions } = await import(resolve(projectRoot, "packaging/options.ts"));
-  return { pkg, debOptions };
 }
 
 /**
@@ -127,14 +123,18 @@ export async function buildDeb(options: DebOptions = {}): Promise<string[]> {
   // Empty the directory first so stale artifacts from earlier runs (e.g. an
   // older version) can't be mistaken for this build's output.
   await cleanOutDir(outDir, options.clean);
-  const { pkg, debOptions } = await resolveMeta(projectRoot);
-
-  const name = debOptions.name;
+  const pkg = await readPackageJson(projectRoot);
+  const name = pkg.name;
   const version: string = pkg.version;
   const srcDir = await stageSource(projectRoot, outDir, name, version, {
     installTools: options.installTools,
     prebuilt: options.prebuilt,
-    control: resolveControlOptions(debOptions, pkg),
+    // Name/section/maintainer come from package.json (and their defaults); only
+    // the fields package.json cannot supply are overridden here.
+    control: resolveControlOptions(
+      { homepage: metadata.homepage, description: metadata.description },
+      pkg
+    ),
   });
 
   // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit
@@ -172,14 +172,16 @@ export async function buildDebSource(options: DebOptions = {}): Promise<string[]
   // Empty the directory first so stale artifacts from earlier runs aren't
   // mistaken for this build's output.
   await cleanOutDir(outDir, options.clean);
-  const { pkg, debOptions } = await resolveMeta(projectRoot);
-
-  const name = debOptions.name;
+  const pkg = await readPackageJson(projectRoot);
+  const name = pkg.name;
   const version: string = pkg.version;
   const srcDir = await stageSource(projectRoot, outDir, name, version, {
     installTools: options.installTools,
     prebuilt: options.prebuilt,
-    control: resolveControlOptions(debOptions, pkg),
+    control: resolveControlOptions(
+      { homepage: metadata.homepage, description: metadata.description },
+      pkg
+    ),
   });
 
   // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit

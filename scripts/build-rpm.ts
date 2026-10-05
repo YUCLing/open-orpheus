@@ -3,13 +3,13 @@ import { resolve } from "node:path";
 import { buildRpm } from "../packaging/rpm/build.ts";
 import { parseFlags } from "../packaging/common/cli.ts";
 import { resolvePrebuiltAppDir } from "../packaging/common/prebuilt.ts";
+import pkg from "../package.json" with { type: "json" };
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const flags = parseFlags(process.argv.slice(2));
 
-const { rpm: rpmOptions } = await import(new URL("../packaging/options.ts", import.meta.url).href);
 const prebuilt = flags.prebuilt
-  ? await resolvePrebuiltAppDir(projectRoot, rpmOptions.name, flags.arch)
+  ? await resolvePrebuiltAppDir(projectRoot, pkg.name, flags.arch)
   : undefined;
 
 // Build the SRPM (with the packaged app bundled as Source1 when `--prebuilt`),
