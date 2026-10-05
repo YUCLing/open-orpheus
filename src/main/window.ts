@@ -5,7 +5,6 @@ import Emittery from "emittery";
 import {
   cancelLayerShellForNextWindow,
   decorateWindowTitle,
-  drainWindowCallbacks,
   getDesktopEnvironment,
   isLayerShellAvailable,
   onLayerShellRoleRefused,
@@ -19,12 +18,7 @@ import type { LayerShellOptions } from "@open-orpheus/window";
 export type { LayerShellOptions };
 
 import type AppMenu from "./menu";
-import {
-  events as lifecycleEvents,
-  LifecycleState,
-  registerShutdownFinalizer,
-  state as lifecycleState,
-} from "./lifecycle";
+import { events as lifecycleEvents, LifecycleState, state as lifecycleState } from "./lifecycle";
 
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
 const managedBrowserWindows = new Set<BrowserWindow>();
@@ -48,23 +42,6 @@ const finalizationRegistry = new FinalizationRegistry<WeakRef<ManagedWindow>>((h
  * native module accepts it.
  */
 const REAPPLY_DELAYS_MS = [0, 50, 100, 200, 400] as const;
-
-/** Reap completed native callbacks on the JS thread, including while idle. */
-const CALLBACK_REAP_INTERVAL_MS = 50;
-
-// A callback can retire just after its final cancellation. Reap independently
-// of new menu activity; this timer must not keep the application alive.
-const callbackReaper = setInterval(() => drainWindowCallbacks(), CALLBACK_REAP_INTERVAL_MS);
-callbackReaper.unref();
-// Keep reaping while shutdown tasks dispose their resources. A finalizer also
-// runs on signal-driven app.exit(), and cannot be skipped by the task deadline.
-registerShutdownFinalizer({
-  name: "window-callbacks",
-  run: () => {
-    clearInterval(callbackReaper);
-    drainWindowCallbacks();
-  },
-});
 
 export let mainWindow: BrowserWindow | null = null;
 
@@ -118,7 +95,7 @@ export type WindowData = {
   maximumSize: { x: number; y: number };
   minimumSize: { x: number; y: number };
   alwaysOnTop: boolean;
-  menu: AppMenu | undefined;
+  menu: AppMenu;
 };
 
 function shouldRespectSizeConstraints(wnd: BrowserWindow) {
@@ -142,8 +119,7 @@ export function guiUrl(route = "/"): string {
 
 app.on("browser-window-created", (event, wnd) => {
   setImmediate(() => {
-    // A short-lived probe may already have closed and released its binding.
-    if (wnd.isDestroyed() || managedBrowserWindows.has(wnd)) return;
+    if (managedBrowserWindows.has(wnd)) return;
     // A window this module did not create. Managed windows are bound
     // synchronously by `createBrowserWindow`, so this is only a safety net.
     new SimpleManagedWindow(wnd);
@@ -196,7 +172,6 @@ export abstract class ManagedWindow<
 
   private _lastOnClosedListener: (() => void) | null = null;
   private _closeNotifier: (() => void) | null = null;
-  private _menuCloseUnsubscribe: (() => void) | null = null;
 
   private readonly _nativeState: NativeWindowState = {
     postShow: { inputRegions: null },
@@ -211,8 +186,10 @@ export abstract class ManagedWindow<
   /**
    * A layer-shell declaration is in flight for this window's next surface.
    *
-   * Exactly one named declaration may be outstanding per surface. Only this
-   * window consumes it; hide/unbind and failed shows withdraw it by owner id.
+   * The native queue is positional and hands declarations out oldest first, so
+   * exactly one may be outstanding per surface: a second one would be claimed
+   * by whichever window creates the next surface instead. Cleared by the next
+   * visibility change, which is when the surface exists or is gone.
    */
   private _layerShellDeclared = false;
 
@@ -227,10 +204,6 @@ export abstract class ManagedWindow<
     if (this._window === value) return;
     const previous = this._window;
     if (previous) {
-      this.cancelReapply();
-      this._surfaceGeneration++;
-      this.cancelLayerShell();
-      this.setMenu(undefined);
       managedBrowserWindows.delete(previous);
       browserManagedWindowMap.delete(previous);
       this.detachWindowListeners(previous);
@@ -294,43 +267,33 @@ export abstract class ManagedWindow<
   };
 
   private readonly _maximizeListener = () => {
-    this.setMenu(undefined);
     this.disableSizeConstraints();
   };
   private readonly _unmaximizeListener = () => {
-    this.setMenu(undefined);
     this.enableSizeConstraints();
   };
   private readonly _enterFullScreenListener = () => {
-    this.setMenu(undefined);
     this.disableSizeConstraints();
   };
   private readonly _leaveFullScreenListener = () => {
-    this.setMenu(undefined);
     this.enableSizeConstraints();
-  };
-  // A popup's anchor belongs to the layout at opening time. Close the parent
-  // window's menu rather than retaining that anchor after a layout resize.
-  private readonly _resizeListener = () => {
-    this.setMenu(undefined);
   };
   private readonly _showListener = () => {
     const wnd = this._window;
     if (!wnd) return;
     // A new show may bring a new platform surface with it.
     this._surfaceGeneration++;
-    // Electron's show event can precede native role creation. Keep ownership
-    // until hide/unbind so it cannot cancel a declaration still being consumed.
+    // Whatever was declared for this surface has been claimed by now.
+    this._layerShellDeclared = false;
     this.reapplyNativeState();
     void this.emit("show", wnd);
   };
   private readonly _hideListener = () => {
     const wnd = this._window;
     if (!wnd) return;
-    this.setMenu(undefined);
     this._surfaceGeneration++;
     // The next show brings a new surface, which needs its own declaration.
-    this.cancelLayerShell();
+    this._layerShellDeclared = false;
     this.cancelReapply();
     this.onWindowHidden();
     void this.emit("hide", wnd);
@@ -361,7 +324,6 @@ export abstract class ManagedWindow<
    * is too late for wiring that must exist before the window is used.
    */
   private attachWindowListeners(wnd: BrowserWindow) {
-    wnd.on("resize", this._resizeListener);
     wnd.on("maximize", this._maximizeListener);
     wnd.on("unmaximize", this._unmaximizeListener);
     wnd.on("enter-full-screen", this._enterFullScreenListener);
@@ -384,22 +346,12 @@ export abstract class ManagedWindow<
     this._originalShow = wnd.show.bind(wnd);
     wnd.show = () => {
       this.armLayerShellForShow(wnd);
-      try {
-        this._originalShow?.();
-      } catch (error) {
-        this.cancelLayerShell();
-        throw error;
-      }
+      this._originalShow?.();
     };
     this._originalShowInactive = wnd.showInactive.bind(wnd);
     wnd.showInactive = () => {
       this.armLayerShellForShow(wnd);
-      try {
-        this._originalShowInactive?.();
-      } catch (error) {
-        this.cancelLayerShell();
-        throw error;
-      }
+      this._originalShowInactive?.();
     };
 
     wnd.webContents.setWindowOpenHandler(({ url }) => {
@@ -434,7 +386,6 @@ export abstract class ManagedWindow<
   }
 
   private detachWindowListeners(wnd: BrowserWindow) {
-    wnd.off("resize", this._resizeListener);
     wnd.off("maximize", this._maximizeListener);
     wnd.off("unmaximize", this._unmaximizeListener);
     wnd.off("enter-full-screen", this._enterFullScreenListener);
@@ -459,22 +410,15 @@ export abstract class ManagedWindow<
    * one created hidden has no surface until its first show, which arms it.
    */
   protected createBrowserWindow(options: BrowserWindowConstructorOptions): BrowserWindow {
-    if (this._window) this.window = null;
     // A new window is a new surface: nothing is in flight for it.
-    this.cancelLayerShell();
+    this._layerShellDeclared = false;
     this.beforeSurfaceCreated();
     if (options.show !== false) this.armLayerShell();
-    // Supply the decorated title from the first native role initialization,
-    // not only after construction: the proxy needs the id to select its role.
+    // The title is ours to write, because the managed id rides in it: it is
+    // never handed to the constructor, where nothing would decorate it.
     const { title, ...rest } = options;
     if (title !== undefined) this._title = title;
-    let wnd: BrowserWindow;
-    try {
-      wnd = new BrowserWindow({ ...rest, title: this.decoratedTitle() });
-    } catch (error) {
-      this.cancelLayerShell();
-      throw error;
-    }
+    const wnd = new BrowserWindow(rest);
     this.window = wnd;
     this.applyTitle();
     return wnd;
@@ -551,14 +495,13 @@ export abstract class ManagedWindow<
     const options = this._nativeState.preCreate.layerShell;
     if (!options) return false;
     if (this._layerShellDeclared) return true;
-    const accepted = useLayerShellForNextWindow(options, this.id);
+    const accepted = useLayerShellForNextWindow(options);
     this._layerShellDeclared = accepted;
     return accepted;
   }
 
   private cancelLayerShell(): void {
-    if (this._layerShellDeclared) cancelLayerShellForNextWindow(this.id);
-    this._layerShellDeclared = false;
+    cancelLayerShellForNextWindow();
   }
 
   /** The bound window, or `null` once it is gone. Never a destroyed window. */
@@ -700,26 +643,6 @@ export abstract class ManagedWindow<
     return this._data[key];
   }
 
-  /** Replace the menu owned by this window and dispose the previous one. */
-  setMenu(menu: AppMenu | undefined) {
-    const previous = this.getData("menu");
-    if (previous === menu) return;
-
-    this._menuCloseUnsubscribe?.();
-    this._menuCloseUnsubscribe = null;
-    this.setData("menu", menu);
-    previous?.close();
-
-    if (menu) {
-      this._menuCloseUnsubscribe = menu.on("close", () => {
-        if (this.getData("menu") !== menu) return;
-        this._menuCloseUnsubscribe?.();
-        this._menuCloseUnsubscribe = null;
-        this.setData("menu", undefined);
-      });
-    }
-  }
-
   private enableSizeConstraints() {
     const wnd = this.liveWindow();
     if (!wnd) return;
@@ -822,9 +745,6 @@ export abstract class ManagedWindow<
    * `window` binding instead.
    */
   transferStateTo(target: ManagedWindow): void {
-    // A popup belongs to the old surface, not to the replacement wrapper.
-    this.setMenu(undefined);
-    target.setMenu(undefined);
     const merged: Record<string, unknown> = Object.create(null);
     Object.assign(merged, target._data, this._data);
     target._data = merged;

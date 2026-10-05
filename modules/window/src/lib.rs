@@ -35,9 +35,9 @@ pub enum LayerShellLayer {
 
 /// Layer-shell state for a window the application is about to create.
 ///
-/// With an owner, applied only to that managed window; without one, applied to
-/// the next eligible toplevel. Declare it before the window (or its surface) is
-/// brought into existence. A declaration without size or anchors covers the output.
+/// Applied to the next toplevel the display connection creates, so it has to be
+/// declared before the window (or its surface) is brought into existence. A
+/// declaration that says nothing about size or anchors covers the output.
 #[napi(object)]
 pub struct LayerShellOptions {
     /// Purpose of the surface, e.g. `"open-orpheus-menu"`. Required.
@@ -87,13 +87,6 @@ pub fn get_desktop_environment() -> DesktopEnvironment {
 }
 
 // region: Linux methods
-
-/// Release completed native input callbacks on the JavaScript thread.
-#[napi]
-pub fn drain_window_callbacks() {
-    #[cfg(target_os = "linux")]
-    linux::reap_retired_releases();
-}
 
 /// Set regions that the window is used to receive inputs.
 ///
@@ -170,162 +163,22 @@ pub fn on_layer_shell_role_refused(
 /// Only for Wayland on Linux.
 #[napi]
 pub fn capture_next_window_first_cursor_enter(
+    env: Env,
     #[napi(ts_arg_type = "(x: number, y: number) => void")] callback: Function<
         FnArgs<(i32, i32)>,
         (),
     >,
-) -> Result<u32> {
+) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
         use crate::linux::capture_next_window_first_cursor_enter as capture_next_window_first_cursor_enter_impl;
-        capture_next_window_first_cursor_enter_impl(callback)
+        capture_next_window_first_cursor_enter_impl(env, callback)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         let _ = callback;
-        Err(napi::Error::from_reason("Only supports Linux"))
-    }
-}
-
-/// Cancel a pending first-cursor-enter capture.
-#[napi]
-pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        linux::cancel_next_window_first_cursor_enter(token)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = token;
-        false
-    }
-}
-
-/// Reserve an xdg_popup role for `target_window_id` on its parent's connection.
-///
-/// Only that managed window may consume the reservation. Omit anchor coordinates
-/// to use the last pointer-button position on the parent. `shadow_inset` excludes
-/// transparent client-side shadow margins from the window geometry.
-/// Returns no token when hooks or the required window/anchor/object-ID data
-/// are unavailable; callers should retry briefly, then use their overlay path.
-#[napi]
-pub fn arm_next_window_as_popup(
-    parent_window_id: String,
-    target_window_id: String,
-    width: i32,
-    height: i32,
-    anchor_x: Option<i32>,
-    anchor_y: Option<i32>,
-    shadow_inset: Option<i32>,
-) -> Option<u32> {
-    #[cfg(target_os = "linux")]
-    {
-        linux::arm_next_window_as_popup(
-            parent_window_id,
-            target_window_id,
-            width,
-            height,
-            anchor_x,
-            anchor_y,
-            shadow_inset,
-        )
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (
-            parent_window_id,
-            target_window_id,
-            width,
-            height,
-            anchor_x,
-            anchor_y,
-            shadow_inset,
-        );
-        None
-    }
-}
-
-/// Cancel a popup reservation that has not yet been consumed by its target window.
-#[napi]
-pub fn cancel_pending_popup(token: u32) -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        linux::cancel_pending_popup(token)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = token;
-        false
-    }
-}
-
-/// Whether this tracked BrowserWindow was actually converted to xdg_popup.
-#[napi]
-pub fn is_window_wayland_popup(window_id: String) -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        linux::is_window_wayland_popup(window_id)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = window_id;
-        false
-    }
-}
-
-/// Whether the active Wayland hooks allow a native popup attempt.
-///
-/// Independent of the desktop name. This does not guarantee that a particular
-/// window can become a popup: arming still requires a tracked parent, anchor
-/// data and a reusable object ID. Callers must retain an overlay fallback.
-#[napi]
-pub fn supports_native_wayland_popup() -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        linux::supports_native_wayland_popup()
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        false
-    }
-}
-
-/// Invoke once when a Wayland pointer-axis event reaches this window's client.
-#[napi]
-pub fn capture_window_next_pointer_axis(
-    window_id: String,
-    #[napi(ts_arg_type = "(axis: number) => void")] callback: Function<FnArgs<(u32,)>, ()>,
-) -> Result<u32> {
-    #[cfg(target_os = "linux")]
-    {
-        linux::capture_window_next_pointer_axis(window_id, callback)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (window_id, callback);
-        Err(napi::Error::from_reason("Only supports Linux"))
-    }
-}
-
-/// Cancel a pending pointer-axis capture.
-#[napi]
-pub fn cancel_window_pointer_axis_capture(token: u32) -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        linux::cancel_window_pointer_axis_capture(token)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = token;
-        false
+        env.throw("Only supports Linux")
     }
 }
 
@@ -370,19 +223,16 @@ pub fn is_layer_shell_available() -> bool {
 /// is created: a compositor assigns a surface's role once and never changes it.
 /// Returns whether the declaration was accepted; when it is refused the window
 /// is still created as an ordinary one.
-/// Named declarations belong only to that managed window; omit `owner` to use
-/// the next eligible toplevel instead.
 #[napi]
-pub fn use_layer_shell_for_next_window(options: LayerShellOptions, owner: Option<String>) -> bool {
+pub fn use_layer_shell_for_next_window(options: LayerShellOptions) -> bool {
     #[cfg(target_os = "linux")]
     {
-        crate::linux::declare_layer_window(&options, owner)
+        crate::linux::declare_layer_window(&options)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         let _ = options;
-        let _ = owner;
         false
     }
 }
@@ -410,19 +260,16 @@ pub fn validate_layer_shell_options(options: LayerShellOptions) -> bool {
     }
 }
 
-/// Withdraw the newest pending declaration for `owner`.
-///
-/// Omit `owner` to withdraw the newest unnamed declaration.
+/// Withdraw a layer-shell declaration that has not been consumed yet.
 #[napi]
-pub fn cancel_layer_shell_for_next_window(owner: Option<String>) -> bool {
+pub fn cancel_layer_shell_for_next_window() -> bool {
     #[cfg(target_os = "linux")]
     {
-        crate::linux::cancel_layer_window(owner.as_deref())
+        crate::linux::cancel_layer_window()
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = owner;
         false
     }
 }

@@ -1,5 +1,5 @@
-//! Layer-shell functionality: registry tracking, declarations that pick their
-//! managed window (or the next unnamed role), and xdg-shell ⇄ layer-shell translation.
+//! Layer-shell functionality: registry tracking, the positional declaration
+//! that picks a window, and the xdg-shell ⇄ layer-shell translation.
 //!
 //! The compositor sees a layer surface where the client believes it has an
 //! `xdg_toplevel`. The client's toplevel id is reused as the layer surface id,
@@ -52,21 +52,21 @@ pub(crate) fn on_registry_global_remove(conn: &mut WaylandConn, msg: &WlMessage)
 /// Consume a declaration and, when it applies, replace `get_toplevel`.
 ///
 /// This is the only place a window takes on the layer-shell role: the
-/// declaration is selected by the managed id resolved by `roles`, with unnamed
-/// declarations as a positional fallback. Missing preconditions leave the
-/// window an ordinary toplevel rather than risking a protocol error.
+/// declaration is positional, so the next toplevel the client creates is the
+/// one it describes. Any missing precondition leaves the window an ordinary
+/// toplevel rather than risking a protocol error.
 ///
 /// A surface that already holds the role is converted again with the
 /// declaration that put it there, because the compositor will not hand the
 /// surface a different role while it lives — the client destroys and re-creates
 /// its `xdg_toplevel` whenever it hides and shows the window.
 pub(crate) fn on_get_toplevel(
-    fd: RawFd,
+    _fd: RawFd,
     conn: &mut WaylandConn,
     msg: &WlMessage,
     fx: &mut Effects,
 ) -> Action {
-    let declaration = state::take_named_layer_window_declaration(conn.role_window_id.as_deref());
+    let declaration = state::take_layer_window_declaration();
     let xdg_surface_id = msg.object_id;
     let surface_id = conn.xdg_to_wl.get(&xdg_surface_id).copied();
     let previously = surface_id.is_some_and(|id| conn.layer_surfaces.contains_key(&id));
@@ -86,19 +86,18 @@ pub(crate) fn on_get_toplevel(
             "[proxy:wayland] layer-shell refused: the window's surface is already an xdg_toplevel, so it cannot become a layer surface (re-create the window to apply it)"
         );
         fx.layer_shell_refused = conn.surface_ids.get(&id).cloned();
-        return objects::on_get_toplevel(fd, conn, msg, fx);
+        return objects::on_get_toplevel(conn, msg, fx);
     }
 
     let Some(options) = options else {
-        return objects::on_get_toplevel(fd, conn, msg, fx);
+        return objects::on_get_toplevel(conn, msg, fx);
     };
 
     let Some(toplevel_id) = msg.u32_arg(8) else {
-        return fall_back(fd, conn, msg, fx, previously, "the request has no new id");
+        return fall_back(conn, msg, fx, previously, "the request has no new id");
     };
     let Some(surface_id) = surface_id else {
         return fall_back(
-            fd,
             conn,
             msg,
             fx,
@@ -108,7 +107,6 @@ pub(crate) fn on_get_toplevel(
     };
     let Some((global_name, version)) = conn.layer_shell_global else {
         return fall_back(
-            fd,
             conn,
             msg,
             fx,
@@ -117,14 +115,7 @@ pub(crate) fn on_get_toplevel(
         );
     };
     let Some(registry_id) = conn.registry_id else {
-        return fall_back(
-            fd,
-            conn,
-            msg,
-            fx,
-            previously,
-            "the client has no wl_registry",
-        );
+        return fall_back(conn, msg, fx, previously, "the client has no wl_registry");
     };
 
     let bound_now = conn.layer_shell_id.is_none();
@@ -132,14 +123,7 @@ pub(crate) fn on_get_toplevel(
         Some(id) => id,
         None => {
             let Some(id) = conn.alloc_injected_id() else {
-                return fall_back(
-                    fd,
-                    conn,
-                    msg,
-                    fx,
-                    previously,
-                    "no spare object id to bind with",
-                );
+                return fall_back(conn, msg, fx, previously, "no spare object id to bind with");
             };
             conn.layer_shell_id = Some(id);
             conn.ifaces.insert(id, Iface::ZwlrLayerShell);
@@ -201,7 +185,7 @@ pub(crate) fn on_get_toplevel(
     conn.wl_to_layer.insert(surface_id, toplevel_id);
     conn.xdg_to_layer.insert(xdg_surface_id, toplevel_id);
     // Cursor-enter capture is armed on the surface, exactly as for a toplevel.
-    fx.arm_watchers_for.push(surface_id);
+    fx.arm_watchers_for = Some(surface_id);
 
     Action::Replace(messages)
 }
@@ -213,7 +197,6 @@ pub(crate) fn on_get_toplevel(
 /// role cannot be given an xdg-shell role at all, so the request is dropped
 /// instead: the window never maps, but the connection lives.
 fn fall_back(
-    fd: RawFd,
     conn: &mut WaylandConn,
     msg: &WlMessage,
     fx: &mut Effects,
@@ -224,7 +207,7 @@ fn fall_back(
     if previously_converted {
         return Action::Suppress;
     }
-    objects::on_get_toplevel(fd, conn, msg, fx)
+    objects::on_get_toplevel(conn, msg, fx)
 }
 
 /// Requests from a client that still believes its window is an `xdg_toplevel`.
@@ -324,9 +307,7 @@ pub(crate) fn on_get_toplevel_decoration(conn: &mut WaylandConn, msg: &WlMessage
     let (Some(decoration_id), Some(toplevel_id)) = (msg.u32_arg(8), msg.u32_arg(12)) else {
         return Action::Suppress;
     };
-    if !conn.layer_windows.contains_key(&toplevel_id)
-        && conn.ifaces.get(&toplevel_id) != Some(&Iface::XdgPopupShim)
-    {
+    if !conn.layer_windows.contains_key(&toplevel_id) {
         return Action::Forward;
     }
 
@@ -351,12 +332,7 @@ pub(crate) fn on_get_toplevel_decoration(conn: &mut WaylandConn, msg: &WlMessage
 /// the assignment is dropped.
 pub(crate) fn on_set_icon(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
     match msg.u32_arg(8) {
-        Some(toplevel_id)
-            if conn.layer_windows.contains_key(&toplevel_id)
-                || conn.ifaces.get(&toplevel_id) == Some(&Iface::XdgPopupShim) =>
-        {
-            Action::Suppress
-        }
+        Some(toplevel_id) if conn.layer_windows.contains_key(&toplevel_id) => Action::Suppress,
         _ => Action::Forward,
     }
 }
@@ -498,24 +474,6 @@ mod tests {
     }
 
     #[test]
-    fn named_declarations_are_consumed_and_cancelled_only_by_their_owner() {
-        let (_guard, _conn) = fixture();
-        assert!(state::declare_named_layer_window(
-            options(),
-            Some("layer-a".into())
-        ));
-        assert!(state::declare_named_layer_window(
-            options(),
-            Some("layer-b".into())
-        ));
-        assert!(state::take_named_layer_window_declaration(Some("foreign")).is_none());
-        assert!(state::cancel_named_layer_window(Some("layer-a")));
-        assert!(!state::cancel_named_layer_window(Some("layer-a")));
-        assert!(state::take_named_layer_window_declaration(Some("layer-b")).is_some());
-        assert!(state::take_named_layer_window_declaration(Some("layer-b")).is_none());
-    }
-
-    #[test]
     fn registry_globals_are_tracked_and_layer_shell_noticed() {
         let (_guard, mut conn) = fixture();
 
@@ -625,7 +583,7 @@ mod tests {
         assert_eq!(conn.wl_to_layer.get(&10), Some(&30));
         assert_eq!(conn.xdg_to_layer.get(&20), Some(&30));
         assert!(conn.layer_windows.contains_key(&30));
-        assert_eq!(fx.arm_watchers_for, vec![10]);
+        assert_eq!(fx.arm_watchers_for, Some(10));
     }
 
     #[test]
@@ -854,32 +812,6 @@ mod tests {
 
         assert!(matches!(action, Action::Forward));
         assert!(conn.pending_to_client.is_empty());
-    }
-
-    #[test]
-    fn popup_decoration_and_icon_requests_never_reach_the_compositor() {
-        let (_guard, mut conn) = fixture();
-        conn.ifaces.insert(30, Iface::XdgPopupShim);
-        let mut body = word(60);
-        body.extend_from_slice(&word(30));
-        assert!(matches!(
-            on_get_toplevel_decoration(&mut conn, &message(9, REQ_GET_TOPLEVEL_DECORATION, &body)),
-            Action::Replace(_)
-        ));
-        assert_eq!(conn.ifaces.get(&60), Some(&Iface::ZxdgToplevelDecoration));
-        assert!(matches!(
-            on_decoration_object_request(&mut conn, &message(60, 1, &word(1))),
-            Action::Suppress
-        ));
-        assert!(matches!(
-            on_set_icon(&mut conn, &message(8, REQ_SET_ICON, &word(30))),
-            Action::Suppress
-        ));
-        assert!(matches!(
-            on_decoration_object_request(&mut conn, &message(60, REQ_DECORATION_DESTROY, &[])),
-            Action::Suppress
-        ));
-        assert!(!conn.ifaces.contains_key(&60));
     }
 
     #[test]

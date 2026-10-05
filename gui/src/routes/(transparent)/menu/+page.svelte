@@ -12,12 +12,7 @@
 
   const api = getBridge<MenuContract>("menu");
 
-  // Both the measuring window and the actual popup must use settled fonts.
-  // Reporting a fallback-font size first permanently undersizes an xdg_popup.
-  const fontReady = api
-    .getFont()
-    .then(setFont)
-    .then(() => document.fonts.ready);
+  api.getFont().then(setFont);
 
   let items: MenuItem[] = $state([]);
   let cursorX = $state(0);
@@ -30,17 +25,6 @@
   let waylandMode = $state(api.wayland);
   let rawTemplates: Record<string, ElementTemplate> = {};
   let isSubmenuMode = api.submenu;
-  let shadowInset = $state(0);
-  let pendingPopup = $state(false);
-  let popupReady = $state(false);
-  const menuShadowClass = "shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]";
-
-  function reportMenuSize(rect: DOMRect) {
-    api.reportSize(
-      Math.ceil(rect.width) + shadowInset * 2,
-      Math.ceil(rect.height) + shadowInset * 2
-    );
-  }
 
   // Submenu state
   let submenuItems: MenuItem[] | null = $state(null);
@@ -61,11 +45,8 @@
 
   /** Once we know the cursor position, clamp the menu and make it visible. */
   function commitMenuPosition() {
-    tick().then(async () => {
-      await document.fonts.ready;
-      if (!menuEl) {
-        return;
-      }
+    tick().then(() => {
+      if (!menuEl) return;
       if (waylandMode) {
         const rect = menuEl.getBoundingClientRect();
         const vw = window.innerWidth;
@@ -82,7 +63,7 @@
         menuTop = top;
       } else {
         const rect = menuEl.getBoundingClientRect();
-        reportMenuSize(rect);
+        api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
       }
       tick().then(() => {
         menuReady = true;
@@ -91,19 +72,8 @@
   }
 
   onMount(() => {
-    const root = document.documentElement;
-    const previousOverflow = root.style.overflow;
-    root.style.overflow = "hidden";
-    let observer: ResizeObserver | null = null;
-    let disposed = false;
-    // Listen before pull/measurement so a fast native conversion cannot race
-    // the renderer's async bootstrap. Keep layout measurable while hidden.
-    api.events.popupReady(() => {
-      if (!disposed) popupReady = true;
-    });
     if (waylandMode) {
-      Promise.all([api.pull(), fontReady]).then(([data]) => {
-        if (disposed) return;
+      api.pull().then((data) => {
         applyColors(data.colors);
         loadTemplates(data.templates);
         items = data.items as MenuItem[];
@@ -122,10 +92,7 @@
         items = rawItems as MenuItem[];
       });
     } else if (isSubmenuMode) {
-      Promise.all([api.pull(), fontReady]).then(([data]) => {
-        if (disposed) return;
-        shadowInset = data.shadowInset ?? 0;
-        pendingPopup = data.pendingPopup ?? false;
+      api.pull().then((data) => {
         applyColors(data.colors);
         rawTemplates = data.templates;
         loadTemplates(data.templates);
@@ -133,33 +100,30 @@
         hoveredIndex = -1;
         visible = true;
         menuReady = true;
-        tick().then(async () => {
-          await document.fonts.ready;
-          if (disposed || !menuEl) return;
-          observer = new ResizeObserver(() => {
+        tick().then(() => {
+          if (!menuEl) return;
+          const ro = new ResizeObserver(() => {
             if (!menuEl) return;
             const rect = menuEl.getBoundingClientRect();
-            reportMenuSize(rect);
+            api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
           });
-          observer.observe(menuEl);
+          ro.observe(menuEl);
         });
       });
     } else {
       // Non-Wayland: use ResizeObserver to keep the window sized to the menu
+      let ro: ResizeObserver | null = null;
       const startObserver = () => {
-        if (disposed || !menuEl || observer) return;
-        observer = new ResizeObserver(() => {
+        if (!menuEl || ro) return;
+        ro = new ResizeObserver(() => {
           if (!menuEl) return;
           const rect = menuEl.getBoundingClientRect();
-          reportMenuSize(rect);
+          api.reportSize(Math.ceil(rect.width), Math.ceil(rect.height));
         });
-        observer.observe(menuEl);
+        ro.observe(menuEl);
       };
 
-      Promise.all([api.pull(), fontReady]).then(([data]) => {
-        if (disposed) return;
-        shadowInset = data.shadowInset ?? 0;
-        pendingPopup = data.pendingPopup ?? false;
+      api.pull().then((data) => {
         applyColors(data.colors);
         rawTemplates = data.templates;
         loadTemplates(data.templates);
@@ -170,23 +134,14 @@
         submenuHoveredIndex = -1;
         visible = true;
         menuReady = true;
-        tick().then(async () => {
-          await document.fonts.ready;
-          if (disposed) return;
-          startObserver();
-          commitMenuPosition();
-        });
+        tick().then(startObserver);
+        commitMenuPosition();
       });
 
       api.events.update((rawItems) => {
         items = rawItems as MenuItem[];
       });
     }
-    return () => {
-      disposed = true;
-      observer?.disconnect();
-      root.style.overflow = previousOverflow;
-    };
   });
 
   function handleItemClick(item: MenuItem) {
@@ -202,9 +157,9 @@
 
   function handleItemHover(index: number, item: MenuItem, event: MouseEvent) {
     hoveredIndex = index;
-    const target = event.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
     if (item.menu && item.children?.length) {
+      const target = event.currentTarget as HTMLElement;
+      const rect = target.getBoundingClientRect();
       if (waylandMode && menuEl) {
         submenuX = rect.right;
         submenuY = rect.top;
@@ -275,7 +230,7 @@
         onbtnclick={handleBtnClick}
         bind:el={menuEl}
         style="left: {cursorX}px; top: {menuTop}px; visibility: {menuReady ? 'visible' : 'hidden'};"
-        class={menuShadowClass}
+        class="shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]"
         {@attach inputRegionAttachment}
       />
 
@@ -294,7 +249,7 @@
           showSubmenuArrows={false}
           bind:el={submenuEl}
           style="left: {submenuX}px; top: {submenuY}px;"
-          class={menuShadowClass}
+          class="shadow-[0_4px_16px_rgba(0,0,0,0.15),0_1px_4px_rgba(0,0,0,0.1)]"
           {@attach inputRegionAttachment}
         />
       {/if}
@@ -309,8 +264,6 @@
       onitemleave={handleItemLeave}
       onbtnclick={handleBtnClick}
       bind:el={menuEl}
-      style={`left: ${shadowInset}px; top: ${shadowInset}px; visibility: ${!pendingPopup || popupReady ? "visible" : "hidden"};`}
-      class={shadowInset ? menuShadowClass : undefined}
     />
   {/if}
 {/if}

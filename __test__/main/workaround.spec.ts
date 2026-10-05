@@ -30,15 +30,6 @@ afterEach(() => {
 });
 
 describe("workaround flags", () => {
-  it.each([
-    { XDG_CURRENT_DESKTOP: "", XDG_SESSION_DESKTOP: "niri", DESKTOP_SESSION: "KDE" },
-    { XDG_CURRENT_DESKTOP: "", XDG_SESSION_DESKTOP: "", DESKTOP_SESSION: "niri" },
-  ])("falls back past empty desktop variables: %j", async (env) => {
-    const { WorkaroundFlags, workaroundFlags, overlayPolicy } = await loadWorkarounds(env);
-    expect(overlayPolicy).toEqual({ capturePhase: "before-show" });
-    expect(workaroundFlags & WorkaroundFlags.OverlayNoMaximize).not.toBe(0);
-  });
-
   it("uses stable flags on a plain desktop", async () => {
     const { WorkaroundFlags, workaroundFlags } = await loadWorkarounds({
       XDG_CURRENT_DESKTOP: "GNOME",
