@@ -11,6 +11,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { DOMParser, XMLSerializer, type Element } from "@xmldom/xmldom";
 
+import pkg from "../package.json" with { type: "json" };
+
 const projectRoot = resolve(import.meta.dirname, "..");
 
 const argv = process.argv.slice(2);
@@ -26,7 +28,6 @@ if (!notesFile || !version) {
 const apiKey = process.env.DEEPSEEK_API_KEY;
 if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY env var.");
 
-const pkg = JSON.parse(await readFile(resolve(projectRoot, "package.json"), "utf-8"));
 const maintainer =
   typeof pkg.author === "string"
     ? pkg.author

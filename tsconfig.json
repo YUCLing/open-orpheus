@@ -23,6 +23,7 @@
     "packaging/**/*.ts",
     "scripts/*.ts",
     "types/*.ts",
+    "plugins/*.ts",
     "__test__/**/*.ts"
   ],
   "exclude": ["gui"]

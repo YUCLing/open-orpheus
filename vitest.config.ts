@@ -15,7 +15,7 @@ export default defineConfig({
       exclude: [
         "src/{preload,worklets}/**/*.ts",
         // Constants
-        "packaging/options.ts",
+        "packaging/resources/metadata.ts",
         "packaging/common/toolchain.ts",
         "src/constants.ts",
       ],

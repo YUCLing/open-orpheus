@@ -11,8 +11,10 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
-import * as options from "./packaging/options";
+import pkg from "./package.json" with { type: "json" };
+import { metadata } from "./packaging/resources/metadata";
 
+import MakerAppImage from "./plugins/MakerAppImage";
 import MakerDeb from "./plugins/MakerDeb";
 import MakerFlatpak from "./plugins/MakerFlatpak";
 import MakerRpm from "./plugins/MakerRpm";
@@ -50,6 +52,16 @@ const config: ForgeConfig = {
             if (code !== 0) reject(code);
             resolve();
           });
+        });
+      },
+    ],
+    afterCopy: [
+      async () => {
+        // Best effort to restore, don't fail the build if something went wrong
+        await new Promise<void>((resolve) => {
+          const proc = fork("scripts/deploy-deps.ts", ["--restore"]);
+          proc.on("error", resolve);
+          proc.on("exit", resolve);
         });
       },
     ],
@@ -146,11 +158,23 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel(options.squirrel),
+    new MakerSquirrel({
+      name: metadata.squirrel.name,
+      title: metadata.squirrel.title,
+      description: metadata.summary,
+      authors: pkg.author?.name ?? "",
+      setupIcon: metadata.squirrel.setupIcon,
+    }),
     new MakerZIP({}, ["darwin"]),
-    new MakerFlatpak(options.flatpak),
-    new MakerDeb(options.deb),
-    new MakerRpm(options.rpm),
+    new MakerFlatpak({
+      id: metadata.appId,
+      runtimeVersion: metadata.flatpak.runtimeVersion,
+      baseVersion: metadata.flatpak.baseVersion,
+      finishArgs: metadata.flatpak.finishArgs,
+    }),
+    new MakerDeb(),
+    new MakerRpm(),
+    new MakerAppImage({ icon: metadata.icons }),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
