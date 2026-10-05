@@ -62,6 +62,21 @@
   </screenshots>
 
   <releases>
+    <release version="0.19.2" date="2026-10-05">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.19.2</url>
+      <description>
+        <ul>
+          <li>Fixed menus drifting to the wrong position under Wayland.</li>
+          <li xml:lang="zh-CN">修复 Wayland 下菜单乱飘的问题。</li>
+          <li>Removed module source code from the packaged application.</li>
+          <li xml:lang="zh-CN">将模块源码从打包程序中移除。</li>
+          <li>Switched to custom ICU data.</li>
+          <li xml:lang="zh-CN">改用自定义 ICU 数据。</li>
+          <li>Restored support for AppImage builds.</li>
+          <li xml:lang="zh-CN">重新支持 AppImage 构建。</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.19.1" date="2026-10-02">
       <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.19.1</url>
       <description>
