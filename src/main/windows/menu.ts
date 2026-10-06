@@ -12,38 +12,20 @@ import {
   getDesktopEnvironment,
 } from "@open-orpheus/window";
 
-import { menuSkin } from "./menu/skin";
 import type { MenuClickHandler } from "./menu/types";
 import { patchById } from "./menu/types";
-import {
-  createMenuWindow,
-  createOverlayWindow,
-  createSubmenuWindow,
-  destroyMenuWindow,
-  destroyOverlayWindow,
-  getMenuWindow,
-  getOverlayWindow,
-} from "./menu/windows";
-import packManager from "../services/pack";
 import SkinPack from "../services/packs/SkinPack";
-import { registerIpcHandlers } from "../../bridge/register";
 import type { MenuContract } from "../../bridge/contracts/menu-api";
-import { parseBtnUrl, parseElementTemplate } from "../domain/skin/dui";
 import type { ElementTemplate } from "../domain/skin/dui";
-import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import type { AppMenuItem } from "@shared/types/menu";
-import { font } from "../platform/gui";
-import { ManagedWindow } from "./managedWindow";
 import { toError } from "@shared/util";
 import { isLiveFocusedWindow, runMenuCallbacks, scheduleMenuTask } from "./menu/lifecycle";
-import { overlayPolicy, workaroundEnabled, WorkaroundFlags } from "./menu/workaround";
 import {
   armNativeWaylandPopupWhenReady,
   NATIVE_MENU_SHADOW_INSET,
   waitForWaylandPopup,
   waylandWindowId,
 } from "./menu/native-popup";
-import { initializeWaylandPopupSupport } from "./menu/popup-support";
 
 const WAYLAND_CURSOR_CAPTURE_DEADLINE_MS = 200;
 const MENU_RENDER_READY_TIMEOUT_MS = 10_000;
@@ -82,14 +64,14 @@ function normalizeMenuCoordinate(value: number) {
 }
 
 /** Recursively parse btn.url → btn.images for every menu item. */
-function parseButtonUrls(items: AppMenuItem[]) {
+function parseButtonUrls(items: AppMenuItem[], dui: MenuDeps["dui"]) {
   for (const item of items) {
     if (item.btns) {
       for (const btn of item.btns) {
-        btn.images = parseBtnUrl(btn.url);
+        btn.images = dui.parseBtnUrl(btn.url);
       }
     }
-    if (item.children) parseButtonUrls(item.children);
+    if (item.children) parseButtonUrls(item.children, dui);
   }
 }
 
@@ -105,6 +87,45 @@ function activateMenu(menu: AppMenu) {
   activeMenu = menu;
 }
 
+/**
+ * What a menu needs from the outside.
+ *
+ * Grouped by concern rather than one field per module, because these arrive
+ * together and a menu is constructed in one place. Types come from
+ * `typeof import(...)`, so importing this module evaluates none of them.
+ */
+export interface MenuDeps {
+  skin: { menuSkin: typeof import("./menu/skin").menuSkin };
+  windows: {
+    createMenuWindow: typeof import("./menu/windows").createMenuWindow;
+    createSubmenuWindow: typeof import("./menu/windows").createSubmenuWindow;
+    createOverlayWindow: typeof import("./menu/windows").createOverlayWindow;
+    getMenuWindow: typeof import("./menu/windows").getMenuWindow;
+    getOverlayWindow: typeof import("./menu/windows").getOverlayWindow;
+    destroyMenuWindow: typeof import("./menu/windows").destroyMenuWindow;
+    destroyOverlayWindow: typeof import("./menu/windows").destroyOverlayWindow;
+  };
+  workarounds: {
+    overlayPolicy: typeof import("./menu/workaround").overlayPolicy;
+    workaroundEnabled: typeof import("./menu/workaround").workaroundEnabled;
+    WorkaroundFlags: typeof import("./menu/workaround").WorkaroundFlags;
+  };
+  bridge: {
+    registerIpcHandlers: typeof import("../../bridge/register").registerIpcHandlers;
+    registerInputRegionHandlers: typeof import("../../bridge/common/inputRegion").registerInputRegionHandlers;
+  };
+  pack: { getOrWaitPack: typeof import("../services/pack").default.getOrWaitPack };
+  dui: {
+    parseBtnUrl: typeof import("../domain/skin/dui").parseBtnUrl;
+    parseElementTemplate: typeof import("../domain/skin/dui").parseElementTemplate;
+  };
+  popupSupport: {
+    initializeWaylandPopupSupport: typeof import("./menu/popup-support").initializeWaylandPopupSupport;
+  };
+  managedWindow: typeof import("./managedWindow").ManagedWindow;
+  font: typeof import("../platform/gui").font;
+}
+
 export default class AppMenu extends Emittery<AppMenuEvents> {
   private onClick: MenuClickHandler | null = null;
   private closed = false;
@@ -118,9 +139,12 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   /** style path → parsed template, preloaded from skin pack */
   templates: Record<string, ElementTemplate> = {};
 
-  constructor(public items: AppMenuItem[]) {
+  constructor(
+    public items: AppMenuItem[],
+    private readonly deps: MenuDeps
+  ) {
     super();
-    parseButtonUrls(this.items);
+    parseButtonUrls(this.items, this.deps.dui);
   }
 
   setClickHandler(handler: MenuClickHandler) {
@@ -141,7 +165,10 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     if (styles.size === 0) return;
 
-    const skinPack = await packManager.getOrWaitPack<SkinPack>("skin", this.lifetimeAbort.signal);
+    const skinPack = await this.deps.pack.getOrWaitPack<SkinPack>(
+      "skin",
+      this.lifetimeAbort.signal
+    );
     const entries = await waitWithAbort(
       Promise.all(
         [...styles].map(async (style) => {
@@ -160,7 +187,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     this.templates = {};
     for (const entry of entries) {
       if (entry) {
-        const tpl = parseElementTemplate(entry[1]);
+        const tpl = this.deps.dui.parseElementTemplate(entry[1]);
         if (tpl) this.templates[entry[0]] = tpl;
       }
     }
@@ -210,7 +237,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         if (parentWindow) {
           try {
             supportsPopup = await waitWithAbort(
-              initializeWaylandPopupSupport(parentWindow),
+              this.deps.popupSupport.initializeWaylandPopupSupport(parentWindow),
               this.lifetimeAbort.signal
             );
           } catch (error) {
@@ -244,10 +271,10 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
     if (ownsGlobalWindows) {
       if (getDesktopEnvironment() === DesktopEnvironment.Wayland) {
-        destroyMenuWindow();
-        destroyOverlayWindow();
+        this.deps.windows.destroyMenuWindow();
+        this.deps.windows.destroyOverlayWindow();
       } else {
-        destroyMenuWindow();
+        this.deps.windows.destroyMenuWindow();
       }
     }
     const closeEvent = this.emit("close");
@@ -279,7 +306,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   }
 
   update(patchItems: AppMenuItem[]) {
-    parseButtonUrls(patchItems);
+    parseButtonUrls(patchItems, this.deps.dui);
     for (const patch of patchItems) {
       if (patch.menu_id == null) continue;
       patchById(this.items, patch);
@@ -288,18 +315,18 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     if (this.closed || activeMenu !== this) return;
 
     if (getDesktopEnvironment() === DesktopEnvironment.Wayland) {
-      const menuWindow = getMenuWindow();
+      const menuWindow = this.deps.windows.getMenuWindow();
       if (menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible()) {
         menuWindow.webContents.send("menu.update", this.items);
       }
-      const overlayWindow = getOverlayWindow();
+      const overlayWindow = this.deps.windows.getOverlayWindow();
       if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
         overlayWindow.webContents.send("menu.update", this.items);
       }
       return;
     }
 
-    const menuWindow = getMenuWindow();
+    const menuWindow = this.deps.windows.getMenuWindow();
     if (menuWindow && !menuWindow.isDestroyed() && menuWindow.isVisible()) {
       menuWindow.webContents.send("menu.update", this.items);
     }
@@ -325,7 +352,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       // make its `closed` handler close the whole menu.
       activePopup = null;
       this.clearDismissResources();
-      destroyMenuWindow();
+      this.deps.windows.destroyMenuWindow();
       if (this.closed) return;
       try {
         this.showOverlay();
@@ -336,7 +363,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     };
     try {
       const token = captureWindowNextPointerAxis(
-        waylandWindowId(parentWindow, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+        waylandWindowId(parentWindow, (wnd) => this.deps.managedWindow.fromBrowserWindow(wnd)),
         () => {
           // Exceptions must not escape a native threadsafe-function callback.
           try {
@@ -388,15 +415,15 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         // Create and load the exact target first. The native "next toplevel"
         // reservation is armed only from its first size report, immediately
         // before showInactive() asks Chromium to create the Wayland role.
-        popup = createMenuWindow(width, height);
+        popup = this.deps.windows.createMenuWindow(width, height);
         activePopup = popup;
         const showAsPopup = (actualWidth: number, actualHeight: number) => {
           width = actualWidth;
           height = actualHeight;
           popup?.setSize(width, height);
           const cancelArm = armNativeWaylandPopupWhenReady(
-            waylandWindowId(parentWindow, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
-            waylandWindowId(popup!, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+            waylandWindowId(parentWindow, (wnd) => this.deps.managedWindow.fromBrowserWindow(wnd)),
+            waylandWindowId(popup!, (wnd) => this.deps.managedWindow.fromBrowserWindow(wnd)),
             width,
             height,
             undefined,
@@ -419,7 +446,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                 return;
               }
               void waitForWaylandPopup(
-                waylandWindowId(popup, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+                waylandWindowId(popup, (wnd) => this.deps.managedWindow.fromBrowserWindow(wnd)),
                 () => Boolean(this.closed || !popup || popup.isDestroyed() || activePopup !== popup)
               ).then(
                 (converted) => {
@@ -492,12 +519,12 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         MENU_RENDER_READY_TIMEOUT_MS,
         this.dismissCleanups
       );
-      registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
-        getFont: async () => font,
+      this.deps.bridge.registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+        getFont: async () => this.deps.font,
         pull: async () => ({
           items: this.items,
           templates: this.templates,
-          colors: menuSkin,
+          colors: this.deps.skin.menuSkin,
           shadowInset: NATIVE_MENU_SHADOW_INSET,
           pendingPopup: !popupMapped,
         }),
@@ -535,7 +562,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           if (activePopup === wnd) this.closeSubmenuWindow();
         },
       });
-      registerInputRegionHandlers(wnd, ManagedWindow);
+      this.deps.bridge.registerInputRegionHandlers(wnd, this.deps.managedWindow);
     };
 
     openPopup(300, 400);
@@ -560,7 +587,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     if (this.closed || parent.isDestroyed()) return;
     let popup: BrowserWindow;
     try {
-      popup = createSubmenuWindow();
+      popup = this.deps.windows.createSubmenuWindow();
     } catch (error) {
       LOGGER.warn({ err: toError(error) }, "Wayland submenu creation failed");
       return;
@@ -585,12 +612,12 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     );
 
     try {
-      registerIpcHandlers<MenuContract>(popup.webContents, "menu", {
-        getFont: async () => font,
+      this.deps.bridge.registerIpcHandlers<MenuContract>(popup.webContents, "menu", {
+        getFont: async () => this.deps.font,
         pull: async () => ({
           items,
           templates,
-          colors: menuSkin,
+          colors: this.deps.skin.menuSkin,
           shadowInset: NATIVE_MENU_SHADOW_INSET,
           pendingPopup: !popupMapped,
         }),
@@ -614,8 +641,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
             // Keep the already-rendered window; only its native role is mapped.
             popup.setSize(width, height);
             const cancelArm = armNativeWaylandPopupWhenReady(
-              waylandWindowId(parent, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
-              waylandWindowId(popup, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+              waylandWindowId(parent, (wnd) => this.deps.managedWindow.fromBrowserWindow(wnd)),
+              waylandWindowId(popup, (wnd) => this.deps.managedWindow.fromBrowserWindow(wnd)),
               width,
               height,
               {
@@ -640,7 +667,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                   return;
                 }
                 void waitForWaylandPopup(
-                  waylandWindowId(popup, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+                  waylandWindowId(popup, (wnd) => this.deps.managedWindow.fromBrowserWindow(wnd)),
                   () => !isCurrent()
                 ).then(
                   (converted) => {
@@ -707,8 +734,10 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   private showOverlay() {
     // Even a forced fullscreen overlay can acquire its role at construction.
     const captureBeforeCreate =
-      overlayPolicy.capturePhase === "before-create" ||
-      !workaroundEnabled(WorkaroundFlags.OverlayNoFullscreen);
+      this.deps.workarounds.overlayPolicy.capturePhase === "before-create" ||
+      !this.deps.workarounds.workaroundEnabled(
+        this.deps.workarounds.WorkaroundFlags.OverlayNoFullscreen
+      );
     let cancelCursorCapture = () => {};
     let finishCursorCapture = () => {};
     let startCursorCapture = () => {};
@@ -751,7 +780,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     // KDE (and legacy desktop paths) must observe surface creation, not wait
     // for renderer pull: the first enter can already have happened by then.
     if (captureBeforeCreate) startCursorCapture();
-    const wnd = createOverlayWindow();
+    const wnd = this.deps.windows.createOverlayWindow();
     let rendererReady = false;
     const cancelRendererDeadline = scheduleMenuTask(
       () => {
@@ -773,8 +802,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       dismiss();
     });
 
-    registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
-      getFont: async () => font,
+    this.deps.bridge.registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+      getFont: async () => this.deps.font,
 
       // Pull-based: the renderer calls menu.pull once SvelteKit has mounted.
       // We show the window here, then wait for the native first-enter capture
@@ -794,7 +823,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         return {
           items: this.items,
           templates: this.templates,
-          colors: menuSkin,
+          colors: this.deps.skin.menuSkin,
           cursorX,
           cursorY,
         };
@@ -816,14 +845,14 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       openSubmenu: async () => {},
       closeSubmenu: async () => {},
     });
-    registerInputRegionHandlers(wnd, ManagedWindow);
+    this.deps.bridge.registerInputRegionHandlers(wnd, this.deps.managedWindow);
   }
 
   // --- Non-Wayland: transparent popup BrowserWindow ---
   private showWindow() {
     const de = getDesktopEnvironment();
 
-    const wnd = createMenuWindow();
+    const wnd = this.deps.windows.createMenuWindow();
     let rendererReady = false;
     const cancelRendererDeadline = scheduleMenuTask(
       () => {
@@ -872,7 +901,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
 
       let createdSubmenu: BrowserWindow | null = null;
       try {
-        const sub = createSubmenuWindow();
+        const sub = this.deps.windows.createSubmenuWindow();
         createdSubmenu = sub;
         this.submenuWindow = sub;
 
@@ -883,10 +912,10 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           this.clearResources(this.submenuCleanups);
         });
 
-        registerIpcHandlers<MenuContract>(sub.webContents, "menu", {
-          getFont: async () => font,
+        this.deps.bridge.registerIpcHandlers<MenuContract>(sub.webContents, "menu", {
+          getFont: async () => this.deps.font,
           pull: async () => {
-            return { items, templates, colors: menuSkin };
+            return { items, templates, colors: this.deps.skin.menuSkin };
           },
           itemClick: async (_event, menuId) => {
             try {
@@ -945,14 +974,14 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       }
     };
 
-    registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
-      getFont: async () => font,
+    this.deps.bridge.registerIpcHandlers<MenuContract>(wnd.webContents, "menu", {
+      getFont: async () => this.deps.font,
       // Pull-based bootstrap so renderer can always request data after mount.
       pull: async () => {
         return {
           items: this.items,
           templates: this.templates,
-          colors: menuSkin,
+          colors: this.deps.skin.menuSkin,
         };
       },
       reportSize: async (_event, width, height) => {

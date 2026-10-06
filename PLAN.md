@@ -134,7 +134,7 @@ comment loses nothing for a reader who never saw the conversation, delete it.
 
 | Metric                            | Now                                        | Target                          | Phase |
 | --------------------------------- | ------------------------------------------ | ------------------------------- | ----- |
-| Own-module `vi.mock` sites        | ~~11 in 10~~ ~~**0**~~ **27 in 8** **[V]** | **0** — reached at P1-12        | P1    |
+| Own-module `vi.mock` sites        | ~~11 in 10~~ ~~**27 in 8**~~ **0** **[V]** | **0** — reached at P1-12        | P1    |
 | Specs importing via `../../src/…` | ~~~38 sites~~ **0** **[V]**                | 0                               | P0    |
 | `$sharedTypes` declared in        | ~~4 places~~ **0** **[V]**                 | **0** — retired in P2-4         | P2    |
 | `src/main.ts`                     | ~~486~~ ~~**74**~~ **99** **[V]**          | thin entry                      | P1    |
@@ -143,16 +143,22 @@ comment loses nothing for a reader who never saw the conversation, delete it.
 
 **After the merge with `main` (2026-09-22).** Three of these moved, and the reason matters:
 
-- **Own-module `vi.mock` went back to 29 in 9 files, and is down to 27 in 8.** Every one came
-  from upstream specs —
-  `menu-popup`, `window`, `shutdown`, `popup-support`, `logger`, `MediaEngine`, `lifecycle`,
-  `calls/handlers/app` — which mock our own modules directly. The refactor's number was about
-  _our_ test architecture, and merging cannot hold it against specs the branch does not own.
-  Two were removable with the seams the refactor already has (`MediaEngine.spec`'s window mock
-  was dead, and `logger.spec`'s `folders` mock only stood in for `app.getPath`); the other 27
-  need new seams, because the modules under test still import `pack`/`cache`/`OnlineStreamer`
-  singletons and the module-level `currentState`/`events` accessors. Closing the rest is
-  P1-12-shaped work on specs the branch does not own, deliberately not attempted here.
+- **Own-module `vi.mock` went back to 29 in 9 files after the merge, and is back to 0.** Every
+  one came from upstream specs — `menu-popup`, `window`, `shutdown`, `popup-support`, `logger`,
+  `MediaEngine`, `lifecycle`, `platform/arguments`, `calls/handlers/app` — which mock our own
+  modules directly. Closing them was **not** a test-only change: each needed a production seam,
+  and the work turned up six import-time side effects that had been invisible because a mock was
+  standing in front of them (the shutdown registration, the window callback reaper's interval,
+  the menu skin updater's subscription, the logger import, the pack singleton read, and the
+  lifecycle install indirection). Two specs were also asserting the wrong thing and passing by
+  accident: `popup-support.spec` counted listeners on a process-wide bus that `managedWindow`
+  legitimately subscribes to at import, and `window.spec` reconstructed a registration it could
+  observe for real. See §5.0b for the rule this settled, and §10 for the ledger.
+
+  The four exceptions are all module _boundaries_ the refactor already treats as vendor: 21 ×
+  `electron`, 18 × `node:fs/promises`, 3 × `@open-orpheus/window`, plus `keyv`, `pino`,
+  `@open-orpheus/dbus` and `node:child_process`. Mocking those is the point of a seam.
+
 - **`src/main.ts` is 99 lines**, not 74: main's `open-file`, `open-url` and richer
   `second-instance` handlers (local files via `raceArgument`) came in on top of the thin entry,
   and `installLifecycle({ logger })` replaced the hand-rolled quit handlers.
@@ -1493,6 +1499,7 @@ was restated as _resource-acquiring_ registrations, and `CallDispatcher` documen
 `unregister` as a choice.
 
 | 2026-09-22 | Merged `main` (67c2c27, 70 commits) into the refactor branch **[V]** | Merge base `8869ed2`; the branch was 54 commits ahead and `git cherry` confirmed none of them were already upstream. **63 conflicted paths:** 40 both-modified, 16 modify/delete, 5 relocated additions and 2 where upstream deleted a file the branch had edited. The 16 modify/delete were the refactor's _moves_ colliding with main's _edits of the old paths_ — twelve `src/main/calls/*.ts` that main changed and the branch had moved to `calls/handlers/` — and were resolved with a rename-aware three-way merge (`git merge-file` with base = the old path at the merge-base, theirs = main's old path, ours = the branch's moved file) rather than by hand-porting 1,224 changed lines. **Toolchain:** adopted main's oxlint/oxfmt as agreed — `eslint.config.ts` and `.prettierignore` deleted, `package.json` taken from main (which is also where `lint:eslint`/`lint:types` went away). That exposed **30 type errors in main's new code**, all from the branch's strict flags now being enforced through `.oxlintrc.json`'s `typeCheck`: missing `override` (7), index-signature property access (12) and `exactOptionalPropertyTypes` (11). Fixed the way P3-4 fixed the old code — widen our own optional properties, omit the key at third-party boundaries. **Lifecycle:** main grew the file 74 → 365 lines (startup task, shutdown tasks and finalizers, deadline, signal handling); the machinery stayed module-level because it must install before `bootstrap()` runs so a signal during start-up still exits correctly, `LOGGER` became an optional injected logger, and `main.ts` now calls `installLifecycle({ logger })` with the app-scoped registrations as a `registerShutdownTask` step. **Native modules:** main's set (dropped `lifecycle` and `smtc`, added `system-win32`, which already replaces `smtc` for media session and power-off). **Structure:** main's new root modules were relocated into the refactor's groups (`platform/arguments.ts`, `domain/xeapi.ts`, `bootstrap/shutdown.ts`) so `src/main/` has no root `.ts` files and every directory stays ≤15. **Four upstream specs were adapted to the branch's API, not the reverse:** `lifecycle.spec` installs a service to exercise the module-level accessors, `popup-support.spec` and `window.spec` mocks gained `currentState`, and `app.spec` registers handlers explicitly because P1-11 removed import-time registration (its electron/folders/util/pack mocks were completed for the larger graph). **Recorded regression:** own-module `vi.mock` sites 0 → 29 in 9 files, entirely from upstream specs; closing that is P1-12-shaped work on tests the branch does not own. `tsc --noEmit` 0 errors with all six strict flags, `pnpm test` 74 files / 794 tests, `pnpm lint` clean (oxlint 0 errors + svelte-check 0), `pnpm format:check` clean, `pnpm package` succeeded. |
+| 2026-09-22 | Own-module `vi.mock` sites eliminated: 29 in 9 files -> **0** **[V]** | The merge left 29 sites in 9 upstream specs. None could be removed by editing a test: every one needed a production seam, in the order the objective names. **Ambient vs collaborator** (§5.0b) decided the shape each time. Lifecycle: the state accessors were module-level _slots_ that `bootstrap()` filled in later, with `() => Starting` and a no-op as placeholders — which turned a wiring mistake into a silently wrong answer. The state now lives privately in the module and both accessors are always real; `installLifecycleService` is deleted, the last install-style global in the tree. Collaborators were injected through `Pick<>` slices or named boundary types: `MediaEngineDeps.{playCache,createStreamer}`, `AppDeps.{pack,orpheus,dawn,request,files,hardwareAccelerationFlag}`, `PopupSupportDeps.{createProbeWindow,lookupManagedWindow}`, `WindowReaperWiring`, `ShutdownWiring`, `MenuDeps`, plus `ArgumentFileChecks` and an injectable `flushLogs`. **Six import-time side effects surfaced and were fixed rather than worked around:** `shutdown.ts` registered a task and a finalizer at module scope; `managedWindow.ts` started a `setInterval` reaper at import; `menu.ts` called `registerMenuSkinUpdater()` at import, subscribing to the pack manager; `app.ts` imported the logger module for one call while logging through the ambient `LOGGER` four other times; `MediaEngine` read the `playCacheManager` singleton directly; and `native-popup.ts` reached for the `ManagedWindow` registry instead of taking it. Two specs were **asserting the wrong thing and passing by accident**: `popup-support.spec` counted listeners on the process-wide bus that `managedWindow` legitimately subscribes to at import (it now measures the probe's own delta, a stronger assertion), and `window.spec` reconstructed a registration it can now observe for real. One attempt was correctly reverted (`MediaEngine`'s cache first, `popup-support` twice) rather than weakening an assertion to make a number move; `popup-support.spec` also caught a genuine listener leak and a genuine timer leak on the way. What remains mocked is only what should be: `electron` (21), `node:fs/promises` (18), `@open-orpheus/window` (3), `keyv`, `pino`, `@open-orpheus/dbus`, `node:child_process`. `tsc` 0 errors, `pnpm test` 74 files / 794 tests, `pnpm lint` clean, `pnpm format:check` clean, `pnpm package` succeeded. |
 ---
 
 ## Appendix A — Change summary vs. the initial draft

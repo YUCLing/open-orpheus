@@ -29,6 +29,16 @@ import * as orpheus from "@main/platform/orpheus";
 import * as request from "@main/platform/request";
 import { disableHardwareAccelerationFlag } from "@main/platform/folders";
 import { registerMenuSkinUpdater } from "@main/windows/menu/skin";
+import * as menuSkin from "@main/windows/menu/skin";
+import * as menuWindows from "@main/windows/menu/windows";
+import * as menuWorkarounds from "@main/windows/menu/workaround";
+import * as popupSupport from "@main/windows/menu/popup-support";
+import * as bridgeRegister from "@bridge/register";
+import * as inputRegion from "@bridge/common/inputRegion";
+import * as dui from "@main/domain/skin/dui";
+import { ManagedWindow } from "@main/windows/managedWindow";
+import { font } from "@main/platform/gui";
+import type { MenuDeps } from "@main/windows/menu";
 import { fileExists, isMusicFile, pngFromIco } from "@main/platform/util";
 import type { Disposable } from "@shared/disposable";
 import type { WindowService } from "./types";
@@ -232,12 +242,28 @@ export async function startApplication(): Promise<Application> {
     settings: ctx.settings,
   });
 
+  const menuDeps: MenuDeps = {
+    skin: menuSkin,
+    windows: menuWindows,
+    workarounds: menuWorkarounds,
+    bridge: {
+      registerIpcHandlers: bridgeRegister.registerIpcHandlers,
+      registerInputRegionHandlers: inputRegion.registerInputRegionHandlers,
+    },
+    pack: packManager,
+    dui,
+    popupSupport,
+    managedWindow: ManagedWindow,
+    font,
+  };
+
   const callRegistrations = registerCallModules({
     settings: ctx.settings,
     database: ctx.database,
     windows: ctx.windows,
     lifecycle: ctx.lifecycle,
     pack: packManager,
+    menu: menuDeps,
     orpheus,
     dawn,
     request,

@@ -10,7 +10,7 @@ import { registerCallHandler } from "../dispatcher";
 import { loadFromOrpheusUrl } from "../../platform/orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../../platform/util";
 import { BasicManagedWindow, ManagedWindow } from "../../windows/managedWindow";
-import AppMenu from "../../windows/menu";
+import AppMenu, { type MenuDeps } from "../../windows/menu";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../../platform/shortcuts";
 import { LifecycleState } from "../../services/lifecycle";
 import showManageWindow from "../../windows/manage";
@@ -74,6 +74,8 @@ export interface WinhelperDeps {
   windows: Pick<WindowService, "currentWindow">;
   settings: Pick<SettingsService, "kv" | "events">;
   lifecycle: Pick<LifecycleService, "setLifecycleState">;
+  /** What an `AppMenu` needs; it is built here on demand. */
+  menu: MenuDeps;
 }
 
 export function register(deps: WinhelperDeps): Disposable {
@@ -413,7 +415,7 @@ export function register(deps: WinhelperDeps): Disposable {
       }
       event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
     };
-    const menu = new AppMenu(parsedMenuData.content);
+    const menu = new AppMenu(parsedMenuData.content, deps.menu);
     managed.setMenu(menu);
     menu.setClickHandler(onClick);
     await menu.show(wnd);
