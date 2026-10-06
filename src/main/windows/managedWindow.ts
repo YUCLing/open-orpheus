@@ -50,8 +50,12 @@ const CALLBACK_REAP_INTERVAL_MS = 50;
 
 // A callback can retire just after its final cancellation. Reap independently
 // of new menu activity; this timer must not keep the application alive.
-const callbackReaper = setInterval(() => drainWindowCallbacks(), CALLBACK_REAP_INTERVAL_MS);
-callbackReaper.unref();
+//
+// Started by `registerWindowReaper` rather than at import. An interval created
+// as an import side effect is a live handle in every process that merely imports
+// this module — including a unit test, which is how the popup spec noticed: it
+// asserts that popup probing leaks no timers.
+let callbackReaper: NodeJS.Timeout | undefined;
 /** The hook this module needs; the composition root supplies it. */
 export type WindowReaperWiring = Pick<LifecycleService, "registerShutdownFinalizer">;
 
@@ -67,6 +71,10 @@ export type WindowReaperWiring = Pick<LifecycleService, "registerShutdownFinaliz
  * while shutdown tasks dispose their resources.
  */
 export function registerWindowReaper(lifecycle: WindowReaperWiring): void {
+  if (callbackReaper === undefined) {
+    callbackReaper = setInterval(() => drainWindowCallbacks(), CALLBACK_REAP_INTERVAL_MS);
+    callbackReaper.unref();
+  }
   lifecycle.registerShutdownFinalizer({
     name: "window-callbacks",
     run: () => {

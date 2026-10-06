@@ -12,7 +12,9 @@ import {
   armNativeWaylandPopupWhenReady,
   waitForWaylandPopup,
   waylandWindowId,
+  type ManagedWindowLookup,
 } from "./native-popup";
+import { ManagedWindow } from "../managedWindow";
 import { createPopupProbeWindow } from "./windows";
 
 // A desktop name or an xdg-shell global cannot prove our role mapping works.
@@ -20,7 +22,25 @@ import { createPopupProbeWindow } from "./windows";
 let nativePopupSupported: boolean | undefined;
 let popupSupportProbe: Promise<boolean> | null = null;
 
-export async function initializeWaylandPopupSupport(parent: BrowserWindow): Promise<boolean> {
+/** What this module needs from the outside; production passes defaults. */
+export interface PopupSupportDeps {
+  /**
+   * Creates the hidden probe window. Injectable because a probe is a real
+   * `BrowserWindow`: a test has to observe the ones it creates (and their
+   * destruction) without a real window server.
+   */
+  createProbeWindow?: () => BrowserWindow;
+  /** Resolves the managed wrapper for a window; see `ManagedWindowLookup`. */
+  lookupManagedWindow?: ManagedWindowLookup;
+}
+
+export async function initializeWaylandPopupSupport(
+  parent: BrowserWindow,
+  deps: PopupSupportDeps = {}
+): Promise<boolean> {
+  const createProbeWindow = deps.createProbeWindow ?? createPopupProbeWindow;
+  const lookupManagedWindow =
+    deps.lookupManagedWindow ?? ((wnd) => ManagedWindow.fromBrowserWindow(wnd));
   if (nativePopupSupported !== undefined) {
     return nativePopupSupported;
   }
@@ -37,7 +57,7 @@ export async function initializeWaylandPopupSupport(parent: BrowserWindow): Prom
     LOGGER.warn({ err: toError(error) }, "Wayland popup availability check failed");
     return false;
   }
-  popupSupportProbe = probePopup(parent)
+  popupSupportProbe = probePopup(parent, createProbeWindow, lookupManagedWindow)
     .then((result) => {
       // Missing role data, timeouts and cancellation do not prove incompatibility.
       if (result !== null && nativePopupSupported === undefined) {
@@ -51,7 +71,11 @@ export async function initializeWaylandPopupSupport(parent: BrowserWindow): Prom
   return popupSupportProbe;
 }
 
-async function probePopup(parent: BrowserWindow): Promise<boolean | null> {
+async function probePopup(
+  parent: BrowserWindow,
+  createProbeWindow: () => BrowserWindow,
+  lookupManagedWindow: ManagedWindowLookup
+): Promise<boolean | null> {
   let cancelled = false;
   const cleanups: Array<() => void> = [];
   try {
@@ -70,7 +94,7 @@ async function probePopup(parent: BrowserWindow): Promise<boolean | null> {
       cleanups.push(() => parent.off("closed", cancel));
       cleanups.push(events.on("quitting", cancel));
       try {
-        const probe = createPopupProbeWindow();
+        const probe = createProbeWindow();
         cleanups.push(() => {
           if (!probe.isDestroyed()) probe.destroy();
         });
@@ -80,8 +104,8 @@ async function probePopup(parent: BrowserWindow): Promise<boolean | null> {
           cancelled || settled || parent.isDestroyed() || probe.isDestroyed();
         cleanups.push(
           armNativeWaylandPopupWhenReady(
-            waylandWindowId(parent),
-            waylandWindowId(probe),
+            waylandWindowId(parent, lookupManagedWindow),
+            waylandWindowId(probe, lookupManagedWindow),
             1,
             1,
             { x: 0, y: 0 },
@@ -90,7 +114,10 @@ async function probePopup(parent: BrowserWindow): Promise<boolean | null> {
               cleanups.push(disposePending);
               try {
                 probe.showInactive();
-                void waitForWaylandPopup(waylandWindowId(probe), isCancelled).then(
+                void waitForWaylandPopup(
+                  waylandWindowId(probe, lookupManagedWindow),
+                  isCancelled
+                ).then(
                   (converted) => {
                     finish(converted ? true : null);
                   },

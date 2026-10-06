@@ -337,14 +337,17 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       }
     };
     try {
-      const token = captureWindowNextPointerAxis(waylandWindowId(parentWindow), () => {
-        // Exceptions must not escape a native threadsafe-function callback.
-        try {
-          dismiss();
-        } catch (err) {
-          LOGGER.warn({ err: toError(err) }, "Menu axis dismissal failed");
+      const token = captureWindowNextPointerAxis(
+        waylandWindowId(parentWindow, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+        () => {
+          // Exceptions must not escape a native threadsafe-function callback.
+          try {
+            dismiss();
+          } catch (err) {
+            LOGGER.warn({ err: toError(err) }, "Menu axis dismissal failed");
+          }
         }
-      });
+      );
       this.dismissCleanups.push(() => cancelWindowPointerAxisCapture(token));
     } catch {
       // Keep the Electron event fallback below when the native hook is absent.
@@ -394,8 +397,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           height = actualHeight;
           popup?.setSize(width, height);
           const cancelArm = armNativeWaylandPopupWhenReady(
-            waylandWindowId(parentWindow),
-            waylandWindowId(popup!),
+            waylandWindowId(parentWindow, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+            waylandWindowId(popup!, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
             width,
             height,
             undefined,
@@ -417,8 +420,9 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                 fallbackToOverlay("popup show failed", err);
                 return;
               }
-              void waitForWaylandPopup(waylandWindowId(popup), () =>
-                Boolean(this.closed || !popup || popup.isDestroyed() || activePopup !== popup)
+              void waitForWaylandPopup(
+                waylandWindowId(popup, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+                () => Boolean(this.closed || !popup || popup.isDestroyed() || activePopup !== popup)
               ).then(
                 (converted) => {
                   disposePending();
@@ -612,8 +616,8 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
             // Keep the already-rendered window; only its native role is mapped.
             popup.setSize(width, height);
             const cancelArm = armNativeWaylandPopupWhenReady(
-              waylandWindowId(parent),
-              waylandWindowId(popup),
+              waylandWindowId(parent, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+              waylandWindowId(popup, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
               width,
               height,
               {
@@ -637,7 +641,10 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
                   closeUnavailable();
                   return;
                 }
-                void waitForWaylandPopup(waylandWindowId(popup), () => !isCurrent()).then(
+                void waitForWaylandPopup(
+                  waylandWindowId(popup, (wnd) => ManagedWindow.fromBrowserWindow(wnd)),
+                  () => !isCurrent()
+                ).then(
                   (converted) => {
                     disposePending();
                     if (!converted) {

@@ -4,7 +4,7 @@ import {
   cancelPendingPopup,
   isWindowWaylandPopup,
 } from "@open-orpheus/window";
-import { ManagedWindow } from "../managedWindow";
+import type { ManagedWindow } from "../managedWindow";
 
 const WAYLAND_POPUP_ID_WAIT_MS = 200;
 const WAYLAND_POPUP_ID_RETRY_MS = 5;
@@ -12,8 +12,18 @@ const WAYLAND_POPUP_ARM_EXPIRY_MS = 5_000;
 // Room for the same 16px blur / 4px vertical offset used by overlay menus.
 export const NATIVE_MENU_SHADOW_INSET = 24;
 
-export function waylandWindowId(wnd: BrowserWindow): string {
-  const managed = ManagedWindow.fromBrowserWindow(wnd);
+/**
+ * Finds the managed wrapper for a `BrowserWindow`.
+ *
+ * Injected rather than imported: the registry lives in `managedWindow.ts`, and a
+ * spec that drives fake windows has to be able to answer this without loading the
+ * whole window subsystem. It cannot be faked by falling back to `BrowserWindow.id`
+ * — `ManagedWindow.id` is this app's own counter, a different value entirely.
+ */
+export type ManagedWindowLookup = (wnd: BrowserWindow) => ManagedWindow | undefined;
+
+export function waylandWindowId(wnd: BrowserWindow, lookup: ManagedWindowLookup): string {
+  const managed = lookup(wnd);
   if (!managed) throw new Error("popup requires a managed window");
   return managed.id;
 }
