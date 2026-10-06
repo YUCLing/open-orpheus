@@ -511,6 +511,47 @@ handles the `any` catch binding and should be kept.
 What we want is _a composition root_, which is not a container: it is a function
 that constructs the graph in a stated order and hands it out, typed.
 
+### 5.0b Ambient context vs collaborators
+
+**Rule added 2026-09-22, after the merge, while removing the own-module mocks.**
+
+Dependency injection is right for a **collaborator**: something a module does work
+_with_, whose fakes need behaviour to be interesting, and whose lifetime is scoped.
+It is the wrong tool for **ambient context**: a single app-wide fact that reads like
+an environment question, whose only two implementations are "the real one" and "a
+stub returning a constant".
+
+|             | Collaborator                                                                        | Ambient context                           |
+| ----------- | ----------------------------------------------------------------------------------- | ----------------------------------------- |
+| Here        | `database`, `settings`, `windows`, `pack`, `cache`, `OnlineStreamer`, `gui`, `skin` | `logger`, lifecycle state, `events`       |
+| Reach it by | injection, through a `Pick<>` slice or a named boundary type                        | one encapsulated module, behind functions |
+| Test it by  | passing a double                                                                    | using the real module and driving it      |
+
+**The test:** if fakes need behaviour to be interesting, it is a collaborator —
+thread it. If the fake is a constant, it is ambient — do not.
+
+**A module may own ambient context behind functions. It may not expose installed
+state whose defaults mask ordering.** `services/lifecycle.ts` is the worked example:
+its state is private to the module and `currentState()`/`setLifecycleState()` are
+always real, so `Starting` before anyone moves it is the _truth_ rather than a
+placeholder. The earlier design installed those accessors from `bootstrap()` with
+`() => Starting` and a no-op as stand-ins, which converted a wiring mistake into a
+silently wrong answer. `installLifecycleService` is deleted; it was the last
+install-style global in the tree.
+
+Two consequences worth keeping in view:
+
+- **Boundary types, not N slices, at layer boundaries.** A window factory that needs
+  three services should take one named type (`WindowHost = Pick<ReadyPhase, "windows"
+| "lifecycle" | "settings">`), not three parameters. Leaves keep their narrow
+  `Pick<>` so the declaration stays honest.
+- **No process-global service locator.** It would delete the compiler's proof that
+  the graph is complete, reintroduce phase hazards (`ReadyPhase extends
+BootstrapPhase` exists to type them away), break the per-spec graph isolation
+  `createTestContext()` provides, and contradict §1.3: plugin dependencies are meant
+  to be _declared_ for audit, which a locator cannot express. §5.0's "a composition
+  root, which is not a container" already said the same thing.
+
 ### 5.1 Composition root
 
 ```
