@@ -29,8 +29,8 @@ vi.mock("@main/services/audio/OnlineStreamer", () => ({
 }));
 
 // Only read for progress reporting and cache-on-complete, neither of which a
-// teardown test reaches.
-vi.mock("@main/windows/managedWindow", () => ({ mainWindow: null }));
+// teardown test reaches. The window comes from `deps.windows`, so unlike main
+// this spec needs no window mock at all.
 vi.mock("@main/services/cache", () => ({ playCacheManager: null }));
 
 const logger = installLoggerStub();

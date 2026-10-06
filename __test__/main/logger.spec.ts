@@ -46,17 +46,16 @@ vi.mock("pino", () => {
   };
 });
 
-vi.mock("electron", () => ({ ipcMain: { on: vi.fn() } }));
+vi.mock("electron", () => ({
+  ipcMain: { on: vi.fn() },
+  // `platform/folders` resolves its directories from these at import time, so
+  // the real module can be used instead of mocking it.
+  app: { getPath: vi.fn((name: string) => `/tmp/open-orpheus-test/${name}`) },
+}));
 
 // `logger.ts` rolls, compresses and prunes real files at import time, so each
 // import gets a throwaway log directory instead of the app's own.
 let logDir = "";
-
-vi.mock("@main/platform/folders", () => ({
-  get log() {
-    return logDir;
-  },
-}));
 
 // `isTTY` is inherited from the stream prototype rather than owned by
 // `process.stdout`, so it has to be shadowed with an own property — and the
