@@ -261,6 +261,7 @@ export async function startApplication(): Promise<Application> {
     windows: ctx.windows,
     lifecycle: ctx.lifecycle,
     menu: menuDeps,
+    rootLogger: logger,
     orpheus,
     dawn,
     request,

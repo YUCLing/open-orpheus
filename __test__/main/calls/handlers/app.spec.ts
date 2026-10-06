@@ -24,6 +24,8 @@ const hoisted = vi.hoisted(() => ({
     child: vi.fn(),
   },
   kv: { get: vi.fn(), set: vi.fn() },
+  /** The root logger `app.log` forwards renderer lines to. */
+  rendererLog: vi.fn(),
   setStartupTask: vi.fn(),
   /** What `app.ts` asks the pack manager to load. */
   /** Platform collaborators, passed rather than mocked at the module boundary. */
@@ -74,6 +76,7 @@ async function freshModules() {
   register({
     settings: { kv: hoisted.kv } as never,
     lifecycle: { setLifecycleState: lifecycle.setLifecycleState },
+    rootLogger: { info: hoisted.rendererLog },
     orpheus: { loadFromOrpheusUrl: hoisted.loadFromOrpheusUrl },
     dawn: { statisV2: hoisted.statisV2, setStatisEndpoint: hoisted.setStatisEndpoint },
     request: { getProxyAgent: hoisted.getProxyAgent, client: hoisted.client as never },
@@ -110,6 +113,29 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(fixtureDir, { recursive: true, force: true });
+});
+
+describe("app.log", () => {
+  it("forwards the renderer's line to the root logger with no call binding", async () => {
+    const { dispatcher } = await freshModules();
+
+    await call(dispatcher!, "app.log", "[2026-08-09 10:35:57] 【persistentState】,hello world");
+
+    // Exactly `{ name, module }`: the renderer's own attribution, and nothing
+    // that says which main-process command forwarded it.
+    expect(hoisted.rendererLog).toHaveBeenCalledExactlyOnceWith(
+      { name: "app", module: "persistentState" },
+      "hello world"
+    );
+  });
+
+  it("forwards an unparseable line as-is, with no module", async () => {
+    const { dispatcher } = await freshModules();
+
+    await call(dispatcher!, "app.log", "just a line");
+
+    expect(hoisted.rendererLog).toHaveBeenCalledExactlyOnceWith({ name: "app" }, "just a line");
+  });
 });
 
 describe("app.getAppStartCommand", () => {

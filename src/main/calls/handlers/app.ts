@@ -14,6 +14,7 @@ import {
   raceArgument,
 } from "../../platform/arguments";
 import type { SettingsService } from "../../bootstrap/types";
+import type { Logger } from "pino";
 import type { LifecycleService } from "../../services/lifecycle";
 import packManager from "../../services/pack";
 import { fileExists } from "../../platform/utils/fs";
@@ -95,26 +96,33 @@ export interface AppDeps {
     getProxyAgent: typeof import("../../platform/request").getProxyAgent;
     client: typeof import("../../platform/request").client;
   };
+  /** The **root** logger, for `app.log`; see `logRendererLine`. */
+  rootLogger: Pick<Logger, "info">;
 }
 
 /**
  * Forward a line the renderer logged.
  *
- * Deliberately a module-level function rather than the handler body. The
- * build-time logger transform gives `LOGGER` a *command-scoped* child logger
- * (`{ name: "call", call: "app.log" }`) inside a `registerCallHandler` argument
- * function, and this record must not carry one: the line is the renderer's, so it
- * is attributed by `name` and the module extracted from `【】` alone, with the
- * main-process command that forwarded it deliberately absent. Out here `LOGGER`
- * is the per-file child, whose own binding the explicit `name` overrides — so the
- * record is exactly `{ name: "app", module? }`.
+ * It writes to the **root** logger, passed in rather than taken from the ambient
+ * `LOGGER`, and both reasons are specific to this call:
+ *
+ * - The record is the renderer's own, attributed by `name` and the module parsed
+ *   from `【】`. Any `LOGGER` here is a *child*, carrying a binding for this file
+ *   or for the `app.log` command — and the explicit `name: "app"` overwrites it,
+ *   so the binding is an emitted field that must never appear.
+ * - A child's binding is written on every record, and this path forwards every
+ *   line the renderer logs. That write would be paid per line to produce a field
+ *   that is immediately masked.
+ *
+ * Passing the sink also makes the record shape assertable in a unit test, which
+ * it was not while this went through a build-time-injected binding.
  */
-function logRendererLine(raw: string): void {
+function logRendererLine(logger: Pick<Logger, "info">, raw: string): void {
   // Format: `[2026-08-09 10:35:57] 【persistentState】,"...","..."`
   // Strip the timestamp, extract the module name from 【】, drop a leading
   // comma after it (if present), and log the rest.
   const match = raw.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/);
-  LOGGER.info(
+  logger.info(
     {
       name: "app",
       ...(match && { module: match[1] }),
@@ -125,7 +133,7 @@ function logRendererLine(raw: string): void {
 
 export function register(deps: AppDeps): void {
   registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
-    logRendererLine(args.map((v) => String(v)).join(" "));
+    logRendererLine(deps.rootLogger, args.map((v) => String(v)).join(" "));
   });
 
   registerCallHandler<["dawn", DawnEntry[]], void>("app.statisV2", (event, type, data) => {
