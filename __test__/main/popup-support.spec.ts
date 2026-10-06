@@ -63,7 +63,7 @@ vi.mock("@main/windows/menu/windows", () => ({
     return window;
   },
 }));
-const logger = installLoggerStub();
+installLoggerStub();
 
 /**
  * The lifecycle state is reached through installed accessors rather than a
@@ -74,13 +74,9 @@ const logger = installLoggerStub();
 let lifecycle: typeof import("@main/services/lifecycle");
 
 async function loadPopupSupport() {
+  // `vi.resetModules()` gives this a fresh state of `Starting`, which is the
+  // module's real initial value — nothing to install or reset.
   lifecycle = await import("@main/services/lifecycle");
-  lifecycle.installLifecycleService(
-    lifecycle.createLifecycleService({
-      logger: logger as never,
-      events: lifecycle.events,
-    })
-  );
   return import("@main/windows/menu/popup-support");
 }
 

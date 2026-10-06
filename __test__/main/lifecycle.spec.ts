@@ -32,24 +32,18 @@ import {
   createLifecycleService,
   currentState,
   events,
-  installLifecycleService,
   LifecycleState,
   setLifecycleState,
   setStartupTask,
   startupTask,
 } from "@main/services/lifecycle";
 
-// The refactor made the lifecycle state a service and left the module-level
-// accessors as installed indirections (they default to `Starting`/no-op so the
-// entry point can call them before `bootstrap()`). Install one per test.
+// The state is module-owned and always live, so there is nothing to install.
+// Reset it explicitly: this group reads the statically imported module, whose
+// state persists between tests in the same file.
 beforeEach(() => {
   vi.clearAllMocks();
-  installLifecycleService(
-    createLifecycleService({
-      logger: hoisted.logger as never,
-      events,
-    })
-  );
+  setLifecycleState(LifecycleState.Starting);
 });
 
 describe("startupTask", () => {
@@ -147,12 +141,7 @@ async function freshLifecycle(
   hoisted.app.isReady.mockReturnValue(true);
 
   const lifecycle = await import("@main/services/lifecycle");
-  lifecycle.installLifecycleService(
-    lifecycle.createLifecycleService({
-      logger: hoisted.logger as never,
-      events: lifecycle.events,
-    })
-  );
+  lifecycle.createLifecycleService({ logger: hoisted.logger as never });
   lifecycle.installLifecycle(options);
   return lifecycle;
 }

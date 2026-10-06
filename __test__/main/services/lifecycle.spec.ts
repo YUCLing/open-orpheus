@@ -14,7 +14,7 @@ function createService() {
   const events = new Emittery<LifecycleEvents>();
   return {
     events,
-    service: createLifecycleService({ logger, events }),
+    service: createLifecycleService({ logger }),
     logger,
   };
 }
