@@ -8,10 +8,7 @@ import { registerLyricsHandlers } from "@bridge/common/lyrics";
 /** Values reported by the dispatcher getters. */
 let state: Record<string, unknown> = {};
 /** Listeners registered by the bridge, keyed by event name. */
-const listeners = new Map<
-  string,
-  (event: { name: string; data: unknown }) => void
->();
+const listeners = new Map<string, (event: { name: string; data: unknown }) => void>();
 /** Unsubscribe functions handed back by `on`. */
 const unlisteners = new Map<string, ReturnType<typeof vi.fn>>();
 

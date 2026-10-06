@@ -5,12 +5,9 @@ import { fireNativeCall } from "../channel";
 import { AudioPlayInfo } from "../Player";
 import { toError } from "@shared/util";
 
-registerCallHandler<[string, AudioPlayInfo], void>(
-  "audioplayer.load",
-  async (id, playInfo) => {
-    await player.load(playInfo);
-  }
-);
+registerCallHandler<[string, AudioPlayInfo], void>("audioplayer.load", async (id, playInfo) => {
+  await player.load(playInfo);
+});
 
 registerCallHandler<[AudioPlayInfo], void>(
   "audioplayer.setRefreshSongUrlResult",
@@ -35,20 +32,14 @@ registerCallHandler<[string], void>("audioplayer.stop", (id) => {
   player.stop();
 });
 
-registerCallHandler<[string, string, number], void>(
-  "audioplayer.seek",
-  (id, opId, time) => {
-    if (player.currentId !== id) return;
-    player.currentTime = time;
-  }
-);
+registerCallHandler<[string, string, number], void>("audioplayer.seek", (id, opId, time) => {
+  if (player.currentId !== id) return;
+  player.currentTime = time;
+});
 
-registerCallHandler<[string, string, number], void>(
-  "audioplayer.setVolume",
-  (a, b, volume) => {
-    player.volume = volume;
-  }
-);
+registerCallHandler<[string, string, number], void>("audioplayer.setVolume", (a, b, volume) => {
+  player.volume = volume;
+});
 
 registerCallHandler<[number], void>("audioplayer.setPlaybackRate", (rate) => {
   player.playbackRate = rate;
@@ -117,33 +108,27 @@ registerCallHandler<[{ playId: string }], [typeof failedPlaybackInfo]>(
   () => [failedPlaybackInfo]
 );
 
-registerCallHandler<[number], void>(
-  "audioplayer.enableAudioData",
-  async (enable) => {
-    try {
-      await player.setAudioDataEnabled(enable === 1);
-    } catch (err) {
-      LOGGER.error(
-        { err: toError(err) },
-        `Failed to change audio data capture state`
-      );
-    }
+registerCallHandler<[number], void>("audioplayer.enableAudioData", async (enable) => {
+  try {
+    await player.setAudioDataEnabled(enable === 1);
+  } catch (err) {
+    LOGGER.error({ err: toError(err) }, `Failed to change audio data capture state`);
+  }
+});
+
+registerCallHandler<[{ device: string; use_play_device: boolean }], [{ result: boolean }]>(
+  "audioplayer.immerseSurroundSupport",
+  () => {
+    return [{ result: false }];
   }
 );
 
-registerCallHandler<
-  [{ device: string; use_play_device: boolean }],
-  [{ result: boolean }]
->("audioplayer.immerseSurroundSupport", () => {
-  return [{ result: false }];
-});
-
-registerCallHandler<
-  [{ device: string; use_play_device: boolean; enable: boolean }],
-  void
->("audioplayer.immerseSurroundSupportWatch", () => {
-  return;
-});
+registerCallHandler<[{ device: string; use_play_device: boolean; enable: boolean }], void>(
+  "audioplayer.immerseSurroundSupportWatch",
+  () => {
+    return;
+  }
+);
 
 // TODO: Audio player effect support
 registerCallHandler<[string, [{ name: string; on: boolean }]], void>(
@@ -168,17 +153,13 @@ registerCallHandler<[string, { device: AudioDeviceInit; type: string }], void>(
     if (kind === "device") {
       await Promise.allSettled([
         ipcRenderer.invoke("audio.setDevice", device.deviceId),
-        (player.audioContext as unknown as HTMLAudioElement).setSinkId(
-          device.deviceId
-        ),
+        player.setSinkId(device.deviceId),
       ]);
     }
   }
 );
 
-function mediaDeviceInfoToAudioDeviceInfo(
-  device: MediaDeviceInfo
-): AudioDeviceInfo {
+function mediaDeviceInfoToAudioDeviceInfo(device: MediaDeviceInfo): AudioDeviceInfo {
   return {
     deviceId: device.deviceId,
     id: -1,
@@ -186,55 +167,45 @@ function mediaDeviceInfoToAudioDeviceInfo(
     type: "WebAudio",
   };
 }
-registerCallHandler<[string], void>(
-  "audioplayer.enmeratorDevices",
-  (deviceType) => {
-    navigator.mediaDevices.enumerateDevices().then((mediaDevices) => {
-      let defaultDevice: AudioDeviceInfo | null = null;
-      let currentDevice: AudioDeviceInfo | null = null;
-      const devices = mediaDevices.flatMap((device) => {
-        if (deviceType !== "getOutDevices" || device.kind !== "audiooutput")
-          return [];
-        const deviceInfo = mediaDeviceInfoToAudioDeviceInfo(device);
-        if (device.deviceId === "default") defaultDevice = deviceInfo;
-        if (
-          device.deviceId ===
-          (player.audioContext as unknown as HTMLAudioElement).sinkId
-        )
-          currentDevice = deviceInfo;
-        return [deviceInfo];
-      });
-
-      fireNativeCall(
-        "audioplayer.onEnmeratorDevices",
-        deviceType,
-        [
-          {
-            type: "WebAudio",
-            devices,
-          },
-        ],
-        currentDevice ??
-          defaultDevice ?? {
-            deviceId: "default",
-            id: -1,
-            type: "WebAudio",
-            name: "Default",
-          }
-      );
+registerCallHandler<[string], void>("audioplayer.enmeratorDevices", (deviceType) => {
+  void navigator.mediaDevices.enumerateDevices().then((mediaDevices) => {
+    let defaultDevice: AudioDeviceInfo | null = null;
+    let currentDevice: AudioDeviceInfo | null = null;
+    const devices = mediaDevices.flatMap((device) => {
+      if (deviceType !== "getOutDevices" || device.kind !== "audiooutput") return [];
+      const deviceInfo = mediaDeviceInfoToAudioDeviceInfo(device);
+      if (device.deviceId === "default") defaultDevice = deviceInfo;
+      if (device.deviceId === (player.audioContext as unknown as HTMLAudioElement).sinkId)
+        currentDevice = deviceInfo;
+      return [deviceInfo];
     });
-  }
-);
+
+    fireNativeCall(
+      "audioplayer.onEnmeratorDevices",
+      deviceType,
+      [
+        {
+          type: "WebAudio",
+          devices,
+        },
+      ],
+      currentDevice ??
+        defaultDevice ?? {
+          deviceId: "default",
+          id: -1,
+          type: "WebAudio",
+          name: "Default",
+        }
+    );
+  });
+});
 
 const systemMasterVolume = {
   muted: false,
   realVolume: 1, // Actual system volume if not muted
   volume: 1,
 };
-registerCallHandler<[], [typeof systemMasterVolume]>(
-  "audioplayer.getSystemMasterVolume",
-  () => {
-    // TODO: Implement actual system master volume retrieval.
-    return [systemMasterVolume];
-  }
-);
+registerCallHandler<[], [typeof systemMasterVolume]>("audioplayer.getSystemMasterVolume", () => {
+  // TODO: Implement actual system master volume retrieval.
+  return [systemMasterVolume];
+});

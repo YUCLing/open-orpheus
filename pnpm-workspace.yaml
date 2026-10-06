@@ -12,8 +12,6 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true
 patchedDependencies:
-  # inlineDynamicImports is deprecated in Vite 8
-  "@electron-forge/plugin-vite": patches/@electron-forge__plugin-vite.patch
   # Drop other adapter support, as we always use node:sqlite
   "@keyv/sqlite": patches/@keyv__sqlite.patch
 blockExoticSubdeps: false

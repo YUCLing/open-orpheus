@@ -20,10 +20,7 @@ export type PlaybackEventName =
   | "ratechange";
 
 /** Callback through which a backend reports media events to `Player`. */
-export type PlaybackEventSink = (
-  name: PlaybackEventName,
-  data?: unknown
-) => void;
+export type PlaybackEventSink = (name: PlaybackEventName, data?: unknown) => void;
 
 /**
  * A playback engine behind `Player`'s media surface: either the hidden

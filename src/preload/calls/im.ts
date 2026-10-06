@@ -12,7 +12,7 @@ registerCallHandler<
   ],
   void
 >("im.enter", (params) => {
-  (async () => {
+  void (async () => {
     if (!im) {
       // Lazy load SDK
       im = new (await import("../YunxinIM")).default();

@@ -8,10 +8,7 @@
     class: className,
     children,
     ...restProps
-  }: WithElementRef<
-    HTMLAttributes<HTMLButtonElement>,
-    HTMLButtonElement
-  > = $props();
+  }: WithElementRef<HTMLAttributes<HTMLButtonElement>, HTMLButtonElement> = $props();
 
   const sidebar = useSidebar();
 </script>

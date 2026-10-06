@@ -28,7 +28,9 @@ export type Av3aProcessServiceToMain = {
  * busy (e.g. blocked by a window drag).
  */
 export type Av3aChannelRendererToService =
-  { type: "pause" } | { type: "resume" } | { type: "seek"; frameIndex: number };
+  | { type: "pause" }
+  | { type: "resume" }
+  | { type: "seek"; frameIndex: number };
 
 export type Av3aChannelServiceToRenderer =
   | ({ type: "pcm" } & Av3aPcmEvent)

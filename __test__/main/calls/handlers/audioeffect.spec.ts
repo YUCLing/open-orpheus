@@ -49,9 +49,7 @@ describe("audioeffect.getParams", () => {
       payload: new Uint8Array([1, 2, 3, 4]),
     });
 
-    await expect(getParams()).resolves.toEqual([
-      { errorCode: 2, errorMsg: "Got WAV NCAE" },
-    ]);
+    await expect(getParams()).resolves.toEqual([{ errorCode: 2, errorMsg: "Got WAV NCAE" }]);
   });
 
   it("turns read failures into an error response", async () => {

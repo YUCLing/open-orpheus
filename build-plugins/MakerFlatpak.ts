@@ -11,11 +11,7 @@ import { createDirectoryTarball } from "../packaging/common/archive.ts";
 import { flatpakArch } from "../packaging/common/arch.ts";
 import { makeInStaging } from "../packaging/common/maker.ts";
 import { runStreaming } from "../packaging/common/process.ts";
-import {
-  baseManifest,
-  prebuiltAppModule,
-  writeManifest,
-} from "../packaging/flatpak/manifest.ts";
+import { baseManifest, prebuiltAppModule, writeManifest } from "../packaging/flatpak/manifest.ts";
 
 const execFile = promisify(execFileCb);
 
@@ -115,26 +111,14 @@ export default class MakerFlatpak extends MakerBase<MakerFlatpakOptions> {
       const stateDir = resolve(staging, ".flatpak-builder");
       await runStreaming(
         "flatpak-builder",
-        [
-          "--force-clean",
-          `--state-dir=${stateDir}`,
-          `--repo=${repo}`,
-          buildDir,
-          manifestPath,
-        ],
+        ["--force-clean", `--state-dir=${stateDir}`, `--repo=${repo}`, buildDir, manifestPath],
         { cwd: projectRoot }
       );
 
       // 5. Export the repo as a single-file bundle, named per Flatpak
       //    convention: <app-id>_<branch>_<arch>.flatpak.
       const bundle = resolve(staging, `${appId}_${branch}_${fpArch}.flatpak`);
-      await runStreaming("flatpak", [
-        "build-bundle",
-        repo,
-        bundle,
-        appId,
-        branch,
-      ]);
+      await runStreaming("flatpak", ["build-bundle", repo, bundle, appId, branch]);
 
       return [bundle];
     };

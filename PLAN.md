@@ -8,11 +8,12 @@ pass — it applies to registrations that acquire something shorter-lived than t
 `channel.call` commands are permanent by design and carry no handle. The `lifecycle.ts`
 pre-`bootstrap()` exception remains a documented, deliberate residual, not an open defect.
 Design sections below still carry their evidence tags.
-**Revision:** 53 (2026-09-22) — two review findings fixed and falsified: the composition
-root no longer resolves the native database at import time (it is a dynamic import reached
-only when `openDatabase` was not injected), and window state is per `bootstrap()` instance
-rather than a module-level singleton, closing §5.1's third scaffolding row. The Vitest CI job
-now builds the native modules, which `lint.yml` and `build.yml` already did.
+**Revision:** 54 (2026-09-22) — the branch is merged with `main` (67c2c27, 70 commits). The
+toolchain is now main's oxlint/oxfmt, the lifecycle service absorbed main's startup/shutdown
+feature set, and the native module set is main's. One metric regressed and is recorded rather
+than hidden: upstream specs mock our own modules, so own-module `vi.mock` sites went 0 -> 29.
+**Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
+
 **Scope:** (a) cleanup of the current architecture, (b) a plugin system, built last.
 
 This document is intentionally written so it can be **corrected between phases**. See
@@ -131,14 +132,29 @@ comment loses nothing for a reader who never saw the conversation, delete it.
 
 ### 1.2 Success metrics
 
-| Metric                            | Now                              | Target                          | Phase |
-| --------------------------------- | -------------------------------- | ------------------------------- | ----- |
-| Own-module `vi.mock` sites        | ~~11 in 10 files~~ **0** **[V]** | **0** — reached at P1-12        | P1    |
-| Specs importing via `../../src/…` | ~~~38 sites~~ **0** **[V]**      | 0                               | P0    |
-| `$sharedTypes` declared in        | ~~4 places~~ **0** **[V]**       | **0** — retired in P2-4         | P2    |
-| `src/main.ts`                     | ~~486 lines~~ **74** **[V]**     | thin entry                      | P1    |
-| `strict` in root `tsconfig.json`  | ~~off~~ **on** **[V]**           | on — measured 0 errors          | P0    |
-| App graph bootable in Vitest      | ~~no~~ **yes**                   | yes (via `createTestContext()`) | P1/P3 |
+| Metric                            | Now                                        | Target                          | Phase |
+| --------------------------------- | ------------------------------------------ | ------------------------------- | ----- |
+| Own-module `vi.mock` sites        | ~~11 in 10~~ ~~**0**~~ **29 in 9** **[V]** | **0** — reached at P1-12        | P1    |
+| Specs importing via `../../src/…` | ~~~38 sites~~ **0** **[V]**                | 0                               | P0    |
+| `$sharedTypes` declared in        | ~~4 places~~ **0** **[V]**                 | **0** — retired in P2-4         | P2    |
+| `src/main.ts`                     | ~~486~~ ~~**74**~~ **126** **[V]**         | thin entry                      | P1    |
+| `strict` in root `tsconfig.json`  | ~~off~~ **on** **[V]**                     | on — measured 0 errors          | P0    |
+| App graph bootable in Vitest      | ~~no~~ **yes**                             | yes (via `createTestContext()`) | P1/P3 |
+
+**After the merge with `main` (2026-09-22).** Three of these moved, and the reason matters:
+
+- **Own-module `vi.mock` went back to 29 in 9 files.** Every one comes from upstream specs —
+  `menu-popup`, `window`, `shutdown`, `popup-support`, `logger`, `MediaEngine`, `lifecycle`,
+  `calls/handlers/app` — which mock our own modules directly. The refactor's number was about
+  _our_ test architecture, and merging cannot hold it against specs the branch does not own.
+  Closing it is P1-12-shaped work on main's specs, deliberately not attempted here.
+- **`src/main.ts` is 126 lines**, not 74: main's `open-file`, `open-url` and richer
+  `second-instance` handlers (local files via `raceArgument`) came in on top of the thin entry,
+  and `installLifecycle({ logger })` replaced the hand-rolled quit handlers.
+- **The lint toolchain is main's.** `eslint.config.ts` and `.prettierignore` were deleted
+  upstream; `pnpm lint` is now `oxlint` + the GUI checks and `pnpm format` is `oxfmt`. The six
+  strict `tsconfig.json` flags survive and are still enforced, because `.oxlintrc.json` sets
+  `typeAware`/`typeCheck` — the gate moved from a `tsc` script to oxlint's type check.
 
 ### 1.3 Non-goals
 
@@ -679,10 +695,7 @@ export interface CallInterceptors<Side extends "main" | "preload" = "main"> {
     priority: number,
     hook: (call: CallFrame) => BeforeDecision | Promise<BeforeDecision>
   ): Disposable;
-  after(
-    priority: number,
-    hook: (call: CallOutcome) => void | Promise<void>
-  ): Disposable;
+  after(priority: number, hook: (call: CallOutcome) => void | Promise<void>): Disposable;
   /** Only invoked when no handler matched and dispatch would return false. */
   onUnhandled(
     priority: number,
@@ -1423,6 +1436,7 @@ design — the pack ABI, with nothing shorter-lived than the process to release 
 was restated as _resource-acquiring_ registrations, and `CallDispatcher` documents the missing
 `unregister` as a choice.
 
+| 2026-09-22 | Merged `main` (67c2c27, 70 commits) into the refactor branch **[V]** | Merge base `8869ed2`; the branch was 54 commits ahead and `git cherry` confirmed none of them were already upstream. **63 conflicted paths:** 40 both-modified, 16 modify/delete, 5 relocated additions and 2 where upstream deleted a file the branch had edited. The 16 modify/delete were the refactor's _moves_ colliding with main's _edits of the old paths_ — twelve `src/main/calls/*.ts` that main changed and the branch had moved to `calls/handlers/` — and were resolved with a rename-aware three-way merge (`git merge-file` with base = the old path at the merge-base, theirs = main's old path, ours = the branch's moved file) rather than by hand-porting 1,224 changed lines. **Toolchain:** adopted main's oxlint/oxfmt as agreed — `eslint.config.ts` and `.prettierignore` deleted, `package.json` taken from main (which is also where `lint:eslint`/`lint:types` went away). That exposed **30 type errors in main's new code**, all from the branch's strict flags now being enforced through `.oxlintrc.json`'s `typeCheck`: missing `override` (7), index-signature property access (12) and `exactOptionalPropertyTypes` (11). Fixed the way P3-4 fixed the old code — widen our own optional properties, omit the key at third-party boundaries. **Lifecycle:** main grew the file 74 → 365 lines (startup task, shutdown tasks and finalizers, deadline, signal handling); the machinery stayed module-level because it must install before `bootstrap()` runs so a signal during start-up still exits correctly, `LOGGER` became an optional injected logger, and `main.ts` now calls `installLifecycle({ logger })` with the app-scoped registrations as a `registerShutdownTask` step. **Native modules:** main's set (dropped `lifecycle` and `smtc`, added `system-win32`, which already replaces `smtc` for media session and power-off). **Structure:** main's new root modules were relocated into the refactor's groups (`platform/arguments.ts`, `domain/xeapi.ts`, `bootstrap/shutdown.ts`) so `src/main/` has no root `.ts` files and every directory stays ≤15. **Four upstream specs were adapted to the branch's API, not the reverse:** `lifecycle.spec` installs a service to exercise the module-level accessors, `popup-support.spec` and `window.spec` mocks gained `currentState`, and `app.spec` registers handlers explicitly because P1-11 removed import-time registration (its electron/folders/util/pack mocks were completed for the larger graph). **Recorded regression:** own-module `vi.mock` sites 0 → 29 in 9 files, entirely from upstream specs; closing that is P1-12-shaped work on tests the branch does not own. `tsc --noEmit` 0 errors with all six strict flags, `pnpm test` 74 files / 794 tests, `pnpm lint` clean (oxlint 0 errors + svelte-check 0), `pnpm format:check` clean, `pnpm package` succeeded. |
 ---
 
 ## Appendix A — Change summary vs. the initial draft

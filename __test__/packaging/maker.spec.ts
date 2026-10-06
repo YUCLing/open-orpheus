@@ -39,9 +39,7 @@ describe("makeInStaging", () => {
     const artifacts = await makeInStaging("/out/deb", build);
 
     expect(artifacts).toEqual(["/out/deb/app.deb"]);
-    await expect(readFile("/out/deb/app.deb", "utf-8")).resolves.toBe(
-      "deb-bytes"
-    );
+    await expect(readFile("/out/deb/app.deb", "utf-8")).resolves.toBe("deb-bytes");
   });
 
   it("builds in a temp staging directory and removes it afterwards", async () => {
@@ -108,9 +106,7 @@ describe("makeInStaging", () => {
       throw new Error("build exploded");
     });
 
-    await expect(makeInStaging("/out/deb", build)).rejects.toThrow(
-      "build exploded"
-    );
+    await expect(makeInStaging("/out/deb", build)).rejects.toThrow("build exploded");
     expect(vol.existsSync(build.mock.calls[0][0])).toBe(false);
   });
 });

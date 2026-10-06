@@ -11,6 +11,9 @@ import yaml from "yaml";
 import {
   baseManifest,
   DESKTOP_EXEC,
+  PNPM_NATIVE_PACKAGES,
+  pnpmBootstrapCommands,
+  pnpmNativeSources,
   prebuiltAppModule,
   writeManifest,
   type ManifestContext,
@@ -48,9 +51,7 @@ describe("baseManifest", () => {
   });
 
   it("adds a branch only when one is given", () => {
-    expect(
-      baseManifest({ ...ctx, branch: "stable" }, appModule)["branch"]
-    ).toBe("stable");
+    expect(baseManifest({ ...ctx, branch: "stable" }, appModule)["branch"]).toBe("stable");
     expect(baseManifest(ctx, appModule)).not.toHaveProperty("branch");
   });
 
@@ -66,10 +67,7 @@ describe("baseManifest", () => {
       appModule
     );
 
-    expect(manifest["sdk-extensions"]).toEqual([
-      "org.freedesktop.Sdk.Extension.node24",
-      "x",
-    ]);
+    expect(manifest["sdk-extensions"]).toEqual(["org.freedesktop.Sdk.Extension.node24", "x"]);
   });
 
   it("appends the app module after extra modules", () => {
@@ -114,6 +112,99 @@ describe("prebuiltAppModule", () => {
   });
 });
 
+describe("pnpmNativeSources", () => {
+  // The published integrities for pnpm 12.8.1, as `dist.integrity` spells them.
+  const x64Integrity =
+    "sha512-8bDZ0lZlCdi2rvnFul7EYgcC7zKeWSe76y8JV2oXobaS8p9i9d6PSf6LgLtTM0fI7R9Oh4eLCbveXyNDMmvZ+g==";
+  const arm64Integrity =
+    "sha512-q4s9a9X2O3N9aeUFooW24orNrxvu20+jyVUFR5RanPCqOKKPBrgs2iywMkBBx1aXkkzdWT54/mfz8Be8sJlWEw==";
+  const integrities = {
+    [PNPM_NATIVE_PACKAGES["x86_64"]]: x64Integrity,
+    [PNPM_NATIVE_PACKAGES["aarch64"]]: arm64Integrity,
+  };
+
+  it("declares one arch-filtered native binary source per arch", () => {
+    expect(pnpmNativeSources({ pnpmVersion: "12.8.1", integrities })).toEqual([
+      {
+        type: "file",
+        url: "https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.8.1.tgz",
+        sha512:
+          "f1b0d9d2566509d8b6aef9c5ba5ec4620702ef329e5927bbeb2f09576a17a1b692f29f62f5de8f49fe8b80bb533347c8ed1f4e87878b09bbde5f2343326bd9fa",
+        "dest-filename": "pnpm-exe-x86_64.tgz",
+        "only-arches": ["x86_64"],
+      },
+      {
+        type: "file",
+        url: "https://registry.npmjs.org/@pnpm/exe.linux-arm64/-/exe.linux-arm64-12.8.1.tgz",
+        sha512:
+          "ab8b3d6bd5f63b737d69e505a285b6e28acdaf1beedb4fa3c9550547945a9cf0aa38a28f06b82cda2cb0324041c75697924cdd593e78fe67f3f017bcb0995613",
+        "dest-filename": "pnpm-exe-aarch64.tgz",
+        "only-arches": ["aarch64"],
+      },
+    ]);
+  });
+
+  it("refuses to emit a source without a pinned integrity", () => {
+    expect(() => pnpmNativeSources({ pnpmVersion: "12.8.1", integrities: {} })).toThrow(
+      /integrity/i
+    );
+  });
+
+  it("rejects an integrity that is not a sha512", () => {
+    expect(() =>
+      pnpmNativeSources({
+        pnpmVersion: "12.8.1",
+        integrities: { ...integrities, [PNPM_NATIVE_PACKAGES["x86_64"]]: "sha256-YWJj" },
+      })
+    ).toThrow(/sha512/);
+  });
+
+  it("rejects a sha512 digest that is not 64 bytes", () => {
+    expect(() =>
+      pnpmNativeSources({
+        pnpmVersion: "12.8.1",
+        integrities: { ...integrities, [PNPM_NATIVE_PACKAGES["x86_64"]]: "sha512-YWJj" },
+      })
+    ).toThrow(/64-byte/);
+  });
+});
+
+describe("pnpmBootstrapCommands", () => {
+  const PREFIX = "$FLATPAK_BUILDER_BUILDDIR/.npm-prefix";
+  const TARBALL = "pnpm-12.8.1.tgz";
+  const nativeDir = `${PREFIX}/lib/node_modules/@pnpm/exe.linux-$(node -p process.arch)`;
+
+  it("installs the wrapper without lifecycle scripts or optional dependencies", () => {
+    const [first] = pnpmBootstrapCommands(PREFIX, TARBALL);
+
+    expect(first).toBe(
+      `npm install -g --ignore-scripts --omit=optional --no-audit --no-fund --offline --no-update-notifier --prefix ${PREFIX} ./${TARBALL}`
+    );
+  });
+
+  it("keeps npm off the network, which would otherwise stall the build", () => {
+    const [first] = pnpmBootstrapCommands(PREFIX, TARBALL);
+
+    expect(first).toContain("--offline");
+    expect(first).toContain("--no-update-notifier");
+  });
+
+  it("unpacks the native binary into the layout npm would have produced", () => {
+    const commands = pnpmBootstrapCommands(PREFIX, TARBALL);
+
+    expect(commands).toContain(`install -d ${nativeDir}`);
+    expect(commands).toContain(`tar xf pnpm-exe-*.tgz -C ${nativeDir} --strip-components=1`);
+  });
+
+  it("links the wrapper only once the binary is in place", () => {
+    const commands = pnpmBootstrapCommands(PREFIX, TARBALL);
+    const linker = commands.indexOf(`node ${PREFIX}/lib/node_modules/pnpm/install.js`);
+
+    expect(linker).toBeGreaterThan(commands.findIndex((command) => command.startsWith("tar xf")));
+    expect(linker).toBeLessThan(commands.length);
+  });
+});
+
 describe("writeManifest", () => {
   beforeEach(() => {
     vol.reset();
@@ -124,9 +215,7 @@ describe("writeManifest", () => {
 
     const path = await writeManifest("/out/make/flatpak-builder", manifest);
 
-    expect(path).toBe(
-      "/out/make/flatpak-builder/io.github.yucling.open-orpheus.yaml"
-    );
+    expect(path).toBe("/out/make/flatpak-builder/io.github.yucling.open-orpheus.yaml");
     expect(vol.existsSync(path)).toBe(true);
   });
 
@@ -146,12 +235,8 @@ describe("writeManifest", () => {
     const second = baseManifest({ ...ctx, branch: "beta" }, appModule);
     await writeManifest("/out", second);
 
-    const parsed = yaml.parse(
-      await readFile("/out/io.github.yucling.open-orpheus.yaml", "utf-8")
-    );
+    const parsed = yaml.parse(await readFile("/out/io.github.yucling.open-orpheus.yaml", "utf-8"));
     expect(parsed.branch).toBe("beta");
-    expect(vol.readdirSync("/out")).toEqual([
-      "io.github.yucling.open-orpheus.yaml",
-    ]);
+    expect(vol.readdirSync("/out")).toEqual(["io.github.yucling.open-orpheus.yaml"]);
   });
 });

@@ -45,9 +45,7 @@ import type {
 
 const parent = process.parentPort;
 if (!parent) {
-  throw new Error(
-    "av3a decode service must run inside an Electron utility process"
-  );
+  throw new Error("av3a decode service must run inside an Electron utility process");
 }
 
 /** Contiguous downloaded prefix (bytes) known without asking main. */
@@ -200,9 +198,7 @@ function attachRendererPort(port: MessagePortMain): void {
   port.start();
 }
 
-async function startService(
-  msg: MainToService & { type: "init" }
-): Promise<void> {
+async function startService(msg: MainToService & { type: "init" }): Promise<void> {
   if (started) return;
   started = true;
 

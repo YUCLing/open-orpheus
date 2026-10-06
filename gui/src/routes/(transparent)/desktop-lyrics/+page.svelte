@@ -3,23 +3,14 @@
   import { createAttachmentKey } from "svelte/attachments";
 
   import LyricsComponent from "$lib/components/Lyrics.svelte";
-  import type {
-    DesktopLyricsPlayInfo,
-    LyricsStyle,
-  } from "@shared/types/desktop-lyrics";
+  import type { DesktopLyricsPlayInfo, LyricsStyle } from "@shared/types/desktop-lyrics";
   import type { Lyrics, LyricsStore } from "@shared/types/lyrics";
   import IconButton from "$lib/components/IconButton.svelte";
   import { cn } from "$lib/utils";
   import { getBridge } from "$lib/bridge";
   import type { DesktopLyricsContract } from "$bridge/contracts/desktop-lyrics-api";
   import { inputRegionAttachment } from "$lib/inputRegion";
-  import {
-    lyricsBridgeEmitter,
-    getLyrics,
-    getSlogan,
-    getPlayState,
-    getTime,
-  } from "$lib/lyrics";
+  import { lyricsBridgeEmitter, getLyrics, getSlogan, getPlayState, getTime } from "$lib/lyrics";
   import * as settings from "$lib/settings";
   import multihover from "$lib/multihover";
   import { onpointerdrag } from "$lib/pointer";
@@ -51,17 +42,11 @@
   let translateLyrics: Lyrics | null = $state(null);
   let romaLyrics: Lyrics | null = $state(null);
   let slogan: string | null = $state(null);
-  let scrollable = $derived(
-    Boolean(rawLrcLyrics?.length || rawPerwordLyrics?.length)
-  );
+  let scrollable = $derived(Boolean(rawLrcLyrics?.length || rawPerwordLyrics?.length));
   let playInfo: DesktopLyricsPlayInfo | null = $state(null);
 
-  let lrcLyrics = $derived.by(() =>
-    insertInfoFirstLine(rawLrcLyrics, playInfo)
-  );
-  let perwordLyrics = $derived.by(() =>
-    insertInfoFirstLine(rawPerwordLyrics, playInfo)
-  );
+  let lrcLyrics = $derived.by(() => insertInfoFirstLine(rawLrcLyrics, playInfo));
+  let perwordLyrics = $derived.by(() => insertInfoFirstLine(rawPerwordLyrics, playInfo));
 
   let currentTime = $state(0);
   let offset = $state(0);
@@ -115,9 +100,7 @@
     return lyrics;
   }
 
-  const items: (
-    [string, string, string] | [string, string, string, boolean]
-  )[] = $derived([
+  const items: ([string, string, string] | [string, string, string, boolean])[] = $derived([
     ["home", "detail", "打开详情页"],
     ["poffset", "offset_forward", "向前偏移歌词 0.5 秒", !scrollable],
     ["moffset", "offset_back", "向后偏移歌词 0.5 秒", !scrollable],
@@ -272,10 +255,7 @@
           }}
           title="解锁桌面歌词"
           {@attach inputRegionAttachment}
-          ><img
-            src="gui://skin/lrc/desk_icn_unlock.png"
-            alt="解锁桌面歌词"
-          /></button
+          ><img src="gui://skin/lrc/desk_icn_unlock.png" alt="解锁桌面歌词" /></button
         >
       {:else}
         {#each items as [icon, action, title, disabled] (action)}
@@ -310,8 +290,7 @@
         enableFullInteraction = true;
       }}
       lineattrs={{
-        [createAttachmentKey()]:
-          !enableFullInteraction && !locked && inputRegionAttachment,
+        [createAttachmentKey()]: !enableFullInteraction && !locked && inputRegionAttachment,
         [createAttachmentKey()]: lineHoverAttachment,
       }}
     />

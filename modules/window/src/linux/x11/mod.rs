@@ -33,6 +33,16 @@ pub(super) fn set_input_region_rects(window: u32, rects: Option<&[Rect]>) -> boo
         .unwrap_or(false)
 }
 
+/// Put `window` in the desktop layer (see [`inject::set_window_as_background`]).
+pub(super) fn set_window_as_background(window: u32) -> bool {
+    let Some(handle) = X11Handle::active() else {
+        return false;
+    };
+    handle
+        .with_state(|conn, sink| inject::set_window_as_background(conn, sink, window))
+        .unwrap_or(false)
+}
+
 pub(super) fn query_pointer(window: u32) -> Option<(i16, i16)> {
     inject::query_pointer(window)
 }

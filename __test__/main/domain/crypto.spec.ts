@@ -43,9 +43,7 @@ describe("encodeAnonymousId", () => {
   });
 
   it("handles multi-byte characters", () => {
-    expect(
-      Buffer.from(encodeAnonymousId("不完美人生指南"), "base64")
-    ).toHaveLength(16);
+    expect(Buffer.from(encodeAnonymousId("不完美人生指南"), "base64")).toHaveLength(16);
   });
 });
 
@@ -72,9 +70,9 @@ describe("enData / deData", () => {
 
     expect(deData(raw, undefined, false)?.toString("utf8")).toBe("buffer in");
     // The double-base64 variant may also receive the first layer as a buffer.
-    expect(
-      deData(Buffer.from(single, "utf8"), undefined, true)?.toString("utf8")
-    ).toBe("buffer in");
+    expect(deData(Buffer.from(single, "utf8"), undefined, true)?.toString("utf8")).toBe(
+      "buffer in"
+    );
   });
 
   it("encrypts to a multiple of the AES block size", () => {
@@ -112,9 +110,7 @@ describe("serialData / deserialData", () => {
 
     const plaintext = deserialData(params);
     const digest = createHash("md5")
-      .update(
-        `nobody/api/v3/song/detailuse${JSON.stringify(body)}md5forencrypt`
-      )
+      .update(`nobody/api/v3/song/detailuse${JSON.stringify(body)}md5forencrypt`)
       .digest("hex");
 
     expect(plaintext).toBe(
@@ -167,9 +163,9 @@ describe("chacha20Encrypt", () => {
   );
 
   it("matches the RFC 8439 test vector", () => {
-    expect(
-      chacha20Encrypt(RFC_KEY, RFC_NONCE, 1, RFC_PLAINTEXT).toString("hex")
-    ).toBe(RFC_CIPHERTEXT.toString("hex"));
+    expect(chacha20Encrypt(RFC_KEY, RFC_NONCE, 1, RFC_PLAINTEXT).toString("hex")).toBe(
+      RFC_CIPHERTEXT.toString("hex")
+    );
   });
 
   it("is its own inverse", () => {
@@ -181,20 +177,16 @@ describe("chacha20Encrypt", () => {
   it("keeps the plaintext length, including partial blocks", () => {
     for (const length of [0, 1, 63, 64, 65, 200]) {
       const plaintext = Buffer.alloc(length, 0x41);
-      expect(chacha20Encrypt(RFC_KEY, RFC_NONCE, 0, plaintext)).toHaveLength(
-        length
-      );
+      expect(chacha20Encrypt(RFC_KEY, RFC_NONCE, 0, plaintext)).toHaveLength(length);
     }
   });
 
   it("produces the same keystream for the same counter", () => {
     const plaintext = Buffer.alloc(64);
-    expect(
+    expect(chacha20Encrypt(RFC_KEY, RFC_NONCE, 7, plaintext).toString("hex")).toBe(
       chacha20Encrypt(RFC_KEY, RFC_NONCE, 7, plaintext).toString("hex")
-    ).toBe(chacha20Encrypt(RFC_KEY, RFC_NONCE, 7, plaintext).toString("hex"));
-    expect(
-      chacha20Encrypt(RFC_KEY, RFC_NONCE, 8, plaintext).toString("hex")
-    ).not.toBe(
+    );
+    expect(chacha20Encrypt(RFC_KEY, RFC_NONCE, 8, plaintext).toString("hex")).not.toBe(
       chacha20Encrypt(RFC_KEY, RFC_NONCE, 7, plaintext).toString("hex")
     );
   });
@@ -220,8 +212,6 @@ describe("rawRsaEncrypt", () => {
   });
 
   it("maps a zero plaintext to zero", () => {
-    expect(
-      rawRsaEncrypt(Buffer.alloc(1), 3n, 3233n).every((b) => b === 0)
-    ).toBe(true);
+    expect(rawRsaEncrypt(Buffer.alloc(1), 3n, 3233n).every((b) => b === 0)).toBe(true);
   });
 });

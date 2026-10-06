@@ -35,12 +35,10 @@ function forward(level: string, bindings: Bindings | undefined): LogFn {
  * of `undefined`.
  */
 function createFacade(bindings: Bindings | undefined): Facade {
-  const child: ChildFactory = (childBindings) =>
-    createFacade({ ...bindings, ...childBindings });
+  const child: ChildFactory = (childBindings) => createFacade({ ...bindings, ...childBindings });
 
   return new Proxy(Object.create(null) as Facade, {
-    get: (_target, level: string) =>
-      level === "child" ? child : forward(level, bindings),
+    get: (_target, level: string) => (level === "child" ? child : forward(level, bindings)),
   });
 }
 

@@ -4,7 +4,7 @@ import AudioEffectManager from "./AudioEffectManager";
 import { Av3aPlaybackBackend } from "./backends/Av3aPlaybackBackend";
 import { MediaPlaybackBackend } from "./backends/MediaPlaybackBackend";
 import { isAv3aLocalFile } from "./av3a/detect";
-import { dbToGain } from "@shared/util";
+import { toError, volumeToGain } from "@shared/util";
 import type { PlaybackBackend, PlaybackEventName } from "./PlaybackBackend";
 
 export enum AudioPlayerState {
@@ -58,15 +58,7 @@ export type AudioPlayInfo = {
   aiprocessorRatio: number;
   destLevel: string;
   songId: string;
-  songQuality:
-    | "standard"
-    | "exhigh"
-    | "hires"
-    | "jyeffect"
-    | "vivid"
-    | "sky"
-    | "jymaster"
-    | string;
+  songQuality: "standard" | "exhigh" | "hires" | "jyeffect" | "vivid" | "sky" | "jymaster" | string;
 } & (
   | {
       type: 0;
@@ -105,7 +97,6 @@ export type AudioPlayInfo = {
 );
 
 export type PlayerEvents = {
-  lyriccontentupdate: LyricContent | null;
   volumechange: number;
   audiodata: { data: ArrayBuffer; pts: number };
   lyricstyleupdate: { key: string | symbol; value: unknown };
@@ -127,25 +118,6 @@ export type PlayerEvents = {
   ratechange: undefined;
 };
 
-export function isAv3aPlayInfo(playInfo: AudioPlayInfo | null): boolean {
-  return playInfo?.type === 4 && playInfo.audioFormat === "av3a";
-}
-
-/**
- * Convert volume (0-1) to linear gain, logarithmic mapping.
- *
- * @param input
- * @returns
- */
-function volumeToGain(input: number, minDb = 40) {
-  if (input === 0) return 0;
-
-  // Convert volume to dB (negative = attenuation)
-  const db = -minDb * (1 - input);
-
-  return dbToGain(db);
-}
-
 export default class Player extends Emittery<PlayerEvents> {
   private _audioCtx: AudioContext = new AudioContext();
   private _audioEffectManager = new AudioEffectManager(this._audioCtx);
@@ -157,7 +129,27 @@ export default class Player extends Emittery<PlayerEvents> {
   private _backend: PlaybackBackend;
 
   private _playInfo: AudioPlayInfo | null = null;
-  private _lyricContent: LyricContent | null = null;
+  /**
+   * The user's desired playing state: the last explicit transport command
+   * (`play`/`pause`/`stop`). Device-change recovery reads it to decide whether
+   * an interruption should be undone.
+   *
+   * Only a transport command writes it, and only before that command awaits.
+   * The backend pause a sink change causes is an interruption, not intent, so
+   * deriving intent from `paused` mid-switch is what let a second switch erase
+   * the intent the first one was going to restore.
+   *
+   * `_intentSeq` bumps with every command, so a caller that had to await can
+   * tell that a newer command took over while it waited.
+   */
+  private _desiredPlayingState = false;
+  private _intentSeq = 0;
+  /**
+   * Sink switches currently awaiting `setSinkId`. Overlapping switches observe
+   * the same transient pause, so only the last one to settle restores playback
+   * (an earlier one would resume in the middle of a newer device change).
+   */
+  private _sinkSwitchesInFlight = 0;
   private _volume = 1;
   /**
    * Monotonic sequence for `load` requests; only the newest request may win.
@@ -169,19 +161,7 @@ export default class Player extends Emittery<PlayerEvents> {
    */
   private loadRequestSeq = 0;
 
-  songInfo: SongInfo | null = null;
-  playlist: Playlist = { items: [], currentPlay: "" };
-
   // #region Getters & Setters
-  get lyricContent(): LyricContent | null {
-    return this._lyricContent;
-  }
-
-  set lyricContent(value: LyricContent | null) {
-    this._lyricContent = value;
-    void this.emit("lyriccontentupdate", value);
-  }
-
   get audioContext() {
     return this._audioCtx;
   }
@@ -325,6 +305,22 @@ export default class Player extends Emittery<PlayerEvents> {
   }
 
   /**
+   * Record a transport command as the user's intent and return that intent's
+   * epoch. A caller that must await before acting compares the epoch
+   * afterwards: a different value means a newer command owns playback, so the
+   * caller must not force its now-stale intent onto the backend.
+   */
+  private claimPlaybackIntent(playing: boolean): number {
+    this._desiredPlayingState = playing;
+    return ++this._intentSeq;
+  }
+
+  /** Whether no transport command has changed the intent since `epoch`. */
+  private isIntentCurrent(epoch: number): boolean {
+    return epoch === this._intentSeq;
+  }
+
+  /**
    * Whether `playInfo` should play through the AV3A decode backend. URL av3a
    * is signalled by `audioFormat`; a local file's codec is not part of the
    * play info, so it is sniffed (in main, which owns `fs`).
@@ -339,6 +335,47 @@ export default class Player extends Emittery<PlayerEvents> {
       }
     }
     return false;
+  }
+
+  /**
+   * Switch the output device.
+   *
+   * The switch can transiently suspend the audio context, and `statechange`
+   * turns a suspended context into a backend pause, so a device change can stop
+   * playback without the user asking. Undo that here, without ever overriding a
+   * transport command issued while the switch was in flight.
+   */
+  async setSinkId(sinkId: string): Promise<void> {
+    // Whether playback was running when the switch started. Read now, before
+    // the interruption it causes, and never written back as if the transient
+    // pause were the user's intent.
+    const wasPlaying = !this.paused;
+    const intent = this._intentSeq;
+    this._sinkSwitchesInFlight += 1;
+
+    return await (this._audioCtx as unknown as HTMLAudioElement)
+      .setSinkId(sinkId)
+      .finally(async () => {
+        this._sinkSwitchesInFlight -= 1;
+        // A newer switch is still applying; it may interrupt playback again, so
+        // recovery belongs to whichever switch settles last.
+        if (this._sinkSwitchesInFlight > 0) return;
+
+        // Either the user wants playback (`_desiredPlayingState` already
+        // reflects a pause/stop issued while we waited), or playback was
+        // running and no command has touched the intent since. A newer command
+        // always wins over the recovery.
+        const wantsPlayback =
+          this._desiredPlayingState || (wasPlaying && this.isIntentCurrent(intent));
+        if (!wantsPlayback || !this.paused) return;
+
+        // We want changing device doesn't pause the playback. A switch that
+        // starts while this resume waits for the context takes over instead (see
+        // `playWhen`), so playback only starts once the device has settled.
+        await this.playWhen(() => this._sinkSwitchesInFlight === 0).catch((e) =>
+          LOGGER.warn({ err: toError(e) }, "Failed to resume playback after device change.")
+        );
+      });
   }
 
   async load(playInfo: AudioPlayInfo): Promise<void> {
@@ -372,11 +409,31 @@ export default class Player extends Emittery<PlayerEvents> {
   }
 
   async play() {
+    await this.playWhen();
+  }
+
+  /**
+   * Claim the playback intent, wait for the audio context, then start the
+   * backend.
+   *
+   * The claim happens before the wait, so a pause/stop/play issued meanwhile
+   * wins: this call drops out instead of starting a stale play — possibly on a
+   * different song. `mayStart` is checked last and covers conditions that are
+   * not a change of intent; sink-change recovery uses it to hand a resume over
+   * to a switch that started while the context was resuming. That switch
+   * re-reads the intent claimed here when it settles, so it restores playback
+   * itself and nothing is lost by dropping out.
+   */
+  private async playWhen(mayStart: () => boolean = () => true) {
+    const intent = this.claimPlaybackIntent(true);
     await this.ensureAudioContextState();
+    if (!this.isIntentCurrent(intent)) return;
+    if (!mayStart()) return;
     await this._backend.play();
   }
 
   pause() {
+    this.claimPlaybackIntent(false);
     this._backend.pause();
   }
 
@@ -387,6 +444,7 @@ export default class Player extends Emittery<PlayerEvents> {
     // await boundary, exactly like a newer `load` would.
     this.loadRequestSeq += 1;
     this._playInfo = null;
+    this.claimPlaybackIntent(false);
     this._backend.stop();
     // Simply try, does nothing if failed.
     this._honeyPotPromise
@@ -407,8 +465,7 @@ export default class Player extends Emittery<PlayerEvents> {
       try {
         source.disconnect(node);
       } catch (err) {
-        if (err instanceof DOMException && err.name === "InvalidAccessError")
-          return;
+        if (err instanceof DOMException && err.name === "InvalidAccessError") return;
         throw err;
       }
     }
@@ -419,11 +476,7 @@ export default class Player extends Emittery<PlayerEvents> {
    * only when `source` is the currently active backend (so a retired backend's
    * late events never leak through).
    */
-  private onBackendEvent(
-    source: PlaybackBackend,
-    name: PlaybackEventName,
-    data?: unknown
-  ): void {
+  private onBackendEvent(source: PlaybackBackend, name: PlaybackEventName, data?: unknown): void {
     if (source !== this._backend) return;
     switch (name) {
       case "load":
@@ -432,12 +485,18 @@ export default class Player extends Emittery<PlayerEvents> {
       case "error":
         void this.emit("error", data as Error | Event);
         break;
+      case "ended":
+        // Playback finished on its own, so the user's intent to play is spent:
+        // a later device change must not restart the finished track (anything
+        // that should follow — repeat, next track — issues its own `play`).
+        this.claimPlaybackIntent(false);
+        void this.emit("ended");
+        break;
       default: {
         // The remaining events carry no payload.
-        const emit = this.emit as (
-          eventName: PlaybackEventName
-        ) => Promise<void>;
-        void emit(name);
+        // Keep this a member call: Emittery's `emit` relies on `this`, so
+        // copying it into a local first would lose the receiver.
+        void (this.emit as (eventName: PlaybackEventName) => Promise<void>)(name);
         break;
       }
     }

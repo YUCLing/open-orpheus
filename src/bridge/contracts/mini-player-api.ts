@@ -18,9 +18,7 @@ export interface MiniPlayerContract {
     muteUpdate(callback: (muted: boolean) => void): void;
     playStateUpdate(callback: (state: MiniPlayerPlayState) => void): void;
     listUpdate(callback: (data: MiniPlayerListData) => void): void;
-    togetherStatusUpdate(
-      callback: (status: MiniPlayerTogetherStatus) => void
-    ): void;
+    togetherStatusUpdate(callback: (status: MiniPlayerTogetherStatus) => void): void;
     showVolume(callback: (data: MiniPlayerShowVolumeRequest) => void): void;
     styleUpdate(callback: (style: MiniPlayerStyle | null) => void): void;
     setFont(callback: (font: string | null) => void): void;

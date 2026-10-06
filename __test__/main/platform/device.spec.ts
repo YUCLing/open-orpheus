@@ -48,16 +48,10 @@ describe("prepareDeviceId", () => {
 
     expect(deviceId).toMatch(/^[0-9A-F]{52}$/);
     // "<mac>@@@<hex token>@@@@@@<sha256>" with an uppercase unicast MAC.
-    expect(adDeviceId).toMatch(
-      /^[0-9A-F]{2}(:[0-9A-F]{2}){5}@@@[0-9A-F]+@{6}[0-9a-f]{64}$/
-    );
-    expect(adDeviceId.split("@@@")[0]).toMatch(
-      /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/
-    );
+    expect(adDeviceId).toMatch(/^[0-9A-F]{2}(:[0-9A-F]{2}){5}@@@[0-9A-F]+@{6}[0-9a-f]{64}$/);
+    expect(adDeviceId.split("@@@")[0]).toMatch(/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/);
 
-    const persisted = JSON.parse(
-      vol.readFileSync(DEVICE_ID_PATH, "utf-8") as string
-    );
+    const persisted = JSON.parse(vol.readFileSync(DEVICE_ID_PATH, "utf-8") as string);
     expect(persisted).toEqual({ deviceId, ADDeviceId: adDeviceId });
   });
 
@@ -97,10 +91,7 @@ describe("prepareDeviceId", () => {
   });
 
   it("regenerates when the stored file is incomplete", async () => {
-    vol.writeFileSync(
-      DEVICE_ID_PATH,
-      JSON.stringify({ deviceId: "ABCD", ADDeviceId: "" })
-    );
+    vol.writeFileSync(DEVICE_ID_PATH, JSON.stringify({ deviceId: "ABCD", ADDeviceId: "" }));
 
     const device = await freshDeviceModule();
     await device.prepareDeviceId();

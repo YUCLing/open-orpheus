@@ -3,18 +3,14 @@ import type { Database } from "@open-orpheus/database";
 import { SqliteDriver } from "@keyv/sqlite";
 
 function coerceParams(params: unknown[]): unknown[] {
-  return params.map((p) =>
-    p !== null && typeof p === "object" ? JSON.stringify(p) : p
-  );
+  return params.map((p) => (p !== null && typeof p === "object" ? JSON.stringify(p) : p));
 }
 
 export type DatabaseSqliteDriver = SqliteDriver & {
   db: Database;
 };
 
-export default function createKeyvSqliteDriver(
-  db: Database
-): DatabaseSqliteDriver {
+export default function createKeyvSqliteDriver(db: Database): DatabaseSqliteDriver {
   const driver: DatabaseSqliteDriver = {
     name: "custom",
     db,

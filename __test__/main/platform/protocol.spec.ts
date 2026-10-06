@@ -12,52 +12,21 @@ vi.mock("electron", () => ({
 import { app } from "electron";
 
 import registerAsProtocolClient, {
-  checkOpenCommand,
   getProtocolClientName,
   isProtocolClient,
   unregisterAsProtocolClient,
 } from "@main/platform/protocol";
 
-describe("checkOpenCommand", () => {
-  it("finds an orpheus URL in the argv", () => {
-    expect(checkOpenCommand(["/usr/bin/open-orpheus", "orpheus://x/y"])).toBe(
-      "orpheus://x/y"
-    );
-  });
-
-  it("returns the first orpheus URL", () => {
-    expect(checkOpenCommand(["orpheus://first", "orpheus://second"])).toBe(
-      "orpheus://first"
-    );
-  });
-
-  it("returns null when nothing matches", () => {
-    expect(checkOpenCommand(["--flag", "file.txt"])).toBeNull();
-    expect(checkOpenCommand([])).toBeNull();
-    expect(checkOpenCommand(["notorpheus://x"])).toBeNull();
-  });
-
-  it("falls back to the process argv", () => {
-    const original = process.argv;
-    process.argv = ["node", "main.js", "orpheus://from-process-argv"];
-    try {
-      expect(checkOpenCommand()).toBe("orpheus://from-process-argv");
-    } finally {
-      process.argv = original;
-    }
-  });
-});
+// Command line parsing no longer lives here: `checkOpenCommand` moved to
+// `src/main/arguments.ts` and is covered by `arguments.spec.ts`. This file only
+// covers the protocol registration helpers.
 
 describe("registerAsProtocolClient", () => {
   beforeEach(() => {
     vi.mocked(app.isDefaultProtocolClient).mockReset().mockReturnValue(false);
-    vi.mocked(app.getApplicationNameForProtocol)
-      .mockReset()
-      .mockReturnValue("");
+    vi.mocked(app.getApplicationNameForProtocol).mockReset().mockReturnValue("");
     vi.mocked(app.setAsDefaultProtocolClient).mockReset().mockReturnValue(true);
-    vi.mocked(app.removeAsDefaultProtocolClient)
-      .mockReset()
-      .mockReturnValue(true);
+    vi.mocked(app.removeAsDefaultProtocolClient).mockReset().mockReturnValue(true);
   });
 
   it("does nothing when the app already owns the scheme", () => {
@@ -69,9 +38,7 @@ describe("registerAsProtocolClient", () => {
   });
 
   it("does nothing when another application owns the scheme", () => {
-    vi.mocked(app.getApplicationNameForProtocol).mockReturnValue(
-      "Some Other App"
-    );
+    vi.mocked(app.getApplicationNameForProtocol).mockReturnValue("Some Other App");
 
     expect(registerAsProtocolClient()).toBe(false);
     expect(app.setAsDefaultProtocolClient).not.toHaveBeenCalled();
@@ -83,9 +50,7 @@ describe("registerAsProtocolClient", () => {
   });
 
   it("overrides another owner when forced", () => {
-    vi.mocked(app.getApplicationNameForProtocol).mockReturnValue(
-      "Some Other App"
-    );
+    vi.mocked(app.getApplicationNameForProtocol).mockReturnValue("Some Other App");
 
     expect(registerAsProtocolClient(true)).toBe(true);
     expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith("orpheus");
@@ -95,18 +60,14 @@ describe("registerAsProtocolClient", () => {
     vi.mocked(app.getApplicationNameForProtocol).mockReturnValue("Firefox");
 
     expect(getProtocolClientName()).toBe("Firefox");
-    expect(app.getApplicationNameForProtocol).toHaveBeenCalledWith(
-      "orpheus://"
-    );
+    expect(app.getApplicationNameForProtocol).toHaveBeenCalledWith("orpheus://");
   });
 });
 
 describe("unregisterAsProtocolClient", () => {
   beforeEach(() => {
     vi.mocked(app.isDefaultProtocolClient).mockReset().mockReturnValue(false);
-    vi.mocked(app.removeAsDefaultProtocolClient)
-      .mockReset()
-      .mockReturnValue(true);
+    vi.mocked(app.removeAsDefaultProtocolClient).mockReset().mockReturnValue(true);
   });
 
   it("does nothing when the app is not the default client", () => {

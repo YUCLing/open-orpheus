@@ -17,10 +17,7 @@ const kv = {
 };
 const events = new Emittery();
 
-const settings = { kv, events } as unknown as Pick<
-  SettingsService,
-  "kv" | "events"
->;
+const settings = { kv, events } as unknown as Pick<SettingsService, "kv" | "events">;
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -67,19 +64,14 @@ describe("registerSettingsHandlers", () => {
     const win = createFakeWindow();
     register(win.wnd);
 
-    await expect(win.invoke("settings.get", "proxy")).resolves.toBe(
-      "value:proxy"
-    );
-    await expect(win.invoke("settings.set", "proxy", "http://a")).resolves.toBe(
-      true
-    );
-    await expect(
-      win.invoke("settings.setMany", [{ key: "a", value: 1 }])
-    ).resolves.toEqual([true, false]);
-    await expect(win.invoke("settings.delete", "proxy")).resolves.toBe(true);
-    await expect(win.invoke("settings.deleteMany", ["a"])).resolves.toEqual([
+    await expect(win.invoke("settings.get", "proxy")).resolves.toBe("value:proxy");
+    await expect(win.invoke("settings.set", "proxy", "http://a")).resolves.toBe(true);
+    await expect(win.invoke("settings.setMany", [{ key: "a", value: 1 }])).resolves.toEqual([
       true,
+      false,
     ]);
+    await expect(win.invoke("settings.delete", "proxy")).resolves.toBe(true);
+    await expect(win.invoke("settings.deleteMany", ["a"])).resolves.toEqual([true]);
 
     expect(kv.get).toHaveBeenCalledWith("proxy");
     expect(kv.set).toHaveBeenCalledWith("proxy", "http://a");
@@ -95,11 +87,7 @@ describe("registerSettingsHandlers", () => {
     void events.emit("change", { key: "proxy", value: "http://a" });
     await flush();
 
-    expect(win.send).toHaveBeenCalledWith(
-      "settings.change",
-      "proxy",
-      "http://a"
-    );
+    expect(win.send).toHaveBeenCalledWith("settings.change", "proxy", "http://a");
   });
 
   it("forwards store deletions to the renderer", async () => {

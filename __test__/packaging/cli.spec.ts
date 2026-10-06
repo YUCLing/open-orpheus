@@ -27,9 +27,7 @@ describe("parseFlags", () => {
   });
 
   it("combines several flags", () => {
-    expect(
-      parseFlags(["--prebuilt", "--nodeps", "--arch", "x64", "--no-clean"])
-    ).toEqual({
+    expect(parseFlags(["--prebuilt", "--nodeps", "--arch", "x64", "--no-clean"])).toEqual({
       installTools: false,
       nodeps: true,
       prebuilt: true,

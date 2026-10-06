@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
@@ -68,10 +69,7 @@ export interface PrebuiltAppModuleOptions {
  * metainfo are all bundled on the host (where node_modules exists), so the
  * sandbox just copies them into /app — no toolchain, no node.
  */
-export function prebuiltAppModule(
-  ctx: ManifestContext,
-  opts: PrebuiltAppModuleOptions
-) {
+export function prebuiltAppModule(ctx: ManifestContext, opts: PrebuiltAppModuleOptions) {
   return {
     name: ctx.appIdentifier,
     buildsystem: "simple",
@@ -87,6 +85,95 @@ export function prebuiltAppModule(
   };
 }
 
+/**
+ * Flatpak arch -> the npm package carrying pnpm's native binary for it. Only
+ * the glibc builds are listed: the runtime, and therefore the build sandbox,
+ * is glibc, which is also the variant pnpm's own `native-binary.mjs` probes
+ * for first there.
+ */
+export const PNPM_NATIVE_PACKAGES: Record<string, string> = {
+  x86_64: "@pnpm/exe.linux-x64",
+  aarch64: "@pnpm/exe.linux-arm64",
+};
+
+export interface PnpmNativeSourcesOptions {
+  pnpmVersion: string;
+  /** npm `dist.integrity` per package name, as published by the registry. */
+  integrities: Record<string, string>;
+}
+
+/**
+ * The `@pnpm/exe.*` sources carrying pnpm's native binary. `only-arches` keeps
+ * a build to a single ~30 MB download, and the distinct dest-filenames let the
+ * module unpack whichever one it got with one glob.
+ */
+export function pnpmNativeSources(opts: PnpmNativeSourcesOptions) {
+  return Object.entries(PNPM_NATIVE_PACKAGES).map(([arch, packageName]) => {
+    const integrity = opts.integrities[packageName];
+    if (integrity === undefined) {
+      throw new Error(`No registry integrity for ${packageName}`);
+    }
+    const unscopedName = packageName.split("/")[1];
+    return {
+      type: "file",
+      url: `https://registry.npmjs.org/${packageName}/-/${unscopedName}-${opts.pnpmVersion}.tgz`,
+      sha512: sha512IntegrityToHex(integrity),
+      "dest-filename": `pnpm-exe-${arch}.tgz`,
+      "only-arches": [arch],
+    };
+  });
+}
+
+/** npm's `sha512-<base64>` integrity as the hex digest flatpak-builder wants. */
+function sha512IntegrityToHex(integrity: string): string {
+  const prefix = "sha512-";
+  if (!integrity.startsWith(prefix)) {
+    throw new Error(`Expected a ${prefix} integrity, got: ${integrity}`);
+  }
+  const digest = Buffer.from(integrity.slice(prefix.length), "base64");
+  if (digest.length !== 64) {
+    throw new Error(`Expected a 64-byte ${prefix} digest, got ${digest.length} bytes`);
+  }
+  return digest.toString("hex");
+}
+
+/**
+ * Build commands that install the npm `pnpm` wrapper and give it the native
+ * binary it cannot fetch itself.
+ *
+ * That package is a wrapper: its `preinstall` (`node install.js`) links a
+ * native binary out of the platform-specific `@pnpm/exe.*` optional
+ * dependency, and fails the build when that dependency is absent — which it
+ * always is in the offline sandbox, where npm cannot resolve it. So the
+ * wrapper is installed without lifecycle scripts or optional dependencies, the
+ * binary from the declared source is unpacked into the exact layout npm would
+ * have produced, and pnpm's own linker then places it, leaving the wrapper's
+ * `dist/` payload (node-gyp) next to it as on any other install.
+ *
+ * `--offline` is not a nicety: npm resolves the manifest of every
+ * `@pnpm/exe.*` optional dependency even when they are omitted, and the
+ * update-notifier asks the registry about npm itself. In the sandbox those
+ * requests reach nothing and each blocks for the full `fetch-timeout`
+ * (5 minutes by default, retried twice), which reads as an install that hangs
+ * for the better part of an hour. Offline mode skips the metadata walk and
+ * `--no-update-notifier` removes the last request, leaving the step with no
+ * network I/O at all.
+ *
+ * @param prefix install prefix, e.g. `$FLATPAK_BUILDER_BUILDDIR/.npm-prefix`
+ * @param pnpmTarballName wrapper tarball in the module's build directory
+ */
+export function pnpmBootstrapCommands(prefix: string, pnpmTarballName: string): string[] {
+  // node's arch names (`x64`, `arm64`) are the pnpm target names of the arches
+  // `pnpmNativeSources` restricts its entries to.
+  const nativeDir = `${prefix}/lib/node_modules/@pnpm/exe.linux-$(node -p process.arch)`;
+  return [
+    `npm install -g --ignore-scripts --omit=optional --no-audit --no-fund --offline --no-update-notifier --prefix ${prefix} ./${pnpmTarballName}`,
+    `install -d ${nativeDir}`,
+    `tar xf pnpm-exe-*.tgz -C ${nativeDir} --strip-components=1`,
+    `node ${prefix}/lib/node_modules/pnpm/install.js`,
+  ];
+}
+
 /** Write a manifest to `<outDir>/<app-id>.yaml`; returns the file path. */
 export async function writeManifest(
   outDir: string,
@@ -94,7 +181,11 @@ export async function writeManifest(
 ): Promise<string> {
   await mkdir(outDir, { recursive: true });
   const doc = yaml.parseDocument(yaml.stringify(manifest));
-  const manifestPath = join(outDir, `${manifest["app-id"]}.yaml`);
+  const appId = manifest["app-id"];
+  if (typeof appId !== "string") {
+    throw new Error("Flatpak manifest is missing a string 'app-id'");
+  }
+  const manifestPath = join(outDir, `${appId}.yaml`);
   await writeFile(manifestPath, doc.toString());
   return manifestPath;
 }

@@ -1,11 +1,6 @@
 import { DOMParser, type Element } from "@xmldom/xmldom";
 
-import type {
-  BtnImages,
-  BtnState,
-  ElementTemplate,
-  LayoutNode,
-} from "@shared/types/dui";
+import type { BtnImages, BtnState, ElementTemplate, LayoutNode } from "@shared/types/dui";
 
 export type { ElementTemplate, LayoutNode };
 
@@ -14,10 +9,7 @@ function parseNum(el: Element, attr: string): number | undefined {
   return v != null ? Number(v) : undefined;
 }
 
-function parseLayoutNode(
-  el: Element,
-  counter: { i: number }
-): LayoutNode | null {
+function parseLayoutNode(el: Element, counter: { i: number }): LayoutNode | null {
   const tag = el.tagName;
   if (tag === "HorizontalLayout") {
     return { type: "horizontal", children: parseChildren(el, counter) };

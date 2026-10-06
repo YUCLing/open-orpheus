@@ -1,11 +1,6 @@
 import { toError } from "@shared/util";
 
-import type {
-  Av3aDecodeExecutor,
-  Av3aDecodedFrame,
-  Av3aSampleRange,
-  Av3aTrackInfo,
-} from "./types";
+import type { Av3aDecodeExecutor, Av3aDecodedFrame, Av3aSampleRange, Av3aTrackInfo } from "./types";
 
 /**
  * Source abstraction over anything that can supply an AV3A-in-M4A file that
@@ -226,9 +221,7 @@ export class Av3aM4aSession {
    * `moov` sits at the end: once the sequential prefix stops advancing, probe
    * the tail instead of waiting for the whole file to download.
    */
-  private async openUntilReady(
-    signal: AbortSignal
-  ): Promise<Av3aTrackInfo | null> {
+  private async openUntilReady(signal: AbortSignal): Promise<Av3aTrackInfo | null> {
     let lastPrefix = -1;
     for (;;) {
       if (signal.aborted) return null;
@@ -251,15 +244,8 @@ export class Av3aM4aSession {
         // If the prefix is not advancing, the `moov` box is probably at the
         // end of the file; fetch the tail so open can succeed early.
         if (prefix === lastPrefix) {
-          const probeStart = Math.max(
-            0,
-            this.source.totalLength - TAIL_PROBE_BYTES
-          );
-          await this.source.ensureRange(
-            probeStart,
-            this.source.totalLength,
-            signal
-          );
+          const probeStart = Math.max(0, this.source.totalLength - TAIL_PROBE_BYTES);
+          await this.source.ensureRange(probeStart, this.source.totalLength, signal);
           if (signal.aborted) return null;
         }
         lastPrefix = prefix;
@@ -268,10 +254,7 @@ export class Av3aM4aSession {
     }
   }
 
-  private async decodeLoop(
-    info: Av3aTrackInfo,
-    signal: AbortSignal
-  ): Promise<void> {
+  private async decodeLoop(info: Av3aTrackInfo, signal: AbortSignal): Promise<void> {
     for (;;) {
       if (signal.aborted) return;
       await this.waitIfPaused();

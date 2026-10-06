@@ -2,7 +2,7 @@
 [package]
 authors = ["YUCLing <luotianyi@luotianyi.me>"]
 edition = "2021"
-name    = "database"
+name = "database"
 version = "0.1.0"
 
 [lib]
@@ -11,8 +11,8 @@ crate-type = ["cdylib"]
 [dependencies]
 napi.workspace = true
 napi-derive.workspace = true
-pinyin      = { version = "0.11", features = ["plain"] }
-rusqlite    = { version = "0.40.0", features = ["bundled", "collation"] }
+pinyin = { version = "0.11", features = ["plain"] }
+rusqlite = { version = "0.40.0", features = ["bundled", "collation"] }
 threadpool = "1.8.1"
 
 [build-dependencies]

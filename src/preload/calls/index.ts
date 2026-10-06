@@ -9,7 +9,7 @@ import "./nimsys";
 
 if (isMain) {
   // Only main window uses player
-  import("./audioplayer");
-  import("./audioeffect");
-  import("./player");
+  void import("./audioplayer");
+  void import("./audioeffect");
+  void import("./player");
 }

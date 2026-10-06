@@ -700,5 +700,7 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.DbusClient = nativeBinding.DbusClient
+module.exports.DbusSubscription = nativeBinding.DbusSubscription
 module.exports.MediaSession = nativeBinding.MediaSession
 module.exports.PlaybackStatus = nativeBinding.PlaybackStatus

@@ -12,8 +12,8 @@
 
 <h1 class="text-2xl font-bold">资源包</h1>
 <p class="mt-2 text-gray-700">
-  一个 Open Orpheus 版本仅为一个特定的资源包版本设计，因此推荐使用与当前 Open
-  Orpheus 版本匹配的资源包版本以获得最佳体验。
+  一个 Open Orpheus 版本仅为一个特定的资源包版本设计，因此推荐使用与当前 Open Orpheus
+  版本匹配的资源包版本以获得最佳体验。
 </p>
 <p class="mt-4 text-gray-700">
   {#await api.pack.getWebPackCommitHash()}
@@ -35,8 +35,7 @@
     <Dialog.Header>
       <Dialog.Title>确认重新下载推荐资源包</Dialog.Title>
       <Dialog.Description
-        >重新下载推荐资源包将需要重启 Open
-        Orpheus，当前版本资源包将被删除。确定吗？</Dialog.Description
+        >重新下载推荐资源包将需要重启 Open Orpheus，当前版本资源包将被删除。确定吗？</Dialog.Description
       >
     </Dialog.Header>
     <Dialog.Footer>

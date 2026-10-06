@@ -11,6 +11,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { DOMParser, XMLSerializer, type Element } from "@xmldom/xmldom";
 
+import pkg from "../package.json" with { type: "json" };
+
 const projectRoot = resolve(import.meta.dirname, "..");
 
 const argv = process.argv.slice(2);
@@ -21,16 +23,11 @@ const flagValue = (flag: string) => {
 const notesFile = flagValue("--notes");
 const version = flagValue("--version");
 if (!notesFile || !version) {
-  throw new Error(
-    "Usage: generate-changelog.ts --notes <release-notes.md> --version <version>"
-  );
+  throw new Error("Usage: generate-changelog.ts --notes <release-notes.md> --version <version>");
 }
 const apiKey = process.env["DEEPSEEK_API_KEY"];
 if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY env var.");
 
-const pkg = JSON.parse(
-  await readFile(resolve(projectRoot, "package.json"), "utf-8")
-);
 const maintainer =
   typeof pkg.author === "string"
     ? pkg.author
@@ -67,25 +64,10 @@ const description: string = JSON.parse(fence ? fence[1] : raw).description;
 
 // --- Helpers ---
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const now = new Date();
 // e.g. Thu, 28 Aug 2026 00:00:00 +0000 (Debian)
-const debianDate = `${WEEKDAYS[now.getUTCDay()]}, ${String(
-  now.getUTCDate()
-).padStart(
+const debianDate = `${WEEKDAYS[now.getUTCDay()]}, ${String(now.getUTCDate()).padStart(
   2,
   "0"
 )} ${MONTHS[now.getUTCMonth()]} ${now.getUTCFullYear()} 00:00:00 +0000`;
@@ -121,10 +103,7 @@ const escapeXmlText = (s: string) =>
 /** Parse a description fragment; returns the root element or null on failure. */
 function parseDescription(html: string): Element | null {
   try {
-    const doc = new DOMParser().parseFromString(
-      `<description>${html}</description>`,
-      "text/xml"
-    );
+    const doc = new DOMParser().parseFromString(`<description>${html}</description>`, "text/xml");
     const root = doc.documentElement;
     return root && root.nodeName !== "parsererror" ? root : null;
   } catch {
@@ -146,9 +125,7 @@ function sanitizeDescription(description: string): string {
   );
   const root = parseDescription(preEscaped);
   if (!root) {
-    return `<description>${escapeXmlText(
-      preEscaped.replace(/<[^>]*>/g, "")
-    )}</description>`;
+    return `<description>${escapeXmlText(preEscaped.replace(/<[^>]*>/g, ""))}</description>`;
   }
   return new XMLSerializer().serializeToString(root);
 }
@@ -187,14 +164,9 @@ const releaseBlock = formatXmlFragment(
 );
 const anchor = /( {2}<releases>\n)/;
 if (!anchor.test(metainfo)) {
-  throw new Error(
-    "Cannot find <releases> in packaging/flatpak/metainfo.xml — aborting."
-  );
+  throw new Error("Cannot find <releases> in packaging/flatpak/metainfo.xml — aborting.");
 }
-await writeFile(
-  metainfoPath,
-  metainfo.replace(anchor, `  <releases>\n${releaseBlock}\n`)
-);
+await writeFile(metainfoPath, metainfo.replace(anchor, `  <releases>\n${releaseBlock}\n`));
 
 // --- 2. debian/changelog: prepend an entry ---
 const bullets = extractBullets(description);

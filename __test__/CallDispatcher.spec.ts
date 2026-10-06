@@ -97,9 +97,7 @@ describe("CallDispatcher", () => {
     });
 
     const callback = vi.fn();
-    await expect(
-      dispatcher.dispatch("cmd", callback, 7)
-    ).resolves.toBeUndefined();
+    await expect(dispatcher.dispatch("cmd", callback, 7)).resolves.toBeUndefined();
 
     expect(callback).toHaveBeenCalledWith("streamed", 7);
   });
@@ -123,9 +121,7 @@ describe("CallDispatcher", () => {
       throw new Error("handler exploded");
     });
 
-    await expect(dispatcher.dispatch("boom", vi.fn())).rejects.toThrow(
-      "handler exploded"
-    );
+    await expect(dispatcher.dispatch("boom", vi.fn())).rejects.toThrow("handler exploded");
   });
 
   it("does not mistake inherited object properties for handlers", async () => {

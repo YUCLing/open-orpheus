@@ -32,12 +32,8 @@ import {
 
 describe("folders", () => {
   it("derives the temp directories from the OS temp path", () => {
-    expect(downloadTemp).toBe(
-      join("/tmp/open-orpheus-test/temp", "open-orpheus-download-temp")
-    );
-    expect(streamerTemp).toBe(
-      join("/tmp/open-orpheus-test/temp", "open-orpheus-streamer-temp")
-    );
+    expect(downloadTemp).toBe(join("/tmp/open-orpheus-test/temp", "open-orpheus-download-temp"));
+    expect(streamerTemp).toBe(join("/tmp/open-orpheus-test/temp", "open-orpheus-streamer-temp"));
   });
 
   it("uses the repository data directory while unpackaged", () => {
@@ -57,9 +53,7 @@ describe("folders", () => {
   });
 
   it("derives the flag and state files", () => {
-    expect(disableHardwareAccelerationFlag).toBe(
-      join(data, "disable-hw-accel")
-    );
+    expect(disableHardwareAccelerationFlag).toBe(join(data, "disable-hw-accel"));
     expect(lastWebpackHash).toBe(join(data, "last-webpack-hash"));
   });
 

@@ -11,10 +11,7 @@ export default class ChunkTracker {
   private intervals: ChunkInterval[] = [];
 
   get loadedBytes() {
-    return this.intervals.reduce(
-      (total, interval) => total + interval.end - interval.start,
-      0
-    );
+    return this.intervals.reduce((total, interval) => total + interval.end - interval.start, 0);
   }
 
   addInterval(start: number, end: number) {

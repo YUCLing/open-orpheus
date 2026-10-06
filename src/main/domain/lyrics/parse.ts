@@ -66,14 +66,11 @@ export function parseLrc(lrc: string): Lyrics {
 
   // Convert to LyricLine[], inferring end_time from the next line
   return entries.map((entry, i) => {
-    const nextTime =
-      i + 1 < entries.length ? entries[i + 1].time : entry.time + 5000;
+    const nextTime = i + 1 < entries.length ? entries[i + 1].time : entry.time + 5000;
     return {
       start_time: entry.time,
       end_time: nextTime,
-      words: [
-        { text: entry.text, start_time: 0, duration: nextTime - entry.time },
-      ],
+      words: [{ text: entry.text, start_time: 0, duration: nextTime - entry.time }],
     };
   });
 }

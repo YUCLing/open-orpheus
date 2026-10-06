@@ -60,8 +60,8 @@ describe("Pack bookkeeping", () => {
   });
 
   it("exposes the pack path to subclasses", async () => {
-    await expect(
-      new TestPack("/tmp/x.pack").readFile("a.txt")
-    ).resolves.toEqual(Buffer.from("a.txt"));
+    await expect(new TestPack("/tmp/x.pack").readFile("a.txt")).resolves.toEqual(
+      Buffer.from("a.txt")
+    );
   });
 });

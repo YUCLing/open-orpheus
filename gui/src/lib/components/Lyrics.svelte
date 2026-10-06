@@ -126,8 +126,7 @@
       if (elapsed >= wordEnd) {
         filledCh += ww;
       } else if (elapsed > wordStart) {
-        const wordProg =
-          w.duration > 0 ? (elapsed - wordStart) / w.duration : 1;
+        const wordProg = w.duration > 0 ? (elapsed - wordStart) / w.duration : 1;
         filledCh += ww * wordProg;
         break;
       } else {
@@ -138,9 +137,7 @@
   }
 
   let adjustedTime = $derived(Math.max(0, currentTime + offset));
-  let currentIdx = $derived(
-    lyrics ? findCurrentLineIndex(lyrics, adjustedTime) : -1
-  );
+  let currentIdx = $derived(lyrics ? findCurrentLineIndex(lyrics, adjustedTime) : -1);
 
   // In double-line mode without secondary lyrics, pair lines:
   // even-indexed lines display on row 1, odd-indexed on row 2.
@@ -183,9 +180,7 @@
       : null
   );
 
-  let primaryLine = $derived(
-    lyrics && upperIdx >= 0 ? lyrics[upperIdx] : sloganLine
-  );
+  let primaryLine = $derived(lyrics && upperIdx >= 0 ? lyrics[upperIdx] : sloganLine);
 
   let secondaryLine = $derived.by(() => {
     if (!lyrics) return null;
@@ -193,20 +188,14 @@
     const secLine = findSecondaryLine(secondaryLyrics, adjustedTime);
     if (secLine) return secLine;
     // In double-line mode with no secondary, show the paired line
-    if (
-      style.lineMode === LineMode.Double &&
-      lowerIdx >= 0 &&
-      lyrics[lowerIdx]
-    ) {
+    if (style.lineMode === LineMode.Double && lowerIdx >= 0 && lyrics[lowerIdx]) {
       return lyrics[lowerIdx];
     }
     return null;
   });
 
   // Base word-level progress — computed once per line, shared by visual & scroll
-  let primaryWordProgress = $derived(
-    primaryLine ? wordProgress(primaryLine, adjustedTime) : 0
-  );
+  let primaryWordProgress = $derived(primaryLine ? wordProgress(primaryLine, adjustedTime) : 0);
 
   let secondaryWordProgress = $derived(
     secondaryLine ? wordProgress(secondaryLine, adjustedTime) : 0
@@ -253,12 +242,8 @@
     vertical: boolean
   ): number {
     if (!lineContainerEl) return 0;
-    const scrollDim = vertical
-      ? lineContainerEl.scrollHeight
-      : lineContainerEl.scrollWidth;
-    const boxDim = vertical
-      ? lineContainerEl.clientHeight
-      : lineContainerEl.clientWidth;
+    const scrollDim = vertical ? lineContainerEl.scrollHeight : lineContainerEl.scrollWidth;
+    const boxDim = vertical ? lineContainerEl.clientHeight : lineContainerEl.clientWidth;
     return Math.max(0, scrollDim - boxDim);
   }
 
@@ -276,12 +261,8 @@
     });
   });
 
-  let line1Scroll = $derived(
-    line1Overflow > 0 ? line1Overflow * primaryWordProgress : 0
-  );
-  let line2Scroll = $derived(
-    line2Overflow > 0 ? line2Overflow * secondaryWordProgress : 0
-  );
+  let line1Scroll = $derived(line1Overflow > 0 ? line1Overflow * primaryWordProgress : 0);
+  let line2Scroll = $derived(line2Overflow > 0 ? line2Overflow * secondaryWordProgress : 0);
 
   // Font style string
   let fontStyle = $derived(
@@ -371,9 +352,7 @@
                 {playedOutline ? `text-shadow: ${playedOutline};` : ''}
                 clip-path: inset(0 {style.vertical
               ? '0'
-              : `${(1 - progress) * 100}%`} {style.vertical
-              ? `${(1 - progress) * 100}%`
-              : '0'} 0);
+              : `${(1 - progress) * 100}%`} {style.vertical ? `${(1 - progress) * 100}%` : '0'} 0);
               "
           >
             {@render lineContent(line)}
@@ -399,9 +378,7 @@
             background: {playedGradient};
             -webkit-background-clip: text;
             background-clip: text;
-            clip-path: inset(0 {style.vertical
-          ? '0'
-          : `${(1 - progress) * 100}%`} {style.vertical
+            clip-path: inset(0 {style.vertical ? '0' : `${(1 - progress) * 100}%`} {style.vertical
           ? `${(1 - progress) * 100}%`
           : '0'} 0);
           "
@@ -415,9 +392,7 @@
         class="relative -m-2 overflow-hidden p-2 leading-[1.3] whitespace-nowrap {style.vertical
           ? '[text-orientation:mixed] [writing-mode:vertical-rl]'
           : ''}"
-        style="text-align: {line1Overflow > 0
-          ? 'left'
-          : style.textAlign[0]}; {fontStyle}"
+        style="text-align: {line1Overflow > 0 ? 'left' : style.textAlign[0]}; {fontStyle}"
         bind:this={line1ContainerEl}
       >
         <div
@@ -436,9 +411,7 @@
       </div>
     {:else if style.lineMode === LineMode.Double}
       <div
-        class="invisible leading-[1.3] {style.vertical
-          ? '[writing-mode:vertical-rl]'
-          : ''}"
+        class="invisible leading-[1.3] {style.vertical ? '[writing-mode:vertical-rl]' : ''}"
         style={fontStyle}
       >
         &nbsp;
@@ -450,9 +423,7 @@
         class="relative -m-2 overflow-hidden p-2 leading-[1.3] whitespace-nowrap {style.vertical
           ? '[text-orientation:mixed] [writing-mode:vertical-rl]'
           : ''}"
-        style="text-align: {line2Overflow > 0
-          ? 'left'
-          : style.textAlign[1]}; {fontStyle}"
+        style="text-align: {line2Overflow > 0 ? 'left' : style.textAlign[1]}; {fontStyle}"
         bind:this={line2ContainerEl}
       >
         <div
@@ -471,9 +442,7 @@
       </div>
     {:else if style.lineMode === LineMode.Double}
       <div
-        class="invisible leading-[1.3] {style.vertical
-          ? '[writing-mode:vertical-rl]'
-          : ''}"
+        class="invisible leading-[1.3] {style.vertical ? '[writing-mode:vertical-rl]' : ''}"
         style={fontStyle}
       >
         &nbsp;

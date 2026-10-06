@@ -67,12 +67,7 @@ describe("createLifecycleService", () => {
   it("does not emit for states with no mapped event", async () => {
     const { service } = createService();
     const listener = vi.fn();
-    for (const name of [
-      "mainwindowcreated",
-      "mainwindowloaded",
-      "started",
-      "quitting",
-    ] as const) {
+    for (const name of ["mainwindowcreated", "mainwindowloaded", "started", "quitting"] as const) {
       service.events.on(name, listener);
     }
 

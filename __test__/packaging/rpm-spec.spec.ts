@@ -7,11 +7,7 @@ import { readFile } from "node:fs/promises";
 
 import { vol } from "memfs";
 
-import {
-  createSpecFile,
-  generateSpec,
-  type SpecOptions,
-} from "../../packaging/rpm/spec";
+import { createSpecFile, generateSpec, type SpecOptions } from "../../packaging/rpm/spec";
 
 const base: SpecOptions = {
   name: "open-orpheus",
@@ -37,9 +33,7 @@ describe("generateSpec", () => {
     expect(spec).toContain("Release:        1");
     expect(spec).toContain("Summary:        An open-source implementation");
     expect(spec).toContain("License:        MIT");
-    expect(spec).toContain(
-      "URL:            https://github.com/YUCLing/open-orpheus"
-    );
+    expect(spec).toContain("URL:            https://github.com/YUCLing/open-orpheus");
     expect(spec).toContain("Source0:        %{name}-%{version}.tar.gz");
     expect(spec).toContain("AutoReqProv:    no");
   });
@@ -47,13 +41,7 @@ describe("generateSpec", () => {
   it("renders the required sections and the changelog", async () => {
     const spec = await generateSpec(base);
 
-    for (const section of [
-      "%prep",
-      "%build",
-      "%install",
-      "%files",
-      "%changelog",
-    ]) {
+    for (const section of ["%prep", "%build", "%install", "%files", "%changelog"]) {
       expect(spec).toContain(section);
     }
     expect(spec).toContain("%setup -q");
@@ -100,12 +88,8 @@ describe("generateSpec", () => {
   it("bundles the prebuilt app as Source1", async () => {
     const spec = await generateSpec({ ...base, prebuilt: true });
 
-    expect(spec).toContain(
-      "Source1:        %{name}-%{version}-prebuilt.tar.gz"
-    );
-    expect(spec).toContain(
-      "tar xzf %{_sourcedir}/%{name}-%{version}-prebuilt.tar.gz"
-    );
+    expect(spec).toContain("Source1:        %{name}-%{version}-prebuilt.tar.gz");
+    expect(spec).toContain("tar xzf %{_sourcedir}/%{name}-%{version}-prebuilt.tar.gz");
     expect(spec).not.toContain("pnpm run package");
     expect(spec).not.toContain("sh.rustup.rs");
     expect(spec).toContain(
@@ -134,9 +118,7 @@ describe("generateSpec", () => {
     ]) {
       expect(spec).toContain(flag);
     }
-    expect(spec).toContain(
-      "sed 's|-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes||g'"
-    );
+    expect(spec).toContain("sed 's|-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes||g'");
     // POSIX parameter expansion only: `%build` may run under dash.
     expect(spec).not.toContain("${RUSTFLAGS//");
     expect(spec).not.toContain("${CFLAGS//");
@@ -145,19 +127,13 @@ describe("generateSpec", () => {
   it("keeps the SUID sandbox, license and file list", async () => {
     const spec = await generateSpec(base);
 
-    expect(spec).toContain(
-      "chmod 4755 %{buildroot}/usr/lib/%{name}/chrome-sandbox"
-    );
-    expect(spec).toContain(
-      "install -Dm0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE"
-    );
+    expect(spec).toContain("chmod 4755 %{buildroot}/usr/lib/%{name}/chrome-sandbox");
+    expect(spec).toContain("install -Dm0644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE");
     expect(spec).toContain("/usr/bin/%{name}");
     expect(spec).toContain("/usr/share/applications/%{name}.desktop");
     expect(spec).toContain("/usr/share/icons/hicolor/256x256/apps/%{name}.png");
     expect(spec).toContain("/usr/share/icons/hicolor/512x512/apps/%{name}.png");
-    expect(spec).toContain(
-      "/usr/share/icons/hicolor/scalable/apps/%{name}.svg"
-    );
+    expect(spec).toContain("/usr/share/icons/hicolor/scalable/apps/%{name}.svg");
   });
 });
 
@@ -171,8 +147,8 @@ describe("createSpecFile", () => {
 
     await createSpecFile("/stage/open-orpheus.spec", base);
 
-    await expect(
-      readFile("/stage/open-orpheus.spec", "utf-8")
-    ).resolves.toContain("Name:           open-orpheus");
+    await expect(readFile("/stage/open-orpheus.spec", "utf-8")).resolves.toContain(
+      "Name:           open-orpheus"
+    );
   });
 });

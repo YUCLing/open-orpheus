@@ -5,9 +5,7 @@ import type { UpdateInfo } from "@shared/types/update";
 
 let cachedUpdateInfo: UpdateInfo | null | false = false;
 
-export async function checkUpdate(
-  ignoreCache = false
-): Promise<UpdateInfo | null> {
+export async function checkUpdate(ignoreCache = false): Promise<UpdateInfo | null> {
   if (!ignoreCache && cachedUpdateInfo !== false) return cachedUpdateInfo;
 
   const res: {
@@ -15,9 +13,9 @@ export async function checkUpdate(
     html_url: string;
     published_at: string;
     body: string;
-  } = await fetch(
-    "https://api.github.com/repos/YUCLing/open-orpheus/releases/latest"
-  ).then((res) => res.json());
+  } = await fetch("https://api.github.com/repos/YUCLing/open-orpheus/releases/latest").then((res) =>
+    res.json()
+  );
 
   const current = semver.coerce(app.getVersion());
   const latest = semver.coerce(res.tag_name);

@@ -5,8 +5,7 @@
     base: "data-[invalid=true]:text-destructive gap-3 group/field flex w-full",
     variants: {
       orientation: {
-        vertical:
-          "cn-field-orientation-vertical flex-col [&>*]:w-full [&>.sr-only]:w-auto",
+        vertical: "cn-field-orientation-vertical flex-col [&>*]:w-full [&>.sr-only]:w-auto",
         horizontal:
           "cn-field-orientation-horizontal flex-row items-center has-[>[data-slot=field-content]]:items-start [&>[data-slot=field-label]]:flex-auto has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px",
         responsive:
@@ -18,9 +17,7 @@
     },
   });
 
-  export type FieldOrientation = VariantProps<
-    typeof fieldVariants
-  >["orientation"];
+  export type FieldOrientation = VariantProps<typeof fieldVariants>["orientation"];
 </script>
 
 <script lang="ts">

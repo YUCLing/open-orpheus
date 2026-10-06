@@ -67,10 +67,7 @@ class MusicRecorderProcessor extends AudioWorkletProcessor {
       const final = this.nextMatchFrame >= this.totalFrames;
       this.postMatch(this.nextMatchFrame, final);
       if (final) return false;
-      this.nextMatchFrame = Math.min(
-        this.nextMatchFrame + this.intervalFrames,
-        this.totalFrames
-      );
+      this.nextMatchFrame = Math.min(this.nextMatchFrame + this.intervalFrames, this.totalFrames);
     }
 
     return true;

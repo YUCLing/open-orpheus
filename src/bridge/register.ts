@@ -58,11 +58,7 @@ export function registerIpcHandlers<T>(
         seen.add(channel);
         channels.push(channel);
         wc.ipc.handle(channel, value as (...args: unknown[]) => unknown);
-      } else if (
-        value !== null &&
-        typeof value === "object" &&
-        !Array.isArray(value)
-      ) {
+      } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
         walk(value as Record<string, unknown>, currentPath);
       }
     }

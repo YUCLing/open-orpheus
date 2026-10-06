@@ -46,19 +46,13 @@ describe("vkCodesToElectronAccelerator", () => {
     expect(vkCodesToElectronAccelerator([32]).accelerator).toBe("Space");
     expect(vkCodesToElectronAccelerator([37]).accelerator).toBe("Left");
     expect(vkCodesToElectronAccelerator([46]).accelerator).toBe("Delete");
-    expect(vkCodesToElectronAccelerator([179]).accelerator).toBe(
-      "MediaPlayPause"
-    );
-    expect(vkCodesToElectronAccelerator([177]).accelerator).toBe(
-      "MediaPreviousTrack"
-    );
+    expect(vkCodesToElectronAccelerator([179]).accelerator).toBe("MediaPlayPause");
+    expect(vkCodesToElectronAccelerator([177]).accelerator).toBe("MediaPreviousTrack");
   });
 
   it("keeps the last non-modifier key as the trigger", () => {
     expect(vkCodesToElectronAccelerator([65, 66]).accelerator).toBe("B");
-    expect(vkCodesToElectronAccelerator([17, 65, 66]).accelerator).toBe(
-      "Control+B"
-    );
+    expect(vkCodesToElectronAccelerator([17, 65, 66]).accelerator).toBe("Control+B");
   });
 
   it("returns no accelerator when only modifiers are given", () => {
@@ -87,9 +81,7 @@ describe("vkCodesToElectronAccelerator", () => {
   });
 
   it("ignores duplicate modifiers", () => {
-    expect(vkCodesToElectronAccelerator([16, 16, 65]).accelerator).toBe(
-      "Shift+A"
-    );
+    expect(vkCodesToElectronAccelerator([16, 16, 65]).accelerator).toBe("Shift+A");
   });
 });
 
@@ -116,33 +108,24 @@ describe("registerGlobalShortcut", () => {
     registerGlobalShortcut("replace-me", ["17", "77"], vi.fn());
 
     expect(globalShortcut.unregister).toHaveBeenCalledWith("Control+L");
-    expect(globalShortcut.register).toHaveBeenLastCalledWith(
-      "Control+M",
-      expect.any(Function)
-    );
+    expect(globalShortcut.register).toHaveBeenLastCalledWith("Control+M", expect.any(Function));
   });
 
   it("refuses to register when there is no trigger key", () => {
-    expect(registerGlobalShortcut("modifiers-only", ["17"], vi.fn())).toBe(
-      false
-    );
+    expect(registerGlobalShortcut("modifiers-only", ["17"], vi.fn())).toBe(false);
     expect(globalShortcut.register).not.toHaveBeenCalled();
   });
 
   it("reports the failure when the OS rejects the accelerator", () => {
     vi.mocked(globalShortcut.register).mockReturnValue(false);
 
-    expect(registerGlobalShortcut("rejected", ["17", "76"], vi.fn())).toBe(
-      false
-    );
+    expect(registerGlobalShortcut("rejected", ["17", "76"], vi.fn())).toBe(false);
   });
 
   it("warns about unsupported keys but still registers", () => {
     const logger = installLoggerStub();
 
-    expect(
-      registerGlobalShortcut("partial", ["17", "186", "76"], vi.fn())
-    ).toBe(true);
+    expect(registerGlobalShortcut("partial", ["17", "186", "76"], vi.fn())).toBe(true);
     expect(logger.warn).toHaveBeenCalled();
   });
 });

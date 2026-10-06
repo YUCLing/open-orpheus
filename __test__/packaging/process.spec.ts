@@ -72,10 +72,7 @@ describe("runStreaming", () => {
   it("rejects when the command cannot be spawned", async () => {
     const promise = runStreaming("missing-binary", [], {});
 
-    hoisted.spawn.mock.results[0].value.emit(
-      "error",
-      new Error("spawn missing-binary ENOENT")
-    );
+    hoisted.spawn.mock.results[0].value.emit("error", new Error("spawn missing-binary ENOENT"));
 
     await expect(promise).rejects.toThrow("spawn missing-binary ENOENT");
   });

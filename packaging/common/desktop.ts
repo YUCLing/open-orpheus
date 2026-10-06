@@ -3,10 +3,7 @@ import { writeFile } from "node:fs/promises";
 
 import ejs from "ejs";
 
-const template = resolve(
-  import.meta.dirname,
-  "../resources/open-orpheus.desktop.ejs"
-);
+const template = resolve(import.meta.dirname, "../resources/open-orpheus.desktop.ejs");
 
 export interface DesktopFileOptions {
   executable?: string;
@@ -29,10 +26,7 @@ export async function generateDesktop(options: DesktopFileOptions = {}) {
   });
 }
 
-export async function createDesktopFile(
-  path: string,
-  options: DesktopFileOptions = {}
-) {
+export async function createDesktopFile(path: string, options: DesktopFileOptions = {}) {
   const result = await generateDesktop(options);
   await writeFile(path, result, { encoding: "utf-8" });
 }

@@ -1,3 +1,36 @@
+* Mon Oct 5 2026 YUCLing <luotianyi@luotianyi.me> - 0.19.2-1
+- Fixed menus drifting to the wrong position under Wayland.
+- Removed module source code from the packaged application.
+- Switched to custom ICU data.
+- Restored support for AppImage builds.
+
+* Fri Oct 2 2026 YUCLing <luotianyi@luotianyi.me> - 0.19.1-1
+- Corrected the commit hash of the resource pack.
+
+* Fri Oct 2 2026 YUCLing <luotianyi@luotianyi.me> - 0.19.0-1
+- Added support for the xeapi algorithm.
+- Added support for scheduled automatic shutdown.
+- Added support for the emotion mode player.
+- Fixed missing log output when stdout is redirected.
+- Refactored lifecycle management.
+- Updated dependencies and Electron.
+- Added update information to the About window.
+- Added scroll anchor offset in the management interface.
+- Updated the resource pack to 3.1.41.
+- Playback no longer pauses when switching output devices.
+- Reduced the description width on the package download screen.
+- Added icons for Windows and macOS.
+
+* Mon Sep 28 2026 YUCLing <luotianyi@luotianyi.me> - 0.18.0-1
+- Added support for opening local music files via file association.
+- Added desktop support for music reviews.
+- Fixed an issue where the log directory did not exist.
+- Fixed MPRIS volume setting return value being out of sync.
+- Fixed a crash when loading certain fonts.
+- Updated the Flatpak runtime.
+- Removed CJS support.
+- Refactored window management.
+
 * Mon Sep 14 2026 YUCLing <luotianyi@luotianyi.me> - 0.17.1-1
 - Fixed play/pause from system media integration being incorrectly handled as a state toggle.
 - Lowered the required glibc version.

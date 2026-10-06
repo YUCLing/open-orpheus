@@ -47,8 +47,7 @@
   {:else if node.type === "container"}
     <div
       class="flex shrink-0 flex-row items-center"
-      style="{node.width != null ? `width:${node.width}px;` : ''}{node.height !=
-      null
+      style="{node.width != null ? `width:${node.width}px;` : ''}{node.height != null
         ? `height:${node.height}px;`
         : ''}"
     >
@@ -60,9 +59,9 @@
     {#if node.width != null || node.height != null}
       <div
         class="shrink-0"
-        style="{node.width != null
-          ? `width:${node.width}px;`
-          : ''}{node.height != null ? `height:${node.height}px;` : ''}"
+        style="{node.width != null ? `width:${node.width}px;` : ''}{node.height != null
+          ? `height:${node.height}px;`
+          : ''}"
       ></div>
     {:else}
       <div class="grow"></div>
@@ -97,20 +96,14 @@
 {/snippet}
 
 <div
-  class={cn(
-    "absolute max-w-80 min-w-58 overflow-hidden rounded-lg py-1.5 select-none",
-    className
-  )}
+  class={cn("absolute max-w-80 min-w-58 overflow-hidden rounded-lg py-1.5 select-none", className)}
   style="background-color: var(--menu-bg); {style ?? ''}"
   bind:this={el}
   {...props}
 >
   {#each items as item, i (i)}
     {#if item.separator}
-      <div
-        class="mx-3 my-2 h-px"
-        style="background-color: var(--menu-separator)"
-      ></div>
+      <div class="mx-3 my-2 h-px" style="background-color: var(--menu-separator)"></div>
     {:else if item.style && item.btns}
       {@render styledItem(item)}
     {:else}

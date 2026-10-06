@@ -23,13 +23,7 @@ function readUint16LE(buf: Uint8Array, off: number): number {
 }
 
 function readUint32LE(buf: Uint8Array, off: number): number {
-  return (
-    (buf[off] |
-      (buf[off + 1] << 8) |
-      (buf[off + 2] << 16) |
-      (buf[off + 3] << 24)) >>>
-    0
-  );
+  return (buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0;
 }
 
 function checkMagic(buf: Uint8Array): void {
@@ -40,11 +34,7 @@ function checkMagic(buf: Uint8Array): void {
   }
 }
 
-function validateSize(
-  totalLength: number,
-  extCount: number,
-  payloadSize: number
-): void {
+function validateSize(totalLength: number, extCount: number, payloadSize: number): void {
   const expected = HEADER_SIZE + extCount + payloadSize;
   if (totalLength !== expected) {
     throw new Error(
@@ -54,15 +44,11 @@ function validateSize(
   }
   // Extension must be at least 5 bytes so that index 4 (the XOR key byte) exists
   if (extCount < 5) {
-    throw new Error(
-      `NCAE header extension count must be at least 5; got ${extCount}`
-    );
+    throw new Error(`NCAE header extension count must be at least 5; got ${extCount}`);
   }
   // (N - 5) must be a multiple of 4 → valid values: 5, 9, 13, …
   if ((extCount - 1) & 3) {
-    throw new Error(
-      `NCAE header extension count must be 5, 9, 13, …; got ${extCount}`
-    );
+    throw new Error(`NCAE header extension count must be 5, 9, 13, …; got ${extCount}`);
   }
 }
 
@@ -146,10 +132,7 @@ function rc4Crypt(state: Uint8Array, data: Uint8Array): void {
 function rawInflate(data: Uint8Array): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     inflateRaw(data, (err, result) => {
-      if (err)
-        return reject(
-          new Error(`NCAE deflate decompression failed`, { cause: err })
-        );
+      if (err) return reject(new Error(`NCAE deflate decompression failed`, { cause: err }));
       resolve(result);
     });
   });
@@ -167,9 +150,7 @@ function rawInflate(data: Uint8Array): Promise<Buffer> {
  */
 export async function decodeNcae(buf: Buffer): Promise<Ncae> {
   if (buf.length < HEADER_SIZE) {
-    throw new Error(
-      `NCAE buffer too short: ${buf.length} bytes (need at least ${HEADER_SIZE})`
-    );
+    throw new Error(`NCAE buffer too short: ${buf.length} bytes (need at least ${HEADER_SIZE})`);
   }
 
   const arr = new Uint8Array(buf);

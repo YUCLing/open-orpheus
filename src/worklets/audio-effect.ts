@@ -1,12 +1,7 @@
 /// <reference types="@types/audioworklet" />
 
 import "./helpers/MockTextDecoder";
-import {
-  initSync,
-  FdnReverb,
-  EarlyReflections,
-  SpatialEnhancer,
-} from "@open-orpheus/audio-effect";
+import { initSync, FdnReverb, EarlyReflections, SpatialEnhancer } from "@open-orpheus/audio-effect";
 
 // #region Type definitions
 
@@ -117,11 +112,7 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       this.fdn = new FdnReverb(sr);
       this.er = new EarlyReflections(sr);
       this.se = new SpatialEnhancer(sr);
-      this.rvbTcFilters = [
-        new WorkletBiquad(sr),
-        new WorkletBiquad(sr),
-        new WorkletBiquad(sr),
-      ];
+      this.rvbTcFilters = [new WorkletBiquad(sr), new WorkletBiquad(sr), new WorkletBiquad(sr)];
     } catch (err) {
       console.error("audio-effect: WASM init failed", err);
     }
@@ -174,12 +165,8 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       this.dryGain = dbToGain(params.rvb.ol.dry);
       this.erGain = params.rvb.er.on ? dbToGain(params.rvb.ol.er) : 0;
       this.rvbGain = dbToGain(params.rvb.ol.rvb);
-      this.rvbInputGain = dbToGain(
-        ((params.rvb.il?.center ?? 0) + (params.rvb.il?.lfe ?? 0)) / 2
-      );
-      this.rvbReturnGain = dbToGain(
-        ((params.rvb.rl?.front ?? 0) + (params.rvb.rl?.rear ?? 0)) / 2
-      );
+      this.rvbInputGain = dbToGain(((params.rvb.il?.center ?? 0) + (params.rvb.il?.lfe ?? 0)) / 2);
+      this.rvbReturnGain = dbToGain(((params.rvb.rl?.front ?? 0) + (params.rvb.rl?.rear ?? 0)) / 2);
       this.configureRvbTc(params.rvb.tc);
     } else {
       this.rvbParams = null;
@@ -195,9 +182,7 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
 
     // #region Spatial Enhancement
     if (params.se?.on && !this.se) {
-      console.warn(
-        "audio-effect: spatial enhancer requested but WASM not available"
-      );
+      console.warn("audio-effect: spatial enhancer requested but WASM not available");
     }
     if (params.se?.on && this.se) {
       this.seParams = params.se;
@@ -312,10 +297,8 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
       );
       // Accumulate: wet = ER * erGain + FDN * rvbGain
       for (let i = 0; i < n; i++) {
-        this.wetBufL[i] =
-          this.wetBufL[i] * this.erGain + this.lateBufL[i] * this.rvbGain;
-        this.wetBufR[i] =
-          this.wetBufR[i] * this.erGain + this.lateBufR[i] * this.rvbGain;
+        this.wetBufL[i] = this.wetBufL[i] * this.erGain + this.lateBufL[i] * this.rvbGain;
+        this.wetBufR[i] = this.wetBufR[i] * this.erGain + this.lateBufR[i] * this.rvbGain;
       }
     } else {
       for (let i = 0; i < n; i++) {
@@ -389,12 +372,7 @@ class AudioEffectProcessor extends AudioWorkletProcessor {
     for (const band of tc.f ?? []) {
       const idx = band.band - 1;
       if (idx < 0 || idx >= this.rvbTcFilters.length) continue;
-      this.rvbTcFilters[idx].setParams(
-        band.curve,
-        band.freq,
-        band.gain,
-        band.q
-      );
+      this.rvbTcFilters[idx].setParams(band.curve, band.freq, band.gain, band.q);
     }
   }
 
@@ -479,13 +457,7 @@ class WorkletBiquad {
     }
   }
 
-  private setShelf(
-    high: boolean,
-    a: number,
-    cos: number,
-    sin: number,
-    slope: number
-  ): void {
+  private setShelf(high: boolean, a: number, cos: number, sin: number, slope: number): void {
     const sqrtA = Math.sqrt(a);
     const shelfTerm = (a + 1 / a) * (1 / clamp(slope, 0.1, 10) - 1) + 2;
     const alpha = (sin / 2) * Math.sqrt(Math.max(0.000001, shelfTerm));

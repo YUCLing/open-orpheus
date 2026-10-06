@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  dispatcher,
-  registerCallHandler,
-  registerCallbackHandler,
-} from "@main/calls/dispatcher";
+import { dispatcher, registerCallHandler, registerCallbackHandler } from "@main/calls/dispatcher";
 
 // `src/main/calls/dispatcher.ts` is a thin wrapper around the shared `CallDispatcher`
 // instance. Dispatch semantics themselves are covered by

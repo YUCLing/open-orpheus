@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": {
+    "typeAware": true,
+    "typeCheck": true
+  },
+  "ignorePatterns": ["gui/**"],
+  "rules": {
+    // TODO: Maybe bring it back in the future?
+    "typescript/no-redundant-type-constituents": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/__test__/**"],
+      "rules": {
+        "typescript/unbound-method": "off"
+      }
+    }
+  ]
+}

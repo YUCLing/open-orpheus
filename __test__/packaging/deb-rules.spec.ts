@@ -7,11 +7,7 @@ import { readFile } from "node:fs/promises";
 
 import { vol } from "memfs";
 
-import {
-  createRulesFile,
-  generateRules,
-  type RulesOptions,
-} from "../../packaging/deb/rules";
+import { createRulesFile, generateRules, type RulesOptions } from "../../packaging/deb/rules";
 
 const base: RulesOptions = {
   name: "open-orpheus",
@@ -46,9 +42,7 @@ describe("generateRules", () => {
   it("interpolates the package name into the scaffolder call", async () => {
     const rules = await generateRules({ ...base, name: "my-app" });
 
-    expect(rules).toContain(
-      "node scripts/build-scaffold.ts rpm-scaffold --name my-app"
-    );
+    expect(rules).toContain("node scripts/build-scaffold.ts rpm-scaffold --name my-app");
   });
 
   it("skips the toolchain when installTools is false", async () => {
@@ -74,9 +68,7 @@ describe("generateRules", () => {
     expect(rules).not.toContain("sh.rustup.rs");
     expect(rules).not.toContain("rpm-scaffold");
     expect(rules).toContain("cp -r prebuilt/scaffold/usr debian/open-orpheus/");
-    expect(rules).toContain(
-      "cp -r prebuilt/app/. debian/open-orpheus/usr/lib/open-orpheus/"
-    );
+    expect(rules).toContain("cp -r prebuilt/app/. debian/open-orpheus/usr/lib/open-orpheus/");
   });
 
   it("keeps the SUID sandbox and no-strip overrides in every mode", async () => {

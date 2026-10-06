@@ -2,7 +2,7 @@
 [package]
 authors = ["YUCLing <luotianyi@luotianyi.me>"]
 edition = "2024"
-name    = "window"
+name = "window"
 version = "0.1.0"
 
 [lib]
@@ -14,10 +14,7 @@ napi-derive.workspace = true
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.62.2"
-features = [
-  "Win32_UI_Input_KeyboardAndMouse",
-  "Win32_UI_WindowsAndMessaging"
-]
+features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2.182"
@@ -27,6 +24,7 @@ sighook = "0.10.0"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSEvent", "NSWindow", "NSView"] }
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "objc2-core-foundation"] }
+objc2-core-graphics = { version = "0.3", features = ["CGWindowLevel"] }
 
 [build-dependencies]
 napi-build = "2"

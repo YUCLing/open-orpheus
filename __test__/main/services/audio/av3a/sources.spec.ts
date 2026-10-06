@@ -5,10 +5,7 @@ vi.mock("node:fs/promises");
 
 import { vol } from "memfs";
 
-import {
-  localAv3aSource,
-  onlineStreamerToAv3aSource,
-} from "@main/services/audio/av3a/sources";
+import { localAv3aSource, onlineStreamerToAv3aSource } from "@main/services/audio/av3a/sources";
 
 describe("localAv3aSource", () => {
   beforeEach(() => {
@@ -65,11 +62,7 @@ describe("onlineStreamerToAv3aSource", () => {
 
     await source.ensureRange(0, 512, controller.signal);
 
-    expect(streamer.ensureRangeDownloaded).toHaveBeenCalledWith(
-      0,
-      512,
-      controller.signal
-    );
+    expect(streamer.ensureRangeDownloaded).toHaveBeenCalledWith(0, 512, controller.signal);
   });
 
   it("observes later changes of the streamer state", () => {

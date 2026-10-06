@@ -1,0 +1,272 @@
+{
+  "collationUCAData": "implicithan",
+
+  "// Locales: en_US plus Japanese, Korean, and both Chinese scripts.": "",
+  "localeFilter": {
+    "filterType": "locale",
+    "includeChildren": false,
+    "includelist": ["en_US", "ja", "ko", "zh_Hans", "zh_Hant"]
+  },
+
+  "featureFilters": {
+    "stringprep": { "filterType": "exclude" },
+    "unames": { "filterType": "exclude" },
+
+    "normalization": {
+      "excludelist": ["nfkc_scf"]
+    },
+
+    "// Omitted rules: title (title-casing), word_POSIX (POSIX word rules),": "",
+    "// sent_el (Greek sentence rules).": "",
+    "brkitr_rules": {
+      "excludelist": ["title", "word_POSIX", "sent_el"]
+    },
+
+    "// Dictionaries: cjdict covers Chinese and Japanese word segmentation.": "",
+    "// Thai, Lao, Khmer, and Burmese dictionaries are omitted.": "",
+    "brkitr_dictionaries": {
+      "includelist": ["cjdict"]
+    },
+
+    "// No brkitr_tree entry is set: any _tree filter overrides localeFilter": "",
+    "// for that tree and lifts the locale restriction.": "",
+
+    "// Charset converters: CJK legacy encodings plus common Western ones.": "",
+    "conversion_mappings": {
+      "includelist": [
+        "gb18030",
+        "windows-936-2000",
+        "big5-html",
+        "shift_jis-html",
+        "euc-jp-html",
+        "euc-kr-html",
+        "windows-1252-html",
+        "iso-8859-1-html",
+        "iso-8859-15-html",
+        "utf-16",
+        "utf-32"
+      ]
+    },
+
+    "// Time zones: locale list plus tzdbNames, a non-locale supplemental": "",
+    "// file that is not covered by the locale filter.": "",
+    "zone_tree": {
+      "filterType": "union",
+      "unionOf": [
+        {
+          "filterType": "locale",
+          "includeChildren": false,
+          "includelist": ["en_US", "ja", "ko", "zh_Hans", "zh_Hant"]
+        },
+        {
+          "includelist": ["tzdbNames"]
+        }
+      ]
+    },
+
+    "// Rule-based number formatting: ja supplies japanese-calendar digits;": "",
+    "// zh supplies hanidays.": "",
+    "rbnf_tree": {
+      "includelist": ["ja", "zh"]
+    },
+
+    "// Collation: default tailorings for en_US, ja, and ko; pinyin, stroke,": "",
+    "// and zhuyin for Chinese.": "",
+    "coll_tree": {
+      "filterType": "union",
+      "unionOf": [
+        {
+          "filterType": "locale",
+          "includeChildren": false,
+          "includelist": ["en_US", "ja", "ko"]
+        },
+        {
+          "filterType": "locale",
+          "includeChildren": false,
+          "includelist": ["zh_Hans", "zh_Hant"]
+        }
+      ]
+    },
+
+    "translit": {
+      "filterType": "language",
+      "includelist": ["en", "ja", "ko", "zh"]
+    }
+  },
+
+  "resourceFilters": [
+    {
+      "// Remove resource entries unused at runtime from each locale bundle.": "",
+      "categories": ["locales_tree"],
+      "rules": [
+        "-/*/mon",
+        "-/*/mon-short",
+        "-/*/mon-narrow",
+        "-/*/tue",
+        "-/*/tue-short",
+        "-/*/tue-narrow",
+        "-/*/wed",
+        "-/*/wed-short",
+        "-/*/wed-narrow",
+        "-/*/thu",
+        "-/*/thu-short",
+        "-/*/thu-narrow",
+        "-/*/fri",
+        "-/*/fri-short",
+        "-/*/fri-narrow",
+        "-/*/sat",
+        "-/*/sat-short",
+        "-/*/sat-narrow",
+        "-/*/sun",
+        "-/*/sun-short",
+        "-/*/sun-narrow",
+        "-/*/mon-short:alias",
+        "-/*/mon-narrow:alias",
+        "-/*/tue-short:alias",
+        "-/*/tue-narrow:alias",
+        "-/*/wed-short:alias",
+        "-/*/wed-narrow:alias",
+        "-/*/thu-short:alias",
+        "-/*/thu-narrow:alias",
+        "-/*/fri-short:alias",
+        "-/*/fri-narrow:alias",
+        "-/*/sat-short:alias",
+        "-/*/sat-narrow:alias",
+        "-/*/sun-short:alias",
+        "-/*/sun-narrow:alias",
+        "-/characterLabel",
+        "-/AuxExemplarCharacters",
+        "-/ExemplarCharactersNumbers",
+        "-/ExemplarCharactersPunctuation",
+        "-/measurementSystemNames",
+        "-/NumberElements/minimalPairs",
+        "-/personNames"
+      ]
+    },
+    {
+      "// Language display names: restricted to the included languages.": "",
+      "categories": ["lang_tree"],
+      "rules": [
+        "-/Languages",
+        "-/Languages%long",
+        "-/Languages%menu",
+        "-/Languages%variant",
+        "+/*/en",
+        "+/*/ja",
+        "+/*/ko",
+        "+/*/zh",
+        "+/*/zh_Hans",
+        "+/*/zh_Hant",
+        "-/Keys",
+        "-/Types",
+        "-/Types%short",
+        "+/Types/calendar",
+        "-/characterLabelPattern",
+        "-/Variants"
+      ]
+    },
+    {
+      "categories": ["curr_tree"],
+      "rules": [
+        "-/Currencies%narrow",
+        "-/CurrencyPlurals",
+        "-/Currencies%formal",
+        "-/Currencies%variant"
+      ]
+    },
+    {
+      "// Region: numeric groupings other than 419 are removed.": "",
+      "categories": ["region_tree"],
+      "rules": [
+        "-/*/001",
+        "-/*/002",
+        "-/*/003",
+        "-/*/005",
+        "-/*/009",
+        "-/*/011",
+        "-/*/013",
+        "-/*/014",
+        "-/*/015",
+        "-/*/017",
+        "-/*/018",
+        "-/*/019",
+        "-/*/021",
+        "-/*/029",
+        "-/*/030",
+        "-/*/034",
+        "-/*/035",
+        "-/*/039",
+        "-/*/053",
+        "-/*/054",
+        "-/*/057",
+        "-/*/061",
+        "-/*/142",
+        "-/*/143",
+        "-/*/145",
+        "-/*/150",
+        "-/*/151",
+        "-/*/154",
+        "-/*/155",
+        "-/*/202"
+      ]
+    },
+    {
+      "// Collation: uncompiled rule text removed; compiled binaries kept.": "",
+      "categories": ["coll_tree"],
+      "rules": ["-/UCARules", "-/collations/*/Sequence"]
+    },
+    {
+      "// Chinese collation: unihan, big5han, and gb2312han removed.": "",
+      "categories": ["coll_tree"],
+      "files": {
+        "includelist": ["zh"]
+      },
+      "rules": ["-/*/unihan", "-/*/big5han", "-/*/gb2312han"]
+    },
+    {
+      "categories": ["misc"],
+      "files": { "includelist": ["supplementalData"] },
+      "rules": [
+        "-/*",
+        "+/calendarData",
+        "+/calendarPreferenceData",
+        "+/cldrVersion",
+        "+/codeMappings",
+        "+/idValidity",
+        "+/measurementData",
+        "+/territoryContainment",
+        "+/timeData",
+        "+/weekData",
+        "+/weekData%variant"
+      ]
+    },
+    {
+      "// Transliteration: romanization and Kana/Hangul conversion rules.": "",
+      "categories": ["translit"],
+      "rules": [
+        "-/*",
+        "+/RuleBasedTransliteratorIDs/Latin-ASCII",
+        "+/RuleBasedTransliteratorIDs/Han-Latin",
+        "+/RuleBasedTransliteratorIDs/Hiragana-Latin",
+        "+/RuleBasedTransliteratorIDs/Katakana-Latin",
+        "+/RuleBasedTransliteratorIDs/Katakana-Hiragana",
+        "+/RuleBasedTransliteratorIDs/Hiragana-Katakana",
+        "+/RuleBasedTransliteratorIDs/Hira-Kana",
+        "+/RuleBasedTransliteratorIDs/Kana-Hira",
+        "+/RuleBasedTransliteratorIDs/Hangul-Latin"
+      ]
+    },
+    {
+      "categories": [
+        "brkitr_tree",
+        "coll_tree",
+        "curr_tree",
+        "lang_tree",
+        "region_tree",
+        "unit_tree",
+        "zone_tree"
+      ],
+      "rules": ["-/Version"]
+    }
+  ]
+}

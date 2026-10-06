@@ -6,6 +6,15 @@ export interface AudioeffectDeps {
   audio: { readEffect: typeof import("../../services/audio").readEffect };
 }
 
+type ModelParam = {
+  name: string;
+  dtype: string;
+  shape: unknown[];
+};
+type ModelInput = ModelParam & {
+  data: unknown[];
+};
+
 export function register(deps: AudioeffectDeps): void {
   registerCallHandler<
     [number, { path: string; pathtype: number }],
@@ -25,5 +34,33 @@ export function register(deps: AudioeffectDeps): void {
       LOGGER.error({ err }, "Failed to get audio effect params");
       return [{ errorCode: 2, errorMsg: err.message }];
     }
+  });
+
+  registerCallHandler<
+    [
+      {
+        modelId: string;
+        inputs: ModelInput[];
+        outputNames: string[];
+        signature: {
+          modelId: string;
+          inputs: ModelInput[];
+          outputs: ModelParam[];
+        };
+      },
+    ],
+    [
+      {
+        errorCode: number;
+        errorMsg: string;
+      },
+    ]
+  >("audioeffect.predictEmoFX", () => {
+    return [
+      {
+        errorCode: -111,
+        errorMsg: "model not loaded",
+      },
+    ];
   });
 }

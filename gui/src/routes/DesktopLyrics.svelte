@@ -34,13 +34,7 @@
   <div class="my-4">
     <p class="text-lg font-bold">桌面歌词透明度</p>
     <div class="mt-2 flex gap-4">
-      <Slider
-        type="single"
-        bind:value={opacity}
-        max={100}
-        step={1}
-        class="w-2/3"
-      />
+      <Slider type="single" bind:value={opacity} max={100} step={1} class="w-2/3" />
       <p>{Math.floor(opacity)}%</p>
     </div>
   </div>
@@ -61,12 +55,9 @@
       class="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white dark:data-[state=checked]:border-blue-700 dark:data-[state=checked]:bg-blue-700"
     />
     <div class="grid gap-1.5 font-normal">
-      <p class="text-sm leading-none font-medium">
-        启用桌面歌词逐行插值进度显示
-      </p>
+      <p class="text-sm leading-none font-medium">启用桌面歌词逐行插值进度显示</p>
       <p class="text-sm text-muted-foreground">
-        启用后，当没有逐字歌词可用时，Open Orpheus
-        将会根据当前一行歌词时间显示当前一行歌词的进度。
+        启用后，当没有逐字歌词可用时，Open Orpheus 将会根据当前一行歌词时间显示当前一行歌词的进度。
       </p>
     </div>
   </Label>

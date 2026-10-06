@@ -22,9 +22,7 @@ export async function localAv3aSource(path: string): Promise<Av3aM4aSource> {
  * Adapts an `OnlineStreamer` (a progressively downloaded sparse temp file)
  * to the `Av3aM4aSource` the decode session paces against.
  */
-export function onlineStreamerToAv3aSource(
-  streamer: OnlineStreamer
-): Av3aM4aSource {
+export function onlineStreamerToAv3aSource(streamer: OnlineStreamer): Av3aM4aSource {
   return {
     get path(): string {
       return streamer.tempFilePath;
@@ -33,7 +31,6 @@ export function onlineStreamerToAv3aSource(
       return streamer.totalLength;
     },
     prefixEnd: () => streamer.downloadedPrefixEnd(),
-    ensureRange: (start, end, signal) =>
-      streamer.ensureRangeDownloaded(start, end, signal),
+    ensureRange: (start, end, signal) => streamer.ensureRangeDownloaded(start, end, signal),
   };
 }

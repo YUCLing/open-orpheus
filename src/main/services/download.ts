@@ -71,12 +71,10 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
 
       if (deltaTime > 0) {
         const instantSpeed = (deltaBytes * 1000) / deltaTime; // bytes/sec
-        this.ema = this.ema
-          ? 0.8 * this.ema + 0.2 * instantSpeed
-          : instantSpeed;
+        this.ema = this.ema ? 0.8 * this.ema + 0.2 * instantSpeed : instantSpeed;
       }
 
-      this.emit("progress", {
+      void this.emit("progress", {
         path: this.path,
         // Hardcode percent to 1 on completion to prevent 0% UI flashes when Content-Length is missing
         percent: isEnd ? 1 : prog.percent,
@@ -131,7 +129,7 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
               "Downloaded file MD5 mismatch"
             );
             this.errored().catch(() => {}); // Clean up on error
-            this.emit("error", new Error("MD5 checksum verification failed"));
+            void this.emit("error", new Error("MD5 checksum verification failed"));
             return;
           }
         }
@@ -157,24 +155,20 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
       this.request.on("error", async (error) => {
         LOGGER.error({ dest: this.path, err: error }, "Download error");
         this.errored().catch(() => {}); // Ensure we attempt to clean up on error
-        this.emit("error", error);
+        void this.emit("error", error);
       });
 
       this.writeStream.on("error", async (error) => {
         LOGGER.error({ dest: this.path, err: error }, "Download write error");
         this.errored().catch(() => {}); // Ensure we attempt to clean up on error
-        this.emit("error", error);
+        void this.emit("error", error);
       });
 
       this.request.pipe(this.writeStream);
     } catch (error) {
-      LOGGER.error(
-        { dest: this.path },
-        "Unrecognized error downloading: %s",
-        error
-      );
+      LOGGER.error({ dest: this.path }, "Unrecognized error downloading: %s", error);
       this.errored().catch(() => {}); // Ensure we attempt to clean up on error
-      this.emit("error", error);
+      void this.emit("error", error);
     }
   }
 

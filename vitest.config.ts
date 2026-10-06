@@ -18,7 +18,7 @@ export default defineConfig({
       exclude: [
         "src/{preload,worklets}/**/*.ts",
         // Constants
-        "packaging/options.ts",
+        "packaging/resources/metadata.ts",
         "packaging/common/toolchain.ts",
         "src/shared/constants.ts",
         // Declaration-only shared types would otherwise enter the denominator

@@ -4,9 +4,11 @@ import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import { createProjectTarball } from "../common/archive.ts";
+import { readPackageJson } from "../common/package-json.ts";
 import { createPrebuiltBundle } from "../common/prebuilt.ts";
 import { CARGO_ZIGBUILD_VERSION, ZIG_VERSION } from "../common/toolchain.ts";
 import { cleanOutDir } from "../common/util.ts";
+import { metadata } from "../resources/metadata.ts";
 import { createSpecFile } from "./spec.ts";
 
 const execFile = promisify(execFileCb);
@@ -32,35 +34,22 @@ export interface BuildSrpmOptions {
  * Bundles the project source (Source0) and a generated spec, then runs
  * `rpmbuild -bs`. Returns the absolute paths of the produced SRPMs.
  */
-export async function buildSrpm(
-  options: BuildSrpmOptions = {}
-): Promise<string[]> {
-  const projectRoot =
-    options.projectRoot ?? resolve(import.meta.dirname, "../..");
+export async function buildSrpm(options: BuildSrpmOptions = {}): Promise<string[]> {
+  const projectRoot = options.projectRoot ?? resolve(import.meta.dirname, "../..");
   const outDir = options.outDir ?? resolve(projectRoot, "out/make/srpm");
   // Empty the directory first so stale artifacts from earlier runs (e.g. an
   // older version) can't be mistaken for this build's output.
   await cleanOutDir(outDir, options.clean);
 
-  const pkg = JSON.parse(
-    await readFile(resolve(projectRoot, "package.json"), "utf-8")
-  );
-  const { rpm: rpmOptions } = await import(
-    resolve(projectRoot, "packaging/options.ts")
-  );
-
-  const name = rpmOptions.name;
+  const pkg = await readPackageJson(projectRoot);
+  const name = pkg.name;
   const version: string = pkg.version;
   const release = "1%{?dist}";
 
   // --- Step 1: Resolve versions injected into the spec ---
-  const nodeVersion = String(
-    (pkg.engines?.node ?? "").match(/\d+/)?.[0] ?? "24"
-  );
+  const nodeVersion = String((pkg.engines?.node ?? "").match(/\d+/)?.[0] ?? "24");
   const cargoToml = await readFile(resolve(projectRoot, "Cargo.toml"), "utf-8");
-  const wasmBindgen = cargoToml.match(
-    /^\s*wasm-bindgen\s*=\s*["']([^"']+)["']/m
-  )?.[1];
+  const wasmBindgen = cargoToml.match(/^\s*wasm-bindgen\s*=\s*["']([^"']+)["']/m)?.[1];
   if (!wasmBindgen) {
     throw new Error("Cannot find wasm-bindgen version in Cargo.toml.");
   }
@@ -71,10 +60,7 @@ export async function buildSrpm(
   } <${pkg.author?.email ?? ""}>
 `;
   try {
-    changelog = await readFile(
-      resolve(projectRoot, "packaging/resources/rpm.changelog"),
-      "utf-8"
-    );
+    changelog = await readFile(resolve(projectRoot, "packaging/resources/rpm.changelog"), "utf-8");
   } catch {
     // no committed changelog — keep the header-only fallback
   }
@@ -94,12 +80,7 @@ export async function buildSrpm(
   const projectTarball = `${name}-${version}.tar.gz`;
 
   // --- Step 3: Project source tarball (Source0) ---
-  await createProjectTarball(
-    projectRoot,
-    resolve(sourcesDir, projectTarball),
-    name,
-    version
-  );
+  await createProjectTarball(projectRoot, resolve(sourcesDir, projectTarball), name, version);
 
   // --- Step 3b: Optional prebuilt artifact (Source1) ---
   let prebuiltTarballName: string | undefined;
@@ -125,10 +106,12 @@ export async function buildSrpm(
     name,
     version,
     release,
-    summary: rpmOptions.description ?? pkg.description,
+    // Summary/license/homepage: the store supplies what package.json lacks
+    // (`homepage`) and the shorter one-line summary the spec wants.
+    summary: metadata.summary,
     description: pkg.description,
-    license: rpmOptions.license ?? pkg.license,
-    homepage: rpmOptions.homepage ?? pkg.homepage,
+    license: pkg.license,
+    homepage: metadata.homepage,
     nodeVersion,
     wasmBindgen,
     cargoZigbuild: CARGO_ZIGBUILD_VERSION,
@@ -146,9 +129,7 @@ export async function buildSrpm(
 
   // --- Step 6: Collect the SRPM and clean up ---
   const srpms = await readdir(srpmsDir);
-  await Promise.all(
-    srpms.map((f) => cp(resolve(srpmsDir, f), resolve(outDir, f)))
-  );
+  await Promise.all(srpms.map((f) => cp(resolve(srpmsDir, f), resolve(outDir, f))));
   await Promise.all(
     [buildDir, rpmsDir, sourcesDir, specsDir, srpmsDir].map((dir) =>
       rm(dir, { recursive: true, force: true })

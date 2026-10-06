@@ -40,20 +40,15 @@ registerCallHandler<[], string[]>("app.getABTestKeys", () => [
 registerCallHandler<[Record<string, boolean>], void>("app.abtestSwitch", () => {
   /* empty */
 });
-registerCallHandler<[Record<string, object>], void>(
-  "app.abtestSwitchV2",
-  () => {
-    /* empty */
-  }
-);
+registerCallHandler<[Record<string, object>], void>("app.abtestSwitchV2", () => {
+  /* empty */
+});
 
 const cooperation = {
   main: "",
   sub: "",
 };
-registerCallHandler<[], [typeof cooperation]>("app.getCooperation", () => [
-  cooperation,
-]);
+registerCallHandler<[], [typeof cooperation]>("app.getCooperation", () => [cooperation]);
 
 registerCallHandler<[], [string]>("app.getAppStartTime", () => {
   // TODO: Implement this properly
@@ -65,22 +60,19 @@ registerCallHandler<[string], [string]>("app.getP2PUrl", (url) => {
   return [url];
 });
 
-registerCallHandler<[string, string, object], void>(
-  "app.getNativeData",
-  (taskId, key) => {
-    switch (key) {
-      case "secretKey":
-        // Frontend only register the call AFTER this call,
-        // so setImmediate to ensure the callback is registered
-        setImmediate(() => {
-          fireNativeCall("app.onGetNativeData", taskId, key, {
-            secretKey: SECRET_KEY,
-          });
+registerCallHandler<[string, string, object], void>("app.getNativeData", (taskId, key) => {
+  switch (key) {
+    case "secretKey":
+      // Frontend only register the call AFTER this call,
+      // so setImmediate to ensure the callback is registered
+      setImmediate(() => {
+        fireNativeCall("app.onGetNativeData", taskId, key, {
+          secretKey: SECRET_KEY,
         });
-        break;
-    }
+      });
+      break;
   }
-);
+});
 
 if (isMain) {
   // Only main window will have audio system available
@@ -88,10 +80,7 @@ if (isMain) {
     "app.systemVoiceHint",
     async (voice) => {
       if (voice.pathtype !== "resource") {
-        LOGGER.warn(
-          { pathtype: voice.pathtype },
-          "Unsupported voice hint type"
-        );
+        LOGGER.warn({ pathtype: voice.pathtype }, "Unsupported voice hint type");
         return;
       }
 
@@ -100,8 +89,7 @@ if (isMain) {
         fetch(`audio://resource/${voice.path}`).then((v) => v.arrayBuffer()),
       ]);
 
-      const audioBuffer =
-        await player.audioContext.decodeAudioData(arrayBuffer);
+      const audioBuffer = await player.audioContext.decodeAudioData(arrayBuffer);
 
       const source = player.audioContext.createBufferSource();
       source.buffer = audioBuffer;

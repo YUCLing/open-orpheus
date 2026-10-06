@@ -77,8 +77,6 @@ describe("writeIcons", () => {
       "256x256": `${FIXTURES}/icon_256.png`,
     });
 
-    await expect(read(`${FIXTURES}/icon_256.png`)).resolves.toBe(
-      "fake-png-256"
-    );
+    await expect(read(`${FIXTURES}/icon_256.png`)).resolves.toBe("fake-png-256");
   });
 });

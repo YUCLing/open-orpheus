@@ -43,16 +43,12 @@ FROM pragma_page_count(), pragma_freelist_count(), pragma_page_size();`);
 
   async diskSize() {
     // We now always use our own driver
-    return await calculateDbSize(
-      (this.driver.driver as DatabaseSqliteDriver).db.filePath
-    );
+    return await calculateDbSize((this.driver.driver as DatabaseSqliteDriver).db.filePath);
   }
 
   async entryCount() {
     try {
-      const result = await this.driver.query(
-        `SELECT COUNT(*) AS count FROM ${this.driver.table};`
-      );
+      const result = await this.driver.query(`SELECT COUNT(*) AS count FROM ${this.driver.table};`);
       return (result[0] as { count: number }).count;
     } catch {
       return -1;

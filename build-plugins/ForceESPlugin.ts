@@ -17,12 +17,21 @@ export default function ForceESPlugin(): Plugin {
       const lib = config.build.lib;
       if (lib) {
         lib.formats = ["es"];
+        if (typeof lib.fileName === "function") {
+          const orig = lib.fileName;
+          lib.fileName = (...args) => {
+            const name = orig(...args);
+            if (name.endsWith(".cjs")) return name.substring(0, name.length - 4) + ".js";
+            return name;
+          };
+        }
       }
       const output = config.build.rollupOptions?.output;
       if (output) {
         const outputs = Array.isArray(output) ? output : [output];
         outputs.forEach((v) => {
           v.format = "es";
+          v.entryFileNames = v.chunkFileNames = "[name].js";
         });
       }
     },

@@ -16,11 +16,7 @@ export class Av3aPlaybackBackend implements PlaybackBackend {
   private openResolve: (() => void) | null = null;
   private playbackRateValue = 1;
 
-  constructor(
-    ctx: AudioContext,
-    effectInput: AudioNode,
-    sink: PlaybackEventSink
-  ) {
+  constructor(ctx: AudioContext, effectInput: AudioNode, sink: PlaybackEventSink) {
     this.effectInput = effectInput;
     this.sink = sink;
     this.player = new Av3aPcmPlayer(ctx, {

@@ -13,11 +13,7 @@ const WINDOW_SIZE = 2048;
 
 /** Decrypt + decompress the fingerprint blob produced by `GenerateFP`. */
 function decodeFingerprint(blob: string): Buffer {
-  const decipher = createDecipheriv(
-    "aes-128-ecb",
-    Buffer.from("4B97221F27F02907", "ascii"),
-    null
-  );
+  const decipher = createDecipheriv("aes-128-ecb", Buffer.from("4B97221F27F02907", "ascii"), null);
   decipher.setAutoPadding(true);
   const compressed = Buffer.concat([
     decipher.update(Buffer.from(blob, "base64")),

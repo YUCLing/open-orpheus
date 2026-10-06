@@ -168,10 +168,7 @@ export default class MusicRecognizer extends Emittery<MusicRecognizerEvents> {
   private async match(state: RecognitionState, message: MatchWindowMessage) {
     if (this.state !== state) return;
 
-    const rawdata = await ipcRenderer.invoke(
-      "afp.generateFP",
-      message.audioData
-    );
+    const rawdata = await ipcRenderer.invoke("afp.generateFP", message.audioData);
     if (this.state !== state) return;
 
     const payload = new URLSearchParams({
@@ -236,17 +233,11 @@ export default class MusicRecognizer extends Emittery<MusicRecognizerEvents> {
     });
   }
 
-  private finish(
-    state: RecognitionState,
-    result: MusicRecognizeResult | null = null
-  ) {
+  private finish(state: RecognitionState, result: MusicRecognizeResult | null = null) {
     if (this.state !== state) return;
     if (result)
       void this.emit("result", result).catch((err) => {
-        LOGGER.error(
-          { err: toError(err) },
-          `MusicRecognizer errored when emitting the result`
-        );
+        LOGGER.error({ err: toError(err) }, `MusicRecognizer errored when emitting the result`);
       });
     this.cleanup(state);
     this.state = null;

@@ -22,25 +22,16 @@ export async function createProjectTarball(
   // Files that are tracked in the index but deleted from the working tree
   // without being staged (`git rm`) still show up in `--cached` yet no longer
   // exist on disk — drop them or tar fails with "Cannot stat".
-  const [{ stdout: nullSeparatedFiles }, { stdout: deletedFiles }] =
-    await Promise.all([
-      execFile(
-        "git",
-        [
-          "-C",
-          projectRoot,
-          "ls-files",
-          "--cached",
-          "--others",
-          "--exclude-standard",
-          "-z",
-        ],
-        { maxBuffer: 10 * 1024 * 1024 }
-      ),
-      execFile("git", ["-C", projectRoot, "ls-files", "--deleted", "-z"], {
-        maxBuffer: 10 * 1024 * 1024,
-      }),
-    ]);
+  const [{ stdout: nullSeparatedFiles }, { stdout: deletedFiles }] = await Promise.all([
+    execFile(
+      "git",
+      ["-C", projectRoot, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+      { maxBuffer: 10 * 1024 * 1024 }
+    ),
+    execFile("git", ["-C", projectRoot, "ls-files", "--deleted", "-z"], {
+      maxBuffer: 10 * 1024 * 1024,
+    }),
+  ]);
   const deleted = new Set(deletedFiles.split("\0").filter(Boolean));
 
   const filtered = nullSeparatedFiles

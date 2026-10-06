@@ -212,6 +212,95 @@ pub(crate) fn set_input_region(
     }
 }
 
+// ── EWMH properties ────────────────────────────────────────────────────────
+
+/// The `XA_ATOM` type id, pre-interned by every X server for atom properties.
+const XA_ATOM: u32 = 4;
+
+/// Build a `ChangeProperty(window, property, XA_ATOM, 32, Replace, values)`
+/// request (opcode 18).
+///
+/// The value words are written with the client's byte order: 32-bit property
+/// data travels in the client's order and the server swaps it when the two
+/// orders differ. Both EWMH properties this is used for are lists of atoms, so
+/// the property type is always `XA_ATOM` and no extra atom lookup is needed.
+fn build_change_property_payload(
+    conn: &X11Conn,
+    window: u32,
+    property: u32,
+    values: &[u32],
+) -> Vec<u8> {
+    let is_le = conn.is_le;
+    // 6 header words, then one word per 32-bit value.
+    let words = 6 + values.len();
+    let mut p = vec![0u8; words * 4];
+
+    p[0] = 18; // ChangeProperty
+    p[1] = 0; // mode = Replace
+    write_u16(&mut p[2..4], words as u16, is_le);
+    write_u32(&mut p[4..8], window, is_le);
+    write_u32(&mut p[8..12], property, is_le);
+    write_u32(&mut p[12..16], XA_ATOM, is_le);
+    p[16] = 32; // format
+    // p[17..19] pad
+    write_u32(&mut p[20..24], values.len() as u32, is_le);
+
+    for (i, value) in values.iter().enumerate() {
+        let off = 24 + i * 4;
+        write_u32(&mut p[off..off + 4], *value, is_le);
+    }
+
+    p
+}
+
+/// Put `window` in the background: `_NET_WM_WINDOW_TYPE` =
+/// `_NET_WM_WINDOW_TYPE_DESKTOP`, then `_NET_WM_STATE` =
+/// `_NET_WM_STATE_BELOW`.
+///
+/// The state is written on its own, without `_NET_WM_STATE_STICKY`: a window
+/// manager rewrites this property wholesale, and the shape that was observed to
+/// survive on KWin is a single `_NET_WM_STATE_BELOW`.
+///
+/// `_NET_WM_STATE_ABOVE` is the layer above *normal* windows and contradicts
+/// `BELOW`, so it is never set.
+///
+/// Returns `false`, sending nothing, until every atom has been interned (and
+/// therefore until the connection setup probes have been answered).
+pub(crate) fn set_window_as_background(conn: &mut X11Conn, sink: &Sink, window: u32) -> bool {
+    let Some(property) = conn.net_wm.window_type else {
+        return false;
+    };
+    let Some(desktop) = conn.net_wm.window_type_desktop else {
+        return false;
+    };
+    let Some(state) = conn.net_wm.state else {
+        return false;
+    };
+    let Some(below) = conn.net_wm.state_below else {
+        return false;
+    };
+
+    conn.begin_injected_requests(2);
+
+    let mut payload =
+        build_change_property_payload(conn, window, property, std::slice::from_ref(&desktop));
+    payload.extend_from_slice(&build_change_property_payload(
+        conn,
+        window,
+        state,
+        &[below],
+    ));
+
+    let sent = sink.send_to_server(&payload);
+    // What was actually put on the wire, so it can be compared against what
+    // `xprop` reports for the window.
+    eprintln!(
+        "[window:x11] window={window:#x} type={property:#x}->{desktop:#x} state={state:#x}->[{below:#x}] sent={sent}"
+    );
+
+    sent
+}
+
 pub(crate) fn query_pointer(window: u32) -> Option<(i16, i16)> {
     let fd = last_active_fd()?;
     let sink = sink_for(fd)?;
@@ -339,6 +428,10 @@ mod tests {
         conn.root_y = 20;
         conn.button = 1;
         conn.net_wm_moveresize = Some(0xABCD);
+        conn.net_wm.window_type = Some(0x11);
+        conn.net_wm.window_type_desktop = Some(0x12);
+        conn.net_wm.state = Some(0x13);
+        conn.net_wm.state_below = Some(0x14);
         conn.shape_opcode = Some(130);
         conn.xi_opcode = Some(131);
         conn
@@ -671,6 +764,99 @@ mod tests {
     }
 
     #[test]
+    fn a_change_property_carries_the_atom_in_the_clients_byte_order() {
+        for le in [true, false] {
+            let mut conn = conn();
+            conn.is_le = le;
+
+            let payload = build_change_property_payload(&conn, 0x5000, 0x11, &[0x12]);
+
+            assert_eq!(payload.len(), 28, "7 words for a one-atom property");
+            assert_eq!(payload[0], 18, "ChangeProperty");
+            assert_eq!(payload[1], 0, "mode = Replace");
+            assert_eq!(r16(&payload[2..4], le), 7, "7 words");
+            assert_eq!(r32(&payload[4..8], le), 0x5000, "the window");
+            assert_eq!(r32(&payload[8..12], le), 0x11, "the property atom");
+            assert_eq!(r32(&payload[12..16], le), 4, "type = XA_ATOM");
+            assert_eq!(payload[16], 32, "format");
+            assert_eq!(&payload[17..20], &[0, 0, 0], "pad");
+            assert_eq!(r32(&payload[20..24], le), 1, "one value");
+            assert_eq!(r32(&payload[24..28], le), 0x12, "the value");
+        }
+    }
+
+    #[test]
+    fn background_writes_the_type_then_below() {
+        let (sink, mut peer) = sink();
+        let mut conn = conn();
+
+        assert!(set_window_as_background(&mut conn, &sink, 0x5000));
+
+        let sent = received(&mut peer);
+        assert_eq!(sent.len(), 56, "two 28-byte writes");
+
+        // _NET_WM_WINDOW_TYPE = _NET_WM_WINDOW_TYPE_DESKTOP
+        assert_eq!(sent[0], 18, "ChangeProperty");
+        assert_eq!(r16(&sent[2..4], true), 7, "7 words");
+        assert_eq!(r32(&sent[4..8], true), 0x5000, "the window");
+        assert_eq!(r32(&sent[8..12], true), 0x11, "the type property");
+        assert_eq!(r32(&sent[20..24], true), 1, "one value");
+        assert_eq!(r32(&sent[24..28], true), 0x12, "desktop");
+
+        // _NET_WM_STATE = _NET_WM_STATE_BELOW
+        assert_eq!(sent[28], 18, "ChangeProperty");
+        assert_eq!(r16(&sent[30..32], true), 7, "7 words");
+        assert_eq!(r32(&sent[32..36], true), 0x5000, "the window");
+        assert_eq!(r32(&sent[36..40], true), 0x13, "the state property");
+        assert_eq!(r32(&sent[48..52], true), 1, "one state");
+        assert_eq!(r16(&sent[30..32], true), 7, "7 words");
+        assert_eq!(r32(&sent[52..56], true), 0x14, "below");
+
+        assert_eq!(conn.seq_offset, 2, "two injected requests");
+        assert_eq!(
+            conn.injected_seqs
+                .values()
+                .filter(|t| **t == InjectedType::Other)
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn background_needs_every_atom() {
+        let (sink, mut peer) = sink();
+
+        for missing in 0..4 {
+            let mut conn = conn();
+            match missing {
+                0 => conn.net_wm.window_type = None,
+                1 => conn.net_wm.window_type_desktop = None,
+                2 => conn.net_wm.state = None,
+                _ => conn.net_wm.state_below = None,
+            }
+
+            assert!(
+                !set_window_as_background(&mut conn, &sink, 0x5000),
+                "missing atom {missing}"
+            );
+            assert_eq!(conn.seq_offset, 0, "nothing was recorded as injected");
+        }
+
+        assert!(received(&mut peer).is_empty(), "nothing was sent");
+    }
+
+    #[test]
+    fn a_failed_background_send_is_reported() {
+        let sink = dead_sink();
+        let mut conn = conn();
+
+        // Like `set_input_region`, the sequence bookkeeping is not rolled back
+        // on a failed send; there is no path that resynchronises the stream.
+        assert!(!set_window_as_background(&mut conn, &sink, 0x5000));
+        assert_eq!(conn.seq_offset, 2);
+    }
+
+    #[test]
     fn a_region_needs_the_shape_extension() {
         let (sink, mut peer) = sink();
         let mut conn = conn();
@@ -798,7 +984,7 @@ mod tests {
             feed_inbound(fd, &pointer_reply(seq, -7, 9), None)
                 .expect("never tears down")
                 .data,
-            Vec::new(),
+            Vec::<u8>::new(),
             "the reply is dropped rather than forwarded"
         );
 

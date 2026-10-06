@@ -22,8 +22,7 @@ export type CallbackHandlerFunction<Args extends unknown[] = unknown[]> = (
  */
 export default class CallDispatcher {
   private handlers: Record<string, HandlerFunction> = Object.create(null);
-  private callbackHandlers: Record<string, CallbackHandlerFunction> =
-    Object.create(null);
+  private callbackHandlers: Record<string, CallbackHandlerFunction> = Object.create(null);
 
   registerHandler<Args extends unknown[], Return extends unknown[] | void>(
     cmd: string,

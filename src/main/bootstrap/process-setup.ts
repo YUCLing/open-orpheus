@@ -4,10 +4,7 @@ import { app, Menu, protocol } from "electron";
 
 import started from "electron-squirrel-startup";
 
-import {
-  disableHardwareAccelerationFlag,
-  userdata as userdataDir,
-} from "@main/platform/folders";
+import { disableHardwareAccelerationFlag, userdata as userdataDir } from "@main/platform/folders";
 import { checkEnvFlagPresent } from "@main/platform/util";
 
 export function configureProcess() {

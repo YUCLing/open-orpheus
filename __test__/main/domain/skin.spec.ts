@@ -20,29 +20,21 @@ function fakeImage(width: number, height: number, pixels: number[]) {
 
 describe("extractColor", () => {
   it("reads the centre pixel as #rrggbbaa", async () => {
-    const image = fakeImage(
-      2,
-      2,
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]
-    );
+    const image = fakeImage(2, 2, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]);
 
     await expect(extractColor(image)).resolves.toBe("#01020304");
   });
 
   it("picks the centre of odd sized images", async () => {
-    const pixels = new Array(3 * 3 * 4).fill(0);
+    const pixels = Array.from({ length: 3 * 3 * 4 }, () => 0);
     const centre = (1 * 3 + 1) * 4;
     pixels.splice(centre, 4, 0xab, 0xcd, 0xef, 0xff);
 
-    await expect(extractColor(fakeImage(3, 3, pixels))).resolves.toBe(
-      "#abcdefff"
-    );
+    await expect(extractColor(fakeImage(3, 3, pixels))).resolves.toBe("#abcdefff");
   });
 
   it("reads the only pixel of a 1x1 image", async () => {
-    await expect(
-      extractColor(fakeImage(1, 1, [255, 0, 128, 255]))
-    ).resolves.toBe("#ff0080ff");
+    await expect(extractColor(fakeImage(1, 1, [255, 0, 128, 255]))).resolves.toBe("#ff0080ff");
   });
 
   it("falls back to opaque black when there is no pixel data", async () => {
@@ -157,9 +149,7 @@ describe("parseElementTemplate", () => {
   });
 
   it("falls back to the default element sizes", () => {
-    const parsed = parseElementTemplate(
-      "<MenuElement><MenuElementLayout /></MenuElement>"
-    );
+    const parsed = parseElementTemplate("<MenuElement><MenuElementLayout /></MenuElement>");
 
     expect(parsed).toEqual({
       height: 30,

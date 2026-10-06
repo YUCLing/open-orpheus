@@ -62,6 +62,84 @@
   </screenshots>
 
   <releases>
+    <release version="0.19.2" date="2026-10-05">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.19.2</url>
+      <description>
+        <ul>
+          <li>Fixed menus drifting to the wrong position under Wayland.</li>
+          <li xml:lang="zh-CN">修复 Wayland 下菜单乱飘的问题。</li>
+          <li>Removed module source code from the packaged application.</li>
+          <li xml:lang="zh-CN">将模块源码从打包程序中移除。</li>
+          <li>Switched to custom ICU data.</li>
+          <li xml:lang="zh-CN">改用自定义 ICU 数据。</li>
+          <li>Restored support for AppImage builds.</li>
+          <li xml:lang="zh-CN">重新支持 AppImage 构建。</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.19.1" date="2026-10-02">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.19.1</url>
+      <description>
+        <ul>
+          <li>Corrected the commit hash of the resource pack.</li>
+          <li xml:lang="zh-CN">更正资源包的 Commit Hash。</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.19.0" date="2026-10-02">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.19.0</url>
+      <description>
+        <ul>
+          <li>Added support for the xeapi algorithm.</li>
+          <li xml:lang="zh-CN">新增 xeapi 算法支持。</li>
+          <li>Added support for scheduled automatic shutdown.</li>
+          <li xml:lang="zh-CN">新增定时自动关机支持。</li>
+          <li>Added support for the emotion mode player.</li>
+          <li xml:lang="zh-CN">新增情绪模式播放器支持。</li>
+          <li>Fixed missing log output when stdout is redirected.</li>
+          <li xml:lang="zh-CN">修复输出被重定向时无日志输出的问题。</li>
+          <li>Refactored lifecycle management.</li>
+          <li xml:lang="zh-CN">重构生命周期管理。</li>
+          <li>Updated dependencies and Electron.</li>
+          <li xml:lang="zh-CN">更新依赖和 Electron。</li>
+          <li>Added update information to the About window.</li>
+          <li xml:lang="zh-CN">在关于窗口添加更新信息。</li>
+          <li>Added scroll anchor offset in the management interface.</li>
+          <li xml:lang="zh-CN">在管理界面添加滚动锚点偏移。</li>
+          <li>Updated the resource pack to 3.1.41.</li>
+          <li xml:lang="zh-CN">更新资源包到 3.1.41。</li>
+          <li>Playback no longer pauses when switching output devices.</li>
+          <li xml:lang="zh-CN">更换输出设备时不再暂停播放。</li>
+          <li>Reduced the description width on the package download screen.</li>
+          <li xml:lang="zh-CN">减小包下载界面的描述宽度。</li>
+          <li>Added icons for Windows and macOS.</li>
+          <li xml:lang="zh-CN">为 Windows 和 macOS 添加图标。</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.18.0" date="2026-09-28">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.18.0</url>
+      <description>
+        <ul>
+          <li>Added support for opening local music files via file association.</li>
+          <li xml:lang="zh-CN">支持作为本地音乐文件打开方式。</li>
+          <li>Added desktop support for music reviews.</li>
+          <li xml:lang="zh-CN">新增乐评桌面支持。</li>
+          <li>Fixed an issue where the log directory did not exist.</li>
+          <li xml:lang="zh-CN">修复日志目录不存在的问题。</li>
+          <li>Fixed MPRIS volume setting return value being out of sync.</li>
+          <li xml:lang="zh-CN">修复 MPRIS 设置音量返回值不同步的问题。</li>
+          <li>Fixed a crash when loading certain fonts.</li>
+          <li xml:lang="zh-CN">修复加载部分字体时崩溃的问题。</li>
+          <li>Updated the Flatpak runtime.</li>
+          <li xml:lang="zh-CN">更新 Flatpak 运行时。</li>
+          <li>Removed CJS support.</li>
+          <li xml:lang="zh-CN">移除 CJS 支持。</li>
+          <li>Refactored window management.</li>
+          <li xml:lang="zh-CN">重构窗口管理。</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.1" date="2026-09-14">
       <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.17.1</url>
       <description>

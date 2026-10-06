@@ -13,6 +13,4 @@ export interface LyricLine {
 export type Lyrics = LyricLine[];
 
 export type LyricsType = "regular" | "per-word" | "translate" | "roma";
-export type LyricsStore = { regular: Lyrics } & Partial<
-  Record<LyricsType, Lyrics>
->;
+export type LyricsStore = { regular: Lyrics } & Partial<Record<LyricsType, Lyrics>>;

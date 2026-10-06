@@ -1,17 +1,14 @@
 import Emittery from "emittery";
 
-import { MediaSession } from "@open-orpheus/smtc";
+import { MediaSession } from "@open-orpheus/system-win32";
 import { nativeArtUrl } from "../artwork";
 import { PlaybackStatus, TrackInfo } from "../types";
-import {
-  MediaSessionAdapter,
-  PlayerCommandEvents,
-} from "./MediaSessionAdapter";
+import { MediaSessionAdapter, PlayerCommandEvents } from "./MediaSessionAdapter";
 
 // SMTC uses 100 ns ticks; we use seconds.
 const TIME_RATIO = 10_000_000;
 
-/** Windows SMTC integration, backed by the `@open-orpheus/smtc` NAPI module. */
+/** Windows SMTC integration, backed by the `@open-orpheus/system-win32` NAPI module. */
 export default class SmtcAdapter
   extends Emittery<PlayerCommandEvents>
   implements MediaSessionAdapter
@@ -30,22 +27,22 @@ export default class SmtcAdapter
     this.mediaSession.setEventHandler((err, event) => {
       switch (event.type) {
         case "Play":
-          this.emit("play");
+          void this.emit("play");
           break;
         case "Pause":
-          this.emit("pause");
+          void this.emit("pause");
           break;
         case "Next":
-          this.emit("next");
+          void this.emit("next");
           break;
         case "Previous":
-          this.emit("previous");
+          void this.emit("previous");
           break;
         case "Stop":
-          this.emit("pause");
+          void this.emit("pause");
           break;
         case "SetPosition":
-          this.emit("setPosition", event.position / TIME_RATIO);
+          void this.emit("setPosition", event.position / TIME_RATIO);
           break;
         case "SetRate":
           // OS-initiated rate change needs a renderer command; ignored in v1.

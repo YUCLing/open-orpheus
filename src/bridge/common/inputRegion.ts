@@ -28,8 +28,4 @@ export function registerInputRegionHandlers(
       }
     },
   });
-
-  wnd.on("show", () => {
-    wnd.webContents.send("inputRegion.shown");
-  });
 }

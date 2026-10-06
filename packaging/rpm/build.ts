@@ -16,14 +16,9 @@ export interface BuildRpmOptions extends BuildSrpmOptions {
  * bundled as Source1), then `rpmbuild --rebuild` it. Returns the produced
  * `.rpm` paths.
  */
-export async function buildRpm(
-  options: BuildRpmOptions = {}
-): Promise<string[]> {
-  const projectRoot =
-    options.projectRoot ?? resolve(import.meta.dirname, "../..");
-  const outDir =
-    options.outDir ??
-    resolve(projectRoot, "out/make/rpm", rpmArch(options.arch));
+export async function buildRpm(options: BuildRpmOptions = {}): Promise<string[]> {
+  const projectRoot = options.projectRoot ?? resolve(import.meta.dirname, "../..");
+  const outDir = options.outDir ?? resolve(projectRoot, "out/make/rpm", rpmArch(options.arch));
   // Empty the directory first so stale artifacts from earlier runs (e.g. an
   // older version) can't be mistaken for this build's output.
   await cleanOutDir(outDir, options.clean);

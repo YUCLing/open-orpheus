@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  combineDisposables,
-  noopDisposable,
-  toDisposable,
-} from "@shared/disposable";
+import { combineDisposables, noopDisposable, toDisposable } from "@shared/disposable";
 
 describe("toDisposable", () => {
   it("runs the teardown when disposed", () => {
@@ -72,10 +68,7 @@ describe("combineDisposables", () => {
   it("disposes the whole set at most once", () => {
     const first = vi.fn();
     const second = vi.fn();
-    const combined = combineDisposables(
-      toDisposable(first),
-      toDisposable(second)
-    );
+    const combined = combineDisposables(toDisposable(first), toDisposable(second));
 
     combined.dispose();
     combined.dispose();

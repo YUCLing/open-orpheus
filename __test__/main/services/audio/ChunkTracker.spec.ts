@@ -142,12 +142,8 @@ describe("ChunkTracker queries", () => {
       { start: 400, end: 500 },
     ]);
     expect(tracker().getMissingIntervals(120, 180)).toEqual([]);
-    expect(tracker().getMissingIntervals(200, 300)).toEqual([
-      { start: 200, end: 300 },
-    ]);
-    expect(new ChunkTracker().getMissingIntervals(5, 10)).toEqual([
-      { start: 5, end: 10 },
-    ]);
+    expect(tracker().getMissingIntervals(200, 300)).toEqual([{ start: 200, end: 300 }]);
+    expect(new ChunkTracker().getMissingIntervals(5, 10)).toEqual([{ start: 5, end: 10 }]);
   });
 
   it("alternates hit and miss instructions", () => {

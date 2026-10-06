@@ -59,7 +59,7 @@ function stftPower(samples: Float32Array): Float32Array[] {
 
   const frameCount = Math.floor((samples.length - WINDOW_SIZE) / HOP_SIZE) + 1;
   const binCount = WINDOW_SIZE / 2 + 1;
-  const frames: Float32Array[] = new Array(frameCount);
+  const frames: Float32Array[] = [];
   const input = fft.createComplexArray();
   const output = fft.createComplexArray();
 
@@ -78,7 +78,7 @@ function stftPower(samples: Float32Array): Float32Array[] {
       const im = output[2 * k + 1];
       power[k] = re * re + im * im;
     }
-    frames[frame] = power;
+    frames.push(power);
   }
 
   return frames;
@@ -88,19 +88,17 @@ function buildFeatureMatrix(powerFrames: Float32Array[]): Float32Array[] {
   const frameCount = powerFrames.length;
   if (frameCount === 0) return [];
 
-  const matrix: Float32Array[] = new Array(BAND_BINS);
-  for (let f = 0; f < BAND_BINS; f++) {
-    matrix[f] = new Float32Array(frameCount);
-  }
+  const matrix: Float32Array[] = Array.from(
+    { length: BAND_BINS },
+    () => new Float32Array(frameCount)
+  );
 
   let sum = 0;
   let count = 0;
   for (let t = 0; t < frameCount; t++) {
     const power = powerFrames[t];
     for (let f = 0; f < BAND_BINS; f++) {
-      const value = Math.log(
-        Math.max(Math.sqrt(power[LOW_BIN + f]), 1.11920929e-6)
-      );
+      const value = Math.log(Math.max(Math.sqrt(power[LOW_BIN + f]), 1.11920929e-6));
       matrix[f][t] = value;
       sum += value;
       count++;
@@ -142,11 +140,7 @@ function hasGreaterInNeighborhood(
   return false;
 }
 
-function filterByLocalAverage(
-  peaks: Peak[],
-  matrix: Float32Array[],
-  cfg: ExtractConfig
-): Peak[] {
+function filterByLocalAverage(peaks: Peak[], matrix: Float32Array[], cfg: ExtractConfig): Peak[] {
   const bandBins = matrix.length;
   const frameCount = matrix[0]?.length ?? 0;
   const kept: Peak[] = [];
@@ -219,10 +213,7 @@ function filterByF227Shape(peaks: Peak[], matrix: Float32Array[]): Peak[] {
   return kept;
 }
 
-function extractPeaks(
-  matrix: Float32Array[],
-  cfg = DEFAULT_EXTRACT_CONFIG
-): Peak[] {
+function extractPeaks(matrix: Float32Array[], cfg = DEFAULT_EXTRACT_CONFIG): Peak[] {
   const bandBins = matrix.length;
   const frameCount = matrix[0]?.length ?? 0;
   if (frameCount < MIN_FRAMES) return [];
@@ -243,10 +234,7 @@ function extractPeaks(
     } else if (cfg.postprocessMode === 2) {
       peaks = filterByF227Shape(peaks, matrix);
     } else if (cfg.postprocessMode === 3) {
-      peaks = filterByF227Shape(
-        filterByLocalAverage(peaks, matrix, cfg),
-        matrix
-      );
+      peaks = filterByF227Shape(filterByLocalAverage(peaks, matrix, cfg), matrix);
     }
   }
 
@@ -305,9 +293,7 @@ function encryptRawFingerprint(raw: Buffer): string {
   const compressed = deflateSync(raw);
   const cipher = createCipheriv("aes-128-ecb", AES_KEY, null);
   cipher.setAutoPadding(true);
-  return Buffer.concat([cipher.update(compressed), cipher.final()]).toString(
-    "base64"
-  );
+  return Buffer.concat([cipher.update(compressed), cipher.final()]).toString("base64");
 }
 
 export function GenerateFP(samples: Float32Array): string {
@@ -319,10 +305,7 @@ export function GenerateFP(samples: Float32Array): string {
 }
 
 lifecycleEvents.on("mainwindowcreated", (e) => {
-  e.data.webContents.ipc.handle(
-    "afp.generateFP",
-    (_event, data: ArrayBuffer) => {
-      return GenerateFP(new Float32Array(data));
-    }
-  );
+  e.data.webContents.ipc.handle("afp.generateFP", (_event, data: ArrayBuffer) => {
+    return GenerateFP(new Float32Array(data));
+  });
 });

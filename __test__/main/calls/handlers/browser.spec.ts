@@ -11,8 +11,7 @@ const cookieApi = {
 };
 
 installLoggerStub();
-const { register: registerBrowser } =
-  await import("@main/calls/handlers/browser");
+const { register: registerBrowser } = await import("@main/calls/handlers/browser");
 registerBrowser({ cookie: cookieApi });
 
 /** Dispatch a command and return the tuple spread onto the callback. */
@@ -41,10 +40,9 @@ describe("browser.getFullCookies", () => {
       },
     ]);
 
-    const [cookies] = (await call(
-      "browser.getFullCookies",
-      "https://music.163.com"
-    )) as [Record<string, unknown>[]];
+    const [cookies] = (await call("browser.getFullCookies", "https://music.163.com")) as [
+      Record<string, unknown>[],
+    ];
 
     expect(cookies).toHaveLength(1);
     expect(cookies[0]).toMatchObject({
@@ -79,9 +77,7 @@ describe("browser.getFullCookies", () => {
       // Built from the raw (missing) fields, as upstream does.
       Url: "http://undefinedundefined",
     });
-    expect(cookies[0]["Expires"] as number).toBeGreaterThan(
-      Date.now() / 1000 - 5
-    );
+    expect(cookies[0]["Expires"] as number).toBeGreaterThan(Date.now() / 1000 - 5);
   });
 });
 
@@ -89,9 +85,7 @@ describe("browser.getCookies", () => {
   it("returns the plain cookie map", async () => {
     cookieApi.getCookies.mockResolvedValue({ MUSIC_U: "token" });
 
-    await expect(call("browser.getCookies", "https://x")).resolves.toEqual([
-      { MUSIC_U: "token" },
-    ]);
+    await expect(call("browser.getCookies", "https://x")).resolves.toEqual([{ MUSIC_U: "token" }]);
   });
 });
 
@@ -159,9 +153,9 @@ describe("browser.setCookie", () => {
   });
 
   it("reports failure for an unparsable url", async () => {
-    await expect(
-      call("browser.setCookie", { ...cookie, Url: "not a url" })
-    ).resolves.toEqual([false]);
+    await expect(call("browser.setCookie", { ...cookie, Url: "not a url" })).resolves.toEqual([
+      false,
+    ]);
     expect(cookieApi.setCookie).not.toHaveBeenCalled();
   });
 });
@@ -170,18 +164,14 @@ describe("browser.removeCookie", () => {
   it("removes an existing cookie", async () => {
     cookieApi.getCookies.mockResolvedValue({ MUSIC_U: "token" });
 
-    await expect(
-      call("browser.removeCookie", "https://x", "MUSIC_U")
-    ).resolves.toEqual([1]);
+    await expect(call("browser.removeCookie", "https://x", "MUSIC_U")).resolves.toEqual([1]);
     expect(cookieApi.removeCookie).toHaveBeenCalledWith("https://x", "MUSIC_U");
   });
 
   it("does nothing for a cookie that is not there", async () => {
     cookieApi.getCookies.mockResolvedValue({});
 
-    await expect(
-      call("browser.removeCookie", "https://x", "MUSIC_U")
-    ).resolves.toEqual([0]);
+    await expect(call("browser.removeCookie", "https://x", "MUSIC_U")).resolves.toEqual([0]);
     expect(cookieApi.removeCookie).not.toHaveBeenCalled();
   });
 });

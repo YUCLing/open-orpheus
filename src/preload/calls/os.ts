@@ -7,12 +7,9 @@ registerCallHandler<[], [string]>("os.queryOsVer", () => {
   return [OSVER];
 });
 
-registerCallHandler<[], [{ enabled: boolean }]>(
-  "os.isSystemDarkThemeEnabled",
-  () => {
-    return [{ enabled: false }];
-  }
-);
+registerCallHandler<[], [{ enabled: boolean }]>("os.isSystemDarkThemeEnabled", () => {
+  return [{ enabled: false }];
+});
 
 registerCallHandler<[], void>("os.isOnLine", () => {
   fireNativeCall("os.onisonline", navigator.onLine);

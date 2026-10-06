@@ -13,10 +13,7 @@ describe("createSymlink", () => {
   });
 
   it("creates a relocatable relative symlink", async () => {
-    await createSymlink(
-      "/usr/lib/open-orpheus/open-orpheus",
-      "/usr/bin/open-orpheus"
-    );
+    await createSymlink("/usr/lib/open-orpheus/open-orpheus", "/usr/bin/open-orpheus");
     expect(vol.toSnapshot()).toMatchSnapshot();
   });
 
@@ -27,10 +24,7 @@ describe("createSymlink", () => {
 
   it("replaces an existing entry at the link path", async () => {
     vol.fromJSON({ "/usr/bin/open-orpheus": "stale-binary" });
-    await createSymlink(
-      "/usr/lib/open-orpheus/open-orpheus",
-      "/usr/bin/open-orpheus"
-    );
+    await createSymlink("/usr/lib/open-orpheus/open-orpheus", "/usr/bin/open-orpheus");
     expect(vol.toSnapshot()).toMatchSnapshot();
   });
 });

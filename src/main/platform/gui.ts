@@ -19,17 +19,13 @@ export function setFont(fnt: string | null) {
   setManageWindowFont(fnt);
 }
 
-async function loadSkinFileFromPack(
-  packName: "skin" | "skin2",
-  pathname: string
-) {
+async function loadSkinFileFromPack(packName: "skin" | "skin2", pathname: string) {
   const skinPack = await packManager.getOrWaitPack<SkinPack>(packName);
   try {
     const file = await skinPack.readFile(normalize(pathname));
     return new Response(Buffer.from(file), {
       headers: {
-        "Content-Type":
-          mime.getType(extname(pathname)) || "application/octet-stream",
+        "Content-Type": mime.getType(extname(pathname)) || "application/octet-stream",
       },
     });
   } catch {
@@ -60,11 +56,7 @@ export default function registerGuiScheme(protocol: Protocol) {
         // Try exact path first, then fall back to .html for route paths
         const candidates = [filePath];
         if (!extname(pathname)) {
-          candidates.push(
-            url.pathname === "/"
-              ? join(guiDir, "index.html")
-              : `${filePath}.html`
-          );
+          candidates.push(url.pathname === "/" ? join(guiDir, "index.html") : `${filePath}.html`);
         }
 
         for (const candidate of candidates) {
@@ -72,9 +64,7 @@ export default function registerGuiScheme(protocol: Protocol) {
             const file = await readFile(candidate);
             return new Response(file, {
               headers: {
-                "Content-Type":
-                  mime.getType(extname(candidate)) ||
-                  "application/octet-stream",
+                "Content-Type": mime.getType(extname(candidate)) || "application/octet-stream",
               },
             });
           } catch {

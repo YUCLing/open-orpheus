@@ -44,10 +44,7 @@ type UploadPayload = {
   apiCheckTokenList: Record<string, { checkToken: string }>;
 };
 
-async function handleUpload(
-  event: Electron.IpcMainInvokeEvent,
-  payload: UploadPayload
-) {
+async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadPayload) {
   const uploadClient = client.extend({
     cookieJar: undefined, // Manages cookie manually here.
   });
@@ -55,10 +52,7 @@ async function handleUpload(
   const fullPath = normalizePath(payload.path);
 
   try {
-    const [stats, content] = await Promise.all([
-      stat(fullPath),
-      readFile(fullPath),
-    ]);
+    const [stats, content] = await Promise.all([stat(fullPath), readFile(fullPath)]);
 
     event.sender.send(
       "channel.call",
@@ -354,8 +348,7 @@ async function handleUpload(
       );
     }
   } catch (e) {
-    if (!isFileNotFound(e))
-      globalLogger.error({ name: "cloud-upload", err: e }, "Upload error");
+    if (!isFileNotFound(e)) globalLogger.error({ name: "cloud-upload", err: e }, "Upload error");
     event.sender.send(
       "channel.call",
       "subprocess.oncall",
@@ -382,7 +375,7 @@ export function register(): void {
     (event, num, exe, action, payload) => {
       if (exe === "cloudmusic_util") {
         if (action === "upload.upload") {
-          handleUpload(event, JSON.parse(payload));
+          void handleUpload(event, JSON.parse(payload));
         }
       }
     }

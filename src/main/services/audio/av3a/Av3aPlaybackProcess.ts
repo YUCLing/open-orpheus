@@ -1,4 +1,4 @@
-import { app, MessageChannelMain, utilityProcess } from "electron";
+import { MessageChannelMain, utilityProcess } from "electron";
 import type { MessagePortMain, UtilityProcess, WebContents } from "electron";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,7 @@ import type {
   Av3aProcessServiceToMain,
 } from "../../../../bridge/contracts/av3a-process";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
+import { registerShutdownTask } from "../../lifecycle";
 import { toError } from "@shared/util";
 
 /**
@@ -41,13 +42,19 @@ export type Av3aPlaybackProcessOptions = {
 const liveProcesses = new Set<Av3aPlaybackProcess>();
 let quitHooked = false;
 
+/** Best-effort synchronous kill of every live decode process (used on quit). */
+export function killAllAv3aProcesses(): void {
+  for (const process of liveProcesses) {
+    process.killQuietly();
+  }
+}
+
 function hookQuitCleanup(): void {
   if (quitHooked) return;
   quitHooked = true;
-  app.once("will-quit", () => {
-    for (const process of liveProcesses) {
-      process.killQuietly();
-    }
+  registerShutdownTask({
+    name: "av3a-processes",
+    run: killAllAv3aProcesses,
   });
 }
 
@@ -77,9 +84,7 @@ export class Av3aPlaybackProcess {
     const { port1, port2 } = new MessageChannelMain();
     // `?worker&url` makes Vite emit the decode service as its own standalone
     // bundle next to the main bundle; fork that emitted file.
-    const entryPath = fileURLToPath(
-      new URL(decoderProcessPath, import.meta.url)
-    );
+    const entryPath = fileURLToPath(new URL(decoderProcessPath, import.meta.url));
     const child = utilityProcess.fork(entryPath, [], {
       serviceName: "AV3A Decoder Service",
     });
@@ -215,10 +220,7 @@ export class Av3aPlaybackProcess {
     this.closeRendererPort();
     liveProcesses.delete(this);
     if (unexpected) {
-      this.options.sendEvent(
-        "error",
-        `AV3A decode process exited unexpectedly (code ${code})`
-      );
+      this.options.sendEvent("error", `AV3A decode process exited unexpectedly (code ${code})`);
     }
   }
 

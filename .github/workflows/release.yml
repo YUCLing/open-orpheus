@@ -128,7 +128,7 @@ jobs:
         runner:
           - ubuntu-latest
           - ubuntu-24.04-arm
-          - macos-latest
+          - xcode-27
           - windows-latest
           - windows-11-arm
     uses: ./.github/workflows/build.yml

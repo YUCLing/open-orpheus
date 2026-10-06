@@ -1,24 +1,13 @@
 import Emittery from "emittery";
 
-import {
-  MediaSession,
-  PlaybackStatus as DbusPlaybackStatus,
-} from "@open-orpheus/dbus";
+import { MediaSession, PlaybackStatus as DbusPlaybackStatus } from "@open-orpheus/dbus";
 
 import type { MprisMetadata } from "@open-orpheus/dbus";
 import { client } from "../../../platform/request";
 import { imageSize } from "@shared/util";
-import {
-  artworkFileExists,
-  artworkFileUrl,
-  cacheArtwork,
-  remoteArtExt,
-} from "../artwork";
+import { artworkFileExists, artworkFileUrl, cacheArtwork, remoteArtExt } from "../artwork";
 import { PlaybackStatus, TrackInfo } from "../types";
-import {
-  MediaSessionAdapter,
-  PlayerCommandEvents,
-} from "./MediaSessionAdapter";
+import { MediaSessionAdapter, PlayerCommandEvents } from "./MediaSessionAdapter";
 
 // MPRIS uses microseconds, and we use seconds.
 const TIME_RATIO = 1_000_000;
@@ -39,6 +28,13 @@ export default class MprisAdapter
   private position: number | null = null;
   private duration: number | null = null;
   private rate = 1;
+  /**
+   * The most recent MPRIS volume write, keyed by the value it was for. The
+   * native write is asynchronous, so `SetVolume` awaits the write for *its*
+   * value once the renderer has confirmed that value — a write triggered by
+   * some other (concurrent or in-app) change must not be mistaken for it.
+   */
+  private volumeApplied: { volume: number; write: Promise<unknown> } | null = null;
 
   constructor() {
     super();
@@ -49,35 +45,46 @@ export default class MprisAdapter
       mprisName = desktopEntry = process.env["FLATPAK_ID"];
     }
 
-    this.mediaSession = new MediaSession(
-      mprisName,
-      "Open Orpheus",
-      desktopEntry
-    );
+    this.mediaSession = new MediaSession(mprisName, "Open Orpheus", desktopEntry);
 
-    this.mediaSession.setEventHandler((err, event) => {
+    this.mediaSession.setEventHandler(async (err, event) => {
       switch (event.type) {
         case "Play":
-          this.emit("play");
+          await this.emit("play");
           break;
         case "Pause":
-          this.emit("pause");
+          await this.emit("pause");
           break;
         case "Next":
-          this.emit("next");
+          await this.emit("next");
           break;
         case "Previous":
-          this.emit("previous");
+          await this.emit("previous");
           break;
         case "Seek":
-          this.emit("seek", event.delta / TIME_RATIO);
+          await this.emit("seek", event.delta / TIME_RATIO);
           break;
         case "SetPosition":
-          this.emit("setPosition", event.position / TIME_RATIO);
+          await this.emit("setPosition", event.position / TIME_RATIO);
           break;
-        case "SetVolume":
-          this.emit("volume", event.volume);
+        case "SetVolume": {
+          try {
+            await this.emit("volume", event.volume);
+          } catch {
+            // The router rejects when the renderer never confirms the value; a
+            // rejected handler becomes a D-Bus error, so the client learns the
+            // request failed rather than waiting forever.
+            throw new Error(
+              `MPRIS volume change to ${event.volume} was not confirmed by the renderer`
+            );
+          }
+          // The renderer confirmed this exact value, so `onVolume` has already
+          // recorded the matching MPRIS write; awaiting it keeps the reply
+          // behind the property actually changing.
+          const applied = this.volumeApplied;
+          if (applied?.volume === event.volume) await applied.write;
           break;
+        }
       }
     });
   }
@@ -86,7 +93,7 @@ export default class MprisAdapter
     this.metadata = track;
     this.artUrl = null; // album art for a new song arrives separately (onArtwork)
     if (!track) {
-      this.mediaSession.setMetadata(null);
+      void this.mediaSession.setMetadata(null);
       return;
     }
     this.pushMetadata();
@@ -101,7 +108,7 @@ export default class MprisAdapter
     this.position = position;
     this.pushPlaybackState();
     if (seeked) {
-      this.mediaSession.sendSeeked(position * TIME_RATIO);
+      void this.mediaSession.sendSeeked(position * TIME_RATIO);
     }
   }
 
@@ -116,11 +123,14 @@ export default class MprisAdapter
   }
 
   onVolume(volume: number): void {
-    this.mediaSession.setVolume(volume);
+    this.volumeApplied = {
+      volume,
+      write: this.mediaSession.setVolume(volume) as Promise<unknown>,
+    };
   }
 
   dispose(): void {
-    this.mediaSession.setMetadata(null);
+    void this.mediaSession.setMetadata(null);
     this.mediaSession.setEventHandler(null);
   }
 
@@ -134,7 +144,7 @@ export default class MprisAdapter
       ...(this.artUrl ? { artUrl: this.artUrl } : {}),
       ...(this.duration ? { length: this.duration * TIME_RATIO } : {}),
     };
-    this.mediaSession.setMetadata(metadata);
+    void this.mediaSession.setMetadata(metadata);
   }
 
   /**
@@ -160,10 +170,7 @@ export default class MprisAdapter
     this.pushMetadata();
   }
 
-  private async cacheArtworkLocally(
-    id: string,
-    artUrl: string
-  ): Promise<string> {
+  private async cacheArtworkLocally(id: string, artUrl: string): Promise<string> {
     // Already local (embedded art extracted by the media-session layer).
     if (artUrl.startsWith("file://")) return artUrl;
     // Fetch a reasonably-sized thumbnail instead of the original (potentially
@@ -187,7 +194,7 @@ export default class MprisAdapter
 
   private pushPlaybackState(): void {
     if (this.position === null) return;
-    this.mediaSession.updatePlaybackState({
+    void this.mediaSession.updatePlaybackState({
       status: toDbusStatus(this.status),
       position: this.position * TIME_RATIO,
       speed: this.rate,

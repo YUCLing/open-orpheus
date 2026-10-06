@@ -4,6 +4,19 @@ import { copyFile, mkdir } from "node:fs/promises";
 export type Icons = Partial<Record<`${string}x${string}` | "scalable", string>>;
 
 /**
+ * Resolve every icon source in `icons` against `root`. Metadata stores icon
+ * paths project-relative, while `writeIcons` copies them from the filesystem.
+ */
+export function resolveIcons(root: string, icons: Icons | undefined): Icons {
+  const resolved = { ...icons };
+  const bySize = resolved as Record<string, string | undefined>;
+  for (const [size, source] of Object.entries(resolved)) {
+    if (source) bySize[size] = resolve(root, source);
+  }
+  return resolved;
+}
+
+/**
  * Write icons using file structure: `/$size/apps/$appName.$ext`
  *
  * Each key of `icons` is a size (e.g. `256x256`) or `scalable`; the value is

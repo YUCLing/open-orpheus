@@ -60,24 +60,24 @@ jobs:
           # --break-system-packages: the Ubuntu images are PEP 668 managed.
           pip install --break-system-packages "ziglang==$zig_version"
 
-      - name: Build native modules
-        run: pnpm build:modules
-
-      - name: Install packaging dependencies
+      - name: Install system and packaging dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y flatpak flatpak-builder appstream elfutils debhelper-compat
+          sudo apt-get install -y libfreetype-dev flatpak flatpak-builder appstream elfutils debhelper-compat
+
+      - name: Validate metainfo
+        if: runner.os == 'Linux'
+        run: appstreamcli validate packaging/flatpak/metainfo.xml
+
+      - name: Build native modules
+        run: pnpm build:modules
 
       - name: Set up Flatpak runtimes
         if: runner.os == 'Linux'
         run: |
           sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08 org.electronjs.Electron2.BaseApp//26.08
-
-      - name: Validate metainfo
-        if: runner.os == 'Linux'
-        run: appstreamcli validate packaging/flatpak/metainfo.xml
 
       - name: Build application bundles
         run: pnpm make

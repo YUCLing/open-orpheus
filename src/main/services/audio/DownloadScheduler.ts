@@ -139,12 +139,7 @@ export default class DownloadScheduler {
       this.notifyUrgentRangeChanged();
 
       try {
-        for await (const chunk of this.downloadRange(
-          cursor,
-          missEnd,
-          "urgent",
-          signal
-        )) {
+        for await (const chunk of this.downloadRange(cursor, missEnd, "urgent", signal)) {
           received += chunk.byteLength;
           cursor += chunk.byteLength;
           urgentRange.start = cursor;
@@ -165,13 +160,8 @@ export default class DownloadScheduler {
 
       if (signal.aborted || this.destroyed) return;
 
-      if (
-        received === 0 &&
-        this.tracker.getDownloadedEnd(cursor, end) === cursor
-      ) {
-        throw new Error(
-          "Remote stream ended before the requested range was filled"
-        );
+      if (received === 0 && this.tracker.getDownloadedEnd(cursor, end) === cursor) {
+        throw new Error("Remote stream ended before the requested range was filled");
       }
     }
   }
@@ -200,10 +190,7 @@ export default class DownloadScheduler {
       }
 
       if (gapResult.type === "blocked") {
-        await this.waitForUrgentRangeChange(
-          this.backgroundController.signal,
-          gapResult.version
-        );
+        await this.waitForUrgentRangeChange(this.backgroundController.signal, gapResult.version);
         continue;
       }
 
@@ -227,10 +214,7 @@ export default class DownloadScheduler {
 
         if (isFatalBackgroundError(normalizedError)) return;
 
-        await delay(
-          this.backgroundRetryDelay,
-          this.backgroundController.signal
-        );
+        await delay(this.backgroundRetryDelay, this.backgroundController.signal);
         this.backgroundRetryDelay = Math.min(
           this.backgroundRetryDelay * 2,
           BACKGROUND_RETRY_MAX_DELAY
@@ -253,10 +237,7 @@ export default class DownloadScheduler {
     }
 
     for (const gap of gaps) {
-      if (
-        gap.end <= activeUrgentRange.start ||
-        gap.start >= activeUrgentRange.end
-      ) {
+      if (gap.end <= activeUrgentRange.start || gap.start >= activeUrgentRange.end) {
         return { type: "gap", gap };
       }
 
@@ -354,10 +335,7 @@ export default class DownloadScheduler {
 
         if (chunk.byteLength === 0) break;
 
-        if (
-          mode === "urgent" &&
-          this.tracker.getDownloadedEnd(offset, end) > offset
-        ) {
+        if (mode === "urgent" && this.tracker.getDownloadedEnd(offset, end) > offset) {
           stopReason = "collision";
           request.destroy();
           return;
@@ -396,8 +374,7 @@ export default class DownloadScheduler {
       request.once("response", (response) => {
         const totalLength = this.getTotalLength();
         const acceptsRange = response.statusCode === 206;
-        const acceptsWholeBody =
-          response.statusCode === 200 && start === 0 && end === totalLength;
+        const acceptsWholeBody = response.statusCode === 200 && start === 0 && end === totalLength;
 
         if (acceptsRange || acceptsWholeBody) {
           settled = true;
@@ -422,25 +399,15 @@ export default class DownloadScheduler {
     });
   }
 
-  private async checkBeforeWrite(
-    offset: number,
-    chunk: Buffer,
-    rangeEnd: number
-  ) {
+  private async checkBeforeWrite(offset: number, chunk: Buffer, rangeEnd: number) {
     const writeTask = this.writeChain.then(async () => {
-      const collisionSpan = this.tracker.getDownloadedSpanFrom(
-        offset,
-        rangeEnd
-      );
+      const collisionSpan = this.tracker.getDownloadedSpanFrom(offset, rangeEnd);
       if (collisionSpan > 0 && collisionSpan >= this.toleranceThreshold) {
         return "collision" as const;
       }
 
       await this.storage.write(offset, chunk);
-      const addedBytes = this.tracker.addInterval(
-        offset,
-        offset + chunk.byteLength
-      );
+      const addedBytes = this.tracker.addInterval(offset, offset + chunk.byteLength);
 
       if (addedBytes > 0) {
         this.onProgress();

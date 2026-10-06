@@ -28,10 +28,7 @@ function toLegacyEncodedToken(value: string) {
 }
 
 function buildLegacyHardwareToken(seed: string) {
-  const digest = createHash("sha256")
-    .update(seed, "utf8")
-    .digest("hex")
-    .toUpperCase();
+  const digest = createHash("sha256").update(seed, "utf8").digest("hex").toUpperCase();
   const raw = digest.slice(0, 32);
   const groups: string[] = [];
   for (let i = 0; i < raw.length; i += 4) {
@@ -53,10 +50,7 @@ export async function prepareDeviceId() {
     }
   } catch (e) {
     if (!isFileNotFound(e))
-      LOGGER.warn(
-        { err: e },
-        "Failed to read device ID from file, generating new ones."
-      );
+      LOGGER.warn({ err: e }, "Failed to read device ID from file, generating new ones.");
   }
   // Generate a legal host MAC address: unicast and universally administered.
   const macBytes = randomBytes(6);
@@ -68,20 +62,14 @@ export async function prepareDeviceId() {
 
   deviceId = generateHexString();
 
-  const legacyToken = buildLegacyHardwareToken(
-    `${deviceId}:${randomMACAddress}`
-  );
+  const legacyToken = buildLegacyHardwareToken(`${deviceId}:${randomMACAddress}`);
   const encodedToken = toLegacyEncodedToken(legacyToken);
   const signStr = `${randomMACAddress}@@@${encodedToken}`;
 
   ADDeviceId = `${signStr}@@@@@@${createHash("sha256").update(signStr, "utf8").digest("hex")}`;
 
   try {
-    await writeFile(
-      deviceIdFilePath,
-      JSON.stringify({ deviceId, ADDeviceId }, null, 2),
-      "utf-8"
-    );
+    await writeFile(deviceIdFilePath, JSON.stringify({ deviceId, ADDeviceId }, null, 2), "utf-8");
   } catch (e) {
     LOGGER.warn("Failed to write device ID to file: %s", e);
   }

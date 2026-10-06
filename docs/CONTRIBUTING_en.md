@@ -63,9 +63,9 @@ open-orpheus/
 │   ├── window/             # Cross-platform window utilities (deep Linux integration: Wayland/X11 protocol interception, input regions, cursor capture)
 │   ├── audio-effect/       # Audio effect processing (WebAssembly, used by AudioWorklet)
 │   ├── av3a/               # AV3A (Audio Vivid) decoder
-│   ├── dbus/               # Linux D-Bus integration (MPRIS media session)
+│   ├── dbus/               # Linux D-Bus integration (generic client, MPRIS media session)
 │   ├── nowplaying/         # macOS media session (MPNowPlayingInfoCenter)
-│   ├── smtc/               # Windows media session (SMTC)
+│   ├── sys-win32/          # Windows media session (SMTC) and scheduled power-off
 │   └── lifecycle/          # Exit callbacks and lifecycle utilities
 ├── build-plugins/          # Electron Forge plugins & Makers (deb / rpm / flatpak, logging, etc.)
 ├── scripts/                # Build scripts (module compilation, Flatpak, etc.)
@@ -147,7 +147,7 @@ flowchart TB
   3. **Renderer Side** (`gui/src/lib/bridge.ts` → `getBridge<T>(name)`) — uses a Proxy to map property access to channel paths: `api.cache.getStats()` → `_call("cache.getStats")`, `api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`, providing full type inference and IDE autocompletion.
   4. **Main Side** (`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`) — walks the handler object tree, automatically registering `ipc.handle()` for each leaf function; the `events` subtree is excluded (push-from-main only).
 - **GUI** (`gui/`) is a Svelte SPA responsible for settings, desktop lyrics, context menus, mini player, and all auxiliary UI, loaded via the `gui://` protocol. Menus are rendered as transparent frameless BrowserWindows (using a fullscreen overlay approach on Wayland due to protocol limitations).
-- **Native Modules** (`modules/`) provide low-level capabilities to the Electron main process via napi-rs: SQLite database (with Chinese pinyin collation), cross-platform window utilities (deep Linux integration for Wayland/X11 protocol interception, input region control, window dragging, cursor capture), system font enumeration, AV3A audio decoding, and per-platform media session integrations (`dbus/` MPRIS, `nowplaying/`, `smtc/`); `audio-effect/` is compiled to WebAssembly and consumed by the AudioWorklet in `src/worklets/`.
+- **Native Modules** (`modules/`) provide low-level capabilities to the Electron main process via napi-rs: SQLite database (with Chinese pinyin collation), cross-platform window utilities (deep Linux integration for Wayland/X11 protocol interception, input region control, window dragging, cursor capture), system font enumeration, AV3A audio decoding, and per-platform system integrations (`dbus/` generic D-Bus client + MPRIS, `nowplaying/`, `sys-win32/` Windows media session and scheduled power-off); `audio-effect/` is compiled to WebAssembly and consumed by the AudioWorklet in `src/worklets/`.
 
 ### Key Concepts
 
@@ -196,7 +196,7 @@ Automated tests currently cover part of the project (`pnpm test`, with a coverag
 
 ### Code Style
 
-- TypeScript / JavaScript: The project uses ESLint. Make sure there are no lint errors before submitting (`pnpm lint`).
+- TypeScript / JavaScript: The main codebase is linted with [Oxlint](https://oxc.rs) and formatted with [Oxfmt](https://oxc.rs) (config: `.oxlintrc.json`, `.oxfmtrc.json`), while the SvelteKit code under `gui/` is linted with ESLint (config: `gui/eslint.config.js`). Make sure there are no lint errors before submitting (`pnpm lint`), and that your code is formatted (`pnpm format`).
 - Rust: Follow standard `rustfmt` style (`cargo fmt`).
 - Commit messages should be in English. The [Conventional Commits](https://www.conventionalcommits.org/) format is recommended.
 

@@ -1,14 +1,7 @@
 import os from "node:os";
 import { rm, stat, writeFile } from "node:fs/promises";
 
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  nativeImage,
-  ThumbarButton,
-  WebContents,
-} from "electron";
+import { app, BrowserWindow, dialog, nativeImage, ThumbarButton, WebContents } from "electron";
 
 import { registerCallHandler, registerCallbackHandler } from "../dispatcher";
 import { loadFromOrpheusUrl } from "../../platform/orpheus";
@@ -17,9 +10,15 @@ import packManager from "../../services/pack";
 import type { ProxyConfiguration, ProxyTypes } from "../../platform/request";
 import { client, getProxyAgent } from "../../platform/request";
 import { disableHardwareAccelerationFlag } from "../../platform/folders";
-import { LifecycleState } from "../../services/lifecycle";
+import { LifecycleState, startupTask } from "../../services/lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../../platform/dawn";
 import globalLogger from "../../platform/logger";
+import {
+  parseLocalFile,
+  parseMoveRun,
+  parseWebCommand,
+  raceArgument,
+} from "../../platform/arguments";
 import type { SettingsService } from "../../bootstrap/types";
 import type { LifecycleService } from "../../services/lifecycle";
 
@@ -27,7 +26,8 @@ type StartCommand =
   | { movesrc: string; movedest: string }
   | {
       webcmd: string;
-    };
+    }
+  | { play: string };
 
 type Features = "hdpi";
 type FeaturesSwitch = Partial<Record<Features, boolean>>;
@@ -43,9 +43,7 @@ type ThumbnailOptions = {
   tooltip?: string | undefined;
 };
 const currentThumbnailOptions: ThumbnailOptions = { btnExtends: [] };
-function createButtonFactory(
-  webContents: WebContents
-): (btn: Button) => Promise<ThumbarButton> {
+function createButtonFactory(webContents: WebContents): (btn: Button) => Promise<ThumbarButton> {
   return async (btn: Button) => {
     const icon = await loadFromOrpheusUrl(btn.url);
     const buf = pngFromIco(icon.content as unknown as Uint8Array);
@@ -77,9 +75,7 @@ export function register(deps: AppDeps): void {
     // Format: `[2026-08-09 10:35:57] 【persistentState】,"...","..."`
     // Strip the timestamp, extract the module name from 【】, drop a leading
     // comma after it (if present), and log the rest.
-    const match = raw.match(
-      /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/
-    );
+    const match = raw.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/);
     globalLogger.info(
       {
         name: "app",
@@ -89,59 +85,58 @@ export function register(deps: AppDeps): void {
     );
   });
 
-  registerCallHandler<["dawn", DawnEntry[]], void>(
-    "app.statisV2",
-    (event, type, data) => {
-      statisV2(type, data);
+  registerCallHandler<["dawn", DawnEntry[]], void>("app.statisV2", (event, type, data) => {
+    statisV2(type, data);
+  });
+
+  registerCallHandler<string[], void>("app.exit", (event, action, ...params) => {
+    let args = process.argv.slice(1); // Skip the first argument which is the executable path
+
+    const moverunIdx = args.indexOf("--moverun");
+    if (moverunIdx !== -1) {
+      // If --moverun is present, we need to drop it
+      args = args.slice(0, moverunIdx).concat(args.slice(moverunIdx + 3));
     }
-  );
 
-  registerCallHandler<string[], void>(
-    "app.exit",
-    (event, action, ...params) => {
-      let args = process.argv.slice(1); // Skip the first argument which is the executable path
-
-      const moverunIdx = args.indexOf("--moverun");
-      if (moverunIdx !== -1) {
-        // If --moverun is present, we need to drop it
-        args = args.slice(0, moverunIdx).concat(args.slice(moverunIdx + 3));
-      }
-
-      if (action === "restart") {
-        app.relaunch({ args });
-      } else if (action === "moverun") {
-        const src = params[0];
-        const dest = params[1];
-        app.relaunch({
-          args: args.concat(["--moverun", src, dest]),
-        });
-      }
-
-      app.quit();
+    if (action === "restart") {
+      app.relaunch({ args });
+    } else if (action === "moverun") {
+      const src = params[0];
+      const dest = params[1];
+      app.relaunch({
+        args: args.concat(["--moverun", src, dest]),
+      });
     }
-  );
 
-  registerCallHandler<[], [] | [StartCommand]>("app.getAppStartCommand", () => {
-    for (let i = 0; i < process.argv.length; i++) {
-      const v = process.argv[i];
-      if (v === "--moverun" && process.argv.length > i + 2) {
-        const src = process.argv[i + 1];
-        const dest = process.argv[i + 2];
-        return [
-          {
-            movesrc: src,
-            movedest: dest,
-          },
-        ];
-      } else if (v.startsWith("orpheus://")) {
-        return [
-          {
-            webcmd: v,
-          },
-        ];
+    app.quit();
+  });
+
+  registerCallHandler<[], [] | [StartCommand]>("app.getAppStartCommand", async () => {
+    if (startupTask) {
+      switch (startupTask.type) {
+        case "openFile":
+          return [{ play: startupTask.file }];
+        case "openUrl":
+          return [{ webcmd: startupTask.url }];
       }
     }
-    return [];
+    return (
+      (await raceArgument<[StartCommand]>(async (v, i, arr) => {
+        const moveRun = parseMoveRun(v, i, arr);
+        if (moveRun)
+          return [
+            {
+              movesrc: moveRun[0],
+              movedest: moveRun[1],
+            },
+          ];
+        const localFile = await parseLocalFile(v);
+        if (localFile) return [{ play: localFile }];
+        const webCmd = parseWebCommand(v);
+        if (webCmd) return [{ webcmd: webCmd }];
+        return null;
+      })) ?? []
+    );
   });
 
   registerCallHandler<[string, string], [string]>(
@@ -163,9 +158,7 @@ export function register(deps: AppDeps): void {
           return [""];
         case "setting":
           if (subItem === "hardware-acceleration") {
-            return [
-              (await fileExists(disableHardwareAccelerationFlag)) ? "0" : "1",
-            ];
+            return [(await fileExists(disableHardwareAccelerationFlag)) ? "0" : "1"];
           }
           break;
       }
@@ -202,79 +195,60 @@ export function register(deps: AppDeps): void {
     }
   );
 
-  registerCallHandler<[FeaturesSwitch], void>(
-    "app.featuresSwitch",
-    async (event, features) => {
-      for (const feature in features) {
-        const value = features[feature as Features];
-        if (feature === "hdpi") {
-          if (!value) {
-            // Disable HiDPI, it's there for Chromium 91, but Chromium now doesn't
-            // support disabling HiDPI
-            const wnd = BrowserWindow.fromWebContents(event.sender);
-            if (!wnd) return;
-            dialog.showMessageBox(wnd, {
-              title: "Open Orpheus",
-              message: "十分抱歉，但 Open Orpheus 不支持禁用高分辨率支持。",
-            });
-          }
+  registerCallHandler<[FeaturesSwitch], void>("app.featuresSwitch", async (event, features) => {
+    for (const feature in features) {
+      const value = features[feature as Features];
+      if (feature === "hdpi") {
+        if (!value) {
+          // Disable HiDPI, it's there for Chromium 91, but Chromium now doesn't
+          // support disabling HiDPI
+          const wnd = BrowserWindow.fromWebContents(event.sender);
+          if (!wnd) return;
+          void dialog.showMessageBox(wnd, {
+            title: "Open Orpheus",
+            message: "十分抱歉，但 Open Orpheus 不支持禁用高分辨率支持。",
+          });
         }
       }
     }
-  );
+  });
 
-  registerCallHandler<[ThumbnailOptions], void>(
-    "app.setThumbnail",
-    async (event, options) => {
-      if (os.platform() !== "win32") {
-        // Thumbnail buttons are only supported on Windows, ignore on other platforms
-        return;
-      }
-      const mainWindow = BrowserWindow.fromWebContents(event.sender);
-      if (!mainWindow) return;
-      {
-        const {
-          btnExtends,
-          btnLeft,
-          btnRight,
-          btnMiddle,
-          defaultCover,
-          tooltip,
-        } = options;
-        currentThumbnailOptions.btnExtends = btnExtends;
-        currentThumbnailOptions.btnLeft =
-          btnLeft || currentThumbnailOptions.btnLeft;
-        currentThumbnailOptions.btnRight =
-          btnRight || currentThumbnailOptions.btnRight;
-        currentThumbnailOptions.btnMiddle =
-          btnMiddle || currentThumbnailOptions.btnMiddle;
-        currentThumbnailOptions.defaultCover =
-          defaultCover || currentThumbnailOptions.defaultCover;
-        currentThumbnailOptions.tooltip =
-          tooltip || currentThumbnailOptions.tooltip;
-      }
-
-      const { btnExtends, btnLeft, btnRight, btnMiddle, tooltip } =
-        currentThumbnailOptions;
-
-      const btns = [];
-      if (btnLeft) {
-        btns.push(btnLeft);
-      }
-      if (btnMiddle) {
-        btns.push(btnMiddle);
-      }
-      if (btnRight) {
-        btns.push(btnRight);
-      }
-      btns.push(...btnExtends);
-      mainWindow.setThumbnailToolTip(tooltip || "");
-
-      mainWindow.setThumbarButtons(
-        await Promise.all(btns.map(createButtonFactory(mainWindow.webContents)))
-      );
+  registerCallHandler<[ThumbnailOptions], void>("app.setThumbnail", async (event, options) => {
+    if (os.platform() !== "win32") {
+      // Thumbnail buttons are only supported on Windows, ignore on other platforms
+      return;
     }
-  );
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!mainWindow) return;
+    {
+      const { btnExtends, btnLeft, btnRight, btnMiddle, defaultCover, tooltip } = options;
+      currentThumbnailOptions.btnExtends = btnExtends;
+      currentThumbnailOptions.btnLeft = btnLeft || currentThumbnailOptions.btnLeft;
+      currentThumbnailOptions.btnRight = btnRight || currentThumbnailOptions.btnRight;
+      currentThumbnailOptions.btnMiddle = btnMiddle || currentThumbnailOptions.btnMiddle;
+      currentThumbnailOptions.defaultCover = defaultCover || currentThumbnailOptions.defaultCover;
+      currentThumbnailOptions.tooltip = tooltip || currentThumbnailOptions.tooltip;
+    }
+
+    const { btnExtends, btnLeft, btnRight, btnMiddle, tooltip } = currentThumbnailOptions;
+
+    const btns = [];
+    if (btnLeft) {
+      btns.push(btnLeft);
+    }
+    if (btnMiddle) {
+      btns.push(btnMiddle);
+    }
+    if (btnRight) {
+      btns.push(btnRight);
+    }
+    btns.push(...btnExtends);
+    mainWindow.setThumbnailToolTip(tooltip || "");
+
+    mainWindow.setThumbarButtons(
+      await Promise.all(btns.map(createButtonFactory(mainWindow.webContents)))
+    );
+  });
 
   registerCallHandler<
     [
@@ -311,11 +285,7 @@ export function register(deps: AppDeps): void {
         await packManager.loadSkinPack(name, name2);
         return [true];
       } catch (e) {
-        LOGGER.error(
-          { packs: [name, name2] },
-          "Failed to load skin pack: %s",
-          e
-        );
+        LOGGER.error({ packs: [name, name2] }, "Failed to load skin pack: %s", e);
       }
       return [false];
     }
@@ -336,12 +306,12 @@ export function register(deps: AppDeps): void {
     deps.lifecycle.setLifecycleState(LifecycleState.Started);
   });
 
-  registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [
-    false,
-  ]);
+  registerCallHandler<[], [boolean]>("app.isRegisterDefaultClient", () => [false]);
 
-  registerCallHandler<[], void>("app.getDefaultMusicPlayPath", () => {
-    return;
+  registerCallHandler<[], [] | [string]>("app.getDefaultMusicPlayPath", async () => {
+    if (startupTask?.type === "openFile") return [startupTask.file];
+    const path = await raceArgument((arg) => parseLocalFile(arg));
+    return path ? [path] : [];
   });
 
   registerCallHandler<[string], void>("app.login", (event, uid) => {
@@ -408,12 +378,7 @@ export function register(deps: AppDeps): void {
         filters,
       });
       if (result.canceled) {
-        event.sender.send(
-          "channel.call",
-          "app.onSelectFileAndDir",
-          false,
-          taskId
-        );
+        event.sender.send("channel.call", "app.onSelectFileAndDir", false, taskId);
         return;
       }
       const items: { isDir: boolean; path: string }[] = [];
@@ -423,13 +388,7 @@ export function register(deps: AppDeps): void {
           items.push({ isDir: statResult.isDirectory(), path: filePath });
         })
       );
-      event.sender.send(
-        "channel.call",
-        "app.onSelectFileAndDir",
-        true,
-        taskId,
-        items
-      );
+      event.sender.send("channel.call", "app.onSelectFileAndDir", true, taskId, items);
     }
   );
 
@@ -541,13 +500,10 @@ export function register(deps: AppDeps): void {
       });
   });
 
-  registerCallHandler<
-    [number, ProxyTypes, string, string, string, string],
-    void
-  >(
+  registerCallHandler<[number, ProxyTypes, string, string, string, string], void>(
     "app.testProxy",
     (event, taskId, type, address, username, password, url) => {
-      (async () => {
+      void (async () => {
         const cfg: ProxyConfiguration = {
           Type: type,
         };
@@ -566,12 +522,7 @@ export function register(deps: AppDeps): void {
             ...(agent ? { agent } : {}),
             throwHttpErrors: false,
           });
-          event.sender.send(
-            "channel.call",
-            "app.ontestproxy",
-            taskId,
-            req.ok ? 0 : 7
-          );
+          event.sender.send("channel.call", "app.ontestproxy", taskId, req.ok ? 0 : 7);
         } catch {
           event.sender.send("channel.call", "app.ontestproxy", taskId, 7);
         }
@@ -588,84 +539,79 @@ export function register(deps: AppDeps): void {
     return [""];
   });
 
-  registerCallHandler<[string], [boolean]>(
-    "app.getAutoRunState",
-    (event, appName) => {
-      if (os.platform() === "linux") {
-        // Not supported on Linux
+  registerCallHandler<[string], [boolean]>("app.getAutoRunState", (event, appName) => {
+    if (os.platform() === "linux") {
+      // Not supported on Linux
+      return [false];
+    }
+    switch (appName) {
+      case "cloudmusic": {
+        const result = app.getLoginItemSettings({
+          args: AUTORUN_ARGS,
+        });
+        return [result.openAtLogin];
+      }
+      default:
+        LOGGER.warn({ appName }, "Unsupported app name for getting autorun");
         return [false];
-      }
-      switch (appName) {
-        case "cloudmusic": {
-          const result = app.getLoginItemSettings({
-            args: AUTORUN_ARGS,
-          });
-          return [result.openAtLogin];
-        }
-        default:
-          LOGGER.warn({ appName }, "Unsupported app name for getting autorun");
-          return [false];
-      }
     }
-  );
+  });
 
-  registerCallHandler<[string, "autorun"], [boolean]>(
-    "app.setAutoRun",
-    (event, appName) => {
-      switch (appName) {
-        case "cloudmusic": {
-          if (os.platform() === "linux") {
-            // Not supported on Linux，show a dialog to provide
-            // information on enabling main program's autorun
-            // here for Linux users
-            const wnd = BrowserWindow.fromWebContents(event.sender);
-            if (wnd)
-              dialog.showMessageBox(wnd, {
-                message:
-                  "暂不支持在 Linux 上设置自动启动。\n\n如有需要可根据系统自行设置并附加参数：" +
-                  AUTORUN_ARGS.join(" "),
-                title: "Open Orpheus",
-                type: "warning",
-              });
-            return [false];
-          }
-          app.setLoginItemSettings({
-            openAtLogin: true,
-            enabled: true,
-            args: AUTORUN_ARGS,
-          });
-          return [true];
-        }
-        default:
-          LOGGER.warn({ appName }, "Unsupported app name for setting autorun");
+  registerCallHandler<[string, "autorun"], [boolean]>("app.setAutoRun", (event, appName) => {
+    switch (appName) {
+      case "cloudmusic": {
+        // Setting autorun in dev is unsupported
+        if (!app.isPackaged) return [false];
+        if (os.platform() === "linux") {
+          // Not supported on Linux，show a dialog to provide
+          // information on enabling main program's autorun
+          // here for Linux users
+          const wnd = BrowserWindow.fromWebContents(event.sender);
+          if (wnd)
+            void dialog.showMessageBox(wnd, {
+              message:
+                "暂不支持在 Linux 上设置自动启动。\n\n如有需要可根据系统自行设置并附加参数：" +
+                AUTORUN_ARGS.join(" "),
+              title: "Open Orpheus",
+              type: "warning",
+            });
           return [false];
+        }
+        app.setLoginItemSettings({
+          openAtLogin: true,
+          enabled: true,
+          args: AUTORUN_ARGS,
+        });
+        return [true];
       }
-    }
-  );
-
-  registerCallHandler<[string], [boolean]>(
-    "app.cancelAutoRun",
-    (event, appName) => {
-      if (os.platform() === "linux") {
-        // Not supported on Linux
+      default:
+        LOGGER.warn({ appName }, "Unsupported app name for setting autorun");
         return [false];
-      }
-      switch (appName) {
-        case "cloudmusic": {
-          app.setLoginItemSettings({
-            openAtLogin: false,
-            enabled: false,
-            args: AUTORUN_ARGS,
-          });
-          return [true];
-        }
-        default:
-          LOGGER.warn(
-            { appName },
-            "Unsupported app name for cancelling autorun"
-          );
-          return [false];
-      }
     }
+  });
+
+  registerCallHandler<[string], [boolean]>("app.cancelAutoRun", (event, appName) => {
+    if (os.platform() === "linux") {
+      // Not supported on Linux
+      return [false];
+    }
+    switch (appName) {
+      case "cloudmusic": {
+        app.setLoginItemSettings({
+          openAtLogin: false,
+          enabled: false,
+          args: AUTORUN_ARGS,
+        });
+        return [true];
+      }
+      default:
+        LOGGER.warn({ appName }, "Unsupported app name for cancelling autorun");
+        return [false];
+    }
+  });
+
+  registerCallHandler<[{ enabled: boolean; height: number }], void>(
+    "app.setCefNativeTransparentMinibarBackdropEnabled",
+    () => {}
   );
 }

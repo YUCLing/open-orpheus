@@ -75,9 +75,7 @@ export interface LoggerPluginOptions {
  *   value and is rewritten as well.
  * - References shadowed by a local `LOGGER` declaration in any enclosing scope.
  */
-export default function LoggerPlugin(
-  options: LoggerPluginOptions = {}
-): Plugin {
+export default function LoggerPlugin(options: LoggerPluginOptions = {}): Plugin {
   const loggerPath = normalizePath(
     resolve(process.cwd(), options.logger ?? "src/main/platform/logger.ts")
   );
@@ -87,10 +85,7 @@ export default function LoggerPlugin(
     ? normalizePath(resolve(process.cwd(), options.base))
     : dirname(loggerPath);
   const callModulesDir = normalizePath(
-    resolve(
-      process.cwd(),
-      options.callModulesDir ?? join(dirname(loggerPath), "calls")
-    )
+    resolve(process.cwd(), options.callModulesDir ?? join(dirname(loggerPath), "calls"))
   );
 
   return {
@@ -128,9 +123,7 @@ export default function LoggerPlugin(
       const s = new MagicString(code);
       for (const ref of references) {
         const binding =
-          ref.call && callBindings.has(ref.call)
-            ? callBindings.get(ref.call)!
-            : fileBinding!;
+          ref.call && callBindings.has(ref.call) ? callBindings.get(ref.call)! : fileBinding!;
         s.overwrite(ref.start, ref.end, binding);
       }
 
@@ -213,10 +206,7 @@ function columnSuffix(index: number): string {
  * `cache.ts` -> "cache", `audio/OnlineStreamer.ts` -> "audio/OnlineStreamer".
  */
 function toChildName(id: string, baseDir: string): string {
-  const withoutExt = relative(baseDir, id).replace(
-    /\.(?:[cm]?[jt]sx?|d\.ts)$/,
-    ""
-  );
+  const withoutExt = relative(baseDir, id).replace(/\.(?:[cm]?[jt]sx?|d\.ts)$/, "");
   return withoutExt.replaceAll("\\", "/");
 }
 
@@ -241,8 +231,7 @@ interface CallHandler {
 /** True for inline handler functions (arrow functions / function expressions). */
 function isHandlerFunction(node: ts.Node): boolean {
   return (
-    node.kind === ts.SyntaxKind.ArrowFunction ||
-    node.kind === ts.SyntaxKind.FunctionExpression
+    node.kind === ts.SyntaxKind.ArrowFunction || node.kind === ts.SyntaxKind.FunctionExpression
   );
 }
 
@@ -304,10 +293,7 @@ function findEnclosingCall(
  * value reference to the global (as opposed to a binding, a property/member
  * name, a type position or a locally declared variable).
  */
-function findGlobalLoggerReferences(
-  fileName: string,
-  code: string
-): LoggerReference[] {
+function findGlobalLoggerReferences(fileName: string, code: string): LoggerReference[] {
   const scriptKind = /\.(?:[cm]?[jt]sx)$/.test(fileName)
     ? ts.ScriptKind.TSX
     : /\.(?:[cm]?[jt]s)$/.test(fileName)
@@ -344,16 +330,12 @@ function findGlobalLoggerReferences(
   // True when `id` is a binding/declaration site rather than a value reference
   // to the global (declaration names, property names, import/export specifiers,
   // member accesses, labels, type positions, ...).
-  const isBindingSite = (
-    id: ts.Identifier,
-    parent: ts.Node | undefined
-  ): boolean => {
+  const isBindingSite = (id: ts.Identifier, parent: ts.Node | undefined): boolean => {
     if (!parent) return false;
     if (ts.isVariableDeclaration(parent) && parent.name === id) return true;
     if (ts.isParameter(parent) && parent.name === id) return true;
     if (ts.isBindingElement(parent) && parent.name === id) return true;
-    if (ts.isCatchClause(parent) && parent.variableDeclaration?.name === id)
-      return true;
+    if (ts.isCatchClause(parent) && parent.variableDeclaration?.name === id) return true;
     if (
       (ts.isFunctionDeclaration(parent) ||
         ts.isFunctionExpression(parent) ||
@@ -375,12 +357,8 @@ function findGlobalLoggerReferences(
     if (ts.isLabeledStatement(parent) && parent.label === id) return true;
     if (ts.isPropertySignature(parent) && parent.name === id) return true;
     if (ts.isPropertyDeclaration(parent) && parent.name === id) return true;
-    if (ts.isMethodDeclaration(parent) || ts.isMethodSignature(parent))
-      return parent.name === id;
-    if (
-      ts.isPropertyAccessExpression(parent) ||
-      ts.isPropertyAccessChain(parent)
-    )
+    if (ts.isMethodDeclaration(parent) || ts.isMethodSignature(parent)) return parent.name === id;
+    if (ts.isPropertyAccessExpression(parent) || ts.isPropertyAccessChain(parent))
       return parent.name === id; // `x.LOGGER` is a member, not the global
     if (ts.isQualifiedName(parent)) return parent.right === id;
     if (ts.isTypeParameterDeclaration(parent)) return true;
@@ -397,15 +375,9 @@ function findGlobalLoggerReferences(
     ts.isForInStatement(node) ||
     ts.isForOfStatement(node) ||
     ts.isClassStaticBlockDeclaration(node) ||
-    (ts.isFunctionLike(node) &&
-      !ts.isFunctionTypeNode(node) &&
-      !ts.isConstructorTypeNode(node));
+    (ts.isFunctionLike(node) && !ts.isFunctionTypeNode(node) && !ts.isConstructorTypeNode(node));
 
-  const visit = (
-    node: ts.Node,
-    parent: ts.Node | undefined,
-    inType: boolean
-  ): void => {
+  const visit = (node: ts.Node, parent: ts.Node | undefined, inType: boolean): void => {
     const createsScope = isScopeNode(node);
     const typeContext = inType || ts.isTypeNode(node);
 
@@ -442,9 +414,7 @@ function findGlobalLoggerReferences(
     if (ts.isIdentifier(node) && node.text === GLOBAL_NAME) {
       const inTypeQuery = parent?.kind === ts.SyntaxKind.TypeQuery;
       const isGlobalReference =
-        !isBindingSite(node, parent) &&
-        (!typeContext || inTypeQuery) &&
-        !isShadowed();
+        !isBindingSite(node, parent) && (!typeContext || inTypeQuery) && !isShadowed();
       if (isGlobalReference) {
         const start = node.getStart(sourceFile);
         const end = node.getEnd();

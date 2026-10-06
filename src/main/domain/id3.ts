@@ -60,9 +60,7 @@ export function commentToID3Json(comment: string | null): string | null {
  * @param comment
  * @returns
  */
-export function commentToID3Metadata(
-  comment: string | null
-): ID3MusicMetadata | null {
+export function commentToID3Metadata(comment: string | null): ID3MusicMetadata | null {
   const json = commentToID3Json(comment);
   if (!json) return null;
   try {

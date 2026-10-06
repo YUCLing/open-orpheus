@@ -29,18 +29,13 @@ interface ModuleInfo {
   os?: string[] | undefined;
 }
 
-async function readModuleInfos(
-  modulesDir: string,
-  moduleNames: string[]
-): Promise<ModuleInfo[]> {
+async function readModuleInfos(modulesDir: string, moduleNames: string[]): Promise<ModuleInfo[]> {
   return (
     await Promise.all(
       moduleNames.map(async (dirName) => {
         try {
           const modulePath = resolve(modulesDir, dirName);
-          const pkg = JSON.parse(
-            await readFile(resolve(modulePath, "package.json"), "utf-8")
-          );
+          const pkg = JSON.parse(await readFile(resolve(modulePath, "package.json"), "utf-8"));
           const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
           const workspaceDeps = Object.entries(allDeps)
             .filter(([, ver]) => (ver as string).startsWith("workspace:"))
@@ -54,8 +49,7 @@ async function readModuleInfos(
             os: pkg.os as string[] | undefined,
           };
         } catch (e) {
-          if (e instanceof Error && "code" in e && e.code === "ENOENT")
-            return null;
+          if (e instanceof Error && "code" in e && e.code === "ENOENT") return null;
           throw e;
         }
       })
@@ -74,10 +68,7 @@ async function readModuleInfos(
  *
  * Returns undefined when neither the variant nor the bare script exists.
  */
-function resolvePlatformScript(
-  scripts: Record<string, string>,
-  base: string
-): string | undefined {
+function resolvePlatformScript(scripts: Record<string, string>, base: string): string | undefined {
   return [`${base}:${process.platform}`, base].find((name) => scripts[name]);
 }
 
@@ -87,12 +78,9 @@ function computeLayers(modules: ModuleInfo[]): ModuleInfo[][] {
   const visiting = new Set<string>();
 
   function getLayer(mod: ModuleInfo): number {
-    if (layerCache.has(mod.packageName))
-      return layerCache.get(mod.packageName)!;
+    if (layerCache.has(mod.packageName)) return layerCache.get(mod.packageName)!;
     if (visiting.has(mod.packageName)) {
-      throw new Error(
-        `Circular dependency detected involving ${mod.packageName}`
-      );
+      throw new Error(`Circular dependency detected involving ${mod.packageName}`);
     }
     visiting.add(mod.packageName);
     let maxDepLayer = -1;
@@ -124,10 +112,7 @@ function computeLayers(modules: ModuleInfo[]): ModuleInfo[][] {
  * - entries prefixed with `!` are negations (always incompatible if matched)
  * - positive entries restrict compatibility to those platforms
  */
-function isPlatformCompatible(
-  os: string[] | undefined,
-  platform: string
-): boolean {
+function isPlatformCompatible(os: string[] | undefined, platform: string): boolean {
   if (!os || os.length === 0) return true;
   const negated = new Set(
     os.filter((entry) => entry.startsWith("!")).map((entry) => entry.slice(1))
@@ -164,9 +149,7 @@ async function buildModules() {
           return;
         }
         const scriptToRun = script ?? "build";
-        console.log(
-          `Building module: ${mod.dirName} (${mod.packageName}) [${scriptToRun}]`
-        );
+        console.log(`Building module: ${mod.dirName} (${mod.packageName}) [${scriptToRun}]`);
         const result = await runBuildCommand(mod.path, scriptToRun);
         if (result.status !== 0) {
           console.error(`Failed to build module: ${mod.dirName}`);
@@ -177,4 +160,4 @@ async function buildModules() {
   }
 }
 
-buildModules();
+void buildModules();

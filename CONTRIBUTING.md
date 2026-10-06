@@ -63,9 +63,9 @@ open-orpheus/
 │   ├── window/             # 跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域、光标捕获）
 │   ├── audio-effect/       # 音效处理（WebAssembly，供 AudioWorklet 使用）
 │   ├── av3a/               # AV3A（Audio Vivid）解码器
-│   ├── dbus/               # Linux D-Bus 集成（MPRIS 媒体会话）
+│   ├── dbus/               # Linux D-Bus 集成（通用客户端、MPRIS 媒体会话）
 │   ├── nowplaying/         # macOS 媒体会话（MPNowPlayingInfoCenter）
-│   ├── smtc/               # Windows 媒体会话（SMTC）
+│   ├── sys-win32/          # Windows 媒体会话（SMTC）与定时关机
 │   └── lifecycle/          # 退出回调等生命周期工具
 ├── build-plugins/          # Electron Forge 插件与 Maker（deb / rpm / flatpak、日志等）
 ├── scripts/                # 构建脚本（模块编译、Flatpak 等）
@@ -144,7 +144,7 @@ flowchart TB
   3. **Renderer 侧**（`gui/src/lib/bridge.ts` → `getBridge<T>(name)`）—— 用 Proxy 将属性访问自动映射为 channel 路径：`api.cache.getStats()` → `_call("cache.getStats")`，`api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`，提供完整的类型推导和 IDE 自动补全。
   4. **Main 侧**（`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`）—— 遍历 handler 对象树，自动为每个叶子函数注册 `ipc.handle()`；`events` 子树被排除（纯 push-from-main）。
 - **GUI 界面**（`gui/`）是一个 Svelte 单页应用，负责设置页、桌面歌词、右键菜单、迷你播放器等所有辅助界面，通过 `gui://` 协议加载。菜单以透明无边框 BrowserWindow 形式呈现（Wayland 下使用全屏覆盖层方案）。
-- **原生模块**（`modules/`）通过 napi-rs 为 Electron 主进程提供底层能力：SQLite 数据库（含中文拼音排序）、跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域设置、窗口拖拽、光标捕获）、系统字体枚举、AV3A 音频解码，以及各平台媒体会话集成（`dbus/` MPRIS、`nowplaying/`、`smtc/`）等；`audio-effect/` 则编译为 WebAssembly，供 `src/worklets/` 中的 AudioWorklet 使用。
+- **原生模块**（`modules/`）通过 napi-rs 为 Electron 主进程提供底层能力：SQLite 数据库（含中文拼音排序）、跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域设置、窗口拖拽、光标捕获）、系统字体枚举、AV3A 音频解码，以及各平台系统集成（`dbus/` 通用 D-Bus 客户端 + MPRIS、`nowplaying/`、`sys-win32/` Windows 媒体会话与定时关机）等；`audio-effect/` 则编译为 WebAssembly，供 `src/worklets/` 中的 AudioWorklet 使用。
 
 ### 关键概念
 
@@ -193,7 +193,7 @@ Issue 是反馈 Bug、提出功能建议或讨论项目方向的主要渠道。�
 
 ### 代码风格
 
-- TypeScript / JavaScript：项目使用 ESLint，提交前请确保没有 lint 错误（`pnpm lint`），并且确保代码已格式化（`pnpm format`）。
+- TypeScript / JavaScript：主体代码由 [Oxlint](https://oxc.rs) 检查、[Oxfmt](https://oxc.rs) 格式化（配置见 `.oxlintrc.json`、`.oxfmtrc.json`），`gui/` 下的 SvelteKit 代码由 ESLint 检查（配置见 `gui/eslint.config.js`）。提交前请确保没有 lint 错误（`pnpm lint`），并且确保代码已格式化（`pnpm format`）。
 - Rust：遵循标准 `rustfmt` 风格（`cargo fmt`）。
 - 提交信息格式建议参考 [Conventional Commits](https://www.conventionalcommits.org/)。
 

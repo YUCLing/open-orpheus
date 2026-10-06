@@ -44,8 +44,31 @@ export class MediaEngine {
 
   constructor(private readonly deps: MediaEngineDeps) {}
 
+  /**
+   * Deletions `stop()` started but did not wait for.
+   *
+   * A song switch must not block on deleting the previous file, so those
+   * deletions run unattended — but a shutdown has to wait for them, or a file
+   * whose deletion was still in flight outlives the process and is only
+   * reclaimed by the next launch's cleanup.
+   */
+  private pendingDestructions = new Set<Promise<void>>();
+
   get active(): boolean {
     return this.state !== null;
+  }
+
+  /** Delete a retired streamer's file without blocking the caller. */
+  private destroyInBackground(streamer: OnlineStreamer): void {
+    const done = streamer.destroy().catch((e) => {
+      LOGGER.error({ err: toError(e) }, `Failed to destroy previous OnlineStreamer`);
+    });
+    this.pendingDestructions.add(done);
+    // Drop the reference once it settles, so the set tracks only what is still
+    // in flight.
+    void done.finally(() => {
+      this.pendingDestructions.delete(done);
+    });
   }
 
   private sendProgress(prog: number) {
@@ -113,12 +136,36 @@ export class MediaEngine {
     const current = this.state;
     this.state = null;
     if (current?.type === MediaType.URL) {
-      current.streamer.destroy().catch((e) => {
-        LOGGER.error(
-          { err: toError(e) },
-          `Failed to destroy previous OnlineStreamer`
-        );
-      });
+      this.destroyInBackground(current.streamer);
+    }
+  }
+
+  /**
+   * Retire the current serving state and wait for every streamer's file to be
+   * deleted, including deletions {@link stop} left running.
+   *
+   * Distinct from {@link stop}, which deliberately does not wait: a song switch
+   * must not block on deleting the previous file, but a shutdown has nothing
+   * after it and wants the temp file gone rather than left for the next launch.
+   */
+  async dispose(): Promise<void> {
+    const current = this.state;
+    this.state = null;
+
+    const deletions = [...this.pendingDestructions];
+    if (current?.type === MediaType.URL) {
+      deletions.push(current.streamer.destroy());
+    }
+
+    // Every deletion has to settle, and one failing must not skip the rest or
+    // stop disposal — but a failure must not be swallowed either. The
+    // deletions `stop()` left running already log themselves; inspecting the
+    // results covers the current stream, whose `destroy()` is awaited here.
+    const results = await Promise.allSettled(deletions);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        LOGGER.error({ err: toError(result.reason) }, `Failed to destroy OnlineStreamer`);
+      }
     }
   }
 

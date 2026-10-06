@@ -27,11 +27,7 @@ export default class StorageManager {
   async write(position: number, chunk: Uint8Array) {
     if (chunk.byteLength === 0) return;
 
-    const buffer = Buffer.from(
-      chunk.buffer,
-      chunk.byteOffset,
-      chunk.byteLength
-    );
+    const buffer = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
     const writeTask = this.writeQueue.then(async () => {
       const fileHandle = await this.getFileHandle();
       let written = 0;
@@ -69,12 +65,7 @@ export default class StorageManager {
     let read = 0;
 
     while (read < length) {
-      const { bytesRead } = await fileHandle.read(
-        buffer,
-        read,
-        length - read,
-        start + read
-      );
+      const { bytesRead } = await fileHandle.read(buffer, read, length - read, start + read);
 
       if (bytesRead === 0) break;
       read += bytesRead;
@@ -105,10 +96,7 @@ export default class StorageManager {
     await this.writeQueue.catch(() => {});
 
     const fileHandle =
-      this.fileHandle ??
-      (this.openingPromise
-        ? await this.openingPromise.catch(() => null)
-        : null);
+      this.fileHandle ?? (this.openingPromise ? await this.openingPromise.catch(() => null) : null);
 
     this.fileHandle = null;
     this.openingPromise = null;

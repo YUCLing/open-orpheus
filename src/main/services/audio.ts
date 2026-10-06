@@ -7,7 +7,7 @@ import mime from "mime";
 import type { AudioPlayInfo } from "../../preload/Player";
 import { sanitizeRelativePath } from "../platform/util";
 import { data as dataDir, pack as packageDir } from "../platform/folders";
-import { events as lifecycleEvents } from "./lifecycle";
+import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
 import { toError } from "@shared/util";
 import { decodeNcae } from "../domain/ncae";
 import { registerIpcHandlers } from "../../bridge/register";
@@ -24,9 +24,7 @@ export interface AudioDeps {
 
 export async function readEffect(pathInfo: { path: string; pathtype: number }) {
   if (pathInfo.pathtype !== 2) {
-    throw new Error(
-      "Unsupported audio.readEffect pathtype: " + pathInfo.pathtype
-    );
+    throw new Error("Unsupported audio.readEffect pathtype: " + pathInfo.pathtype);
   }
   const path = sanitizeRelativePath(dataDir, pathInfo.path);
   if (path === false) {
@@ -61,14 +59,24 @@ export function createAudio(deps: AudioDeps) {
   const mediaEngine = new MediaEngine({ windows: deps.windows });
   const av3aEngine = new Av3aEngine({ windows: deps.windows });
 
+  /**
+   * Stop both engines and wait for the media engine's streamer to delete its
+   * temp file. Without this the file is only reclaimed by the next launch's
+   * cleanup.
+   */
+  registerShutdownTask({
+    name: "audio-engines",
+    run: async () => {
+      await av3aEngine.stop();
+      await mediaEngine.dispose();
+    },
+  });
+
   lifecycleEvents.on("mainwindowcreated", (e) => {
     const mainWindow = e.data;
-    mainWindow.webContents.ipc.handle(
-      "audio.setDevice",
-      async (e, deviceId) => {
-        return deps.settings.kv.set("audio.currentDevice", deviceId);
-      }
-    );
+    mainWindow.webContents.ipc.handle("audio.setDevice", async (e, deviceId) => {
+      return deps.settings.kv.set("audio.currentDevice", deviceId);
+    });
 
     mainWindow.webContents.ipc.handle("audio.getDevice", async () => {
       return deps.settings.kv.get("audio.currentDevice");
@@ -86,38 +94,25 @@ export function createAudio(deps: AudioDeps) {
         try {
           return await readEffect(pathInfo);
         } catch (err) {
-          LOGGER.error(
-            { err: toError(err), pathInfo },
-            `Failed to read audio effect`
-          );
+          LOGGER.error({ err: toError(err), pathInfo }, `Failed to read audio effect`);
           return null;
         }
       }
     );
 
-    mainWindow.webContents.ipc.handle(
-      "audio.isAv3aFile",
-      async (_event, filePath: unknown) => {
-        if (typeof filePath !== "string" || filePath.length === 0) return false;
-        try {
-          return await isAv3aFile(filePath);
-        } catch (err) {
-          LOGGER.debug(
-            { err: toError(err), path: filePath },
-            `Failed to sniff file for AV3A`
-          );
-          return false;
-        }
+    mainWindow.webContents.ipc.handle("audio.isAv3aFile", async (_event, filePath: unknown) => {
+      if (typeof filePath !== "string" || filePath.length === 0) return false;
+      try {
+        return await isAv3aFile(filePath);
+      } catch (err) {
+        LOGGER.debug({ err: toError(err), path: filePath }, `Failed to sniff file for AV3A`);
+        return false;
       }
-    );
+    });
 
     mainWindow.webContents.ipc.handle(
       "audio.updatePlayInfo",
-      async (
-        _event,
-        playInfo: AudioPlayInfo | null,
-        engine: "media" | "av3a"
-      ) => {
+      async (_event, playInfo: AudioPlayInfo | null, engine: "media" | "av3a") => {
         // A new load always retires the previous engine first. Stopping either is
         // cheap when idle. The renderer awaits this handler before starting the
         // new engine, so this retirement always lands before it.
@@ -160,24 +155,15 @@ export function createAudio(deps: AudioDeps) {
             );
             try {
               const isWasm = workletPath.endsWith(".wasm");
-              const content = await readFile(
-                workletPath,
-                isWasm ? null : "utf-8"
-              );
+              const content = await readFile(workletPath, isWasm ? null : "utf-8");
               return new Response(content, {
                 status: 200,
                 headers: {
-                  "Content-Type": isWasm
-                    ? "application/wasm"
-                    : "application/javascript",
+                  "Content-Type": isWasm ? "application/wasm" : "application/javascript",
                 },
               });
             } catch (e) {
-              LOGGER.debug(
-                { scheme: "audio", path: workletPath },
-                "Failed to get worklet: %s",
-                e
-              );
+              LOGGER.debug({ scheme: "audio", path: workletPath }, "Failed to get worklet: %s", e);
               return new Response("Failed to load worklet", { status: 500 });
             }
           }
@@ -193,8 +179,7 @@ export function createAudio(deps: AudioDeps) {
               join(packageDir, "resource"),
               requestUrl.pathname
             );
-            if (fullPath === false)
-              return new Response("Not Found", { status: 404 });
+            if (fullPath === false) return new Response("Not Found", { status: 404 });
 
             try {
               const content = await readFile(fullPath);

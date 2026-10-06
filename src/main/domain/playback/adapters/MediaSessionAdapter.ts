@@ -42,10 +42,7 @@ export interface MediaSessionAdapter extends Emittery<PlayerCommandEvents> {
 }
 
 /** Platform without media-session support. */
-export class NoopAdapter
-  extends Emittery<PlayerCommandEvents>
-  implements MediaSessionAdapter
-{
+export class NoopAdapter extends Emittery<PlayerCommandEvents> implements MediaSessionAdapter {
   onTrack(): void {}
   onArtwork(): void {}
   onStatus(): void {}

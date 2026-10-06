@@ -15,8 +15,10 @@ pub(crate) fn on_touch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
         let surf_id = msg.u32_arg(16);
         if let (Some(serial), Some(surf_id)) = (serial, surf_id) {
             let seat_id = conn.touch_seat.get(&msg.object_id).copied();
-            if let Some(seat_id) = seat_id {
-                fx.button = Some((seat_id, serial, surf_id));
+            if let (Some(seat_id), Some(x), Some(y)) =
+                (seat_id, msg.fixed_arg(24), msg.fixed_arg(28))
+            {
+                fx.button = Some((seat_id, serial, surf_id, x, y));
             }
         }
     }

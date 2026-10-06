@@ -59,10 +59,7 @@ export async function ensureWebPack(deps: WebPackLoadDeps): Promise<void> {
       cancelled = true;
       if (err !== "CANCEL") {
         failed = true;
-        deps.logger.error(
-          { name: "loader", err: toError(err) },
-          "Failed to download web pack."
-        );
+        deps.logger.error({ name: "loader", err: toError(err) }, "Failed to download web pack.");
       }
     }
 
@@ -76,8 +73,7 @@ export async function ensureWebPack(deps: WebPackLoadDeps): Promise<void> {
       // is already on disk, keep launching with it; otherwise there is nothing
       // to run with, so exit instead of looping forever.
       const noUsablePack =
-        reason === PackageDownloadReason.NotFound ||
-        reason === PackageDownloadReason.LoadFailed;
+        reason === PackageDownloadReason.NotFound || reason === PackageDownloadReason.LoadFailed;
       if (failed) deps.showDownloadFailure(noUsablePack);
       if (noUsablePack) {
         deps.exit(1);
@@ -113,8 +109,7 @@ async function downloadReasonFor(
       // Offer the update when the installed pack doesn't match the commit
       // versions.json expects, but only once per commit — once the user has
       // been offered it (or cancelled), don't nag again.
-      return probe.commit !== deps.expectedCommit &&
-        offeredCommit !== deps.expectedCommit
+      return probe.commit !== deps.expectedCommit && offeredCommit !== deps.expectedCommit
         ? PackageDownloadReason.UpdateAvailable
         : null;
     case "missing":

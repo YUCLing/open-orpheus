@@ -71,9 +71,7 @@ describe("createSettingsService", () => {
   it("applies the default value of a known key", async () => {
     initialize();
 
-    await expect(settings.kv.get("tray.clickBehavior")).resolves.toBe(
-      "always-show-menu"
-    );
+    await expect(settings.kv.get("tray.clickBehavior")).resolves.toBe("always-show-menu");
     await expect(settings.kv.get("desktopLyrics.opacity")).resolves.toBe(1);
   });
 
@@ -81,9 +79,7 @@ describe("createSettingsService", () => {
     hoisted.store.get.mockResolvedValueOnce("minimize");
     initialize();
 
-    await expect(settings.kv.get("tray.clickBehavior")).resolves.toBe(
-      "minimize"
-    );
+    await expect(settings.kv.get("tray.clickBehavior")).resolves.toBe("minimize");
   });
 
   it("leaves keys without default as they are", async () => {
@@ -127,9 +123,7 @@ describe("createSettingsService", () => {
     hoisted.store.hooks.get("before:set")?.({ key: "proxy", value: "x" });
     await flush();
 
-    expect(seen).toEqual([
-      { event: "change", data: { key: "proxy", value: "x" } },
-    ]);
+    expect(seen).toEqual([{ event: "change", data: { key: "proxy", value: "x" } }]);
   });
 
   it("emits one delete event per key", async () => {
@@ -140,9 +134,7 @@ describe("createSettingsService", () => {
     hoisted.store.hooks.get("after:delete")?.({ key: "c" });
     await flush();
 
-    expect(
-      seen.map(({ event, data }) => [event, data["key"] as string])
-    ).toEqual([
+    expect(seen.map(({ event, data }) => [event, data["key"] as string])).toEqual([
       ["delete", "a"],
       ["delete", "b"],
       ["delete", "c"],

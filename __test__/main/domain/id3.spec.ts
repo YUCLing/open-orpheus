@@ -37,9 +37,7 @@ describe("ID3JsonToComment", () => {
     const comment = ID3JsonToComment('{"a":1}');
     expect(comment.startsWith("163 key(Don't modify):")).toBe(true);
     // The payload is single base64 (no double encoding).
-    expect(comment.slice("163 key(Don't modify):".length)).toMatch(
-      /^[A-Za-z0-9+/]+={0,2}$/
-    );
+    expect(comment.slice("163 key(Don't modify):".length)).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
   });
 
   it("encrypts, so the raw JSON is not visible", () => {

@@ -1,12 +1,4 @@
-import {
-  access,
-  mkdir,
-  readdir,
-  readFile,
-  writeFile,
-  rm,
-  statfs,
-} from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile, rm, statfs } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import type { MainWindowAccessor } from "../../bootstrap/types";
@@ -113,15 +105,9 @@ export default class PlayCacheManager {
   async getInfo(): Promise<PlayCacheInfo> {
     await this.ready();
 
-    const userSettingSize = this.config
-      ? Number(this.config.userSettingSize)
-      : 10;
-    const settingLowLimit = this.config
-      ? Number(this.config.settingLowLimit)
-      : 10;
-    const settingUpLimit = this.config
-      ? Number(this.config.settingUpLimit)
-      : 50;
+    const userSettingSize = this.config ? Number(this.config.userSettingSize) : 10;
+    const settingLowLimit = this.config ? Number(this.config.settingLowLimit) : 10;
+    const settingUpLimit = this.config ? Number(this.config.settingUpLimit) : 50;
     const autoCacheSize = this.config ? Number(this.config.autoCacheSize) : 1;
 
     const currentCachedSize = await this.getCachedSizeGB();
@@ -138,9 +124,7 @@ export default class PlayCacheManager {
       currentCachedSize,
       diskFreeSize,
       groupName: this.config?.groupName ?? "t1",
-      manuSetting:
-        this.config?.manuSetting === true ||
-        this.config?.manuSetting === "true",
+      manuSetting: this.config?.manuSetting === true || this.config?.manuSetting === "true",
       settingLowLimit,
       settingUpLimit,
       userSettingSize,
@@ -293,17 +277,12 @@ export default class PlayCacheManager {
     await writeFile(metaPath, JSON.stringify(meta));
   }
 
-  private notifyPlayCacheUpdate(
-    meta: CacheTrackMeta,
-    playCacheUpdateType: number
-  ): void {
+  private notifyPlayCacheUpdate(meta: CacheTrackMeta, playCacheUpdateType: number): void {
     try {
-      this.windows
-        .current()
-        ?.webContents.send("channel.call", "storage.onPlayCacheUpdate", {
-          ...meta,
-          playCacheUpdateType,
-        });
+      this.windows.current()?.webContents.send("channel.call", "storage.onPlayCacheUpdate", {
+        ...meta,
+        playCacheUpdateType,
+      });
     } catch {
       // Window might be destroyed
     }

@@ -50,11 +50,7 @@ export function encodeAnonymousId(anonymousId: string): string {
  * Pipeline:
  *   plaintext → PKCS#7 pad → AES-128-ECB → Base64 #1 → Base64 #2 (optional)
  */
-export function enData(
-  plaintext: string,
-  key = DATA_AES_KEY,
-  doubleBase64 = true
-) {
+export function enData(plaintext: string, key = DATA_AES_KEY, doubleBase64 = true) {
   if (!Buffer.isBuffer(key) || key.length !== 0x10) {
     LOGGER.error({ algo: "enData" }, "Invalid input key: %s", key);
     return null;
@@ -62,10 +58,7 @@ export function enData(
   // No IV in ECB mode
   const cipher = createCipheriv("aes-128-ecb", key, null);
   cipher.setAutoPadding(true);
-  const encrypted = Buffer.concat([
-    cipher.update(Buffer.from(plaintext, "utf8")),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(Buffer.from(plaintext, "utf8")), cipher.final()]);
 
   // Base64 #1
   const base64Once = encrypted.toString("base64");
@@ -94,29 +87,20 @@ export function deData(
 
   // Reverse Base64 #2
   let ciphertext: Buffer =
-    typeof bufOr2Base64 === "string"
-      ? Buffer.from(bufOr2Base64, "base64")
-      : bufOr2Base64;
+    typeof bufOr2Base64 === "string" ? Buffer.from(bufOr2Base64, "base64") : bufOr2Base64;
 
   // Reverse Base64 #1
-  if (doubleBase64)
-    ciphertext = Buffer.from(ciphertext.toString("utf8"), "base64");
+  if (doubleBase64) ciphertext = Buffer.from(ciphertext.toString("utf8"), "base64");
 
   if (ciphertext.length === 0 || ciphertext.length % 16 !== 0) {
-    LOGGER.error(
-      { algo: "deData", ciphertext },
-      "Ciphertext length is not a multiple of 16"
-    );
+    LOGGER.error({ algo: "deData", ciphertext }, "Ciphertext length is not a multiple of 16");
     return null;
   }
 
   // Reverse AES-128-ECB encryption
   const decipher = createDecipheriv("aes-128-ecb", key, null);
   decipher.setAutoPadding(true);
-  const decrypted = Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final(),
-  ]);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 
   return decrypted;
 }
@@ -147,10 +131,7 @@ export function serialData(apiPath: string, body: string | object): string {
   // No IV in ECB mode
   const cipher = createCipheriv("aes-128-ecb", EAPI_KEY, null);
   cipher.setAutoPadding(true);
-  const encrypted = Buffer.concat([
-    cipher.update(Buffer.from(plaintext, "utf8")),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(Buffer.from(plaintext, "utf8")), cipher.final()]);
 
   // Step 5 — uppercase HEX
   return encrypted.toString("hex").toUpperCase();
@@ -164,9 +145,7 @@ export function deserialData(hexParams: string | ArrayBuffer): string {
   decipher.setAutoPadding(true);
   const plaintext = Buffer.concat([
     decipher.update(
-      typeof hexParams === "string"
-        ? Buffer.from(hexParams, "hex")
-        : Buffer.from(hexParams)
+      typeof hexParams === "string" ? Buffer.from(hexParams, "hex") : Buffer.from(hexParams)
     ),
     decipher.final(),
   ]).toString("utf8");
@@ -179,21 +158,13 @@ export function deserialData(hexParams: string | ArrayBuffer): string {
 // #region Generic Crypto Algorithms
 
 // #region ChaCha20
-const CHACHA_CONSTANT = new Uint32Array([
-  0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
-]);
+const CHACHA_CONSTANT = new Uint32Array([0x61707865, 0x3320646e, 0x79622d32, 0x6b206574]);
 
 function rotl(v: number, b: number): number {
   return ((v << b) | (v >>> (32 - b))) >>> 0;
 }
 
-function quarterRound(
-  s: Uint32Array,
-  a: number,
-  b: number,
-  c: number,
-  d: number
-): void {
+function quarterRound(s: Uint32Array, a: number, b: number, c: number, d: number): void {
   s[a] = (s[a] + s[b]) >>> 0;
   s[d] = rotl(s[d] ^ s[a], 16);
   s[c] = (s[c] + s[d]) >>> 0;
@@ -204,11 +175,7 @@ function quarterRound(
   s[b] = rotl(s[b] ^ s[c], 7);
 }
 
-function chacha20Block(
-  key: Uint32Array,
-  counter: number,
-  nonce: Uint32Array
-): Uint8Array {
+function chacha20Block(key: Uint32Array, counter: number, nonce: Uint32Array): Uint8Array {
   const state = new Uint32Array(16);
   state.set(CHACHA_CONSTANT, 0); // words 0-3
   state.set(key, 4); // words 4-11
@@ -242,9 +209,7 @@ export function chacha20Encrypt(
   initialCounter: number,
   plaintext: Buffer
 ): Buffer {
-  const keyWords = new Uint32Array(
-    key.buffer.slice(key.byteOffset, key.byteOffset + 32)
-  );
+  const keyWords = new Uint32Array(key.buffer.slice(key.byteOffset, key.byteOffset + 32));
   const nonceWords = new Uint32Array(
     nonce12.buffer.slice(nonce12.byteOffset, nonce12.byteOffset + 12)
   );
@@ -290,11 +255,7 @@ function bigIntToBuf(value: bigint, byteLen: number): Buffer {
   return Buffer.from(hex, "hex");
 }
 
-export function rawRsaEncrypt(
-  plaintext: Buffer,
-  exponent: bigint,
-  modulus: bigint
-): Buffer {
+export function rawRsaEncrypt(plaintext: Buffer, exponent: bigint, modulus: bigint): Buffer {
   const m = bufToBigInt(plaintext);
   // Caller guarantees m < modulus
   const c = modPow(m, exponent, modulus);

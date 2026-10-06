@@ -24,7 +24,7 @@ export default defineConfig({
         "@open-orpheus/window",
         "@open-orpheus/ui",
         "@open-orpheus/dbus",
-        "@open-orpheus/smtc",
+        "@open-orpheus/system-win32",
         "@open-orpheus/nowplaying",
       ],
     },

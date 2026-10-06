@@ -4,7 +4,9 @@
   import * as settings from "$lib/settings";
 
   type TrayClickBehavior =
-    "depends-on-main-window" | "always-show-menu" | "always-show-main-window";
+    | "depends-on-main-window"
+    | "always-show-menu"
+    | "always-show-main-window";
 
   let clickBehaviorPromise = $state(settings.get("tray.clickBehavior"));
 </script>
@@ -31,10 +33,7 @@
             当主窗口打开时，点击托盘图标会显示菜单；当主窗口关闭时，点击托盘图标会打开主窗口。
           </Field.Description>
         </Field.Content>
-        <RadioGroup.Item
-          id="depends-on-main-window"
-          value="depends-on-main-window"
-        />
+        <RadioGroup.Item id="depends-on-main-window" value="depends-on-main-window" />
       </Field.Field>
     </Field.Label>
     <Field.Label for="always-show-menu">
@@ -52,14 +51,9 @@
       <Field.Field orientation="horizontal">
         <Field.Content>
           <Field.Title>总是打开主窗口</Field.Title>
-          <Field.Description>
-            无论主窗口状态如何，点击托盘图标都会打开主窗口。
-          </Field.Description>
+          <Field.Description>无论主窗口状态如何，点击托盘图标都会打开主窗口。</Field.Description>
         </Field.Content>
-        <RadioGroup.Item
-          id="always-show-main-window"
-          value="always-show-main-window"
-        />
+        <RadioGroup.Item id="always-show-main-window" value="always-show-main-window" />
       </Field.Field>
     </Field.Label>
   </RadioGroup.Root>

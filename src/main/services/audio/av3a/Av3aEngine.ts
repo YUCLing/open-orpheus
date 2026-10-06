@@ -53,17 +53,11 @@ export class Av3aEngine {
     if (!current) return;
     this.state = null;
     await current.process.stop().catch((error: unknown) => {
-      LOGGER.error(
-        { err: toError(error) },
-        `Failed to stop av3a decode process`
-      );
+      LOGGER.error({ err: toError(error) }, `Failed to stop av3a decode process`);
     });
     if (current.streamer) {
       await current.streamer.destroy().catch((error: unknown) => {
-        LOGGER.error(
-          { err: toError(error) },
-          `Failed to destroy av3a OnlineStreamer`
-        );
+        LOGGER.error({ err: toError(error) }, `Failed to destroy av3a OnlineStreamer`);
       });
     }
   }
@@ -111,10 +105,7 @@ export class Av3aEngine {
       const localPath = normalizePath(playInfo.path);
       if (!(await isAv3aFile(localPath))) {
         if (!isStale()) {
-          this.sendEvent(
-            "error",
-            "Selected file does not contain an AV3A track"
-          );
+          this.sendEvent("error", "Selected file does not contain an AV3A track");
         }
         return;
       }
@@ -142,10 +133,7 @@ export class Av3aEngine {
             fileSize: buf.length,
           });
         } catch (error) {
-          LOGGER.error(
-            { err: toError(error), songId },
-            `Failed to cache av3a track`
-          );
+          LOGGER.error({ err: toError(error), songId }, `Failed to cache av3a track`);
         }
       });
 

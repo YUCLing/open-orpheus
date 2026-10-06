@@ -1,16 +1,10 @@
 import os from "node:os";
 import { resolve } from "node:path";
 
-import {
-  app,
-  Menu,
-  MenuItemConstructorOptions,
-  nativeImage,
-  NativeImage,
-  Tray,
-} from "electron";
+import { app, Menu, MenuItemConstructorOptions, nativeImage, NativeImage, Tray } from "electron";
 
 import showManageWindow from "../windows/manage";
+import { registerShutdownTask } from "./lifecycle";
 
 import iconFilename from "../../../assets/icon_256.png?no-inline";
 import type { SettingsService, WindowService } from "../bootstrap/types";
@@ -67,19 +61,9 @@ export function createTray(deps: TrayDeps): TrayService {
       label: "退出",
       click: () => {
         const mainWindow = deps.windows.currentWindow();
-        if (
-          trayInstalled &&
-          !quitRequested &&
-          mainWindow &&
-          !mainWindow.isDestroyed()
-        ) {
+        if (trayInstalled && !quitRequested && mainWindow && !mainWindow.isDestroyed()) {
           // NCM seems to be ready, and is not , we will go with graceful way as of now
-          mainWindow.webContents.send(
-            "channel.call",
-            "winhelper.onmenuclick",
-            "exitApp",
-            0
-          );
+          mainWindow.webContents.send("channel.call", "winhelper.onmenuclick", "exitApp", 0);
           quitRequested = true;
           return;
         }
@@ -88,9 +72,7 @@ export function createTray(deps: TrayDeps): TrayService {
     },
   ];
 
-  const defaultIcon = createIconForDarwin(
-    nativeImage.createFromPath(defaultIconPath)
-  );
+  const defaultIcon = createIconForDarwin(nativeImage.createFromPath(defaultIconPath));
 
   const trayIcon = new Tray(defaultIcon);
 
@@ -160,10 +142,7 @@ export function createTray(deps: TrayDeps): TrayService {
               // Although it can't be non-existing...
               const mainWindow = deps.windows.currentWindow();
               if (!mainWindow || mainWindow.isDestroyed()) return;
-              mainWindow.webContents.send(
-                "channel.call",
-                "trayicon.onrightclick"
-              );
+              mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
             },
           },
           {
@@ -189,6 +168,13 @@ export function createTray(deps: TrayDeps): TrayService {
     trayIcon.setContextMenu(Menu.buildFromTemplate(buildDefaultMenuItems()));
     trayInstalled = false;
   }
+
+  /** Destroy the tray icon on shutdown. */
+  function destroyTray() {
+    trayIcon.destroy();
+  }
+
+  registerShutdownTask({ name: "tray", run: destroyTray });
 
   return {
     install,

@@ -33,19 +33,13 @@ import {
   normalizePath,
   sanitizeRelativePath,
 } from "../../platform/util";
-import type {
-  DatabaseService,
-  MainWindowAccessor,
-} from "../../bootstrap/types";
+import type { DatabaseService, MainWindowAccessor } from "../../bootstrap/types";
 import {
   CacheTrackMeta,
   type PlayCacheConfig,
   type PlayCacheInfo,
 } from "../../services/cache/PlayCacheManager";
-import createCacheManager, {
-  lyricCacheManager,
-  playCacheManager,
-} from "../../services/cache";
+import createCacheManager, { lyricCacheManager, playCacheManager } from "../../services/cache";
 import { toError } from "@shared/util";
 import { commentToID3Json, ID3JsonToComment } from "../../domain/id3";
 import globalLogger from "../../platform/logger";
@@ -61,7 +55,7 @@ type DownloadScannerItem = {
 
 async function readDownloadedMusicInfo(
   file: string,
-  base: string | undefined = undefined
+  base?: string
 ): Promise<DownloadScannerItem | undefined> {
   const filePath = normalizePath(base ?? "", file);
   let comment;
@@ -111,10 +105,7 @@ async function handleFileBatch(
   destPaths: string[]
 ) {
   if (srcPaths.length !== destPaths.length) {
-    LOGGER.error(
-      { type, srcPaths, destPaths },
-      "Mismatch srcPaths and destPaths"
-    );
+    LOGGER.error({ type, srcPaths, destPaths }, "Mismatch srcPaths and destPaths");
     return;
   }
 
@@ -209,7 +200,7 @@ export function register(deps: StorageDeps): void {
           downloadDir,
           {
             recursive: true,
-            ignore: (path) => !(mime.getType(path) ?? "").startsWith("audio/"),
+            ignore: (path) => !isMusicFile(path),
           },
           async (eventType, filename) => {
             if (
@@ -217,11 +208,7 @@ export function register(deps: StorageDeps): void {
               !(await fileExists(join(downloadDir, filename))) &&
               !event.sender.isDestroyed()
             ) {
-              event.sender.send(
-                "channel.call",
-                "storage.onfiledeleted",
-                filename
-              );
+              event.sender.send("channel.call", "storage.onfiledeleted", filename);
             }
           }
         );
@@ -255,73 +242,35 @@ export function register(deps: StorageDeps): void {
         );
       } catch {
         // -2: Not Found
-        event.sender.send(
-          "channel.call",
-          "storage.onreadfromfiledone",
-          taskId,
-          -2
-        );
+        event.sender.send("channel.call", "storage.onreadfromfiledone", taskId, -2);
       }
     }
   );
 
-  registerCallHandler<[string, string], void>(
-    "storage.execsql",
-    async (event, taskId, sql) => {
-      try {
-        const execResult = await deps.database.webDb.executeSql(sql);
-        event.sender.send(
-          "channel.call",
-          "storage.onexecsqldone",
-          taskId,
-          ...execResult
-        );
-      } catch (error) {
-        LOGGER.error({ sql, err: error }, "Error executing SQL");
-        event.sender.send(
-          "channel.call",
-          "storage.onexecsqldone",
-          taskId,
-          1,
-          undefined,
-          [0, 0, 0]
-        );
-      }
+  registerCallHandler<[string, string], void>("storage.execsql", async (event, taskId, sql) => {
+    try {
+      const execResult = await deps.database.webDb.executeSql(sql);
+      event.sender.send("channel.call", "storage.onexecsqldone", taskId, ...execResult);
+    } catch (error) {
+      LOGGER.error({ sql, err: error }, "Error executing SQL");
+      event.sender.send("channel.call", "storage.onexecsqldone", taskId, 1, undefined, [0, 0, 0]);
     }
-  );
+  });
 
   registerCallHandler<[string, string], void>(
     "storage.exectransaction",
     async (event, taskId, sql) => {
       try {
         const execResult = await deps.database.webDb.executeTransaction(sql);
-        event.sender.send(
-          "channel.call",
-          "storage.onexecsqldone",
-          taskId,
-          ...execResult
-        );
+        event.sender.send("channel.call", "storage.onexecsqldone", taskId, ...execResult);
       } catch (error) {
-        LOGGER.error(
-          { sql, err: error },
-          "Error executing SQL transaction: %s"
-        );
-        event.sender.send(
-          "channel.call",
-          "storage.onexecsqldone",
-          taskId,
-          1,
-          undefined,
-          [0, 0, 0]
-        );
+        LOGGER.error({ sql, err: error }, "Error executing SQL transaction");
+        event.sender.send("channel.call", "storage.onexecsqldone", taskId, 1, undefined, [0, 0, 0]);
       }
     }
   );
 
-  registerCallHandler<
-    [string, string, string, string, boolean, "abs" | "rel"],
-    void
-  >(
+  registerCallHandler<[string, string, string, string, boolean, "abs" | "rel"], void>(
     "storage.savetofile",
     async (event, taskId, content, mode, path, alone, type) => {
       let filePath: string;
@@ -339,12 +288,7 @@ export function register(deps: StorageDeps): void {
 
       try {
         await writeFile(filePath, content, { flag: "w" });
-        event.sender.send(
-          "channel.call",
-          "storage.onsavetofiledone",
-          taskId,
-          0
-        );
+        event.sender.send("channel.call", "storage.onsavetofiledone", taskId, 0);
       } catch (error) {
         event.sender.send(
           "channel.call",
@@ -373,32 +317,14 @@ export function register(deps: StorageDeps): void {
 
       try {
         await rm(filePath);
-        event.sender.send(
-          "channel.call",
-          "storage.ondeletefilesdone",
-          taskId,
-          0,
-          [filePath]
-        );
+        event.sender.send("channel.call", "storage.ondeletefilesdone", taskId, 0, [filePath]);
       } catch (err) {
         if (isFileNotFound(err)) {
-          event.sender.send(
-            "channel.call",
-            "storage.ondeletefilesdone",
-            taskId,
-            1,
-            undefined
-          );
+          event.sender.send("channel.call", "storage.ondeletefilesdone", taskId, 1, undefined);
           return;
         }
         LOGGER.error({ file: filePath, err }, "Failed to delete file");
-        event.sender.send(
-          "channel.call",
-          "storage.ondeletefilesdone",
-          taskId,
-          2,
-          undefined
-        );
+        event.sender.send("channel.call", "storage.ondeletefilesdone", taskId, 2, undefined);
       }
     }
   );
@@ -415,13 +341,7 @@ export function register(deps: StorageDeps): void {
           };
         })
       );
-      event.sender.send(
-        "channel.call",
-        "storage.oncheckfilesexist",
-        taskId,
-        true,
-        results
-      );
+      event.sender.send("channel.call", "storage.oncheckfilesexist", taskId, true, results);
     }
   );
 
@@ -430,7 +350,7 @@ export function register(deps: StorageDeps): void {
   registerCallHandler<[string, boolean, string, number, string[]], void>(
     "storage.downloadscanner",
     (event, path, recursive, emptyStr, limit, excludes) => {
-      (async () => {
+      void (async () => {
         path = normalizePath(path);
         const excludeSet = new Set(excludes.map((p) => normalizePath(path, p)));
         const batch: DownloadScannerItem[] = [];
@@ -442,11 +362,7 @@ export function register(deps: StorageDeps): void {
 
         const flush = () => {
           if (batch.length > 0) {
-            event.sender.send(
-              "channel.call",
-              "storage.ondownloadscanner",
-              batch.splice(0)
-            );
+            event.sender.send("channel.call", "storage.ondownloadscanner", batch.splice(0));
           }
         };
 
@@ -509,20 +425,14 @@ export function register(deps: StorageDeps): void {
     return [cachedTrack.meta];
   });
 
-  registerCallHandler<[PlayCacheConfig], void>(
-    "storage.setPlayCacheConfig",
-    (event, config) => {
-      playCacheManager?.setConfig(config);
-    }
-  );
+  registerCallHandler<[PlayCacheConfig], void>("storage.setPlayCacheConfig", (event, config) => {
+    playCacheManager?.setConfig(config);
+  });
 
-  registerCallHandler<[], [PlayCacheInfo | undefined]>(
-    "storage.playCacheInfo",
-    async () => {
-      const info = await playCacheManager?.getInfo();
-      return [info];
-    }
-  );
+  registerCallHandler<[], [PlayCacheInfo | undefined]>("storage.playCacheInfo", async () => {
+    const info = await playCacheManager?.getInfo();
+    return [info];
+  });
 
   registerCallHandler<[""], [boolean]>("storage.clearCache", async () => {
     if (!playCacheManager) return [false];
@@ -534,24 +444,15 @@ export function register(deps: StorageDeps): void {
     }
   });
 
-  registerCallHandler<[string], void>(
-    "storage.getTempFile",
-    async (event, songId) => {
-      let content = "";
-      try {
-        content = (await lyricCacheManager?.get(songId)) ?? "";
-      } catch (error) {
-        LOGGER.error({ songId, err: error }, "Error reading temp file");
-      }
-      event.sender.send(
-        "channel.call",
-        "storage.ongettempfile",
-        songId,
-        content ? 0 : 404,
-        content
-      );
+  registerCallHandler<[string], void>("storage.getTempFile", async (event, songId) => {
+    let content = "";
+    try {
+      content = (await lyricCacheManager?.get(songId)) ?? "";
+    } catch (error) {
+      LOGGER.error({ songId, err: error }, "Error reading temp file");
     }
-  );
+    event.sender.send("channel.call", "storage.ongettempfile", songId, content ? 0 : 404, content);
+  });
 
   registerCallHandler<[string, string, string], void>(
     "storage.updatetemp",
@@ -571,19 +472,16 @@ export function register(deps: StorageDeps): void {
     }
   );
 
-  registerCallHandler<[string], [boolean]>(
-    "storage.testwriteable",
-    async (event, path) => {
-      const testFilePath = join(path, "open_orpheus_test_writable.tmp");
-      try {
-        await writeFile(testFilePath, "test", { flag: "w" });
-        await unlink(testFilePath);
-        return [true];
-      } catch {
-        return [false];
-      }
+  registerCallHandler<[string], [boolean]>("storage.testwriteable", async (event, path) => {
+    const testFilePath = join(path, "open_orpheus_test_writable.tmp");
+    try {
+      await writeFile(testFilePath, "test", { flag: "w" });
+      await unlink(testFilePath);
+      return [true];
+    } catch {
+      return [false];
     }
-  );
+  });
 
   registerCallHandler<[string, "abs" | "rel", "", string], void>(
     "storage.listFile",
@@ -605,24 +503,12 @@ export function register(deps: StorageDeps): void {
             path: join(filePath, dirent.name),
             type: dirent.isDirectory() ? "directory" : "file",
           }));
-          event.sender.send(
-            "channel.call",
-            "storage.onlistfile",
-            taskId,
-            0,
-            files
-          );
+          event.sender.send("channel.call", "storage.onlistfile", taskId, 0, files);
         })
         .catch((error) => {
           LOGGER.error({ path: filePath }, "Error listing files: %s", error);
           // TODO: Some error code?
-          event.sender.send(
-            "channel.call",
-            "storage.onlistfile",
-            taskId,
-            1,
-            []
-          );
+          event.sender.send("channel.call", "storage.onlistfile", taskId, 1, []);
         });
     }
   );
@@ -632,10 +518,7 @@ export function register(deps: StorageDeps): void {
   // - taskId
   // - code? 1
   // - final media path relative to download path
-  registerCallHandler<
-    [string, string, string | "", string | "", AddId3Request],
-    void
-  >(
+  registerCallHandler<[string, string, string | "", string | "", AddId3Request], void>(
     "storage.addid3",
     (event, taskId, mediaPath, imagePath, mediaInfo, id3Info) => {
       // Don't block the call.
@@ -658,8 +541,7 @@ export function register(deps: StorageDeps): void {
           if (hasID3Meta) {
             taggedFile.album = talb;
             taggedFile.title = tit2;
-            taggedFile.artist =
-              typeof tpe1 === "string" ? tpe1 : tpe1.join(",");
+            taggedFile.artist = typeof tpe1 === "string" ? tpe1 : tpe1.join(",");
             taggedFile.discNumber = parseInt(tpos) || 0;
             taggedFile.trackNumber = parseInt(trck) || 0;
           }
@@ -698,13 +580,7 @@ export function register(deps: StorageDeps): void {
         if (imageFullPath) await rm(imageFullPath, { force: true });
         await rm(mediaPath, { force: true });
 
-        event.sender.send(
-          "channel.call",
-          "storage.onaddid3done",
-          taskId,
-          1,
-          relPath
-        );
+        event.sender.send("channel.call", "storage.onaddid3done", taskId, 1, relPath);
       })().catch((err) => {
         LOGGER.error({ err: toError(err) }, "Failed to write ID3 tag");
         event.sender.send("channel.call", "storage.onaddid3done", taskId, 0);
@@ -714,49 +590,25 @@ export function register(deps: StorageDeps): void {
 
   registerCallHandler<["copy", "abs", "", string[], "abs", "", string[]], void>(
     "storage.copyfiles",
-    async (
-      event,
-      type,
-      srcType,
-      emptyStr1,
-      srcPaths,
-      destType,
-      emptyStr2,
-      destPaths
-    ) => {
+    async (event, type, srcType, emptyStr1, srcPaths, destType, emptyStr2, destPaths) => {
       if (type !== "copy" || srcType !== "abs" || destType !== "abs") {
-        LOGGER.error(
-          { type, srcType, destType },
-          "Unsupported file operation type"
-        );
+        LOGGER.error({ type, srcType, destType }, "Unsupported file operation type");
         return;
       }
 
-      handleFileBatch("copy", event, srcPaths, destPaths);
+      void handleFileBatch("copy", event, srcPaths, destPaths);
     }
   );
 
   registerCallHandler<["move", "abs", "", string[], "abs", "", string[]], void>(
     "storage.movefiles",
-    async (
-      event,
-      type,
-      srcType,
-      emptyStr1,
-      srcPaths,
-      destType,
-      emptyStr2,
-      destPaths
-    ) => {
+    async (event, type, srcType, emptyStr1, srcPaths, destType, emptyStr2, destPaths) => {
       if (type !== "move" || srcType !== "abs" || destType !== "abs") {
-        LOGGER.error(
-          { type, srcType, destType },
-          "Unsupported file operation type"
-        );
+        LOGGER.error({ type, srcType, destType }, "Unsupported file operation type");
         return;
       }
 
-      handleFileBatch("move", event, srcPaths, destPaths);
+      void handleFileBatch("move", event, srcPaths, destPaths);
     }
   );
 }

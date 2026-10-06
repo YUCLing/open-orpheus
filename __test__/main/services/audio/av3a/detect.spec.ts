@@ -36,10 +36,7 @@ function u32(value: number): Buffer {
 /** `stsd` sample description listing the given sample-entry fourccs. */
 function stsd(...formats: string[]): Buffer {
   const entries = formats.map((format) => box(format, Buffer.alloc(8)));
-  return box(
-    "stsd",
-    Buffer.concat([Buffer.alloc(4), u32(formats.length), ...entries])
-  );
+  return box("stsd", Buffer.concat([Buffer.alloc(4), u32(formats.length), ...entries]));
 }
 
 /** `moov` containing one track whose `stbl` has the given sample entries. */
@@ -52,10 +49,7 @@ function moov(...formats: string[]): Buffer {
 }
 
 function isoFile(...formats: string[]): Buffer {
-  return Buffer.concat([
-    box("ftyp", Buffer.from("isomiso2", "latin1")),
-    moov(...formats),
-  ]);
+  return Buffer.concat([box("ftyp", Buffer.from("isomiso2", "latin1")), moov(...formats)]);
 }
 
 function write(path: string, content: Buffer) {
@@ -85,10 +79,7 @@ describe("isAv3aFile", () => {
       "/empty-moov.m4a",
       Buffer.concat([
         box("ftyp", Buffer.from("isomiso2", "latin1")),
-        box(
-          "moov",
-          box("trak", box("mdia", box("minf", box("stbl", Buffer.alloc(0)))))
-        ),
+        box("moov", box("trak", box("mdia", box("minf", box("stbl", Buffer.alloc(0)))))),
       ])
     );
     await expect(isAv3aFile("/empty-moov.m4a")).resolves.toBe(false);
@@ -117,10 +108,7 @@ describe("isAv3aFile", () => {
   });
 
   it("rejects files that are not ISO-BMFF", async () => {
-    write(
-      "/not-video.txt",
-      Buffer.from("just some text, definitely not an mp4")
-    );
+    write("/not-video.txt", Buffer.from("just some text, definitely not an mp4"));
     await expect(isAv3aFile("/not-video.txt")).resolves.toBe(false);
   });
 

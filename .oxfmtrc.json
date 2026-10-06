@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "trailingComma": "es5",
+  "semi": true,
+  "singleQuote": false,
+  "sortPackageJson": false,
+  "sortTailwindcss": {
+    "stylesheet": "./gui/src/routes/layout.css"
+  },
+  "svelte": {},
+  "ignorePatterns": [
+    // Package Managers
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lock",
+    "bun.lockb",
+    // Miscellaneous
+    "gui/static/",
+    // Svelte Kit Generated
+    ".svelte-kit/",
+    // Module dist
+    "/modules/**/dist/**",
+    "/modules/**/index.js",
+    "/modules/**/index.d.ts"
+  ]
+}

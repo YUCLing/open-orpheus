@@ -3,10 +3,7 @@ import Emittery from "emittery";
 import { MediaSession } from "@open-orpheus/nowplaying";
 import { nativeArtUrl } from "../artwork";
 import { PlaybackStatus, TrackInfo } from "../types";
-import {
-  MediaSessionAdapter,
-  PlayerCommandEvents,
-} from "./MediaSessionAdapter";
+import { MediaSessionAdapter, PlayerCommandEvents } from "./MediaSessionAdapter";
 
 /** macOS Now Playing integration, backed by the `@open-orpheus/nowplaying` module. */
 export default class NowPlayingAdapter
@@ -28,22 +25,22 @@ export default class NowPlayingAdapter
     this.mediaSession.setEventHandler((err, event) => {
       switch (event.type) {
         case "Play":
-          this.emit("play");
+          void this.emit("play");
           break;
         case "Pause":
-          this.emit("pause");
+          void this.emit("pause");
           break;
         case "Toggle":
-          this.emit("toggle");
+          void this.emit("toggle");
           break;
         case "Next":
-          this.emit("next");
+          void this.emit("next");
           break;
         case "Previous":
-          this.emit("previous");
+          void this.emit("previous");
           break;
         case "SetPosition":
-          this.emit("setPosition", event.position);
+          void this.emit("setPosition", event.position);
           break;
         case "SetRate":
           // OS-initiated rate change needs a renderer command; ignored in v1.

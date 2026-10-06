@@ -22,10 +22,7 @@ describe("registerIpcHandlers", () => {
     registerIpcHandlers(wc, "settings", { get, set: vi.fn() } as never);
 
     expect(handle).toHaveBeenCalledTimes(2);
-    expect(handle.mock.calls.map(([channel]) => channel)).toEqual([
-      "settings.get",
-      "settings.set",
-    ]);
+    expect(handle.mock.calls.map(([channel]) => channel)).toEqual(["settings.get", "settings.set"]);
     expect(handle.mock.calls[0][1]).toBe(get);
   });
 

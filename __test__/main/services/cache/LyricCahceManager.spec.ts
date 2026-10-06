@@ -45,9 +45,7 @@ describe("LyricCacheManager", () => {
     const manager = newManager();
     await manager.set("456", "content");
 
-    await expect(
-      vol.promises.readFile(`${CACHE_DIR}/456`, "utf-8")
-    ).resolves.toBe("content");
+    await expect(vol.promises.readFile(`${CACHE_DIR}/456`, "utf-8")).resolves.toBe("content");
   });
 
   it("overwrites an existing entry without double counting its size", async () => {
@@ -88,9 +86,7 @@ describe("LyricCacheManager", () => {
     const manager = newManager();
 
     await expect(manager.get("a/b")).rejects.toThrow(/Invalid lyric cache key/);
-    await expect(manager.set("a/b", "x")).rejects.toThrow(
-      /Invalid lyric cache key/
-    );
+    await expect(manager.set("a/b", "x")).rejects.toThrow(/Invalid lyric cache key/);
   });
 
   it("indexes files that already exist on disk", async () => {

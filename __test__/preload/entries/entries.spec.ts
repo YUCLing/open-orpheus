@@ -10,13 +10,6 @@ vi.mock("electron", () => ({
   ipcRenderer: { invoke: vi.fn(), on: vi.fn() },
 }));
 
-// Importing these modules is what registers the API surface.
-import "@preload/entries/desktop-lyrics";
-import "@preload/entries/desktop-lyrics-preview";
-import "@preload/entries/manage";
-import "@preload/entries/menu";
-import "@preload/entries/mini-player";
-
 /**
  * The sync values exposed per prefix, in registration order, from call #`from`
  * onwards, without the bridge's own `_call`/`_on` plumbing.
@@ -31,14 +24,21 @@ function exposed(from = 0) {
 
 function syncValues(values: unknown) {
   return Object.fromEntries(
-    Object.entries(values as Record<string, unknown>).filter(
-      ([key]) => !key.startsWith("_")
-    )
+    Object.entries(values as Record<string, unknown>).filter(([key]) => !key.startsWith("_"))
   );
 }
 
 describe("window preload entry points", () => {
-  it("exposes the API surface each window expects", () => {
+  it("exposes the API surface each window expects", async () => {
+    // Importing these modules is what registers the API surface. They are
+    // imported here rather than at file scope because Vitest clears mock call
+    // history before every test, which would wipe registrations made on import.
+    await import("@preload/entries/desktop-lyrics");
+    await import("@preload/entries/desktop-lyrics-preview");
+    await import("@preload/entries/manage");
+    await import("@preload/entries/menu");
+    await import("@preload/entries/mini-player");
+
     expect(exposed()).toEqual({
       desktopLyrics: { platform: process.platform },
       inputRegion: { platform: process.platform },
@@ -53,9 +53,7 @@ describe("window preload entry points", () => {
 
   it("gives every prefix the call plumbing the renderer proxy needs", () => {
     for (const [, values] of hoisted.exposeInMainWorld.mock.calls) {
-      expect(Object.keys(values as object)).toEqual(
-        expect.arrayContaining(["_call", "_on"])
-      );
+      expect(Object.keys(values as object)).toEqual(expect.arrayContaining(["_call", "_on"]));
     }
   });
 

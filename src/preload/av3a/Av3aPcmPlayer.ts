@@ -69,10 +69,7 @@ export class Av3aPcmPlayer {
   }
 
   get currentTime(): number {
-    return (
-      this.baseTimeSeconds +
-      (this.consumedFrames / this.outputRate) * this.playbackRate
-    );
+    return this.baseTimeSeconds + (this.consumedFrames / this.outputRate) * this.playbackRate;
   }
 
   get duration(): number {
@@ -134,9 +131,7 @@ export class Av3aPcmPlayer {
     } catch (error) {
       if (token !== this.startToken) return;
       this.active = false;
-      this.events.onError?.(
-        error instanceof Error ? error.message : String(error)
-      );
+      this.events.onError?.(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -230,9 +225,7 @@ export class Av3aPcmPlayer {
       ? Math.max(0, Math.min(seconds, this.duration || seconds))
       : 0;
     const targetFrame =
-      this.sourceRate > 0
-        ? Math.round((sec * this.sourceRate) / FRAME_SAMPLES)
-        : 0;
+      this.sourceRate > 0 ? Math.round((sec * this.sourceRate) / FRAME_SAMPLES) : 0;
     this.baseTimeSeconds = sec;
     this.dropUntilFrame = Math.max(0, targetFrame);
     this.consumedFrames = 0;
@@ -245,7 +238,7 @@ export class Av3aPcmPlayer {
     this.setWorkletPlaying(this.playing);
     resetLimiters();
     try {
-      await av3aChannel.seek(targetFrame);
+      av3aChannel.seek(targetFrame);
       av3aChannel.resume();
     } catch {
       // Ignore: a seek racing a session teardown is not fatal.
@@ -256,8 +249,7 @@ export class Av3aPcmPlayer {
   /** (Re)build or update the resampler for the current source/output/rate. */
   private updateResamplerStep(): void {
     if (this.sourceRate <= 0) return;
-    const needsResample =
-      this.sourceRate !== this.outputRate || this.playbackRate !== 1;
+    const needsResample = this.sourceRate !== this.outputRate || this.playbackRate !== 1;
     if (!needsResample) {
       this.resampler = null;
       return;
@@ -265,9 +257,7 @@ export class Av3aPcmPlayer {
     if (!this.resampler) {
       this.resampler = new StereoResampler(this.sourceRate, this.outputRate);
     }
-    this.resampler.setStep(
-      (this.playbackRate * this.sourceRate) / this.outputRate
-    );
+    this.resampler.setStep((this.playbackRate * this.sourceRate) / this.outputRate);
   }
 
   // #region channel events
@@ -331,11 +321,7 @@ export class Av3aPcmPlayer {
 
     this.consumedFrames += data.frames;
 
-    if (
-      this.playing &&
-      !this.streamEnded &&
-      this.pushedFrames - this.consumedFrames <= 0
-    ) {
+    if (this.playing && !this.streamEnded && this.pushedFrames - this.consumedFrames <= 0) {
       // Worklet ran dry while we still expect more PCM.
       if (!this.buffering) {
         this.buffering = true;
@@ -371,11 +357,7 @@ export class Av3aPcmPlayer {
   }
 
   private maybeEmitEnded(): void {
-    if (
-      this.streamEnded &&
-      !this.endedEmitted &&
-      this.pushedFrames - this.consumedFrames <= 0
-    ) {
+    if (this.streamEnded && !this.endedEmitted && this.pushedFrames - this.consumedFrames <= 0) {
       this.endedEmitted = true;
       this.active = false;
       this.playing = false;
@@ -387,11 +369,7 @@ export class Av3aPcmPlayer {
 
   // #region PCM conversion
 
-  private pushFrame(frame: {
-    data: ArrayBuffer;
-    channels: number;
-    frameIndex: number;
-  }): void {
+  private pushFrame(frame: { data: ArrayBuffer; channels: number; frameIndex: number }): void {
     const node = this.node;
     if (!node) return;
     const stereo = pcm16ToStereoFloat32(frame.data, frame.channels);
@@ -484,10 +462,7 @@ function resetLimiters(): void {
   rightLimiter.reset();
 }
 
-function pcm16ToStereoFloat32(
-  data: ArrayBuffer,
-  channels: number
-): Float32Array {
+function pcm16ToStereoFloat32(data: ArrayBuffer, channels: number): Float32Array {
   const src = new Int16Array(data);
   const ch = channels > 0 ? Math.min(channels, STEREO_GAINS.length) : 0;
   if (src.length === 0 || ch <= 0) return new Float32Array(0);

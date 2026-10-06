@@ -1,0 +1,29 @@
+
+[package]
+authors = ["YUCLing <luotianyi@luotianyi.me>"]
+edition = "2021"
+name = "sys-win32"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi.workspace = true
+napi-derive.workspace = true
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62"
+features = [
+  "Media",
+  "Media_Playback",
+  "Foundation",
+  "Storage_Streams",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Shutdown",
+  "Win32_System_Threading",
+]
+
+[build-dependencies]
+napi-build = "2"

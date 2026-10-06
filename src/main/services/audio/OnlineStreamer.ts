@@ -75,16 +75,12 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
     super();
 
     this.url = url;
-    this.tempFilePath = join(
-      OnlineStreamer.tempDir,
-      `${process.pid}-${randomUUID()}.audio`
-    );
+    this.tempFilePath = join(OnlineStreamer.tempDir, `${process.pid}-${randomUUID()}.audio`);
     OnlineStreamer.activeTempFiles.add(this.tempFilePath);
     this.storage = new StorageManager(this.tempFilePath);
     this.scheduler = new DownloadScheduler({
       url,
-      toleranceThreshold:
-        options.toleranceThreshold ?? DEFAULT_TOLERANCE_THRESHOLD,
+      toleranceThreshold: options.toleranceThreshold ?? DEFAULT_TOLERANCE_THRESHOLD,
       tracker: this.tracker,
       storage: this.storage,
       getTotalLength: () => this.totalLength,
@@ -94,9 +90,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
     });
 
     this.metaReadyPromise = this.prepare();
-    this.metaReadyPromise.catch((error: unknown) =>
-      this.emitError(toError(error))
-    );
+    this.metaReadyPromise.catch((error: unknown) => this.emitError(toError(error)));
   }
 
   async handleRequest(request: Request) {
@@ -110,17 +104,10 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
       const rangeHeader = request.headers.get("range");
       const isRangeRequest = rangeHeader !== null;
-      const { start: reqStart, end: reqEnd } = parseRequestRange(
-        rangeHeader,
-        this.totalLength
-      );
+      const { start: reqStart, end: reqEnd } = parseRequestRange(rangeHeader, this.totalLength);
       const chunkLength = reqEnd - reqStart;
       const session = this.scheduler.createUrgentSession(request.signal);
-      const iterator = this.scheduler.streamUrgent(
-        reqStart,
-        reqEnd,
-        session.signal
-      );
+      const iterator = this.scheduler.streamUrgent(reqStart, reqEnd, session.signal);
       const body = asyncIteratorToReadableStream(iterator, {
         onCancel: session.abort,
         onClose: session.close,
@@ -132,10 +119,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
       });
 
       if (isRangeRequest) {
-        headers.set(
-          "Content-Range",
-          `bytes ${reqStart}-${reqEnd - 1}/${this.totalLength}`
-        );
+        headers.set("Content-Range", `bytes ${reqStart}-${reqEnd - 1}/${this.totalLength}`);
       }
 
       return new Response(body, {
@@ -186,11 +170,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
    * are persisted in the temp file (so a decoder can read them). Aborts when
    * `signal` is aborted or the streamer is destroyed.
    */
-  async ensureRangeDownloaded(
-    start: number,
-    end: number,
-    signal?: AbortSignal
-  ) {
+  async ensureRangeDownloaded(start: number, end: number, signal?: AbortSignal) {
     this.assertNotDestroyed();
     await this.metaReadyPromise;
     this.assertNotDestroyed();
@@ -201,11 +181,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
     const session = this.scheduler.createUrgentSession(signal);
     try {
-      const iterator = this.scheduler.streamUrgent(
-        clampedStart,
-        clampedEnd,
-        session.signal
-      );
+      const iterator = this.scheduler.streamUrgent(clampedStart, clampedEnd, session.signal);
       // Draining the iterator persists + tracks every chunk (urgent priority).
       while (!(await iterator.next()).done) {
         // no-op
@@ -278,8 +254,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
     return {
       totalLength,
-      mimeType:
-        firstHeaderValue(response.headers["content-type"]) ?? DEFAULT_MIME_TYPE,
+      mimeType: firstHeaderValue(response.headers["content-type"]) ?? DEFAULT_MIME_TYPE,
     };
   }
 
@@ -314,9 +289,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
         if (response.statusCode < 200 || response.statusCode >= 400) {
           settled = true;
-          reject(
-            new Error(`Failed to read source metadata: ${response.statusCode}`)
-          );
+          reject(new Error(`Failed to read source metadata: ${response.statusCode}`));
           request.destroy();
           return;
         }
@@ -331,9 +304,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
         settled = true;
         resolve({
           totalLength,
-          mimeType:
-            firstHeaderValue(response.headers["content-type"]) ??
-            DEFAULT_MIME_TYPE,
+          mimeType: firstHeaderValue(response.headers["content-type"]) ?? DEFAULT_MIME_TYPE,
         });
         request.destroy();
       });
@@ -385,9 +356,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
   private emitComplete() {
     if (this._destroyed) return;
-    void this.emit("complete").catch((error: unknown) =>
-      LOGGER.error({ err: toError(error) })
-    );
+    void this.emit("complete").catch((error: unknown) => LOGGER.error({ err: toError(error) }));
   }
 
   private emitError(error: Error) {

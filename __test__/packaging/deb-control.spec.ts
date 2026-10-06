@@ -63,22 +63,17 @@ describe("resolveControlOptions", () => {
   });
 
   it("formats an object author as `Name <email>`", () => {
-    expect(
-      resolveControlOptions({}, { author: { name: "A", email: "a@b.c" } })
-        .maintainer
-    ).toBe("A <a@b.c>");
-  });
-
-  it("uses a string author verbatim", () => {
-    expect(resolveControlOptions({}, { author: "A <a@b.c>" }).maintainer).toBe(
+    expect(resolveControlOptions({}, { author: { name: "A", email: "a@b.c" } }).maintainer).toBe(
       "A <a@b.c>"
     );
   });
 
+  it("uses a string author verbatim", () => {
+    expect(resolveControlOptions({}, { author: "A <a@b.c>" }).maintainer).toBe("A <a@b.c>");
+  });
+
   it("drops a missing email", () => {
-    expect(
-      resolveControlOptions({}, { author: { name: "A" } }).maintainer
-    ).toBe("A");
+    expect(resolveControlOptions({}, { author: { name: "A" } }).maintainer).toBe("A");
   });
 
   it("falls back to open-orpheus defaults when metadata is missing", () => {
@@ -92,12 +87,12 @@ describe("resolveControlOptions", () => {
   });
 
   it("only indents continuation lines of a multi-line description", () => {
-    expect(
-      resolveControlOptions({}, { description: "one\ntwo\nthree" }).description
-    ).toBe("one\n two\n three");
-    expect(
-      resolveControlOptions({}, { description: "single line" }).description
-    ).toBe("single line");
+    expect(resolveControlOptions({}, { description: "one\ntwo\nthree" }).description).toBe(
+      "one\n two\n three"
+    );
+    expect(resolveControlOptions({}, { description: "single line" }).description).toBe(
+      "single line"
+    );
   });
 });
 
@@ -109,9 +104,7 @@ describe("generateControl", () => {
     expect(control).toContain("Section: sound");
     expect(control).toContain("Priority: optional");
     expect(control).toContain("Maintainer: YUCLing <luotianyi@luotianyi.me>");
-    expect(control).toContain(
-      "Homepage: https://github.com/YUCLing/open-orpheus"
-    );
+    expect(control).toContain("Homepage: https://github.com/YUCLing/open-orpheus");
     expect(control).toContain("Package: open-orpheus");
     expect(control).toContain("Architecture: any");
     expect(control).toContain("Description: An open-source implementation.");
@@ -158,9 +151,7 @@ describe("createControlFile", () => {
   });
 
   it("creates missing directories through the caller's staging", async () => {
-    await expect(
-      createControlFile("/missing/parent/control", options)
-    ).rejects.toThrow();
+    await expect(createControlFile("/missing/parent/control", options)).rejects.toThrow();
 
     vol.mkdirSync("/missing/parent", { recursive: true });
     await createControlFile("/missing/parent/control", options);

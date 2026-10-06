@@ -2,6 +2,7 @@ mod codec;
 mod filter;
 mod handlers;
 mod inject;
+mod layer_shell;
 mod state;
 
 #[cfg(test)]
@@ -13,8 +14,48 @@ use crate::linux::Rect;
 
 use super::proxy::{Cmsg, ConnectionHandler, Direction, Filtered, Protocol};
 
+pub(super) use layer_shell::{
+    ANCHOR_BOTTOM, ANCHOR_LEFT, ANCHOR_RIGHT, ANCHOR_TOP, KEYBOARD_NONE, LAYER_BACKGROUND,
+    LAYER_BOTTOM, LAYER_OVERLAY, LAYER_TOP, LayerShellOptions,
+};
+
 pub(super) fn is_wayland() -> bool {
     state::is_wayland()
+}
+
+pub(super) fn is_layer_shell_available() -> bool {
+    state::is_layer_shell_available()
+}
+
+/// Queue `options` for the named managed window, or the next eligible toplevel
+/// when no owner is provided.
+pub(super) fn declare_layer_window(options: LayerShellOptions, owner: Option<String>) -> bool {
+    state::declare_named_layer_window(options, owner)
+}
+
+/// Whether `options` survive the defaults and the protocol's rules.
+///
+/// The same checks `declare_layer_window` applies, without taking a place in
+/// the queue: a caller can be told its declaration is unsendable before a
+/// window exists to attach it to.
+pub(super) fn validate_layer_window(options: LayerShellOptions) -> bool {
+    options.with_defaults().validate().is_ok()
+}
+
+/// Withdraw the newest pending declaration for the given owner, or the newest
+/// unnamed declaration when no owner is provided.
+pub(super) fn cancel_layer_window(owner: Option<&str>) -> bool {
+    state::cancel_named_layer_window(owner)
+}
+
+/// Decorate a title with the managed window id the proxy keys windows on.
+pub(super) fn decorate_title(id: &str, title: &str) -> String {
+    codec::decorate_title(id, title)
+}
+
+/// Register the listener that hears about windows whose layer role was refused.
+pub(super) fn on_layer_shell_refused(cb: state::LayerShellRefusedCb) -> bool {
+    state::on_layer_shell_refused(cb)
 }
 
 pub(super) fn send_xdg_toplevel_move() -> bool {
@@ -25,17 +66,51 @@ pub(super) fn set_input_region_rects(window_id: &str, rects: Option<&[Rect]>) ->
     inject::set_input_region_rects(window_id, rects)
 }
 
+pub(super) fn arm_next_window_as_popup(
+    parent_window_id: &str,
+    target_window_id: &str,
+    width: i32,
+    height: i32,
+    anchor: Option<(i32, i32)>,
+    shadow_inset: i32,
+) -> Option<u32> {
+    state::arm_next_popup_with_inset(
+        parent_window_id,
+        target_window_id,
+        width,
+        height,
+        anchor,
+        shadow_inset,
+    )
+}
+
+pub(super) fn cancel_pending_popup(token: u32) -> bool {
+    state::cancel_pending_popup(token)
+}
+
+pub(super) fn window_is_popup(window_id: &str) -> bool {
+    state::window_is_popup(window_id)
+}
+
+pub(super) fn on_next_pointer_axis(
+    window_id: &str,
+    cb: impl FnOnce(Option<u32>) + Send + 'static,
+) -> Option<u32> {
+    state::watch_next_pointer_axis(window_id, Box::new(cb))
+}
+
+pub(super) fn cancel_pointer_axis_watcher(token: u32) -> bool {
+    state::cancel_pointer_axis_watcher(token)
+}
+
 pub(super) fn on_next_new_window_first_cursor_enter(
-    cb: impl FnOnce(i32, i32) + Send + 'static,
-) -> bool {
-    let Some(m) = state::NEXT_TOPLEVEL_CURSOR_ENTER.get() else {
-        return false;
-    };
-    let Ok(mut cbs) = m.lock() else {
-        return false;
-    };
-    cbs.push(Box::new(cb));
-    true
+    cb: impl FnOnce(Option<(i32, i32)>) + Send + 'static,
+) -> Option<u32> {
+    state::watch_next_toplevel_cursor_enter(Box::new(cb))
+}
+
+pub(super) fn cancel_cursor_enter_watcher(token: u32) -> bool {
+    state::cancel_cursor_enter_watcher(token)
 }
 
 pub(crate) fn init_state() {

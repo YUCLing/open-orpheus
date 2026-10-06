@@ -42,6 +42,11 @@ jobs:
           toolchain: ${{ vars.RUST_VERSION || 'stable' }}
           target: wasm32-unknown-unknown
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libfreetype-dev
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -101,6 +106,11 @@ jobs:
           toolchain: ${{ vars.RUST_VERSION || 'stable' }}
           # cargo-llvm-cov needs llvm-cov/llvm-profdata from the toolchain.
           components: llvm-tools-preview
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libfreetype-dev
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
@@ -172,7 +182,7 @@ jobs:
 
       - name: Install flatpak-node-generator and flatpak-cargo-generator
         run: |
-          COMMIT=1fc32195e3e60fe5c97f0af646dec7a99df5962b
+          COMMIT=74697c75b630d7330e77250fc13cb5ea688d9479
           TOOLS_DIR=/tmp/flatpak-builder-tools
           git clone --filter=blob:none https://github.com/flatpak/flatpak-builder-tools.git "$TOOLS_DIR"
           git -C "$TOOLS_DIR" checkout "$COMMIT"
@@ -190,14 +200,6 @@ jobs:
           EOF
           chmod +x "$HOME/.local/bin/flatpak-cargo-generator"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Set up Flatpak runtimes
-        run: |
-          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y flathub \
-            org.freedesktop.Platform//26.08 \
-            org.freedesktop.Sdk//26.08 \
-            org.freedesktop.Sdk.Extension.node24//26.08
 
       - name: Generate Flatpak builder manifest
         run: node scripts/build-flatpak-builder.ts
@@ -222,6 +224,14 @@ jobs:
             "$LINTER_IMAGE" \
             --gha-format --exceptions --exceptions-repo stable \
             manifest io.github.yucling.open-orpheus.yaml
+
+      - name: Set up Flatpak runtimes
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            org.freedesktop.Platform//26.08 \
+            org.freedesktop.Sdk//26.08 \
+            org.freedesktop.Sdk.Extension.node24//26.08
 
       - name: Build the Flatpak
         working-directory: out/make/flatpak-builder

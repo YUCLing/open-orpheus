@@ -1,10 +1,7 @@
 import { ipcRenderer } from "electron";
 import SDK from "@yxim/nim-web-sdk";
 
-import type {
-  NetworkFetchRequest,
-  NetworkFetchResponse,
-} from "../main/calls/handlers/network";
+import type { NetworkFetchRequest, NetworkFetchResponse } from "../main/calls/handlers/network";
 
 export default class YunxinIM extends EventTarget {
   static APP_KEY = "3a6a3e48f6854dfa4e4464f3bdaec3b4";
@@ -37,8 +34,7 @@ export default class YunxinIM extends EventTarget {
 
     const tokenData = JSON.parse(res.blob);
 
-    const account: string | undefined =
-      tokenData.data?.accId ?? tokenData.data?.uid;
+    const account: string | undefined = tokenData.data?.accId ?? tokenData.data?.uid;
     const token: string | undefined = tokenData.data?.token;
 
     if (!account || !token) {
@@ -65,10 +61,10 @@ export default class YunxinIM extends EventTarget {
           resolve(data);
         },
         ondisconnect(data) {
-          LOGGER.warn(`NIM disconnected: ${data}`);
+          LOGGER.warn({ data }, "NIM disconnected");
         },
         onerror(data) {
-          LOGGER.error(`NIM error: ${data}`);
+          LOGGER.error({ data }, "NIM error");
           reject(data);
         },
         onwillreconnect(data) {
@@ -102,20 +98,19 @@ export default class YunxinIM extends EventTarget {
   async joinRoom(roomId: string) {
     if (!this.nimInst) throw new Error("NIM is not initialized");
 
-    const addrResult: Parameters<
-      Parameters<typeof this.nimInst.getChatroomAddress>[0]["done"]
-    >[1] = await new Promise((resolve, reject) => {
-      this.nimInst!.getChatroomAddress({
-        chatroomId: roomId,
-        done(err, data) {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve(data);
-        },
+    const addrResult: Parameters<Parameters<typeof this.nimInst.getChatroomAddress>[0]["done"]>[1] =
+      await new Promise((resolve, reject) => {
+        this.nimInst!.getChatroomAddress({
+          chatroomId: roomId,
+          done(err, data) {
+            if (err) {
+              reject(err);
+              return;
+            }
+            resolve(data);
+          },
+        });
       });
-    });
 
     const addresses = addrResult.address;
 

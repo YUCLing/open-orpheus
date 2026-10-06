@@ -29,9 +29,7 @@ export async function set(key: string, value: unknown): Promise<boolean> {
   return await api.set(key, value);
 }
 
-export async function setMany(
-  entries: { key: string; value: unknown }[]
-): Promise<boolean[]> {
+export async function setMany(entries: { key: string; value: unknown }[]): Promise<boolean[]> {
   return await api.setMany(entries);
 }
 

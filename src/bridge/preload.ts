@@ -16,10 +16,7 @@ import { contextBridge, ipcRenderer } from "electron";
  *     → calls raw._on("lyricsUpdate", cb)
  *     → ipcRenderer.on("desktopLyrics.lyricsUpdate", cb)
  */
-export function exposeApi(
-  prefix: string,
-  syncValues: Record<string, unknown> = {}
-): void {
+export function exposeApi(prefix: string, syncValues: Record<string, unknown> = {}): void {
   contextBridge.exposeInMainWorld(prefix, {
     ...syncValues,
     _call: (channel: string, ...args: unknown[]) =>

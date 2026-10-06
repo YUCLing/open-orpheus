@@ -1,15 +1,12 @@
 import os from "node:os";
 
 import { toError } from "@shared/util";
-import { events as lifecycleEvents } from "./lifecycle";
+import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
 import type { MainWindowAccessor } from "../bootstrap/types";
 import { resolveCoverUrl } from "../domain/playback/artwork";
 import PlaybackController from "../domain/playback/PlaybackController";
 import { PlaybackChange, TrackInfo } from "../domain/playback/types";
-import {
-  MediaSessionAdapter,
-  NoopAdapter,
-} from "../domain/playback/adapters/MediaSessionAdapter";
+import { MediaSessionAdapter, NoopAdapter } from "../domain/playback/adapters/MediaSessionAdapter";
 import PlayerCommandRouter from "../domain/playback/PlayerCommandRouter";
 
 /**
@@ -73,9 +70,7 @@ export interface MediaSessionDeps {
   windows: MainWindowAccessor;
 }
 
-export async function createMediaSession(
-  deps: MediaSessionDeps
-): Promise<void> {
+export async function createMediaSession(deps: MediaSessionDeps): Promise<void> {
   switch (os.platform()) {
     case "linux":
       // MPRIS is Linux-only (`@open-orpheus/dbus`); load the adapter only here.
@@ -87,12 +82,9 @@ export async function createMediaSession(
       );
       break;
     case "win32":
-      // `@open-orpheus/smtc` is a Windows-only native module, so it is only
-      // loaded on this platform (kept out of other platform bundles).
-      adapter = await loadAdapter(
-        () => import("../domain/playback/adapters/SmtcAdapter"),
-        "SMTC"
-      );
+      // `@open-orpheus/system-win32` is a Windows-only native module, so it is
+      // only loaded on this platform (kept out of other platform bundles).
+      adapter = await loadAdapter(() => import("../domain/playback/adapters/SmtcAdapter"), "SMTC");
       break;
     case "darwin":
       // `@open-orpheus/nowplaying` is a macOS-only native module (MPNowPlayingInfoCenter).
@@ -115,11 +107,25 @@ export async function createMediaSession(
   playbackController.on("positionchanged", ({ data }) =>
     adapter.onPosition(data.position, data.seeked)
   );
-  playbackController.on("durationchanged", ({ data }) =>
-    adapter.onDuration(data)
-  );
+  playbackController.on("durationchanged", ({ data }) => adapter.onDuration(data));
   playbackController.on("ratechanged", ({ data }) => adapter.onRate(data));
   playbackController.on("volumechanged", ({ data }) => adapter.onVolume(data));
+
+  registerShutdownTask({ name: "media-session", run: disposeMediaSession });
+}
+
+/**
+ * Release the platform media session (e.g. the MPRIS D-Bus name) at shutdown.
+ *
+ * The adapter is created by {@link createMediaSession}, so when loading it
+ * failed the no-op adapter is still in place and this does nothing.
+ */
+export function disposeMediaSession(): void {
+  try {
+    adapter.dispose();
+  } catch (err) {
+    LOGGER.warn({ err: toError(err) }, "Failed to dispose the media session adapter");
+  }
 }
 
 // Frozen seams: `player.setInfo` (registerCallHandler) calls `setMetadata`;

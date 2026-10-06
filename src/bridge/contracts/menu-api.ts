@@ -1,10 +1,5 @@
 import type { MenuSkin, MenuPullResult } from "@shared/types/menu";
-import type {
-  ElementTemplate,
-  LayoutNode,
-  BtnImages,
-  BtnState,
-} from "@shared/types/dui";
+import type { ElementTemplate, LayoutNode, BtnImages, BtnState } from "@shared/types/dui";
 
 export type { MenuSkin };
 export type { ElementTemplate, LayoutNode };
@@ -17,6 +12,7 @@ export interface MenuContract {
 
   events: {
     update(callback: (items: unknown[]) => void): void;
+    popupReady(callback: () => void): void;
   };
 
   getFont(): Promise<string | null>;

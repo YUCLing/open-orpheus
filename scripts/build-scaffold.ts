@@ -1,7 +1,8 @@
 // Generates the install scaffolding (desktop file, icons, symlink) into a
-// target directory. All options come from the command line (no
-// packaging/options.ts); every control falls back to the RPM/Debian /usr
-// defaults, so only the values that differ need to be passed:
+// target directory. All layout options come from the command line; the icons
+// come from the shared `packaging/resources/metadata.ts`, and every control
+// falls back to the RPM/Debian /usr defaults, so only the values that differ
+// need to be passed:
 //   node scripts/build-scaffold.ts <out-dir> [--name <name>] [--desktop-name <name>]
 //       [--icon-app-name <name>] [--app-path <path>] [--icons-path <path>]
 //       [--desktop-path <path>] [--symlink-path <path>] [--with-zypak-wrapper]
@@ -10,7 +11,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { createDesktopFile } from "../packaging/common/desktop.ts";
+import { resolveIcons } from "../packaging/common/icons.ts";
 import { writeScaffold } from "../packaging/common/scaffold.ts";
+import { metadata } from "../packaging/resources/metadata.ts";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
@@ -63,11 +66,7 @@ await writeScaffold(outDir, {
   appName: name,
   executable: name,
   input: {
-    icons: {
-      "256x256": resolve(projectRoot, "assets/icon_256.png"),
-      "512x512": resolve(projectRoot, "assets/icon_512.png"),
-      scalable: resolve(projectRoot, "assets/icon.svg"),
-    },
+    icons: resolveIcons(projectRoot, metadata.icons),
     desktop: desktopFile,
   },
   paths: {

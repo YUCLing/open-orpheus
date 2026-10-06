@@ -38,9 +38,7 @@
   let _disable = $derived(disable ?? images?.disabled?.uri);
   let _normalColor = $derived(normalColor ?? images?.normal.color);
   let _hoverColor = $derived(hoverColor ?? images?.hot?.color ?? _normalColor);
-  let _activeColor = $derived(
-    activeColor ?? images?.pushed?.color ?? _normalColor
-  );
+  let _activeColor = $derived(activeColor ?? images?.pushed?.color ?? _normalColor);
   let _disableColor = $derived(disableColor ?? images?.disabled?.color);
 </script>
 
@@ -55,12 +53,7 @@
   {/if}
 {/snippet}
 
-<button
-  bind:this={element}
-  class="group/icon-btn {className}"
-  {disabled}
-  {...rest}
->
+<button bind:this={element} class="group/icon-btn {className}" {disabled} {...rest}>
   {#if disabled}
     {@render icon(_disable ?? _normal, _disableColor ?? _normalColor, "")}
   {:else}

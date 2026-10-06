@@ -11,18 +11,7 @@ type EqualizerData = {
   eq: {
     on: boolean;
     /** Gains in dB for bands: [31,63,125,250,500,1k,2k,4k,8k,16k] Hz */
-    eqs: [
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-    ];
+    eqs: [number, number, number, number, number, number, number, number, number, number];
   };
   /** Bass / Treble shelving filters. */
   bt: {
@@ -282,12 +271,9 @@ function applyEqualizer(eq: string | null = null) {
 
     const workletParams = normalizeWorkletParams(e);
     m.postWorkletMessage({ module: "setParams", params: workletParams });
-    m.setWorkletActive(
-      Boolean(workletParams.rvb || workletParams.se || workletParams.rotate)
-    );
+    m.setWorkletActive(Boolean(workletParams.rvb || workletParams.se || workletParams.rotate));
   } catch (err) {
-    if (err !== "DISABLE_EQ")
-      LOGGER.error({ err: toError(err) }, `Failed to apply audio effect`);
+    if (err !== "DISABLE_EQ") LOGGER.error({ err: toError(err) }, `Failed to apply audio effect`);
     m.setEqualizers(null);
     m.setBass(0);
     m.setTreble(0);
@@ -324,10 +310,7 @@ registerCallHandler<
   let eqData = null;
   let wavIr: Uint8Array | null = null;
 
-  const audioEffect: null | string | Ncae = await ipcRenderer.invoke(
-    "audio.readEffect",
-    path
-  );
+  const audioEffect: null | string | Ncae = await ipcRenderer.invoke("audio.readEffect", path);
 
   if (audioEffect) {
     if (typeof audioEffect === "string") {
@@ -367,13 +350,10 @@ registerCallHandler<[boolean], void>("audioeffect.setLoudnessON", (enabled) => {
   }
 });
 
-registerCallHandler<[{ gain: number }], void>(
-  "audioeffect.setLoudnessParams",
-  (params) => {
-    const { gain } = params;
-    loudnessGainDb = gain / 10000;
-    if (loudnessGainEnabled) {
-      player.replayGain.gain.value = dbToGain(loudnessGainDb);
-    }
+registerCallHandler<[{ gain: number }], void>("audioeffect.setLoudnessParams", (params) => {
+  const { gain } = params;
+  loudnessGainDb = gain / 10000;
+  if (loudnessGainEnabled) {
+    player.replayGain.gain.value = dbToGain(loudnessGainDb);
   }
-);
+});

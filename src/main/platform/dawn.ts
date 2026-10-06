@@ -13,8 +13,7 @@ const PID = process.pid;
 const FIELD_SEP = "\x01";
 
 // ── RSA Public Key (256-bit) ──
-const RSA_MODULUS =
-  0xfd90bd466ff9bc8a3fec2fbcf263b90d5c564879fa5d7aab89b31c1d5cb4139dn;
+const RSA_MODULUS = 0xfd90bd466ff9bc8a3fec2fbcf263b90d5c564879fa5d7aab89b31c1d5cb4139dn;
 const RSA_EXPONENT = 65537n;
 
 const MAX_QUEUE_SIZE = 20; // entries — flush immediately when queue reaches this count

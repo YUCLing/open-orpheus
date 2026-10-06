@@ -5,15 +5,13 @@ import { promisify } from "node:util";
 
 import { nodeArch } from "../common/arch.ts";
 import { createProjectTarball } from "../common/archive.ts";
+import { readPackageJson } from "../common/package-json.ts";
 import { createPrebuiltBundle } from "../common/prebuilt.ts";
 import { runStreaming } from "../common/process.ts";
 import { CARGO_ZIGBUILD_VERSION, ZIG_VERSION } from "../common/toolchain.ts";
 import { cleanOutDir } from "../common/util.ts";
-import {
-  createControlFile,
-  resolveControlOptions,
-  type ControlOptions,
-} from "./control.ts";
+import { metadata } from "../resources/metadata.ts";
+import { createControlFile, resolveControlOptions, type ControlOptions } from "./control.ts";
 import { createRulesFile } from "./rules.ts";
 
 const execFile = promisify(execFileCb);
@@ -32,16 +30,6 @@ export interface DebOptions {
   nodeps?: boolean;
   /** Path to a prebuilt packaged app dir (out/<name>-linux-<arch>) to bundle instead of compiling. */
   prebuilt?: string | undefined;
-}
-
-async function resolveMeta(projectRoot: string) {
-  const pkg = JSON.parse(
-    await readFile(resolve(projectRoot, "package.json"), "utf-8")
-  );
-  const { deb: debOptions } = await import(
-    resolve(projectRoot, "packaging/options.ts")
-  );
-  return { pkg, debOptions };
 }
 
 /**
@@ -77,9 +65,7 @@ async function stageSource(
   // 1. Extract the git-derived project source (debian/ excluded) into the
   //    staged tree.
   const baseOrig = resolve(outDir, `${name}_${version}.orig.base.tar.gz`);
-  await createProjectTarball(projectRoot, baseOrig, name, version, [
-    "packaging/resources/debian",
-  ]);
+  await createProjectTarball(projectRoot, baseOrig, name, version, ["packaging/resources/debian"]);
   await execFile("tar", ["xzf", baseOrig, "-C", outDir]);
 
   const srcDir = resolve(outDir, `${name}-${version}`);
@@ -87,35 +73,22 @@ async function stageSource(
   // 2. Bundle the prebuilt app + scaffold into the staged tree so the build
   //    can install it without compiling.
   if (options.prebuilt) {
-    await createPrebuiltBundle(
-      projectRoot,
-      options.prebuilt,
-      name,
-      resolve(srcDir, "prebuilt")
-    );
+    await createPrebuiltBundle(projectRoot, options.prebuilt, name, resolve(srcDir, "prebuilt"));
   }
 
   // 3. Recreate the orig tarball from the staged tree so the prebuilt bundle
   //    is part of the source package (needed for PPA rebuilds).
   await rm(baseOrig, { force: true });
-  await execFile("tar", [
-    "czf",
-    origTarball,
-    "-C",
-    outDir,
-    `${name}-${version}`,
-  ]);
+  await execFile("tar", ["czf", origTarball, "-C", outDir, `${name}-${version}`]);
 
   // 4. The Debian packaging lives in packaging/resources/debian; it is copied
   //    into the staged tree as `debian/` (where dpkg-buildpackage expects it)
   //    and is excluded from the orig tarball. `debian/rules` is rendered from
   //    rules.ejs so the toolchain/prebuilt decisions are baked in at
   //    source-package creation time — mirroring the SRPM spec.
-  await cp(
-    resolve(projectRoot, "packaging/resources/debian"),
-    resolve(srcDir, "debian"),
-    { recursive: true }
-  );
+  await cp(resolve(projectRoot, "packaging/resources/debian"), resolve(srcDir, "debian"), {
+    recursive: true,
+  });
   await rm(resolve(srcDir, "debian", "rules.ejs"));
   await createRulesFile(resolve(srcDir, "debian", "rules"), {
     name,
@@ -125,19 +98,13 @@ async function stageSource(
     prebuilt: !!options.prebuilt,
   });
   await rm(resolve(srcDir, "debian", "control.ejs"));
-  await createControlFile(
-    resolve(srcDir, "debian", "control"),
-    options.control
-  );
+  await createControlFile(resolve(srcDir, "debian", "control"), options.control);
 
   // 5. dpkg-source derives the source version from the changelog and uses it
   //    to locate `name_<version>.orig.tar.gz`, so the top entry MUST match the
   //    package version. Fail early instead of producing an unbuildable source
   //    package (the release workflow keeps these in sync via generate-changelog.ts).
-  const changelog = await readFile(
-    resolve(srcDir, "debian", "changelog"),
-    "utf-8"
-  );
+  const changelog = await readFile(resolve(srcDir, "debian", "changelog"), "utf-8");
   const changelogVersion = parseChangelogVersion(changelog);
   if (changelogVersion !== version) {
     throw new Error(
@@ -151,22 +118,23 @@ async function stageSource(
 
 /** Build the binary `.deb` directly. Returns the produced `.deb` paths. */
 export async function buildDeb(options: DebOptions = {}): Promise<string[]> {
-  const projectRoot =
-    options.projectRoot ?? resolve(import.meta.dirname, "../..");
-  const outDir =
-    options.outDir ??
-    resolve(projectRoot, "out/make/deb", nodeArch(options.arch));
+  const projectRoot = options.projectRoot ?? resolve(import.meta.dirname, "../..");
+  const outDir = options.outDir ?? resolve(projectRoot, "out/make/deb", nodeArch(options.arch));
   // Empty the directory first so stale artifacts from earlier runs (e.g. an
   // older version) can't be mistaken for this build's output.
   await cleanOutDir(outDir, options.clean);
-  const { pkg, debOptions } = await resolveMeta(projectRoot);
-
-  const name = debOptions.name;
+  const pkg = await readPackageJson(projectRoot);
+  const name = pkg.name;
   const version: string = pkg.version;
   const srcDir = await stageSource(projectRoot, outDir, name, version, {
     installTools: options.installTools,
     prebuilt: options.prebuilt,
-    control: resolveControlOptions(debOptions, pkg),
+    // Name/section/maintainer come from package.json (and their defaults); only
+    // the fields package.json cannot supply are overridden here.
+    control: resolveControlOptions(
+      { homepage: metadata.homepage, description: metadata.description },
+      pkg
+    ),
   });
 
   // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit
@@ -198,23 +166,22 @@ export async function buildDeb(options: DebOptions = {}): Promise<string[]> {
  * Build the Debian source package (`.dsc` + `.orig.tar.gz` + `.debian.tar.xz`)
  * for upload to a PPA. Returns the produced file paths.
  */
-export async function buildDebSource(
-  options: DebOptions = {}
-): Promise<string[]> {
-  const projectRoot =
-    options.projectRoot ?? resolve(import.meta.dirname, "../..");
+export async function buildDebSource(options: DebOptions = {}): Promise<string[]> {
+  const projectRoot = options.projectRoot ?? resolve(import.meta.dirname, "../..");
   const outDir = options.outDir ?? resolve(projectRoot, "out/make/deb-src");
   // Empty the directory first so stale artifacts from earlier runs aren't
   // mistaken for this build's output.
   await cleanOutDir(outDir, options.clean);
-  const { pkg, debOptions } = await resolveMeta(projectRoot);
-
-  const name = debOptions.name;
+  const pkg = await readPackageJson(projectRoot);
+  const name = pkg.name;
   const version: string = pkg.version;
   const srcDir = await stageSource(projectRoot, outDir, name, version, {
     installTools: options.installTools,
     prebuilt: options.prebuilt,
-    control: resolveControlOptions(debOptions, pkg),
+    control: resolveControlOptions(
+      { homepage: metadata.homepage, description: metadata.description },
+      pkg
+    ),
   });
 
   // -d (only with `--nodeps`): skip dpkg-checkbuilddeps' implicit

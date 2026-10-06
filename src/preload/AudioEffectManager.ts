@@ -205,12 +205,8 @@ export default class AudioEffectManager {
     try {
       // WASM is being bundled because `audio-effect.ts` imports the wasm-bindgen
       // loader, so it'll be available at this URL
-      const response = await fetch(
-        "audio://worklet/assets/audio_effect_bg.wasm"
-      );
-      const wasmModule = await WebAssembly.compile(
-        await response.arrayBuffer()
-      );
+      const response = await fetch("audio://worklet/assets/audio_effect_bg.wasm");
+      const wasmModule = await WebAssembly.compile(await response.arrayBuffer());
 
       await this.ctx.audioWorklet.addModule("audio://worklet/audio-effect.js");
 
@@ -231,10 +227,7 @@ export default class AudioEffectManager {
         active: false,
       });
     } catch (err) {
-      LOGGER.error(
-        { err: toError(err) },
-        "Failed to load audio-effect worklet"
-      );
+      LOGGER.error({ err: toError(err) }, "Failed to load audio-effect worklet");
       // Non-fatal: audio still works without advanced effects.
     }
   }
@@ -321,7 +314,7 @@ export default class AudioEffectManager {
       this._workletNode.port.postMessage(data);
     } else {
       // Queue for delivery once the worklet is ready.
-      this._workletPromise.then(() => {
+      void this._workletPromise.then(() => {
         this._workletNode?.port.postMessage(data);
       });
     }

@@ -29,10 +29,7 @@ describe("parseLrc", () => {
     const lines = parseLrc("[00:01.00][00:30.00]Chorus");
 
     expect(lines.map((line) => line.start_time)).toEqual([1000, 30_000]);
-    expect(lines.map((line) => line.words[0].text)).toEqual([
-      "Chorus",
-      "Chorus",
-    ]);
+    expect(lines.map((line) => line.words[0].text)).toEqual(["Chorus", "Chorus"]);
     expect(lines[0].end_time).toBe(30_000);
   });
 
@@ -53,9 +50,7 @@ describe("parseLrc", () => {
   });
 
   it("skips metadata tags and blank lines", () => {
-    const lines = parseLrc(
-      "[ti:Title]\n\n[ar:Artist]\n[00:01.00]Hello\n[al:Album]"
-    );
+    const lines = parseLrc("[ti:Title]\n\n[ar:Artist]\n[00:01.00]Hello\n[al:Album]");
     expect(lines).toHaveLength(1);
     expect(lines[0].words[0].text).toBe("Hello");
   });
@@ -93,9 +88,7 @@ describe("parseLrc", () => {
 
 describe("parseYrc", () => {
   it("parses line headers and per-character tuples", () => {
-    expect(
-      parseYrc("[1000,4000](1000,1000,0)He(2000,1000,0)llo(3000,2000,0)!!")
-    ).toEqual([
+    expect(parseYrc("[1000,4000](1000,1000,0)He(2000,1000,0)llo(3000,2000,0)!!")).toEqual([
       {
         start_time: 1000,
         end_time: 5000,

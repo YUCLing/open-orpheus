@@ -1,12 +1,21 @@
 [workspace]
-members = ["modules/database", "modules/window", "modules/ui", "modules/audio-effect", "modules/dbus", "modules/smtc", "modules/nowplaying", "modules/av3a"]
+members = [
+  "modules/database",
+  "modules/window",
+  "modules/ui",
+  "modules/audio-effect",
+  "modules/dbus",
+  "modules/sys-win32",
+  "modules/nowplaying",
+  "modules/av3a",
+]
 resolver = "3"
 
 [workspace.dependencies]
 napi = "3.0.0"
 napi-derive = "3.0.0"
-wasm-bindgen = "0.2.128"
+wasm-bindgen = "0.2.129"
 
 [profile.release]
-lto   = true
+lto = true
 strip = "symbols"

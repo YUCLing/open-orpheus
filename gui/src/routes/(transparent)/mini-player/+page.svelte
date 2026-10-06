@@ -115,19 +115,11 @@
 </script>
 
 <Popover.Root bind:open={showVolumeBar}>
-  <Popover.Content
-    class="max-w-36"
-    customAnchor={volumeButtonEl}
-    {@attach inputRegionAttachment}
-  >
+  <Popover.Content class="max-w-36" customAnchor={volumeButtonEl} {@attach inputRegionAttachment}>
     <Slider
       type="single"
       bind:value={
-        () => volume,
-        (v) => (
-          (volume = v),
-          api.fireCall("player.onminivolumechange", volume / 100)
-        )
+        () => volume, (v) => ((volume = v), api.fireCall("player.onminivolumechange", volume / 100))
       }
       min={0}
       max={100}
@@ -155,19 +147,14 @@
     onclick={() => api.fireCall("player.onrequestchangetomain", "")}
   >
     {#if togetherStatus.status === "alone"}
-      <img
-        src={coverUrl ?? "gui://skin2/mini/album/default.png"}
-        alt="Cover"
-        class="size-12.5"
-      />
+      <img src={coverUrl ?? "gui://skin2/mini/album/default.png"} alt="Cover" class="size-12.5" />
     {:else}
       <div class="flex px-2">
         <div class="size-8 overflow-hidden rounded-full">
           <img src={togetherStatus.self.avatarUrl} alt="Self" />
         </div>
         <div
-          class="size-8 overflow-hidden rounded-full {togetherStatus.status ===
-          'waiting'
+          class="size-8 overflow-hidden rounded-full {togetherStatus.status === 'waiting'
             ? 'relative ml-1'
             : '-ml-1'}"
         >
@@ -175,16 +162,11 @@
             <div
               class="absolute top-0 right-0 bottom-0 left-0 flex items-center justify-center bg-black/50"
             >
-              <img
-                class="w-6"
-                src="gui://skin2/mini/together/loading.webp"
-                alt="Waiting"
-              />
+              <img class="w-6" src="gui://skin2/mini/together/loading.webp" alt="Waiting" />
             </div>
           {/if}
           <img
-            src={togetherStatus.other.avatarUrl ||
-              "gui://skin2/mini/together/default.png"}
+            src={togetherStatus.other.avatarUrl || "gui://skin2/mini/together/default.png"}
             alt="Other"
           />
         </div>
@@ -208,16 +190,10 @@
             style="color: {style?.lrcColor ?? 'black'};"
           />
         {:else if playInfo}
-          <p
-            class="overflow-hidden text-ellipsis"
-            style:color={style?.titleColor}
-          >
+          <p class="overflow-hidden text-ellipsis" style:color={style?.titleColor}>
             {playInfo.songName}
           </p>
-          <p
-            class="overflow-hidden text-ellipsis"
-            style:color={style?.artistColor}
-          >
+          <p class="overflow-hidden text-ellipsis" style:color={style?.artistColor}>
             {playInfo.artistName}
           </p>
         {/if}
@@ -236,11 +212,7 @@
       images={playState.playing ? style?.pauseButton : style?.playButton}
       onpointerdown={noPropagation}
       onclick={() =>
-        api.fireCall(
-          "player.onaction",
-          playState.playing ? "pause" : "play",
-          "miniPlayer"
-        )}
+        api.fireCall("player.onaction", playState.playing ? "pause" : "play", "miniPlayer")}
     />
     <IconButton
       class="size-6 cursor-pointer"
@@ -347,9 +319,7 @@
         >
           {#if item.id === listData.currentPlay}
             <IconButton
-              images={playState.playing
-                ? style?.list.playButton
-                : style?.list.pauseButton}
+              images={playState.playing ? style?.list.playButton : style?.list.pauseButton}
               imgClass="size-4"
             />
           {:else}
@@ -359,10 +329,7 @@
             {item.title}
           </p>
           {#if item.program === 1}
-            <IconButton
-              class="group-hover/list-item:hidden"
-              images={style?.list.radioIcon}
-            />
+            <IconButton class="group-hover/list-item:hidden" images={style?.list.radioIcon} />
             <IconButton
               class="hidden group-hover/list-item:block"
               images={style?.list.radioHoverIcon}

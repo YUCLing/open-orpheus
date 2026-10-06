@@ -20,9 +20,7 @@ const MAX_ANONYMOUS_REGISTER_ATTEMPTS = 15;
 
 function createAnonymousUsername() {
   const id = randomBytes(26).toString("hex").toUpperCase();
-  return Buffer.from(`${id} ${encodeAnonymousId(id)}`, "utf8").toString(
-    "base64"
-  );
+  return Buffer.from(`${id} ${encodeAnonymousId(id)}`, "utf8").toString("base64");
 }
 
 function isAnonymousRegisterRequest(url: string) {
@@ -121,11 +119,7 @@ export default async function interceptAnonymousRequest(
     if (parseResponseCode(res.blob) === 400) {
       // Oops, failed, run the attempts
       let lastRes = res;
-      for (
-        let attempt = 2;
-        attempt <= MAX_ANONYMOUS_REGISTER_ATTEMPTS;
-        attempt++
-      ) {
+      for (let attempt = 2; attempt <= MAX_ANONYMOUS_REGISTER_ATTEMPTS; attempt++) {
         const res = await doRequest(
           {
             ...request,

@@ -20,17 +20,12 @@ describe("isAv3aLocalFile", () => {
     vi.mocked(ipcRenderer.invoke).mockResolvedValue(false);
     await expect(isAv3aLocalFile("/music/song.mp3")).resolves.toBe(false);
 
-    expect(ipcRenderer.invoke).toHaveBeenLastCalledWith(
-      "audio.isAv3aFile",
-      "/music/song.mp3"
-    );
+    expect(ipcRenderer.invoke).toHaveBeenLastCalledWith("audio.isAv3aFile", "/music/song.mp3");
   });
 
   it("propagates main process failures", async () => {
     vi.mocked(ipcRenderer.invoke).mockRejectedValue(new Error("no such file"));
 
-    await expect(isAv3aLocalFile("/missing.m4a")).rejects.toThrow(
-      "no such file"
-    );
+    await expect(isAv3aLocalFile("/missing.m4a")).rejects.toThrow("no such file");
   });
 });

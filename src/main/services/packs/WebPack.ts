@@ -30,8 +30,7 @@ async function verifySignature(file: string): Promise<boolean> {
     const header = Buffer.alloc(100);
     await fh.read(header, 0, 100, 0);
 
-    if (parseInt(header.subarray(0, 4).toString("ascii"), 10) !== 3)
-      return false;
+    if (parseInt(header.subarray(0, 4).toString("ascii"), 10) !== 3) return false;
 
     const sig = header.subarray(36, 100);
 

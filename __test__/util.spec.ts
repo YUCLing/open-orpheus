@@ -17,21 +17,15 @@ describe("toError", () => {
 
 describe("imageSize (read)", () => {
   it("reads the size from `param`", () => {
-    expect(imageSize("https://p1.music.126.net/a.jpg?param=200y300")).toEqual([
-      200, 300,
-    ]);
+    expect(imageSize("https://p1.music.126.net/a.jpg?param=200y300")).toEqual([200, 300]);
   });
 
   it("falls back to `thumbnail`", () => {
-    expect(
-      imageSize("https://p1.music.126.net/a.jpg?thumbnail=640y640")
-    ).toEqual([640, 640]);
+    expect(imageSize("https://p1.music.126.net/a.jpg?thumbnail=640y640")).toEqual([640, 640]);
   });
 
   it("prefers `param` over `thumbnail`", () => {
-    expect(
-      imageSize("https://p1.music.126.net/a.jpg?param=1y2&thumbnail=3y4")
-    ).toEqual([1, 2]);
+    expect(imageSize("https://p1.music.126.net/a.jpg?param=1y2&thumbnail=3y4")).toEqual([1, 2]);
   });
 
   it("returns null when no size parameter is present", () => {
@@ -53,20 +47,14 @@ describe("imageSize (write)", () => {
   });
 
   it("replaces an existing param and drops the legacy thumbnail", () => {
-    const result = imageSize(
-      "https://p1.music.126.net/a.jpg?param=100y100&thumbnail=100y100",
-      800
-    );
+    const result = imageSize("https://p1.music.126.net/a.jpg?param=100y100&thumbnail=100y100", 800);
     const url = new URL(result);
     expect(url.searchParams.get("param")).toBe("800y800");
     expect(url.searchParams.has("thumbnail")).toBe(false);
   });
 
   it("keeps unrelated query parameters", () => {
-    const result = imageSize(
-      "https://p1.music.126.net/a.jpg?token=abc&param=100y100",
-      64
-    );
+    const result = imageSize("https://p1.music.126.net/a.jpg?token=abc&param=100y100", 64);
     const url = new URL(result);
     expect(url.searchParams.get("token")).toBe("abc");
     expect(url.searchParams.get("param")).toBe("64y64");

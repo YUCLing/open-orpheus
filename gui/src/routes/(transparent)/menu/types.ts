@@ -21,9 +21,4 @@ export interface MenuItem {
   btns?: MenuItemBtn[];
 }
 
-export type {
-  BtnState,
-  BtnImages,
-  ElementTemplate,
-  LayoutNode,
-} from "$bridge/contracts/menu-api";
+export type { BtnState, BtnImages, ElementTemplate, LayoutNode } from "$bridge/contracts/menu-api";

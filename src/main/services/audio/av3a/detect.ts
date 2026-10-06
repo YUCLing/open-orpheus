@@ -72,12 +72,7 @@ async function sniff(path: string): Promise<boolean> {
         const payloadLen = size - headerLen;
         if (payloadLen > MAX_MOOV_BYTES) return false;
         const payload = Buffer.alloc(payloadLen);
-        const payloadRead = await fh.read(
-          payload,
-          0,
-          payloadLen,
-          pos + headerLen
-        );
+        const payloadRead = await fh.read(payload, 0, payloadLen, pos + headerLen);
         if (payloadRead.bytesRead < payloadLen) return false;
         if (moovHasAv3a(payload)) return true;
       }
@@ -93,10 +88,7 @@ async function sniff(path: string): Promise<boolean> {
 }
 
 /** Iterate the child boxes inside a container's payload. */
-function forEachBox(
-  buf: Buffer,
-  visit: (type: string, content: Buffer) => void
-): void {
+function forEachBox(buf: Buffer, visit: (type: string, content: Buffer) => void): void {
   let off = 0;
   while (off + 8 <= buf.length) {
     let size = buf.readUInt32BE(off);

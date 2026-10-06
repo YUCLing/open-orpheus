@@ -1,15 +1,7 @@
 import { register } from "node:module";
 import { pathToFileURL } from "node:url";
 
-const EXTENSION_CANDIDATES = [
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".ts",
-  ".mts",
-  ".cts",
-  ".json",
-] as const;
+const EXTENSION_CANDIDATES = [".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".json"] as const;
 
 const NON_PATH_SPECIFIER_PREFIXES = ["node:", "data:"] as const;
 
@@ -91,11 +83,7 @@ type LoaderResolve = (
   ) => Promise<Record<string, unknown>>
 ) => Promise<Record<string, unknown>>;
 
-export const resolve: LoaderResolve = async (
-  specifier,
-  context,
-  defaultResolve
-) => {
+export const resolve: LoaderResolve = async (specifier, context, defaultResolve) => {
   try {
     return await defaultResolve(specifier, context);
   } catch (error) {
@@ -138,9 +126,7 @@ export function registerExtensionlessLoader(options?: {
   const loaderUrl = options?.loaderUrl ?? getCurrentFileUrl();
 
   if (!loaderUrl) {
-    throw new Error(
-      "Cannot infer loader URL in this runtime. Pass options.loaderUrl explicitly."
-    );
+    throw new Error("Cannot infer loader URL in this runtime. Pass options.loaderUrl explicitly.");
   }
 
   register(loaderUrl, options?.parentUrl);

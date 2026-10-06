@@ -10,9 +10,7 @@
   };
 
   declare const downloadReason: PackageDownloadReason;
-  declare const downloadPackage: (
-    callback: (progress: DownloadPackageProgress) => void
-  ) => void;
+  declare const downloadPackage: (callback: (progress: DownloadPackageProgress) => void) => void;
 </script>
 
 <script lang="ts">
@@ -60,7 +58,7 @@
       Icon = FileClock;
       title = "包文件有变更";
       description =
-        "该版本 Open Orpheus 已切换到另一个版本的包文件。是否自动下载并覆盖？关闭本窗口可忽略此次更新";
+        "该版本 Open Orpheus 已切换到另一个版本的包文件。是否自动下载并覆盖？关闭本窗口可忽略此次更新（可在管理 Open Orpheus 界面手动重新下载资源包）";
       break;
   }
 
@@ -84,19 +82,15 @@
     <div class="grid grid-cols-[auto_1fr] grid-rows-2 gap-2">
       <Icon class="row-span-2 mr-4 h-16 w-16 self-center" />
       <h1 class="self-end text-2xl font-bold">{title}</h1>
-      <p class="text-gray-600">{description}</p>
+      <p class="max-w-96 text-gray-600">{description}</p>
     </div>
     <div class="text-center">
-      <Button onclick={startDownload} size="lg" class="cursor-pointer px-8"
-        >下载</Button
-      >
+      <Button onclick={startDownload} size="lg" class="cursor-pointer px-8">下载</Button>
       <p class="mt-2 w-64 text-sm opacity-75">
         将会自动下载网易云音乐 {versions.version} ({versions.build}) 的资源包（{versions.commit}）
       </p>
       <p class="my-4">或者</p>
-      <Button variant="link" href={versions.downloadUrl} target="_blank"
-        >手动下载安装包</Button
-      >
+      <Button variant="link" href={versions.downloadUrl} target="_blank">手动下载安装包</Button>
     </div>
   {:else}
     <div class="flex w-full max-w-sm flex-col gap-4">
@@ -114,10 +108,7 @@
       </div>
 
       {#if phase === "downloading" && downloadProgress}
-        {@const pct =
-          downloadProgress.progress != null
-            ? downloadProgress.progress * 100
-            : null}
+        {@const pct = downloadProgress.progress != null ? downloadProgress.progress * 100 : null}
         <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200">
           <div
             class="h-2 rounded-full bg-blue-500"

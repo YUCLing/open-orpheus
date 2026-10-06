@@ -64,12 +64,7 @@ function blobToPem(blob: Buffer): string {
     Buffer.from([0x00]),
     rsaKey,
   ]);
-  const spki = Buffer.concat([
-    Buffer.from([0x30]),
-    encodeLen(alg.length + bits.length),
-    alg,
-    bits,
-  ]);
+  const spki = Buffer.concat([Buffer.from([0x30]), encodeLen(alg.length + bits.length), alg, bits]);
 
   const b64 = (spki.toString("base64").match(/.{1,64}/g) ?? []).join("\n");
   return `-----BEGIN PUBLIC KEY-----\n${b64}\n-----END PUBLIC KEY-----`;
@@ -81,10 +76,7 @@ const PUBLIC_KEY_PEM = blobToPem(PUBLIC_KEY_BLOB);
  * Stream-verify a skin-pack signature without loading the full ZIP into RAM.
  * The Readable returned by `createZipStream()` pipes into the verifier.
  */
-async function verifySignature(
-  sig: Buffer,
-  createZipStream: () => Readable
-): Promise<boolean> {
+async function verifySignature(sig: Buffer, createZipStream: () => Readable): Promise<boolean> {
   // Signature is little-endian → reverse to PKCS#1 big-endian
   const sigBE = Buffer.from(sig).reverse();
   const verify = crypto.createVerify("SHA1");
@@ -99,16 +91,13 @@ async function verifySignature(
   return verify.verify(PUBLIC_KEY_PEM, sigBE);
 }
 
-async function parseHeader(
-  file: string
-): Promise<{ sigSize: number; zipOffset: number }> {
+async function parseHeader(file: string): Promise<{ sigSize: number; zipOffset: number }> {
   const fh = await open(file, "r");
   try {
     const buf = Buffer.alloc(16);
     await fh.read(buf, 0, 16, 0);
 
-    if (buf.readUInt32LE(0) !== 0x4b50544e /* "NTPK" */)
-      throw new Error("Invalid .skin magic");
+    if (buf.readUInt32LE(0) !== 0x4b50544e /* "NTPK" */) throw new Error("Invalid .skin magic");
     if (buf.readUInt32LE(4) !== 0) throw new Error("Unsupported .skin version");
 
     const sigSize = buf.readUInt32LE(12);
@@ -146,20 +135,14 @@ export default class SkinPack extends Pack {
         const sig = Buffer.alloc(sigSize);
         await fh.read(sig, 0, sigSize, 16);
 
-        if (
-          !(await verifySignature(sig, () =>
-            createReadStream(this.path, { start: zipOffset })
-          ))
-        )
+        if (!(await verifySignature(sig, () => createReadStream(this.path, { start: zipOffset }))))
           throw new Error("Skin pack signature verification failed");
       } finally {
         await fh.close();
       }
     }
 
-    const zipper = await unzipper.Open.custom(
-      createSource(this.path, zipOffset)
-    );
+    const zipper = await unzipper.Open.custom(createSource(this.path, zipOffset));
     for (const file of zipper.files) {
       if (file.type === "File") {
         const key = this.normalizePath(file.path);

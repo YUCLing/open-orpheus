@@ -14,11 +14,7 @@ export function toError(error: unknown): Error {
  * @param height If provided, use this as the height, or `sizeOrWidth` will be used for height
  */
 export function imageSize(url: string): [number, number] | null;
-export function imageSize(
-  url: string,
-  sizeOrWidth: number,
-  height?: number
-): string;
+export function imageSize(url: string, sizeOrWidth: number, height?: number): string;
 export function imageSize(
   url: string,
   sizeOrWidth?: number,
@@ -31,9 +27,7 @@ export function imageSize(
     parsedUrl.searchParams.set("param", `${sizeOrWidth}y${height}`);
     return parsedUrl.toString();
   } else {
-    const param =
-      parsedUrl.searchParams.get("param") ??
-      parsedUrl.searchParams.get("thumbnail");
+    const param = parsedUrl.searchParams.get("param") ?? parsedUrl.searchParams.get("thumbnail");
     if (!param) return null;
     const [w, h] = param.split("y").map(Number);
     return [w, h];
@@ -43,4 +37,19 @@ export function imageSize(
 /** Convert dB to linear gain. */
 export function dbToGain(db: number): number {
   return 10 ** (db / 20);
+}
+
+/**
+ * Convert volume (0-1) to linear gain, logarithmic mapping.
+ *
+ * @param input
+ * @returns
+ */
+export function volumeToGain(input: number, minDb = 40) {
+  if (input === 0) return 0;
+
+  // Convert volume to dB (negative = attenuation)
+  const db = -minDb * (1 - input);
+
+  return dbToGain(db);
 }

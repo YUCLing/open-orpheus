@@ -9,10 +9,7 @@ vi.mock("node:child_process", () => ({
   spawn: hoisted.spawn,
 }));
 
-import {
-  createDirectoryTarball,
-  createProjectTarball,
-} from "../../packaging/common/archive";
+import { createDirectoryTarball, createProjectTarball } from "../../packaging/common/archive";
 
 type FakeChild = EventEmitter & { stdin: { end: ReturnType<typeof vi.fn> } };
 
@@ -25,9 +22,7 @@ function gitReturns(files: string[], deleted: string[] = []) {
       _opts: unknown,
       cb: (error: Error | null, result?: { stdout: string }) => void
     ) => {
-      const stdout = args.includes("--deleted")
-        ? deleted.join("\0")
-        : files.join("\0");
+      const stdout = args.includes("--deleted") ? deleted.join("\0") : files.join("\0");
       cb(null, { stdout });
       return {} as never;
     }
@@ -60,24 +55,11 @@ describe("createProjectTarball", () => {
     gitReturns(["package.json", "src/main.ts"]);
     const child = nextTar();
 
-    const promise = createProjectTarball(
-      "/repo",
-      "/out/project.tar.gz",
-      "open-orpheus",
-      "0.17.1"
-    );
+    const promise = createProjectTarball("/repo", "/out/project.tar.gz", "open-orpheus", "0.17.1");
     await settle();
 
     expect(hoisted.execFile.mock.calls.map(([, args]) => args)).toEqual([
-      [
-        "-C",
-        "/repo",
-        "ls-files",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-        "-z",
-      ],
+      ["-C", "/repo", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
       ["-C", "/repo", "ls-files", "--deleted", "-z"],
     ]);
     expect(hoisted.spawn).toHaveBeenCalledWith(
@@ -120,22 +102,18 @@ describe("createProjectTarball", () => {
       "packaging/resources/debian/control.ejs",
       "packaging/resources/debian/rules.ejs",
       "packaging/resources/misc/file",
-      "packaging/options.ts",
+      "packaging/resources/metadata.ts",
     ]);
     const child = nextTar();
 
-    const promise = createProjectTarball(
-      "/repo",
-      "/out/a.tgz",
-      "app",
-      "1.0.0",
-      ["packaging/resources/debian"]
-    );
+    const promise = createProjectTarball("/repo", "/out/a.tgz", "app", "1.0.0", [
+      "packaging/resources/debian",
+    ]);
     await settle();
 
     expect(tarInput(child)).toEqual([
       "packaging/resources/misc/file",
-      "packaging/options.ts",
+      "packaging/resources/metadata.ts",
     ]);
 
     child.emit("close", 0);
@@ -159,12 +137,7 @@ describe("createProjectTarball", () => {
     gitReturns(["a.ts"]);
     const child = nextTar();
 
-    const promise = createProjectTarball(
-      "/repo",
-      "/out/a.tgz",
-      "my-app",
-      "2.3.4"
-    );
+    const promise = createProjectTarball("/repo", "/out/a.tgz", "my-app", "2.3.4");
     await settle();
 
     expect(hoisted.spawn.mock.calls[0][1]).toContain("s,^,my-app-2.3.4/,");

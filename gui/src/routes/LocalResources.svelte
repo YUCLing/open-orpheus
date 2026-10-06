@@ -17,9 +17,7 @@
   }
 
   let statsPromise = $state(api.cache.getStats());
-  let clearing = $state<
-    Parameters<ManageContract["cache"]["clearResources"]>[0] | null
-  >(null);
+  let clearing = $state<Parameters<ManageContract["cache"]["clearResources"]>[0] | null>(null);
 
   async function clearResources(
     category: Parameters<ManageContract["cache"]["clearResources"]>[0]
@@ -63,9 +61,7 @@
       {/if}
       <p class="text-sm text-gray-600">{formatBytes(stats.http.sizeBytes)}</p>
       <p class="text-xs text-gray-600">
-        实际占用 {formatBytes(
-          stats.http.sizeBytesOnDisk!
-        )}（含预分配和暂存数据）
+        实际占用 {formatBytes(stats.http.sizeBytesOnDisk!)}（含预分配和暂存数据）
         <Tooltip.Provider>
           <Tooltip.Root>
             <Tooltip.Trigger>
@@ -79,8 +75,7 @@
                   清理缓存后，底层数据库不会立即缩减体积，而是保留为空白空间（预分配）以提升后续运行速度，实际占用大于缓存大小属正常现象。
                 </p>
                 <p>
-                  Open Orpheus 每两天会自动回收这些空间，您也可随时点击下方<b
-                    >释放空间</b
+                  Open Orpheus 每两天会自动回收这些空间，您也可随时点击下方<b>释放空间</b
                   >按钮立即回收。
                 </p>
               </div>
@@ -93,8 +88,7 @@
         variant="outline"
         size="sm"
         disabled={clearing !== null}
-        onclick={() => clearResources("http")}
-        >{clearing === "http" ? "清除中…" : "清除"}</Button
+        onclick={() => clearResources("http")}>{clearing === "http" ? "清除中…" : "清除"}</Button
       >
       <Button
         class="mt-3"
@@ -124,8 +118,7 @@
       class="mt-4 w-full sm:w-auto"
       variant="destructive"
       disabled={clearing !== null}
-      onclick={clearCache}
-      >{clearing !== null ? "清除中…" : "清除所有可清除的缓存"}</Button
+      onclick={clearCache}>{clearing !== null ? "清除中…" : "清除所有可清除的缓存"}</Button
     >
   </div>
 
@@ -139,8 +132,7 @@
         variant="outline"
         size="sm"
         disabled={clearing !== null}
-        onclick={() => clearResources("wasm")}
-        >{clearing === "http" ? "清除中…" : "清除"}</Button
+        onclick={() => clearResources("wasm")}>{clearing === "http" ? "清除中…" : "清除"}</Button
       >
     </div>
   </div>

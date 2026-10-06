@@ -1,11 +1,6 @@
 import Emittery from "emittery";
 
-import {
-  PlaybackChange,
-  PlaybackSnapshot,
-  PlaybackStatus,
-  TrackInfo,
-} from "./types";
+import { PlaybackChange, PlaybackSnapshot, PlaybackStatus, TrackInfo } from "./types";
 
 /**
  * Non-seek position updates are coalesced; seek always emits immediately.
@@ -76,17 +71,17 @@ export default class PlaybackController extends Emittery<PlaybackControllerEvent
       this._snapshot.position = null;
       if (this._snapshot.status !== PlaybackStatus.Stopped) {
         this._snapshot.status = PlaybackStatus.Stopped;
-        this.emit("statuschanged", PlaybackStatus.Stopped);
+        void this.emit("statuschanged", PlaybackStatus.Stopped);
       }
     }
-    this.emit("trackchanged", track);
+    void this.emit("trackchanged", track);
   }
 
   /** Frozen seam: `player.setCover` → `mediaSession.setCover`. */
   applyCover(artUrl: string | null): void {
     if (this.cover === artUrl) return;
     this.cover = artUrl;
-    this.emit("coverchanged", artUrl);
+    void this.emit("coverchanged", artUrl);
   }
 
   applyPosition(position: number | null, seeked = false): void {
@@ -96,10 +91,10 @@ export default class PlaybackController extends Emittery<PlaybackControllerEvent
       this.cancelPositionThrottle();
       return;
     }
-    this.emit("timeupdate", position); // telemetry: always, unthrottled
+    void this.emit("timeupdate", position); // telemetry: always, unthrottled
     if (seeked) {
       this.cancelPositionThrottle();
-      this.emit("positionchanged", { position, seeked: true });
+      void this.emit("positionchanged", { position, seeked: true });
     } else {
       this.schedulePositionEmit(position);
     }
@@ -108,18 +103,18 @@ export default class PlaybackController extends Emittery<PlaybackControllerEvent
   applyDuration(duration: number | null): void {
     if (this._snapshot.duration === duration) return;
     this._snapshot.duration = duration;
-    this.emit("durationchanged", duration);
+    void this.emit("durationchanged", duration);
   }
 
   applyPlaybackChange(change: PlaybackChange): void {
     // Lyrics telemetry: progress advances smoothly only while playing.
-    this.emit("advancingchange", change === PlaybackChange.Playing);
+    void this.emit("advancingchange", change === PlaybackChange.Playing);
 
     // No track → always Stopped, regardless of transient transitions.
     if (this._snapshot.track === null) {
       if (this._snapshot.status !== PlaybackStatus.Stopped) {
         this._snapshot.status = PlaybackStatus.Stopped;
-        this.emit("statuschanged", PlaybackStatus.Stopped);
+        void this.emit("statuschanged", PlaybackStatus.Stopped);
       }
       return;
     }
@@ -141,21 +136,21 @@ export default class PlaybackController extends Emittery<PlaybackControllerEvent
     }
     if (next !== this._snapshot.status) {
       this._snapshot.status = next;
-      this.emit("statuschanged", next);
+      void this.emit("statuschanged", next);
     }
   }
 
   applyRate(rate: number): void {
     if (this._snapshot.rate === rate) return;
     this._snapshot.rate = rate;
-    this.emit("playbackratechange", rate); // telemetry
-    this.emit("ratechanged", rate); // derived
+    void this.emit("playbackratechange", rate); // telemetry
+    void this.emit("ratechanged", rate); // derived
   }
 
   applyVolume(volume: number): void {
     if (this._snapshot.volume === volume) return;
     this._snapshot.volume = volume;
-    this.emit("volumechanged", volume);
+    void this.emit("volumechanged", volume);
   }
 
   private schedulePositionEmit(position: number): void {
@@ -172,7 +167,7 @@ export default class PlaybackController extends Emittery<PlaybackControllerEvent
     this.pendingPosition = null;
     if (position === null) return;
     this.lastPositionEmitAt = Date.now();
-    this.emit("positionchanged", { position, seeked: false });
+    void this.emit("positionchanged", { position, seeked: false });
   }
 
   private cancelPositionThrottle(): void {

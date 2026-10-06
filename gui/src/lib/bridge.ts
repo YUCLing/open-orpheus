@@ -21,12 +21,9 @@ interface BridgeRaw {
 }
 
 export function getBridge<T>(name: string): T {
-  const raw = (window as unknown as Record<string, unknown>)[name] as
-    BridgeRaw | undefined;
+  const raw = (window as unknown as Record<string, unknown>)[name] as BridgeRaw | undefined;
   if (!raw) {
-    throw new Error(
-      `Bridge "${name}" is not exposed by the preload for this window.`
-    );
+    throw new Error(`Bridge "${name}" is not exposed by the preload for this window.`);
   }
 
   return new Proxy(raw, {
@@ -51,8 +48,7 @@ function buildPathProxy(path: string[], raw: BridgeRaw): unknown {
       return raw._call(channel, ...args);
     },
     get(_target: unknown, prop: string | symbol) {
-      if (prop === "then" || prop === "catch" || typeof prop === "symbol")
-        return undefined;
+      if (prop === "then" || prop === "catch" || typeof prop === "symbol") return undefined;
       return buildPathProxy([...path, String(prop)], raw);
     },
   });

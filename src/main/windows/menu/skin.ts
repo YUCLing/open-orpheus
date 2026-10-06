@@ -26,24 +26,17 @@ export function registerMenuSkinUpdater() {
   packManager.on("skin2packloaded", async (event) => {
     const skinPack = event.data.pack as SkinPack;
     const [bg, hov, sep, elBuf] = await Promise.all(
-      [
-        "/menu/bk.png",
-        "/menu/hover.png",
-        "/menu/separator.png",
-        "/menu/element.xml",
-      ].map((p) => skinPack.readFile(p))
+      ["/menu/bk.png", "/menu/hover.png", "/menu/separator.png", "/menu/element.xml"].map((p) =>
+        skinPack.readFile(p)
+      )
     );
     const [bgColor, hoverColor, separatorColor] = await Promise.all(
-      [bg, hov, sep]
-        .map((buf) => photon.PhotonImage.new_from_byteslice(buf))
-        .map(extractColor)
+      [bg, hov, sep].map((buf) => photon.PhotonImage.new_from_byteslice(buf)).map(extractColor)
     );
 
     const xml = elBuf.toString("utf-8");
     const fgMatch = xml.match(/\btextcolor="(#[0-9A-Fa-f]{8})"/);
-    const fgDisabledMatch = xml.match(
-      /\bdisabledtextcolor="(#[0-9A-Fa-f]{8})"/
-    );
+    const fgDisabledMatch = xml.match(/\bdisabledtextcolor="(#[0-9A-Fa-f]{8})"/);
     const fgAlphaMatch = xml.match(/\btranstext="(\d{1,3})"/);
     const fgDisabledAlphaMatch = xml.match(/\bdisabletranstext="(\d{1,3})"/);
 
@@ -51,10 +44,7 @@ export function registerMenuSkinUpdater() {
     menuSkin.itemHover = hoverColor;
     menuSkin.separator = separatorColor;
     if (fgMatch) {
-      menuSkin.foreground = applyAlphaOverride(
-        argbToCss(fgMatch[1]),
-        fgAlphaMatch?.[1]
-      );
+      menuSkin.foreground = applyAlphaOverride(argbToCss(fgMatch[1]), fgAlphaMatch?.[1]);
     }
     if (fgDisabledMatch) {
       menuSkin.foregroundDisabled = applyAlphaOverride(

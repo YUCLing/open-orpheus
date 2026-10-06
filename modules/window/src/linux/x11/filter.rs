@@ -371,10 +371,9 @@ pub(crate) fn feed_outbound(fd: RawFd, chunk: &[u8], cmsg: Option<Cmsg>) -> Opti
             out.extend_from_slice(&conn.tx_buf[off..off + total]);
             off += total;
 
-            let (req1, req2, req3) = handlers::setup::initial_requests(conn);
-            out.extend_from_slice(&req1);
-            out.extend_from_slice(&req2);
-            out.extend_from_slice(&req3);
+            for request in handlers::setup::initial_requests(conn) {
+                out.extend_from_slice(&request);
+            }
         } else {
             if conn.tx_buf.len() - off < 4 {
                 if off <= head_idx {
@@ -639,6 +638,37 @@ mod tests {
         assert_eq!(inbound.data.len(), 32);
     }
 
+    /// The `InternAtom` probes the proxy injects right after the setup, in the
+    /// order it sends them: name, then the request's size in words.
+    fn interned_probes() -> [(&'static [u8], u16); 5] {
+        [
+            (b"_NET_WM_MOVERESIZE", 7),
+            (b"_NET_WM_WINDOW_TYPE", 7),
+            (b"_NET_WM_WINDOW_TYPE_DESKTOP", 9),
+            (b"_NET_WM_STATE", 6),
+            (b"_NET_WM_STATE_BELOW", 7),
+        ]
+    }
+
+    /// How many requests the proxy injects right after the setup: the four
+    /// `InternAtom` probes, then SHAPE and XInput.
+    /// Total size of the requests the proxy injects right after the setup: the
+    /// `InternAtom` probes above, then SHAPE (16) and XInput (24) bytes.
+    fn probes_len() -> usize {
+        interned_probes()
+            .iter()
+            .map(|(name, _)| 8 + name.len().div_ceil(4) * 4)
+            .sum::<usize>()
+            + 16
+            + 24
+    }
+
+    /// How many requests the proxy injects right after the setup: the
+    /// `InternAtom` probes above, then SHAPE and XInput.
+    fn injected_probe_count() -> usize {
+        interned_probes().len() + 2
+    }
+
     #[test]
     fn the_setup_is_forwarded_then_the_probe_requests_are_injected() {
         let conn = Conn::new();
@@ -646,37 +676,71 @@ mod tests {
 
         let out = conn.outbound(&setup).expect("never tears down");
 
-        assert_eq!(out.data.len(), setup.len() + 68, "28 + 16 + 24 probe bytes");
+        assert_eq!(
+            out.data.len() - setup.len(),
+            probes_len(),
+            "one probe block"
+        );
         assert_eq!(&out.data[..setup.len()], setup.as_slice());
 
         let probes = &out.data[setup.len()..];
-        assert_eq!(probes[0], 16, "InternAtom");
-        assert_eq!(&probes[8..26], b"_NET_WM_MOVERESIZE");
-        assert_eq!(probes[28], 98, "QueryExtension");
-        assert_eq!(&probes[36..41], b"SHAPE");
-        assert_eq!(probes[44], 98, "QueryExtension");
-        assert_eq!(&probes[52..67], b"XInputExtension");
+        let mut off = 0;
+        for (name, name_words) in interned_probes() {
+            let name_len = name.len() as u16;
+            assert_eq!(probes[off], 16, "InternAtom for {name:?}");
+            assert_eq!(
+                r16(&probes[off + 2..off + 4], true),
+                name_words,
+                "request length for {name:?}"
+            );
+            assert_eq!(
+                r16(&probes[off + 4..off + 6], true),
+                name_len,
+                "name length for {name:?}"
+            );
+            assert_eq!(
+                &probes[off + 8..off + 8 + name_len as usize],
+                name,
+                "interned name"
+            );
+            off += (name_words as usize) * 4;
+        }
+
+        // The two extension probes follow, at the computed offset.
+        assert_eq!(probes[off], 98, "QueryExtension");
+        assert_eq!(r16(&probes[off + 2..off + 4], true), 4, "SHAPE is 4 words");
+        assert_eq!(&probes[off + 8..off + 13], b"SHAPE");
+        off += 16;
+        assert_eq!(probes[off], 98, "QueryExtension");
+        assert_eq!(r16(&probes[off + 2..off + 4], true), 6, "XInput is 6 words");
+        assert_eq!(&probes[off + 8..off + 23], b"XInputExtension");
+        assert_eq!(off + 24, probes.len(), "nothing else was injected");
 
         let conn = conn.take();
         assert!(conn.is_le);
         assert_eq!(conn.tx_state, State::Connected);
-        assert_eq!(conn.server_seq, 3, "one sequence per injected request");
-        assert_eq!(conn.seq_offset, 3);
-        assert_eq!(
-            conn.injected_seqs.get(&1),
-            Some(&InjectedType::InternAtomNetWmMoveresize)
-        );
-        assert_eq!(
-            conn.injected_seqs.get(&2),
-            Some(&InjectedType::QueryExtensionShape)
-        );
-        assert_eq!(
-            conn.injected_seqs.get(&3),
-            Some(&InjectedType::QueryExtensionXInput)
-        );
+        assert_eq!(conn.server_seq, injected_probe_count() as u16);
+        assert_eq!(conn.seq_offset, injected_probe_count() as u16);
+        let kinds = [
+            InjectedType::InternAtomNetWmMoveresize,
+            InjectedType::InternAtomNetWmWindowType,
+            InjectedType::InternAtomNetWmWindowTypeDesktop,
+            InjectedType::InternAtomNetWmState,
+            InjectedType::InternAtomNetWmStateBelow,
+            InjectedType::QueryExtensionShape,
+            InjectedType::QueryExtensionXInput,
+        ];
+        for (i, kind) in kinds.iter().enumerate() {
+            assert_eq!(
+                conn.injected_seqs.get(&(i as u16 + 1)),
+                Some(kind),
+                "injected request {}",
+                i + 1
+            );
+        }
         assert_eq!(
             conn.offset_transitions.last(),
-            Some(&(2, 3)),
+            Some(&(1, injected_probe_count() as u16)),
             "the offset takes effect from the first injected sequence"
         );
     }
@@ -690,9 +754,23 @@ mod tests {
 
         // The probe lengths are written in the client's byte order.
         let probes = &out.data[setup.len()..];
-        assert_eq!(&probes[2..4], &[0, 7], "InternAtom length");
-        assert_eq!(&probes[30..32], &[0, 4], "QueryExtension length");
-        assert_eq!(&probes[46..48], &[0, 6], "QueryExtension length");
+        let mut off = 0;
+        for (name, name_words) in interned_probes() {
+            assert_eq!(
+                &probes[off + 2..off + 4],
+                &name_words.to_be_bytes(),
+                "request length for {name:?}"
+            );
+            assert_eq!(
+                &probes[off + 4..off + 6],
+                &(name.len() as u16).to_be_bytes(),
+                "name length for {name:?}"
+            );
+            off += (name_words as usize) * 4;
+        }
+        assert_eq!(&probes[off + 2..off + 4], &[0, 4], "SHAPE");
+        off += 16;
+        assert_eq!(&probes[off + 2..off + 4], &[0, 6], "XInputExtension");
 
         let conn = conn.take();
         assert!(!conn.is_le);
@@ -711,7 +789,7 @@ mod tests {
         let tail = conn.outbound(&setup[6..]).expect("never tears down");
 
         assert_eq!(&tail.data[..setup.len()], setup.as_slice());
-        assert_eq!(tail.data.len(), setup.len() + 68);
+        assert_eq!(tail.data.len() - setup.len(), probes_len());
         assert!(!conn.with_conn(|c| c.is_le), "the client's byte order wins");
     }
 
@@ -726,7 +804,7 @@ mod tests {
         assert_eq!(out.data, req);
         let conn = conn.take();
         assert_eq!(conn.client_seq, 1);
-        assert_eq!(conn.server_seq, 4, "three probes plus this request");
+        assert_eq!(conn.server_seq, 8, "seven probes plus this request");
     }
 
     #[test]
@@ -801,8 +879,22 @@ mod tests {
                 .is_empty()
         );
 
+        // The EWMH atoms the background injection needs.
+        for seq in 2..=5u16 {
+            let atom_id = 0x100 + u32::from(seq - 2);
+            let mut prop = reply(true, seq);
+            write_u32(&mut prop[8..12], atom_id, true);
+            assert!(
+                conn.inbound(&prop)
+                    .expect("never tears down")
+                    .data
+                    .is_empty()
+            );
+        }
+
         // QueryExtension(SHAPE) reply: present flag then the opcode.
-        let mut shape = reply(true, 2);
+        let mut shape = reply(true, 6);
+        let _ = &shape;
         shape[8] = 1;
         shape[9] = 130;
         assert!(
@@ -812,7 +904,7 @@ mod tests {
                 .is_empty()
         );
 
-        let mut xinput = reply(true, 3);
+        let mut xinput = reply(true, 7);
         xinput[8] = 1;
         xinput[9] = 131;
         assert!(
@@ -827,10 +919,14 @@ mod tests {
         let other = reply(true, 99);
         let forwarded = conn.inbound(&other).expect("never tears down");
         assert_eq!(forwarded.data.len(), 32);
-        assert_eq!(r16(&forwarded.data[2..4], true), 96);
+        assert_eq!(r16(&forwarded.data[2..4], true), 92);
 
         let conn = conn.take();
         assert_eq!(conn.net_wm_moveresize, Some(0xDEAD_BEEF));
+        assert_eq!(conn.net_wm.window_type, Some(0x100));
+        assert_eq!(conn.net_wm.window_type_desktop, Some(0x101));
+        assert_eq!(conn.net_wm.state, Some(0x102));
+        assert_eq!(conn.net_wm.state_below, Some(0x103));
         assert_eq!(conn.shape_opcode, Some(130));
         assert_eq!(conn.xi_opcode, Some(131));
         assert!(conn.injected_seqs.is_empty(), "each reply is consumed once");
@@ -843,13 +939,13 @@ mod tests {
         let setup = setup_reply(true, 0x1000, b"", 0);
         conn.inbound(&setup).expect("setup reply");
 
-        // The client never saw the three injected requests, so the server's
-        // sequence is three ahead of the client's view.
+        // The client never saw the seven injected requests, so the server's
+        // sequence is seven ahead of the client's view.
         let sent = event(true, 2, 100);
         let out = conn.inbound(&sent).expect("never tears down");
 
         assert_eq!(out.data.len(), 32);
-        assert_eq!(r16(&out.data[2..4], true), 97);
+        assert_eq!(r16(&out.data[2..4], true), 93);
         assert_eq!(&out.data[8..], &sent[8..], "only the sequence changed");
     }
 

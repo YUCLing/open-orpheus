@@ -1,11 +1,7 @@
 import type { BrowserWindow } from "electron";
 import { describe, expect, it } from "vitest";
 
-import {
-  createFakeDatabase,
-  createTestContext,
-  createTestLogger,
-} from "../../helpers/context";
+import { createFakeDatabase, createTestContext, createTestLogger } from "../../helpers/context";
 
 describe("bootstrap", () => {
   it("resolves to a ready phase carrying both services", async () => {

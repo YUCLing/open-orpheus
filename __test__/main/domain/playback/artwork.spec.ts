@@ -49,9 +49,7 @@ describe("remoteArtExt", () => {
   });
 
   it("ignores the query string", () => {
-    expect(remoteArtExt("https://p1.music.126.net/a.jpg?param=100y100")).toBe(
-      ".jpg"
-    );
+    expect(remoteArtExt("https://p1.music.126.net/a.jpg?param=100y100")).toBe(".jpg");
   });
 
   it("defaults to .jpg", () => {
@@ -119,9 +117,7 @@ describe("nativeArtUrl", () => {
   it("passes empty and already-local URLs through", () => {
     expect(nativeArtUrl("")).toBe("");
     expect(nativeArtUrl("file:///tmp/a.jpg")).toBe("file:///tmp/a.jpg");
-    expect(nativeArtUrl("data:image/png;base64,AAAA")).toBe(
-      "data:image/png;base64,AAAA"
-    );
+    expect(nativeArtUrl("data:image/png;base64,AAAA")).toBe("data:image/png;base64,AAAA");
   });
 
   it("requests a small square for remote covers", () => {
@@ -145,16 +141,11 @@ describe("resolveEmbeddedArtwork", () => {
       pictures: [picture()],
     } as never);
 
-    const url = await resolveEmbeddedArtwork(
-      orpheusCoverUrl("/music/song.flac"),
-      "42"
-    );
+    const url = await resolveEmbeddedArtwork(orpheusCoverUrl("/music/song.flac"), "42");
 
     expect(MusicFile.load).toHaveBeenCalledWith("/music/song.flac");
     expect(url).toBe(artworkFileUrl("42", ".png"));
-    expect(
-      (await vol.promises.readFile(artworkCachePath("42", ".png"))).length
-    ).toBe(4);
+    expect((await vol.promises.readFile(artworkCachePath("42", ".png"))).length).toBe(4);
   });
 
   it("falls back to .jpg when the mime type is unknown", async () => {
@@ -162,51 +153,39 @@ describe("resolveEmbeddedArtwork", () => {
       pictures: [picture({ mimeType: undefined })],
     } as never);
 
-    await expect(
-      resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "43")
-    ).resolves.toBe(artworkFileUrl("43", ".jpg"));
+    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "43")).resolves.toBe(
+      artworkFileUrl("43", ".jpg")
+    );
   });
 
   it("ignores foreign URLs", async () => {
-    await expect(
-      resolveEmbeddedArtwork("https://example.com/a.jpg", "44")
-    ).resolves.toBeNull();
+    await expect(resolveEmbeddedArtwork("https://example.com/a.jpg", "44")).resolves.toBeNull();
     await expect(resolveEmbeddedArtwork("", "44")).resolves.toBeNull();
   });
 
   it("ignores other orpheus endpoints", async () => {
-    await expect(
-      resolveEmbeddedArtwork("orpheus://localmusic/other?x", "44")
-    ).resolves.toBeNull();
+    await expect(resolveEmbeddedArtwork("orpheus://localmusic/other?x", "44")).resolves.toBeNull();
     await expect(
       resolveEmbeddedArtwork("orpheus://orpheus/storage/local?file=a", "44")
     ).resolves.toBeNull();
   });
 
   it("ignores a cover URL without a file path", async () => {
-    await expect(
-      resolveEmbeddedArtwork("orpheus://localmusic/pic", "44")
-    ).resolves.toBeNull();
+    await expect(resolveEmbeddedArtwork("orpheus://localmusic/pic", "44")).resolves.toBeNull();
   });
 
   it("returns null when the file has no picture", async () => {
     vi.mocked(MusicFile.load).mockResolvedValue({ pictures: null } as never);
-    await expect(
-      resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "45")
-    ).resolves.toBeNull();
+    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "45")).resolves.toBeNull();
 
     vi.mocked(MusicFile.load).mockResolvedValue({ pictures: [] } as never);
-    await expect(
-      resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "45")
-    ).resolves.toBeNull();
+    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "45")).resolves.toBeNull();
   });
 
   it("returns null when the file cannot be read", async () => {
     vi.mocked(MusicFile.load).mockRejectedValue(new Error("boom"));
 
-    await expect(
-      resolveEmbeddedArtwork(orpheusCoverUrl("/missing.mp3"), "46")
-    ).resolves.toBeNull();
+    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/missing.mp3"), "46")).resolves.toBeNull();
   });
 });
 
@@ -222,12 +201,10 @@ describe("resolveCoverUrl", () => {
   });
 
   it("passes remote and local URLs through", async () => {
-    await expect(
-      resolveCoverUrl("https://p1.music.126.net/a.jpg", "1")
-    ).resolves.toBe("https://p1.music.126.net/a.jpg");
-    await expect(resolveCoverUrl("file:///tmp/a.jpg", "1")).resolves.toBe(
-      "file:///tmp/a.jpg"
+    await expect(resolveCoverUrl("https://p1.music.126.net/a.jpg", "1")).resolves.toBe(
+      "https://p1.music.126.net/a.jpg"
     );
+    await expect(resolveCoverUrl("file:///tmp/a.jpg", "1")).resolves.toBe("file:///tmp/a.jpg");
   });
 
   it("extracts orpheus covers to a file URL", async () => {
@@ -235,14 +212,12 @@ describe("resolveCoverUrl", () => {
       pictures: [picture()],
     } as never);
 
-    await expect(
-      resolveCoverUrl(orpheusCoverUrl("/music/song.flac"), "47")
-    ).resolves.toBe(artworkFileUrl("47", ".png"));
+    await expect(resolveCoverUrl(orpheusCoverUrl("/music/song.flac"), "47")).resolves.toBe(
+      artworkFileUrl("47", ".png")
+    );
   });
 
   it("returns an empty string when extraction fails", async () => {
-    await expect(
-      resolveCoverUrl(orpheusCoverUrl("/missing.mp3"), "48")
-    ).resolves.toBe("");
+    await expect(resolveCoverUrl(orpheusCoverUrl("/missing.mp3"), "48")).resolves.toBe("");
   });
 });

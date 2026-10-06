@@ -74,10 +74,7 @@ describe("ensureWebPack", () => {
 
   it("offers the download when there is no pack on disk", async () => {
     const h = harness({
-      probes: [
-        { status: "missing" },
-        { status: "ready", commit: EXPECTED_COMMIT },
-      ],
+      probes: [{ status: "missing" }, { status: "ready", commit: EXPECTED_COMMIT }],
     });
 
     await ensureWebPack(h.deps);
@@ -87,10 +84,7 @@ describe("ensureWebPack", () => {
 
   it("calls a corrupt pack a load failure, not a missing one", async () => {
     const h = harness({
-      probes: [
-        { status: "failed" },
-        { status: "ready", commit: EXPECTED_COMMIT },
-      ],
+      probes: [{ status: "failed" }, { status: "ready", commit: EXPECTED_COMMIT }],
     });
 
     await ensureWebPack(h.deps);

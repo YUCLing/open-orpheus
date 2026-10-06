@@ -4,9 +4,7 @@ import type { ElementTemplate } from "$bridge/contracts/menu-api";
 const templateCache: Record<string, ElementTemplate> = {};
 
 /** Store pre-parsed templates from the main process. */
-export function loadTemplates(
-  parsedTemplates: Record<string, ElementTemplate>
-) {
+export function loadTemplates(parsedTemplates: Record<string, ElementTemplate>) {
   Object.assign(templateCache, parsedTemplates);
 }
 

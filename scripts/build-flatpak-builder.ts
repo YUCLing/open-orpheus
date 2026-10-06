@@ -8,18 +8,19 @@ import {
   RUST_VERSION,
   ZIG_VERSION,
 } from "../packaging/common/toolchain.ts";
-import { baseManifest, writeManifest } from "../packaging/flatpak/manifest.ts";
+import {
+  baseManifest,
+  pnpmBootstrapCommands,
+  pnpmNativeSources,
+  PNPM_NATIVE_PACKAGES,
+  writeManifest,
+} from "../packaging/flatpak/manifest.ts";
+import { metadata } from "../packaging/resources/metadata.ts";
+import pkg from "../package.json" with { type: "json" };
 
 const execFile = promisify(execFileCb);
 
 const projectRoot = resolve(import.meta.dirname, "..");
-
-const pkg = JSON.parse(
-  await readFile(resolve(projectRoot, "package.json"), "utf-8")
-);
-const { flatpak: flatpakOptions } = await import(
-  new URL("../packaging/options.ts", import.meta.url).href
-);
 
 const outDir = resolve(projectRoot, "out/make/flatpak-builder");
 
@@ -27,9 +28,7 @@ await mkdir(outDir, { recursive: true });
 
 // --- Step 2: Fetch pnpm tarball metadata for offline sandbox install ---
 const packageManagerField = (pkg.packageManager ?? "") as string;
-const pnpmVersionMatch = packageManagerField.match(
-  /^pnpm@([^+]+)\+sha512\.([a-f0-9]+)/
-);
+const pnpmVersionMatch = packageManagerField.match(/^pnpm@([^+]+)\+sha512\.([a-f0-9]+)/);
 if (!pnpmVersionMatch) {
   throw new Error(
     `Cannot determine pnpm version/sha512 from packageManager field: ${packageManagerField}`
@@ -41,11 +40,33 @@ const pnpmTarballName = `pnpm-${pnpmVersion}.tgz`;
 const pnpmTarballUrl = `https://registry.npmjs.org/pnpm/-/pnpm-${pnpmVersion}.tgz`;
 console.log(`Using pnpm ${pnpmVersion} with sha512 from packageManager field.`);
 
+// --- Step 2.1: Fetch pnpm native binary metadata for offline sandbox install ---
+// The npm `pnpm` package is only a wrapper: its preinstall script links a
+// native binary out of a platform-specific optional dependency, which the
+// offline sandbox cannot let npm resolve. That package is declared as a source
+// instead (see pnpmNativeSources / pnpmBootstrapCommands), so its integrity has
+// to be pinned here.
+const pnpmNativeIntegrities: Record<string, string> = {};
+
+for (const [arch, packageName] of Object.entries(PNPM_NATIVE_PACKAGES)) {
+  const metadataUrl = `https://registry.npmjs.org/${packageName}/${pnpmVersion}`;
+  console.log(`Fetching registry integrity for ${packageName} (${arch})...`);
+  const resp = await fetch(metadataUrl);
+  if (!resp.ok) {
+    throw new Error(`Registry returned ${resp.status} for ${metadataUrl}`);
+  }
+  const metadata = (await resp.json()) as { dist?: { integrity?: string } };
+  const integrity = metadata.dist?.integrity;
+  if (integrity === undefined) {
+    throw new Error(`No dist.integrity in the registry metadata for ${packageName}`);
+  }
+  pnpmNativeIntegrities[packageName] = integrity;
+}
+console.log("pnpm native binary sources prepared.");
+
 // --- Step 2.5: Extract wasm-bindgen version from Cargo.toml ---
 const cargoToml = await readFile(resolve(projectRoot, "Cargo.toml"), "utf-8");
-const wasmBindgenVersionMatch = cargoToml.match(
-  /^wasm-bindgen\s*=\s*"([^"]+)"/m
-);
+const wasmBindgenVersionMatch = cargoToml.match(/^wasm-bindgen\s*=\s*"([^"]+)"/m);
 if (!wasmBindgenVersionMatch) {
   throw new Error("Cannot determine wasm-bindgen version from Cargo.toml");
 }
@@ -97,9 +118,7 @@ const releaseResp = await fetch(releaseUrl, {
   headers: { Accept: "application/vnd.github+json" },
 });
 if (!releaseResp.ok) {
-  throw new Error(
-    `GitHub API returned ${releaseResp.status} for ${releaseUrl}`
-  );
+  throw new Error(`GitHub API returned ${releaseResp.status} for ${releaseUrl}`);
 }
 const releaseData = (await releaseResp.json()) as {
   assets: Array<{ name: string; browser_download_url: string }>;
@@ -117,9 +136,7 @@ for (const target of wasmBindgenTargets) {
   console.log(`Fetching SHA256 for ${tarballName}...`);
   const sha256Resp = await fetch(sha256Asset.browser_download_url);
   if (!sha256Resp.ok) {
-    throw new Error(
-      `Failed to download ${sha256sumName}: ${sha256Resp.status}`
-    );
+    throw new Error(`Failed to download ${sha256sumName}: ${sha256Resp.status}`);
   }
   const sha256Content = await sha256Resp.text();
   // Format: "SHA256  filename" or just "SHA256"
@@ -175,13 +192,9 @@ for (const target of rustArchTargets) {
 // wasm32-unknown-unknown std (arch-independent)
 const wasm32StdName = `rust-std-${RUST_VERSION}-wasm32-unknown-unknown.tar.xz`;
 console.log(`Fetching SHA256 for ${wasm32StdName}...`);
-const wasm32Sha256Resp = await fetch(
-  `https://static.rust-lang.org/dist/${wasm32StdName}.sha256`
-);
+const wasm32Sha256Resp = await fetch(`https://static.rust-lang.org/dist/${wasm32StdName}.sha256`);
 if (!wasm32Sha256Resp.ok) {
-  throw new Error(
-    `Failed to fetch SHA256 for ${wasm32StdName}: ${wasm32Sha256Resp.status}`
-  );
+  throw new Error(`Failed to fetch SHA256 for ${wasm32StdName}: ${wasm32Sha256Resp.status}`);
 }
 const wasm32Sha256 = (await wasm32Sha256Resp.text()).trim().split(/\s+/)[0];
 
@@ -230,9 +243,7 @@ for (const target of cargoZigbuildTargets) {
   console.log(`Fetching SHA256 for ${tarballName}...`);
   const sha256Resp = await fetch(sha256Asset.browser_download_url);
   if (!sha256Resp.ok) {
-    throw new Error(
-      `Failed to download ${tarballName}.sha256: ${sha256Resp.status}`
-    );
+    throw new Error(`Failed to download ${tarballName}.sha256: ${sha256Resp.status}`);
   }
   // Format: "SHA256  filename" or "SHA256 *filename"
   const sha256 = (await sha256Resp.text()).trim().split(/\s+/)[0];
@@ -326,12 +337,7 @@ if (flatpakSourceMatch) {
   console.log(`Creating project source tarball: ${sourceTarball}`);
   // git-derived file list (tracked + untracked-but-not-ignored), so uncommitted
   // edits are included — same wheel used by the RPM/deb source staging.
-  await createProjectTarball(
-    projectRoot,
-    sourceTarballPath,
-    pkgName,
-    pkgVersion
-  );
+  await createProjectTarball(projectRoot, sourceTarballPath, pkgName, pkgVersion);
   projectSource = {
     type: "archive",
     path: sourceTarball,
@@ -343,11 +349,11 @@ if (flatpakSourceMatch) {
 // @malept/electron-installer-flatpak Installer (fed by a fake app dir); since
 // the sandbox scaffolding is generated by our own build-scaffold.ts, they are
 // computed directly here.
-const appId = flatpakOptions.id ?? "";
+const appId = metadata.appId;
 const appIdentifier = pkg.name;
-const runtimeVersion = String(flatpakOptions.runtimeVersion ?? "26.08");
-const baseVersion = String(flatpakOptions.baseVersion ?? "26.08");
-const finishArgs = flatpakOptions.finishArgs ?? [];
+const runtimeVersion = metadata.flatpak.runtimeVersion;
+const baseVersion = metadata.flatpak.baseVersion;
+const finishArgs = metadata.flatpak.finishArgs;
 
 const appModule = {
   name: appIdentifier,
@@ -370,8 +376,10 @@ const appModule = {
     // pnpm will use the registry to verify the release age, but we are offline
     "echo 'minimumReleaseAge: 0' >> pnpm-workspace.yaml",
 
-    // Install pnpm into the (writable) build dir using FLATPAK_BUILDER_BUILDDIR
-    `npm install -g --prefix $FLATPAK_BUILDER_BUILDDIR/.npm-prefix ./${pnpmTarballName}`,
+    // Install pnpm into the (writable) build dir using FLATPAK_BUILDER_BUILDDIR.
+    // pnpm 12 ships as a wrapper around a native binary, which an offline build
+    // has to supply itself — see pnpmBootstrapCommands.
+    ...pnpmBootstrapCommands("$FLATPAK_BUILDER_BUILDDIR/.npm-prefix", pnpmTarballName),
 
     // Install dependencies using the offline pnpm store populated by flatpak-node-generator.
     `pnpm install --offline --frozen-lockfile --store-dir $FLATPAK_BUILDER_BUILDDIR/flatpak-node/pnpm-store`,
@@ -422,6 +430,10 @@ const appModule = {
       sha512: pnpmSha512,
       "dest-filename": pnpmTarballName,
     },
+    ...pnpmNativeSources({
+      pnpmVersion,
+      integrities: pnpmNativeIntegrities,
+    }),
     "generated-cargo-sources.json",
     ...wasmBindgenSources,
     ...rustSources,
@@ -439,7 +451,7 @@ const manifest = baseManifest(
     runtimeVersion,
     baseVersion,
     finishArgs,
-    extraModules: flatpakOptions.modules,
+    extraModules: metadata.flatpak.modules,
   },
   appModule
 );

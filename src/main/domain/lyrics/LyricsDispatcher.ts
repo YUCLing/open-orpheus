@@ -25,7 +25,7 @@ export default class LyricsDispatcher extends Emittery<LyricsDispatcherEvents> {
   set lyrics(value) {
     this._lyrics = value;
     if (value) this.slogan = null;
-    this.emit("lyricsupdate", value);
+    void this.emit("lyricsupdate", value);
   }
 
   get slogan() {
@@ -35,7 +35,7 @@ export default class LyricsDispatcher extends Emittery<LyricsDispatcherEvents> {
   set slogan(value) {
     this._slogan = value;
     if (value) this.lyrics = null;
-    this.emit("sloganupdate", value);
+    void this.emit("sloganupdate", value);
   }
 
   get playState() {
@@ -44,7 +44,7 @@ export default class LyricsDispatcher extends Emittery<LyricsDispatcherEvents> {
 
   set playState(value) {
     this._playState = value;
-    this.emit("playstateupdate", value);
+    void this.emit("playstateupdate", value);
   }
 
   get time() {
@@ -53,7 +53,7 @@ export default class LyricsDispatcher extends Emittery<LyricsDispatcherEvents> {
 
   set time(value) {
     this._time = value;
-    this.emit("timeupdate", value);
+    void this.emit("timeupdate", value);
   }
 
   get playbackRate() {
@@ -62,6 +62,6 @@ export default class LyricsDispatcher extends Emittery<LyricsDispatcherEvents> {
 
   set playbackRate(value) {
     this._playbackRate = value;
-    this.emit("playbackratechange", value);
+    void this.emit("playbackratechange", value);
   }
 }

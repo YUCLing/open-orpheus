@@ -2,7 +2,7 @@
 [package]
 authors = ["YUCLing <luotianyi@luotianyi.me>"]
 edition = "2021"
-name    = "nowplaying"
+name = "nowplaying"
 version = "0.1.0"
 
 [lib]
@@ -19,15 +19,15 @@ objc2-app-kit = { version = "0.3", features = ["NSImage"] }
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 objc2-foundation = { version = "0.3", features = ["NSURL"] }
 objc2-media-player = { version = "0.3", features = [
-    "alloc",
-    "block2",
-    "MPMediaItem",
-    "MPNowPlayingInfoCenter",
-    "MPRemoteCommand",
-    "MPRemoteCommandCenter",
-    "MPRemoteCommandEvent",
-    "objc2-app-kit",
-    "objc2-core-foundation",
+  "alloc",
+  "block2",
+  "MPMediaItem",
+  "MPNowPlayingInfoCenter",
+  "MPRemoteCommand",
+  "MPRemoteCommandCenter",
+  "MPRemoteCommandEvent",
+  "objc2-app-kit",
+  "objc2-core-foundation",
 ] }
 
 [build-dependencies]

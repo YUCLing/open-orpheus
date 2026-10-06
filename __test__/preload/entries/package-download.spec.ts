@@ -37,9 +37,7 @@ async function load(...argv: string[]) {
 
   return {
     reason: exposed("downloadReason") as PackageDownloadReason,
-    downloadPackage: exposed("downloadPackage") as (
-      cb: (progress: Progress) => void
-    ) => void,
+    downloadPackage: exposed("downloadPackage") as (cb: (progress: Progress) => void) => void,
     /** The progress listener registered by `downloadPackage`, if any. */
     progressListener: () => hoisted.on.mock.calls[0]?.[1] as Listener,
   };
@@ -75,10 +73,7 @@ describe("package download preload", () => {
     downloadPackage(callback);
 
     expect(hoisted.send).toHaveBeenCalledWith("download-package");
-    expect(hoisted.on).toHaveBeenCalledWith(
-      "download-package-progress",
-      expect.any(Function)
-    );
+    expect(hoisted.on).toHaveBeenCalledWith("download-package-progress", expect.any(Function));
   });
 
   it("forwards progress events to the caller", async () => {
@@ -103,9 +98,6 @@ describe("package download preload", () => {
 
     expect(callback).toHaveBeenNthCalledWith(1, { step: "saving" });
     expect(callback).toHaveBeenNthCalledWith(2, { step: "completed" });
-    expect(hoisted.off).toHaveBeenCalledWith(
-      "download-package-progress",
-      listener
-    );
+    expect(hoisted.off).toHaveBeenCalledWith("download-package-progress", listener);
   });
 });

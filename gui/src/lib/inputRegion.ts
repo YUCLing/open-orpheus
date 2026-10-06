@@ -115,13 +115,3 @@ export const inputRegionAttachment: Attachment = (element) => {
     removeInputRegion(element);
   };
 };
-
-api.events.shown(async () => {
-  if (api.platform !== "linux") return;
-  // Ensure it's set, even if it was populated before window surface is
-  // actually shown.
-  for (let i = 0; i < 5; i++) {
-    if (await refreshInputRegion()) return;
-    await new Promise((r) => setTimeout(r, (i + 1) * 100));
-  }
-});

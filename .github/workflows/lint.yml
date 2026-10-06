@@ -38,21 +38,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check formatting
+        run: pnpm format:check
+
       - name: Build native modules
         shell: bash
         run: SKIP_IF_NO_SCRIPT=1 PREFER_SCRIPT=types pnpm build:modules
 
-      - name: Run ESLint
-        run: pnpm lint:eslint
+      - name: Run Oxlint
+        run: pnpm lint:oxlint
 
-      - name: Run TypeScript type check (root)
-        run: pnpm lint:types:root
+      - name: Run ESLint (gui)
+        run: pnpm lint:gui:eslint
 
-      - name: Run Svelte type check (gui)
-        run: pnpm lint:types:gui
-
-      - name: Check Prettier formatting
-        run: pnpm prettier --check .
+      - name: Run Svelte check
+        run: pnpm lint:gui:check
 
   lint-rust:
     name: Clippy & Rustfmt (${{ matrix.os }})
@@ -73,6 +73,12 @@ jobs:
         with:
           toolchain: ${{ vars.RUST_VERSION || 'stable' }}
           components: clippy,rustfmt
+
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libfreetype-dev
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

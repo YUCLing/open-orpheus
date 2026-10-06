@@ -10,27 +10,24 @@ import {
   serialData,
 } from "../domain/crypto";
 
-ipcMain.handle(
-  "channel.call",
-  (event, command: string, ...params: unknown[]) => {
-    return new Promise((resolve) => {
-      dispatcher
-        .dispatch(
-          command,
-          (...args: unknown[]) => {
-            resolve(args);
-          },
-          event,
-          ...params
-        )
-        .then((result: unknown | false) => {
-          if (result === false) {
-            resolve(false); // No handler found for the command
-          }
-        });
-    });
-  }
-);
+ipcMain.handle("channel.call", (event, command: string, ...params: unknown[]) => {
+  return new Promise((resolve) => {
+    void dispatcher
+      .dispatch(
+        command,
+        (...args: unknown[]) => {
+          resolve(args);
+        },
+        event,
+        ...params
+      )
+      .then((result: unknown | false) => {
+        if (result === false) {
+          resolve(false); // No handler found for the command
+        }
+      });
+  });
+});
 
 ipcMain.on("channel.enData", (event, plaintext: string) => {
   const ciphertext = enData(plaintext);
@@ -42,13 +39,10 @@ ipcMain.on("channel.deData", (event, doubleBase64: string) => {
   event.returnValue = plaintextBuf ? plaintextBuf.toString("utf8") : null;
 });
 
-ipcMain.on(
-  "channel.serialData",
-  (event, apiPath: string, body: string | object) => {
-    const hexParams = serialData(apiPath ?? "", body ?? "");
-    event.returnValue = hexParams;
-  }
-);
+ipcMain.on("channel.serialData", (event, apiPath: string, body: string | object) => {
+  const hexParams = serialData(apiPath ?? "", body ?? "");
+  event.returnValue = hexParams;
+});
 
 ipcMain.on("channel.deserialData", (event, hexParams: string | ArrayBuffer) => {
   const deserialized = deserialData(hexParams);
@@ -56,9 +50,7 @@ ipcMain.on("channel.deserialData", (event, hexParams: string | ArrayBuffer) => {
 });
 
 ipcMain.on("channel.encodeAnonymousId", (event, id: string) => {
-  event.returnValue = Buffer.from(id + " " + encodeAnonymousId(id)).toString(
-    "base64"
-  );
+  event.returnValue = Buffer.from(id + " " + encodeAnonymousId(id)).toString("base64");
 });
 
 ipcMain.on("channel.serialKey", (event, key: string) => {

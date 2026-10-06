@@ -12,15 +12,9 @@ vi.mock("node:child_process", () => ({
 
 import { vol } from "memfs";
 
-import {
-  createPrebuiltBundle,
-  resolvePrebuiltAppDir,
-} from "../../packaging/common/prebuilt";
+import { createPrebuiltBundle, resolvePrebuiltAppDir } from "../../packaging/common/prebuilt";
 
-type ExecFileCallback = (
-  error: Error | null,
-  result?: { stdout: string; stderr: string }
-) => void;
+type ExecFileCallback = (error: Error | null, result?: { stdout: string; stderr: string }) => void;
 
 /** `execFile` in callback style, so `promisify` works on the mock. */
 function execFileSucceeds() {
@@ -53,15 +47,14 @@ describe("resolvePrebuiltAppDir", () => {
       "/repo/out/open-orpheus-linux-arm64/resources/app.asar": "app",
     });
 
-    await expect(
-      resolvePrebuiltAppDir("/repo", "open-orpheus", "arm64")
-    ).resolves.toBe("/repo/out/open-orpheus-linux-arm64");
+    await expect(resolvePrebuiltAppDir("/repo", "open-orpheus", "arm64")).resolves.toBe(
+      "/repo/out/open-orpheus-linux-arm64"
+    );
   });
 
   it("falls back to the host arch", async () => {
     vol.fromJSON({
-      [`/repo/out/open-orpheus-linux-${process.arch}/resources/app.asar`]:
-        "app",
+      [`/repo/out/open-orpheus-linux-${process.arch}/resources/app.asar`]: "app",
     });
 
     await expect(resolvePrebuiltAppDir("/repo", "open-orpheus")).resolves.toBe(
@@ -71,19 +64,18 @@ describe("resolvePrebuiltAppDir", () => {
 
   it("looks only at the requested arch when one is given", async () => {
     vol.fromJSON({
-      [`/repo/out/open-orpheus-linux-${process.arch}/resources/app.asar`]:
-        "app",
+      [`/repo/out/open-orpheus-linux-${process.arch}/resources/app.asar`]: "app",
     });
 
-    await expect(
-      resolvePrebuiltAppDir("/repo", "open-orpheus", "arm64")
-    ).rejects.toThrow(/No packaged Electron app found/);
+    await expect(resolvePrebuiltAppDir("/repo", "open-orpheus", "arm64")).rejects.toThrow(
+      /No packaged Electron app found/
+    );
   });
 
   it("explains how to produce the directory when it is missing", async () => {
-    await expect(
-      resolvePrebuiltAppDir("/repo", "open-orpheus")
-    ).rejects.toThrow("Run `pnpm package` first.");
+    await expect(resolvePrebuiltAppDir("/repo", "open-orpheus")).rejects.toThrow(
+      "Run `pnpm package` first."
+    );
   });
 });
 
@@ -107,12 +99,7 @@ describe("createPrebuiltBundle", () => {
     expect(vol.existsSync("/stage/prebuilt/scaffold")).toBe(true);
     expect(hoisted.execFile).toHaveBeenCalledWith(
       process.execPath,
-      [
-        "/repo/scripts/build-scaffold.ts",
-        "/stage/prebuilt/scaffold",
-        "--name",
-        "open-orpheus",
-      ],
+      ["/repo/scripts/build-scaffold.ts", "/stage/prebuilt/scaffold", "--name", "open-orpheus"],
       { cwd: "/repo" },
       expect.any(Function)
     );
@@ -125,12 +112,7 @@ describe("createPrebuiltBundle", () => {
       "/stage/prebuilt/keep.txt": "old",
     });
 
-    await createPrebuiltBundle(
-      "/repo",
-      "/out/app-linux-x64",
-      "app",
-      "/stage/prebuilt"
-    );
+    await createPrebuiltBundle("/repo", "/out/app-linux-x64", "app", "/stage/prebuilt");
 
     expect(vol.existsSync("/stage/prebuilt/app/stale")).toBe(false);
     expect(vol.existsSync("/stage/prebuilt/keep.txt")).toBe(false);

@@ -76,10 +76,7 @@ function buildNcae(options: {
 
   const buf = Buffer.alloc(HEADER_SIZE + ext.length + encrypted.length);
   Buffer.from("NCAE", "latin1").copy(buf, 0);
-  buf.writeUInt32LE(
-    options.declaredPayloadSize ?? encrypted.length,
-    OFF_PAYLOAD_SIZE
-  );
+  buf.writeUInt32LE(options.declaredPayloadSize ?? encrypted.length, OFF_PAYLOAD_SIZE);
   buf.writeUInt16LE(options.type, OFF_TYPE);
   buf[OFF_EXT_COUNT] = ext.length;
   Buffer.from(ext).copy(buf, OFF_EXT_DATA);
@@ -94,15 +91,11 @@ const JSON_PAYLOAD = JSON.stringify({
 
 describe("decodeNcae", () => {
   it("decodes a JSON (type 1) payload", async () => {
-    const result = await decodeNcae(
-      buildNcae({ payload: JSON_PAYLOAD, type: NcaeType.Json })
-    );
+    const result = await decodeNcae(buildNcae({ payload: JSON_PAYLOAD, type: NcaeType.Json }));
 
     expect(result.header.type).toBe(NcaeType.Json);
     expect(typeof result.payload).toBe("string");
-    expect(JSON.parse(result.payload as string)).toEqual(
-      JSON.parse(JSON_PAYLOAD)
-    );
+    expect(JSON.parse(result.payload as string)).toEqual(JSON.parse(JSON_PAYLOAD));
   });
 
   it("reports the declared payload size, not the decompressed one", async () => {
@@ -114,16 +107,12 @@ describe("decodeNcae", () => {
     // The declared size is the encrypted (compressed) payload region.
     expect(result.header.payloadSize).toBe(declared);
     expect(declared).toBe(buf.length - HEADER_SIZE - 5);
-    expect(JSON.parse(result.payload as string)).toEqual(
-      JSON.parse(JSON_PAYLOAD)
-    );
+    expect(JSON.parse(result.payload as string)).toEqual(JSON.parse(JSON_PAYLOAD));
   });
 
   it("decodes a WAV (type 2) payload as bytes", async () => {
     const wav = Buffer.from("RIFF....WAVEfmt ");
-    const result = await decodeNcae(
-      buildNcae({ payload: wav, type: NcaeType.Wav })
-    );
+    const result = await decodeNcae(buildNcae({ payload: wav, type: NcaeType.Wav }));
 
     expect(result.header.type).toBe(NcaeType.Wav);
     expect(Buffer.from(result.payload as Uint8Array)).toEqual(wav);
@@ -131,9 +120,7 @@ describe("decodeNcae", () => {
 
   it("round-trips larger payloads that span RC4 blocks", async () => {
     const payload = "x".repeat(5000);
-    const result = await decodeNcae(
-      buildNcae({ payload, type: NcaeType.Json })
-    );
+    const result = await decodeNcae(buildNcae({ payload, type: NcaeType.Json }));
 
     expect(result.payload).toBe(payload);
   });
@@ -160,12 +147,8 @@ describe("decodeNcae", () => {
   });
 
   it("rejects buffers shorter than the header", async () => {
-    await expect(decodeNcae(Buffer.alloc(16))).rejects.toThrow(
-      /NCAE buffer too short/
-    );
-    await expect(decodeNcae(Buffer.alloc(0))).rejects.toThrow(
-      /NCAE buffer too short/
-    );
+    await expect(decodeNcae(Buffer.alloc(16))).rejects.toThrow(/NCAE buffer too short/);
+    await expect(decodeNcae(Buffer.alloc(0))).rejects.toThrow(/NCAE buffer too short/);
   });
 
   it("rejects a bad magic", async () => {
@@ -193,9 +176,7 @@ describe("decodeNcae", () => {
     buf.writeUInt16LE(NcaeType.Json, OFF_TYPE);
     buf[OFF_EXT_COUNT] = 4;
 
-    await expect(decodeNcae(buf)).rejects.toThrow(
-      /extension count must be at least 5/
-    );
+    await expect(decodeNcae(buf)).rejects.toThrow(/extension count must be at least 5/);
   });
 
   it("rejects extension counts that are not 5, 9, 13, …", async () => {
@@ -224,8 +205,6 @@ describe("decodeNcae", () => {
     // cannot be raw-inflated.
     buf.fill(0xff, OFF_EXT_DATA + 5);
 
-    await expect(decodeNcae(buf)).rejects.toThrow(
-      /deflate decompression failed/
-    );
+    await expect(decodeNcae(buf)).rejects.toThrow(/deflate decompression failed/);
   });
 });

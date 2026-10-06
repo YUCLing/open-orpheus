@@ -22,9 +22,7 @@ export const av3aBridge = {
   },
   /** Fallback terminal errors originating in main (e.g. process crash). */
   onError(callback: (message: string) => void): void {
-    ipcRenderer.on("av3a.error", (_event, message: string) =>
-      callback(message)
-    );
+    ipcRenderer.on("av3a.error", (_event, message: string) => callback(message));
   },
   onProgress(callback: (loaded: number, total: number) => void): void {
     ipcRenderer.on("av3a.progress", (_event, loaded: number, total: number) =>

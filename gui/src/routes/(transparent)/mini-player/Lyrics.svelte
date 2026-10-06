@@ -48,11 +48,7 @@
   let offset = $derived(maxScroll * progress);
 </script>
 
-<div
-  class="w-full overflow-hidden whitespace-nowrap"
-  bind:clientWidth={containerWidth}
-  {...rest}
->
+<div class="w-full overflow-hidden whitespace-nowrap" bind:clientWidth={containerWidth} {...rest}>
   {#if currentLine}
     <div
       class="inline-block px-[2ch] will-change-transform"

@@ -65,9 +65,7 @@ function mapVkToElectronKey(vkCode: number): string | null {
 /**
  * Convert legacy VK/keyCode values (e.g. 17,18,76) into an Electron accelerator.
  */
-export function vkCodesToElectronAccelerator(
-  vkCodes: readonly number[]
-): VkToElectronResult {
+export function vkCodesToElectronAccelerator(vkCodes: readonly number[]): VkToElectronResult {
   const unsupportedVkCodes: number[] = [];
   const modifiers = new Set<string>();
   let key: string | null = null;
@@ -96,9 +94,7 @@ export function vkCodesToElectronAccelerator(
     };
   }
 
-  const orderedModifiers = MODIFIER_ORDER.filter((token) =>
-    modifiers.has(token)
-  );
+  const orderedModifiers = MODIFIER_ORDER.filter((token) => modifiers.has(token));
 
   return {
     accelerator: [...orderedModifiers, key].join("+"),

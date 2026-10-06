@@ -2,16 +2,22 @@
 [package]
 authors = ["YUCLing <luotianyi@luotianyi.me>"]
 edition = "2021"
-name    = "dbus"
+name = "dbus"
 version = "0.1.0"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-napi.workspace = true
+# `serde-json` provides the JS <-> `serde_json::Value` conversions the generic
+# D-Bus client uses to move arbitrary D-Bus values across the napi boundary.
+# `napi6` is what lets 64-bit integers outside the ±2^53 safe range cross that
+# boundary losslessly as JS bigints (see `src/client/value.rs`); without it napi
+# rounds signed values and turns large unsigned ones into strings.
+napi = { workspace = true, features = ["serde-json", "napi6"] }
 napi-derive.workspace = true
 serde = "1.0.228"
+serde_json = "1"
 smol = "2.0.2"
 zbus = "5.16.0"
 

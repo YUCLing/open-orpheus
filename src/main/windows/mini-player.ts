@@ -1,17 +1,13 @@
 import { join } from "node:path";
 
 import { BrowserWindow } from "electron";
+import type { BrowserWindowConstructorOptions } from "electron";
 import photon from "@silvia-odwyer/photon-node";
 import psd from "@webtoon/psd";
 import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
-import {
-  ManagedWindow,
-  OnDemandWindow,
-  OnDemandWindowState,
-  SimpleManagedWindow,
-} from "./managedWindow";
+import { guiUrl, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "./managedWindow";
 import { registerIpcHandlers } from "../../bridge/register";
 import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
 import type { BtnImages, BtnState } from "../../shared/types/dui";
@@ -31,7 +27,6 @@ import type {
 } from "@shared/types/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { lyricsDispatcher } from "../domain/lyrics";
-import { LifecycleState } from "../services/lifecycle";
 import { font } from "../platform/gui";
 import type { SettingsService, WindowService } from "../bootstrap/types";
 import type { LifecycleService } from "../services/lifecycle";
@@ -39,7 +34,7 @@ import type { LifecycleService } from "../services/lifecycle";
 export interface MiniPlayerDeps {
   windows: Pick<WindowService, "currentWindow">;
   lifecycle: Pick<LifecycleService, "currentState">;
-  settings: Pick<SettingsService, "kv">;
+  settings: Pick<SettingsService, "kv" | "events">;
 }
 
 // State
@@ -153,30 +148,24 @@ packManager.on("skin2packloaded", async (event) => {
     listPlayingBgColor,
     listScrollBarBgColor,
   ] = await Promise.all(
-    [
-      bg,
-      listBg,
-      listItemBg,
-      listHoverBg,
-      listSelectedBg,
-      listPlayingBg,
-      listScrollBarBg,
-    ].map(async (buf) => {
-      let img: photon.PhotonImage;
-      if (buf.subarray(0, 4).toString("ascii") === "8BPS") {
-        // It's a PSD, convert it (Netease is so freaking stupid)
-        const p = psd.parse(buf.buffer as ArrayBuffer);
-        const data = await p.composite();
-        img = new photon.PhotonImage(
-          new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
-          p.width,
-          p.height
-        );
-      } else {
-        img = photon.PhotonImage.new_from_byteslice(buf);
+    [bg, listBg, listItemBg, listHoverBg, listSelectedBg, listPlayingBg, listScrollBarBg].map(
+      async (buf) => {
+        let img: photon.PhotonImage;
+        if (buf.subarray(0, 4).toString("ascii") === "8BPS") {
+          // It's a PSD, convert it (Netease is so freaking stupid)
+          const p = psd.parse(buf.buffer as ArrayBuffer);
+          const data = await p.composite();
+          img = new photon.PhotonImage(
+            new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+            p.width,
+            p.height
+          );
+        } else {
+          img = photon.PhotonImage.new_from_byteslice(buf);
+        }
+        return extractColor(img);
       }
-      return extractColor(img);
-    })
+    )
   );
 
   // Unlike `Partial`, this permits an explicit `undefined`: the skin parser fills
@@ -305,8 +294,7 @@ packManager.on("skin2packloaded", async (event) => {
   }
 
   const listStyle: {
-    [K in keyof MiniPlayerStyle["list"]]?:
-      MiniPlayerStyle["list"][K] | undefined;
+    [K in keyof MiniPlayerStyle["list"]]?: MiniPlayerStyle["list"][K] | undefined;
   } = {
     background: listBgColor,
     itemBackground: listItemBgColor,
@@ -321,9 +309,7 @@ packManager.on("skin2packloaded", async (event) => {
     if (el.getAttribute("name") === "play_list") {
       listStyle.color = argbToCss(el.getAttribute("itemtextcolor")!);
       listStyle.hoverColor = argbToCss(el.getAttribute("itemhottextcolor")!);
-      listStyle.selectedColor = argbToCss(
-        el.getAttribute("itemselectedtextcolor")!
-      );
+      listStyle.selectedColor = argbToCss(el.getAttribute("itemselectedtextcolor")!);
       break;
     }
   }
@@ -355,8 +341,7 @@ packManager.on("skin2packloaded", async (event) => {
         listStyle.radioIcon = extractBtnImagesFromElement(btn) ?? undefined;
         break;
       case "dj_highlight":
-        listStyle.radioHoverIcon =
-          extractBtnImagesFromElement(btn) ?? undefined;
+        listStyle.radioHoverIcon = extractBtnImagesFromElement(btn) ?? undefined;
         break;
       default:
         btnsFound--;
@@ -404,10 +389,7 @@ export function updatePlayState(playing: boolean) {
   sendToMiniPlayer("playStateUpdate", playState);
 }
 
-export function updateListData(
-  items: MiniPlayerListElement[],
-  cp: string | null
-) {
+export function updateListData(items: MiniPlayerListElement[], cp: string | null) {
   listItems = items;
   currentPlay = cp;
   sendToMiniPlayer("listUpdate", { items, currentPlay });
@@ -447,80 +429,96 @@ export function getFullState(): MiniPlayerFullState {
   };
 }
 
-function createWindow(
-  deps: MiniPlayerDeps,
-  state?: OnDemandWindowState
-): BrowserWindow {
-  const miniPlayerWindow = new BrowserWindow({
-    width: 310,
-    height: 50 + 340, // Total size: Main + List
-    transparent: true,
-    hasShadow: false,
-    frame: false,
-    resizable: false,
-    show: false,
-    roundedCorners: false,
-    title: "Open Orpheus Mini Player",
-    webPreferences: {
-      partition: "open-orpheus",
-      preload: join(import.meta.dirname, "mini-player.js"),
+const miniPlayerWindowOptions = {
+  width: 310,
+  height: 50 + 340, // Total size: Main + List
+  transparent: true,
+  hasShadow: false,
+  frame: false,
+  resizable: false,
+  show: false,
+  roundedCorners: false,
+  title: "Open Orpheus Mini Player",
+  webPreferences: {
+    partition: "open-orpheus",
+    preload: join(import.meta.dirname, "mini-player.cjs"),
+  },
+} satisfies BrowserWindowConstructorOptions;
+
+function setupMiniPlayerWindow(deps: MiniPlayerDeps, wnd: BrowserWindow): BrowserWindow {
+  void wnd.loadURL(guiUrl("/mini-player"));
+
+  registerIpcHandlers<MiniPlayerContract>(wnd.webContents, "miniPlayer", {
+    requestFullUpdate: async () => getFullState(),
+    dragWindow: async () => {
+      if (wnd.isDestroyed()) return;
+      const hwnd = wnd.getNativeWindowHandle();
+      dragWindow(hwnd);
+    },
+    fireCall: async (event, cmd, ...args) => {
+      const mainWindow = deps.windows.currentWindow();
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send("channel.call", cmd, ...args);
     },
   });
-  if (GUI_VITE_DEV_SERVER_URL) {
-    miniPlayerWindow.loadURL(`${GUI_VITE_DEV_SERVER_URL}/mini-player`);
-  } else {
-    miniPlayerWindow.loadURL("gui://frontend/mini-player");
+  registerInputRegionHandlers(wnd, ManagedWindow);
+  registerLyricsHandlers(wnd, lyricsDispatcher);
+  return wnd;
+}
+
+/** Closing the window asks the player to close, unless it is being dismissed. */
+function notifyMiniPlayerClose(deps: MiniPlayerDeps) {
+  const mainWindow = deps.windows.currentWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
+}
+
+class MiniPlayerWindow extends ManagedWindow {
+  constructor(deps: MiniPlayerDeps) {
+    super();
+    this.setData("name", "mini_player");
+    this.requestCloseApproval(() => notifyMiniPlayerClose(deps));
+    setupMiniPlayerWindow(deps, this.createBrowserWindow(miniPlayerWindowOptions));
   }
-
-  miniPlayerWindow.on("close", (e) => {
-    if (
-      (state && !state.alive) ||
-      deps.lifecycle.currentState() === LifecycleState.Quitting
-    )
-      return; // Allow closing when hiding or quitting
-    e.preventDefault();
-    const mainWindow = deps.windows.currentWindow();
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
-  });
-
-  registerIpcHandlers<MiniPlayerContract>(
-    miniPlayerWindow.webContents,
-    "miniPlayer",
-    {
-      requestFullUpdate: async () => getFullState(),
-      dragWindow: async () => {
-        if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
-        const hwnd = miniPlayerWindow.getNativeWindowHandle();
-        dragWindow(hwnd);
-      },
-      fireCall: async (event, cmd, ...args) => {
-        const mainWindow = deps.windows.currentWindow();
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        mainWindow.webContents.send("channel.call", cmd, ...args);
-      },
-    }
-  );
-  registerInputRegionHandlers(miniPlayerWindow, ManagedWindow);
-  registerLyricsHandlers(miniPlayerWindow, lyricsDispatcher);
-  return miniPlayerWindow;
 }
 
 class MiniPlayerOnDemandWindow extends OnDemandWindow {
   constructor(private readonly deps: MiniPlayerDeps) {
     super();
+    this.setData("name", "mini_player");
+    this.requestCloseApproval(() => notifyMiniPlayerClose(this.deps));
   }
 
-  createWindow(state: OnDemandWindowState): BrowserWindow {
-    return createWindow(this.deps, state);
+  createWindow(): BrowserWindow {
+    return setupMiniPlayerWindow(this.deps, this.createBrowserWindow(miniPlayerWindowOptions));
   }
+}
+
+/** `"on-demand"` destroys the window when hidden; anything else keeps it. */
+function createWindowForLifecycle(deps: MiniPlayerDeps, value: unknown): ManagedWindow {
+  return value === "on-demand" ? new MiniPlayerOnDemandWindow(deps) : new MiniPlayerWindow(deps);
+}
+
+let lifecycleSwitchRegistered = false;
+
+/**
+ * React to lifecycle changes without a restart.
+ *
+ * Registered from the startup path rather than at module scope: this module is
+ * evaluated before `settings.initialize()` creates the settings emitter.
+ */
+function registerLifecycleSwitch(deps: MiniPlayerDeps) {
+  if (lifecycleSwitchRegistered) return;
+  lifecycleSwitchRegistered = true;
+
+  deps.settings.events.on("change", (e) => {
+    if (e.data.key !== "window.lifecycle" || !window) return;
+    window = switchWindowPolicy(window, () => createWindowForLifecycle(deps, e.data.value));
+  });
 }
 
 export let window: ManagedWindow;
 export default async function createMiniPlayerWindow(deps: MiniPlayerDeps) {
-  window =
-    (await deps.settings.kv.get("window.lifecycle")) !== "on-demand"
-      ? new SimpleManagedWindow(createWindow(deps))
-      : new MiniPlayerOnDemandWindow(deps);
-  window.setData("name", "mini_player");
+  window = createWindowForLifecycle(deps, await deps.settings.kv.get("window.lifecycle"));
+  registerLifecycleSwitch(deps);
 }

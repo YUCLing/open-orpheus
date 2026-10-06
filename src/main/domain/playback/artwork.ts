@@ -38,10 +38,7 @@ export function artworkFileUrl(id: string, ext: string): string {
 }
 
 /** Whether the artwork for a track is already cached. */
-export async function artworkFileExists(
-  id: string,
-  ext: string
-): Promise<boolean> {
+export async function artworkFileExists(id: string, ext: string): Promise<boolean> {
   try {
     await stat(artworkCachePath(id, ext));
     return true;
@@ -72,11 +69,7 @@ function artExtForMime(mimeType: string | undefined): string {
  * Write bytes into the album-art cache and return the `file://` URL. No-op
  * (returns the URL) when the file is already present.
  */
-export async function cacheArtwork(
-  id: string,
-  data: Uint8Array,
-  ext: string
-): Promise<string> {
+export async function cacheArtwork(id: string, data: Uint8Array, ext: string): Promise<string> {
   const path = artworkCachePath(id, ext);
   try {
     await stat(path);
@@ -156,10 +149,7 @@ export async function resolveEmbeddedArtwork(
  *    file;
  *  - anything else resolves to "" (no art).
  */
-export async function resolveCoverUrl(
-  rawUrl: string | null,
-  trackId: string
-): Promise<string> {
+export async function resolveCoverUrl(rawUrl: string | null, trackId: string): Promise<string> {
   if (!rawUrl) return "";
   if (/^https?:\/\//i.test(rawUrl) || rawUrl.startsWith("file://")) {
     return rawUrl;

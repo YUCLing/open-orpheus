@@ -105,9 +105,7 @@ describe("HttpCacheStorage automatic vacuum", () => {
     await vi.waitFor(() => {
       expect(driver.query).toHaveBeenCalledWith("VACUUM;");
     });
-    expect(driver.query).toHaveBeenCalledWith(
-      "PRAGMA wal_checkpoint(TRUNCATE);"
-    );
+    expect(driver.query).toHaveBeenCalledWith("PRAGMA wal_checkpoint(TRUNCATE);");
     expect(await timestampOf(first)).toBeGreaterThan(stale);
   });
 

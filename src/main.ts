@@ -10,22 +10,30 @@ import "@main/bootstrap/error";
 import { app, dialog } from "electron";
 
 import { toError } from "@shared/util";
-import {
-  LifecycleState,
-  setLifecycleState,
-  currentState,
-} from "@main/services/lifecycle";
+import logger from "@main/platform/logger";
+import { installLifecycle, registerShutdownTask, setStartupTask } from "@main/services/lifecycle";
 import { configureProcess } from "@main/bootstrap/process-setup";
-import { checkOpenCommand as checkWebCommand } from "@main/platform/protocol";
+import { parseLocalFile, parseWebCommand, raceArgument } from "@main/platform/arguments";
 import { startApplication, type Application } from "@main/bootstrap/startup";
 
 configureProcess();
 
-// What start-up produced: the app-scoped registrations (disposed on
-// `before-quit`) and this process's window service. Both are owned here rather
-// than imported from a module-level singleton, so nothing outside `bootstrap()`
-// can reach the window state.
+// What start-up produced: the app-scoped registrations and this process's
+// window service. Both are owned here rather than imported from a module-level
+// singleton, so nothing outside `bootstrap()` can reach the window state.
 let application: Application | undefined;
+
+// Signals and quitting are wired as early as possible, so a signal arriving
+// during start-up still exits with the right code. This owns the
+// `window-all-closed` and `before-quit` handlers the entry used to hand-roll.
+installLifecycle({ logger });
+
+// §3.3: the app-scoped registrations are torn down as one step of the shutdown
+// sequence, rather than from a second `before-quit` listener.
+registerShutdownTask({
+  name: "app-registrations",
+  run: () => application?.registrations.dispose(),
+});
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -45,40 +53,47 @@ app.on("ready", async () => {
   }
 });
 
-app.on("window-all-closed", () => {
-  // Make sure we don't quit because of package download window being closed before main window has started
-  if (currentState() !== LifecycleState.Starting) {
-    app.quit();
-  }
+// Both of these can fire before `ready` on macOS, which is what `setStartupTask`
+// is for: the request is recorded and picked up once the app is up. The renderer
+// is only told about them when a window already exists.
+app.on("open-file", (e, path) => {
+  e.preventDefault();
+  setStartupTask({
+    type: "openFile",
+    file: path,
+  });
+  const mainWindow = application?.windows.currentWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("channel.call", "ipc.onipcmessagerecived", 2, path);
 });
 
-app.on("before-quit", () => {
-  // The app is the owner of the app-scoped registrations, so it is the one
-  // that tears them down (§3.3).
-  application?.registrations.dispose();
-  // Allow some windows to be closed.
-  setLifecycleState(LifecycleState.Quitting);
+app.on("open-url", (e, url) => {
+  if (!url.startsWith("orpheus://")) return;
+  e.preventDefault();
+  setStartupTask({
+    type: "openUrl",
+    url,
+  });
+  const mainWindow = application?.windows.currentWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("channel.call", "ipc.onipcmessagerecived", 3, url);
 });
 
-app.on("second-instance", (event, argv) => {
+app.on("second-instance", async (event, argv) => {
   // Undefined until start-up resolves, which is also when a main window can
   // first exist — the same early return the module-level singleton produced.
   const mainWindow = application?.windows.currentWindow();
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  const cmd = checkWebCommand(argv);
+  const cmd = await raceArgument<[number, string]>(async (arg) => {
+    const webCmd = parseWebCommand(arg);
+    if (webCmd) return [3, webCmd];
+    const localFile = await parseLocalFile(arg);
+    if (localFile) return [2, localFile];
+    return null;
+  }, argv);
   if (cmd) {
-    mainWindow.webContents.send(
-      "channel.call",
-      "ipc.onipcmessagerecived",
-      3,
-      cmd
-    );
+    mainWindow.webContents.send("channel.call", "ipc.onipcmessagerecived", ...cmd);
     return;
   }
-  mainWindow.webContents.send(
-    "channel.call",
-    "ipc.onipcmessagerecived",
-    1,
-    null
-  );
+  mainWindow.webContents.send("channel.call", "ipc.onipcmessagerecived", 1, null);
 });

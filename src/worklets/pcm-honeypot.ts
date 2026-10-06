@@ -42,9 +42,7 @@ class PcmHoneypotProcessor extends AudioWorkletProcessor {
       this._off += 2;
 
       if (this._off >= PACKET_BYTES) {
-        const pts = Math.round(
-          ((this._frames + i + 1 - PACKET_FRAMES) / sampleRate) * 1000
-        );
+        const pts = Math.round(((this._frames + i + 1 - PACKET_FRAMES) / sampleRate) * 1000);
         this.port.postMessage({ data: this._buf, pts }, [this._buf]);
         this._buf = new ArrayBuffer(PACKET_BYTES);
         this._dv = new DataView(this._buf);

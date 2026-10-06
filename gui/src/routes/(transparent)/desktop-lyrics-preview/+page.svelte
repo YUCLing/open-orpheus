@@ -35,9 +35,7 @@
 
   // Double-line: line 0 fully played (time=10000), line 1 unplayed
   // Single-line: line 0 half played (time=5000)
-  let currentTime = $derived(
-    lyricStyle?.lineMode === LineMode.Single ? 5000 : 10000
-  );
+  let currentTime = $derived(lyricStyle?.lineMode === LineMode.Single ? 5000 : 10000);
 
   let lyricsEl: HTMLDivElement | undefined = $state();
   let scale = $state(1);
@@ -65,13 +63,8 @@
   });
 </script>
 
-<div
-  class="fixed inset-0 flex h-screen w-screen items-center justify-center overflow-hidden"
->
-  <div
-    bind:this={lyricsEl}
-    style="transform: scale({scale}); transform-origin: center center;"
-  >
+<div class="fixed inset-0 flex h-screen w-screen items-center justify-center overflow-hidden">
+  <div bind:this={lyricsEl} style="transform: scale({scale}); transform-origin: center center;">
     {#if lyricStyle}
       <Lyrics
         lyrics={lyricsData.lines}

@@ -15,10 +15,32 @@ pub(crate) enum State {
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub(crate) enum InjectedType {
     InternAtomNetWmMoveresize,
+    InternAtomNetWmWindowType,
+    InternAtomNetWmWindowTypeDesktop,
+    InternAtomNetWmState,
+    InternAtomNetWmStateBelow,
     QueryExtensionShape,
     QueryExtensionXInput,
     QueryPointer,
     Other,
+}
+
+/// The EWMH atoms a window's stacking needs, interned once at setup.
+///
+/// `None` means the reply has not arrived yet (or the atom could not be
+/// interned), which is what makes an injection that needs one fail rather than
+/// write a bogus property.
+#[derive(Default, Clone, Copy)]
+pub(crate) struct NetWmAtoms {
+    /// `_NET_WM_WINDOW_TYPE`, the property a window's type is written to.
+    pub(crate) window_type: Option<u32>,
+    /// `_NET_WM_WINDOW_TYPE_DESKTOP`, the type that puts a window in the
+    /// desktop layer.
+    pub(crate) window_type_desktop: Option<u32>,
+    /// `_NET_WM_STATE`, the property stacking and other states are written to.
+    pub(crate) state: Option<u32>,
+    /// `_NET_WM_STATE_BELOW`, the layer directly above the desktop window.
+    pub(crate) state_below: Option<u32>,
 }
 
 /// The most recently captured press gesture (button press or touch begin).
@@ -49,6 +71,7 @@ pub(crate) struct X11Conn {
     pub(crate) offset_transitions: Vec<(u16, u16)>, // (first_wire_seq_affected, offset_to_apply)
     pub(crate) injected_seqs: HashMap<u16, InjectedType>,
     pub(crate) net_wm_moveresize: Option<u32>,
+    pub(crate) net_wm: NetWmAtoms,
     pub(crate) shape_opcode: Option<u8>,
     pub(crate) xi_opcode: Option<u8>,
     pub(crate) root_window: u32,
@@ -91,6 +114,7 @@ impl X11Conn {
             offset_transitions: vec![(0, 0)],
             injected_seqs: HashMap::new(),
             net_wm_moveresize: None,
+            net_wm: NetWmAtoms::default(),
             shape_opcode: None,
             xi_opcode: None,
             root_window: 0,

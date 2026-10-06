@@ -4,8 +4,6 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 
 import { app, dialog, protocol, session } from "electron";
 
-import { onExit } from "@open-orpheus/lifecycle";
-
 import { CORE_VERSION } from "@shared/constants";
 import { toError } from "@shared/util";
 import versions from "../../../versions.json";
@@ -19,11 +17,7 @@ import {
 } from "@main/platform/folders";
 import logger from "@main/platform/logger";
 import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "@main/services/pack";
-import {
-  ensureWebPack,
-  type WebPackLoadDeps,
-  type WebPackProbe,
-} from "@main/services/pack-loader";
+import { ensureWebPack, type WebPackLoadDeps, type WebPackProbe } from "@main/services/pack-loader";
 import registerAsProtocolClient from "@main/platform/protocol";
 import { isFileNotFound } from "@main/platform/util";
 import showPackgeDownloadWindow from "@main/windows/package-download";
@@ -127,10 +121,7 @@ export async function startApplication(): Promise<Application> {
         }
       } catch (err) {
         if (isFileNotFound(err)) return;
-        logger.error(
-          { name: "loader", err: toError(err) },
-          `Failed to cleanup download temp`
-        );
+        logger.error({ name: "loader", err: toError(err) }, `Failed to cleanup download temp`);
       }
     })(),
     import("@main/domain/afp"),
@@ -189,11 +180,7 @@ export async function startApplication(): Promise<Application> {
         const agents = await m.getProxyAgent(cfg);
         m.setProxy(agents);
       } catch (err) {
-        logger.warn(
-          { name: "proxy" },
-          "Failed to load proxy configuration: %s",
-          err
-        );
+        logger.warn({ name: "proxy" }, "Failed to load proxy configuration: %s", err);
       }
     }),
     prepareDeviceId().then(async () => {
@@ -248,9 +235,10 @@ export async function startApplication(): Promise<Application> {
     tray,
   });
 
-  onExit(() => {
-    app.quit(); // Graceful exit
-  });
+  // Graceful exit is owned by `installLifecycle` in the entry point, which runs
+  // the registered shutdown tasks before letting Electron quit. The previous
+  // `onExit(() => app.quit())` came from `@open-orpheus/lifecycle`, a module
+  // main deleted when it grew the shutdown sequence.
 
   // Create main window
   await (
@@ -279,21 +267,17 @@ async function configureSessions() {
       "Mozilla/5.0 (Windows NT 10.0; WOW64)"
     );
   }
-  session.defaultSession.setUserAgent(
-    `${userAgent} NeteaseMusicDesktop/${CORE_VERSION}`
-  );
-  session.defaultSession.setDisplayMediaRequestHandler(
-    async (request, callback) => {
-      if (!request.frame) {
-        callback({});
-        return;
-      }
-      callback({
-        video: request.frame,
-        audio: "loopback",
-      });
+  session.defaultSession.setUserAgent(`${userAgent} NeteaseMusicDesktop/${CORE_VERSION}`);
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    if (!request.frame) {
+      callback({});
+      return;
     }
-  );
+    callback({
+      video: request.frame,
+      audio: "loopback",
+    });
+  });
 
   const openOrpheusSession = session.fromPartition("open-orpheus");
 
@@ -339,10 +323,7 @@ function createWebPackLoadDeps(): WebPackLoadDeps {
         const webPack = packManager.getPack<WebPack>("web");
         return { status: "ready", commit: await webPack.getCommitHash() };
       } catch (err) {
-        logger.error(
-          { name: "loader", err: toError(err) },
-          "Failed to load web pack."
-        );
+        logger.error({ name: "loader", err: toError(err) }, "Failed to load web pack.");
         return err instanceof Error && err.message === NO_WEBPACK_ERROR_MESSAGE
           ? { status: "missing" }
           : { status: "failed" };
@@ -354,9 +335,7 @@ function createWebPackLoadDeps(): WebPackLoadDeps {
     showDownloadFailure: (noUsablePack) => {
       dialog.showErrorBox(
         "Open Orpheus",
-        noUsablePack
-          ? "资源包下载失败"
-          : "资源包下载失败\n可通过 Open Orpheus 管理界面重新尝试下载"
+        noUsablePack ? "资源包下载失败" : "资源包下载失败\n可通过 Open Orpheus 管理界面重新尝试下载"
       );
     },
 

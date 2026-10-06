@@ -30,9 +30,7 @@ describe("StorageManager", () => {
     const storage = manager();
 
     await storage.write(0, Buffer.from("hello"));
-    await expect(storage.readBuffer(0, 5)).resolves.toEqual(
-      Buffer.from("hello")
-    );
+    await expect(storage.readBuffer(0, 5)).resolves.toEqual(Buffer.from("hello"));
     await expect(storage.readBuffer(0, 2)).resolves.toEqual(Buffer.from("he"));
 
     await storage.close();
@@ -45,9 +43,7 @@ describe("StorageManager", () => {
     await storage.write(0, Buffer.from("aa"));
     await storage.setLength(12);
 
-    await expect(storage.readBuffer(0, 12)).resolves.toEqual(
-      Buffer.from("aa\0\0\0\0\0\0\0\0bb")
-    );
+    await expect(storage.readBuffer(0, 12)).resolves.toEqual(Buffer.from("aa\0\0\0\0\0\0\0\0bb"));
 
     await storage.close();
   });
@@ -92,9 +88,7 @@ describe("StorageManager", () => {
 
     await storage.write(0, view);
 
-    await expect(storage.readBuffer(0, 5)).resolves.toEqual(
-      Buffer.from("hello")
-    );
+    await expect(storage.readBuffer(0, 5)).resolves.toEqual(Buffer.from("hello"));
 
     await storage.close();
   });
@@ -135,9 +129,7 @@ describe("StorageManager", () => {
     const storage = manager();
     await storage.write(0, Buffer.from("0123456789"));
 
-    await expect(collect(storage.createReadStream(2, 5))).resolves.toEqual(
-      Buffer.from("234")
-    );
+    await expect(collect(storage.createReadStream(2, 5))).resolves.toEqual(Buffer.from("234"));
     expect(storage.createReadStream(5, 5).readableLength).toBe(0);
 
     await storage.close();
@@ -151,9 +143,7 @@ describe("StorageManager", () => {
     await expect(storage.write(0, Buffer.from("more"))).rejects.toThrow(
       "Storage manager has been closed"
     );
-    await expect(storage.readBuffer(0, 4)).rejects.toThrow(
-      "Storage manager has been closed"
-    );
+    await expect(storage.readBuffer(0, 4)).rejects.toThrow("Storage manager has been closed");
   });
 
   it("is safe to close twice", async () => {

@@ -1,105 +1,139 @@
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { fork } from "node:child_process";
 
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
-import { MakerAppImage } from "@reforged/maker-appimage";
+import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
-import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives"; // TODO: Remove in Electron Forge 8
+import pkg from "./package.json" with { type: "json" };
+import { metadata } from "./packaging/resources/metadata";
 
-import * as options from "./packaging/options";
-
+import MakerAppImage from "./build-plugins/MakerAppImage";
 import MakerDeb from "./build-plugins/MakerDeb";
 import MakerFlatpak from "./build-plugins/MakerFlatpak";
 import MakerRpm from "./build-plugins/MakerRpm";
 
 const LOCALES = ["en", "en-US", "zh-CN"];
 
+let icon;
+switch (process.platform) {
+  case "win32":
+    icon = "assets/icon_256";
+    break;
+  case "darwin":
+    icon = ["assets/icon.icns", "assets/icon.icon"];
+    break;
+  default:
+    icon = undefined;
+    break;
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
+    ...(icon ? { icon } : {}),
     asar: {
       unpack: "**/*.{so*,dylib,dll}",
     },
-    derefSymlinks: true, // TODO: Remove in Electron Forge 8
+
+    // Deploy our modules as published version, so source code of modules will not be bundled
+    // into the final packaged app.
+    beforeCopy: [
+      async () => {
+        await new Promise<void>((resolve, reject) => {
+          const proc = fork("scripts/deploy-deps.ts");
+          proc.on("error", reject);
+          proc.on("exit", (code) => {
+            if (code !== 0) reject(code);
+            resolve();
+          });
+        });
+      },
+    ],
+    afterCopy: [
+      async () => {
+        // Best effort to restore, don't fail the build if something went wrong
+        await new Promise<void>((resolve) => {
+          const proc = fork("scripts/deploy-deps.ts", ["--restore"]);
+          proc.on("error", resolve);
+          proc.on("exit", resolve);
+        });
+      },
+    ],
 
     afterExtract: [
-      (buildPath, electronVersion, platform, arch, callback) => {
-        (async () => {
-          if (platform === "mas" || platform === "darwin") {
-            const resourcesPath = resolve(
-              buildPath,
-              "Electron.app/Contents/Resources"
-            );
-            const frameworkResourcesPath = resolve(
-              buildPath,
-              "Electron.app/Contents/Frameworks/Electron Framework.framework/Resources"
-            );
+      async ({ buildPath, platform }) => {
+        if (platform === "mas" || platform === "darwin") {
+          const resourcesPath = resolve(buildPath, "Electron.app/Contents/Resources");
+          const frameworkResourcesPath = resolve(
+            buildPath,
+            "Electron.app/Contents/Frameworks/Electron Framework.framework/Resources"
+          );
 
-            const resources = await readdir(resourcesPath, {
-              withFileTypes: true,
-            });
-            const frameworkResources = await readdir(frameworkResourcesPath, {
-              withFileTypes: true,
-            });
-            await Promise.all(
-              [...resources, ...frameworkResources].map(async (locale) => {
-                if (!locale.isDirectory() || !locale.name.endsWith(".lproj"))
-                  return;
-                if (
-                  LOCALES.some((v) =>
-                    locale.name.replace("_", "-").startsWith(v)
-                  )
-                )
-                  return;
-                await rm(resolve(locale.parentPath, locale.name), {
-                  recursive: true,
-                });
-              })
-            );
-
-            return;
-          }
-          const localesPath = resolve(buildPath, "locales");
-
-          const locales = await readdir(localesPath, { withFileTypes: true });
+          const resources = await readdir(resourcesPath, {
+            withFileTypes: true,
+          });
+          const frameworkResources = await readdir(frameworkResourcesPath, {
+            withFileTypes: true,
+          });
           await Promise.all(
-            locales.map(async (locale) => {
-              if (!locale.isFile()) return;
-              if (
-                LOCALES.includes(
-                  locale.name
-                    .substring(0, locale.name.length - 4)
-                    .replace("_", "-")
-                )
-              )
-                return;
-              await rm(resolve(locale.parentPath, locale.name));
+            [...resources, ...frameworkResources].map(async (locale) => {
+              if (!locale.isDirectory() || !locale.name.endsWith(".lproj")) return;
+              if (LOCALES.some((v) => locale.name.replace("_", "-").startsWith(v))) return;
+              await rm(resolve(locale.parentPath, locale.name), {
+                recursive: true,
+              });
             })
           );
-        })()
-          .then(() => callback())
-          .catch((err) => callback(new Error(String(err))));
+
+          return;
+        }
+        const localesPath = resolve(buildPath, "locales");
+
+        const locales = await readdir(localesPath, { withFileTypes: true });
+        await Promise.all(
+          locales.map(async (locale) => {
+            if (!locale.isFile()) return;
+            if (
+              LOCALES.includes(locale.name.substring(0, locale.name.length - 4).replace("_", "-"))
+            )
+              return;
+            await rm(resolve(locale.parentPath, locale.name));
+          })
+        );
       },
       // Extract LICENSES.chromium.html to a separate directory when
       // EXTRACT_LICENSES_TO is set, then remove it from the build.
-      (buildPath, _electronVersion, platform, _arch, callback) => {
-        (async () => {
-          const destDir = process.env["EXTRACT_LICENSES_TO"];
-          if (destDir) {
-            platform = platform === "mas" ? "darwin" : platform;
-            const src = resolve(buildPath, "LICENSES.chromium.html");
-            const dest = resolve(destDir, `LICENSES.chromium.${platform}.html`);
-            await mkdir(dirname(dest), { recursive: true });
-            await copyFile(src, dest);
-            await rm(src);
-          }
-        })()
-          .then(() => callback())
-          .catch((err) => callback(new Error(String(err))));
+      async ({ buildPath, platform }) => {
+        const destDir = process.env["EXTRACT_LICENSES_TO"];
+        if (destDir) {
+          platform = platform === "mas" ? "darwin" : platform;
+          const src = resolve(buildPath, "LICENSES.chromium.html");
+          const dest = resolve(destDir, `LICENSES.chromium.${platform}.html`);
+          await mkdir(dirname(dest), { recursive: true });
+          await copyFile(src, dest);
+          await rm(src);
+        }
+      },
+      // Replace icudtl.dat with our smaller, filtered build.
+      async ({ buildPath, platform }) => {
+        const source = resolve("packaging/resources/icudtl.dat");
+        if (!existsSync(source)) return;
+
+        const target =
+          platform === "mas" || platform === "darwin"
+            ? resolve(
+                buildPath,
+                "Electron.app/Contents/Frameworks/Electron Framework.framework/Resources/icudtl.dat"
+              )
+            : resolve(buildPath, "icudtl.dat");
+
+        await copyFile(source, target);
       },
     ],
 
@@ -126,14 +160,23 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel(options.squirrel),
-    new MakerZIP({}, ["darwin"]),
-    new MakerFlatpak(options.flatpak),
-    new MakerAppImage({
-      options: options.AppImage,
+    new MakerSquirrel({
+      name: metadata.squirrel.name,
+      title: metadata.squirrel.title,
+      description: metadata.summary,
+      authors: pkg.author?.name ?? "",
+      setupIcon: metadata.squirrel.setupIcon,
     }),
-    new MakerDeb(options.deb),
-    new MakerRpm(options.rpm),
+    new MakerZIP({}, ["darwin"]),
+    new MakerFlatpak({
+      id: metadata.appId,
+      runtimeVersion: metadata.flatpak.runtimeVersion,
+      baseVersion: metadata.flatpak.baseVersion,
+      finishArgs: metadata.flatpak.finishArgs,
+    }),
+    new MakerDeb(),
+    new MakerRpm(),
+    new MakerAppImage({ icon: metadata.icons }),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

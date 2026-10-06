@@ -45,10 +45,7 @@ export async function writeScaffold(root: string, options: ScaffoldOptions) {
     ...options,
     paths: options.paths && {
       ...options.paths,
-      symlink:
-        options.paths.symlink === true
-          ? `/usr/bin/${options.id}`
-          : options.paths.symlink,
+      symlink: options.paths.symlink === true ? `/usr/bin/${options.id}` : options.paths.symlink,
     },
   };
 
@@ -59,16 +56,11 @@ export async function writeScaffold(root: string, options: ScaffoldOptions) {
         icons:
           options.input?.icons && options.input?.desktop
             ? {
-                appName: basename(
-                  options.input.desktop,
-                  extname(options.input.desktop)
-                ),
+                appName: basename(options.input.desktop, extname(options.input.desktop)),
                 path: "/usr/share/icons/hicolor/",
               }
             : undefined,
-        desktop: options.input?.desktop
-          ? `/usr/share/applications/${appName}.desktop`
-          : undefined,
+        desktop: options.input?.desktop ? `/usr/share/applications/${appName}.desktop` : undefined,
       },
     },
     effective
@@ -90,11 +82,7 @@ export async function writeScaffold(root: string, options: ScaffoldOptions) {
 
   // 2. Icons
   if (opts.input?.icons && paths.icons) {
-    await writeIcons(
-      join(root, paths.icons.path),
-      paths.icons.appName,
-      opts.input.icons
-    );
+    await writeIcons(join(root, paths.icons.path), paths.icons.appName, opts.input.icons);
   }
 
   // 3. Desktop file
@@ -106,11 +94,7 @@ export async function writeScaffold(root: string, options: ScaffoldOptions) {
 
   // 4. Binary symlink
   if (paths.symlink) {
-    if (!opts.executable)
-      throw new Error("Cannot create symlink: `executable` is required.");
-    await createSymlink(
-      join(root, paths.app ?? "", opts.executable),
-      join(root, paths.symlink)
-    );
+    if (!opts.executable) throw new Error("Cannot create symlink: `executable` is required.");
+    await createSymlink(join(root, paths.app ?? "", opts.executable), join(root, paths.symlink));
   }
 }

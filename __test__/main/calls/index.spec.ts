@@ -3,12 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-const handlersDir = fileURLToPath(
-  new URL("../../../src/main/calls/handlers/", import.meta.url)
-);
-const barrelPath = fileURLToPath(
-  new URL("../../../src/main/calls/index.ts", import.meta.url)
-);
+const handlersDir = fileURLToPath(new URL("../../../src/main/calls/handlers/", import.meta.url));
+const barrelPath = fileURLToPath(new URL("../../../src/main/calls/index.ts", import.meta.url));
 
 const modules = readdirSync(handlersDir)
   .filter((name) => name.endsWith(".ts"))
@@ -25,16 +21,12 @@ describe("call module barrel", () => {
 
   it("imports every module in src/main/calls/handlers", () => {
     const barrel = readFileSync(barrelPath, "utf8");
-    const missing = modules.filter(
-      (name) => !barrel.includes(`"./handlers/${name}"`)
-    );
+    const missing = modules.filter((name) => !barrel.includes(`"./handlers/${name}"`));
     expect(missing).toEqual([]);
   });
 
   it("exports register() from every module", () => {
-    const missing = modules.filter(
-      (name) => !/^export function register\(/m.test(source(name))
-    );
+    const missing = modules.filter((name) => !/^export function register\(/m.test(source(name)));
     expect(missing).toEqual([]);
   });
 

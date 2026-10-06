@@ -8,13 +8,11 @@ export const HALTED_EVENTS = ["pause", "stalled", "ended", "error"] as const;
 
 export const player = new Player();
 
-ipcRenderer.invoke("audio.getDevice").then((deviceId) => {
+void ipcRenderer.invoke("audio.getDevice").then((deviceId) => {
   if (deviceId && typeof deviceId === "string") {
-    (player.audioContext as unknown as HTMLAudioElement)
-      .setSinkId(deviceId)
-      .catch((e) => {
-        LOGGER.error({ err: toError(e) }, `Failed to set audio output device`);
-      });
+    player.setSinkId(deviceId).catch((e) => {
+      LOGGER.error({ err: toError(e) }, `Failed to set audio output device`);
+    });
   }
 });
 
@@ -24,11 +22,7 @@ let bufferProgress = 0;
 function notifyBuffering(isBuffering: boolean) {
   if (buffering !== isBuffering) {
     buffering = isBuffering;
-    fireNativeCall(
-      "audioplayer.onBuffering",
-      player.currentId,
-      buffering ? 1 : 0
-    );
+    fireNativeCall("audioplayer.onBuffering", player.currentId, buffering ? 1 : 0);
   }
 }
 
@@ -61,21 +55,11 @@ player.on("load", (event) => {
 player.on("play", () => {
   // 1806160891_1B5MK7|resume|XEDKE2
   // 1806160891|pause|4RB6IY
-  fireNativeCall(
-    "audioplayer.onPlayState",
-    player.currentId,
-    "",
-    AudioPlayerState.Playing
-  );
+  fireNativeCall("audioplayer.onPlayState", player.currentId, "", AudioPlayerState.Playing);
 });
 
 player.on("pause", () => {
-  fireNativeCall(
-    "audioplayer.onPlayState",
-    player.currentId,
-    "",
-    AudioPlayerState.Paused
-  );
+  fireNativeCall("audioplayer.onPlayState", player.currentId, "", AudioPlayerState.Paused);
 });
 
 player.on("ended", () => {
@@ -125,13 +109,7 @@ player.on("error", async ({ data }) => {
 });
 
 player.on("seeked", () => {
-  fireNativeCall(
-    "audioplayer.onSeek",
-    player.currentId,
-    "",
-    0,
-    player.currentTime
-  );
+  fireNativeCall("audioplayer.onSeek", player.currentId, "", 0, player.currentTime);
   notifyBuffering(true);
 });
 
@@ -222,12 +200,8 @@ player.on("seeking", () => {
   ipcRenderer.send("player.playbackchange", PLAYBACK_CHANGE.SEEKING);
 });
 
-player.on("seeked", () =>
-  ipcRenderer.send("player.seeked", player.currentTime)
-);
-player.on("timeupdate", () =>
-  ipcRenderer.send("player.timeupdate", player.currentTime)
-);
+player.on("seeked", () => ipcRenderer.send("player.seeked", player.currentTime));
+player.on("timeupdate", () => ipcRenderer.send("player.timeupdate", player.currentTime));
 player.on("durationchange", () => {
   let duration: number | null = player.duration;
   if (!isFinite(duration) || duration < 0) duration = null;

@@ -22,8 +22,7 @@ contextBridge.executeInMainWorld({
     if (originalContentDocumentDescriptor) {
       Object.defineProperty(HTMLIFrameElement.prototype, "contentDocument", {
         get() {
-          const contentDocument =
-            originalContentDocumentDescriptor.get?.call(this);
+          const contentDocument = originalContentDocumentDescriptor.get?.call(this);
           if (!contentDocument) {
             // Create a fake contentDocument to prevent load-fail
             const fakeDocument = { body: { textContent: "N" } };
@@ -34,6 +33,8 @@ contextBridge.executeInMainWorld({
       });
     }
 
+    // Referenced unbound on purpose: invoked below via .apply with the receiver.
+    // oxlint-disable-next-line typescript/unbound-method
     const originalOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (
       this: XMLHttpRequest,
@@ -41,18 +42,13 @@ contextBridge.executeInMainWorld({
       url: string,
       ...args: unknown[]
     ) {
-      if (
-        typeof url === "string" &&
-        url.startsWith("http://music.163.com/api/nos/token/alloc")
-      ) {
+      if (typeof url === "string" && url.startsWith("http://music.163.com/api/nos/token/alloc")) {
         // Rewrite the URL before the browser even knows about it
         url = url.replace("http://", "https://");
       }
-      return originalOpen.apply(this, [
-        method,
-        url,
-        ...args,
-      ] as unknown as Parameters<typeof XMLHttpRequest.prototype.open>);
+      return originalOpen.apply(this, [method, url, ...args] as unknown as Parameters<
+        typeof XMLHttpRequest.prototype.open
+      >);
     } as unknown as typeof XMLHttpRequest.prototype.open;
 
     const OriginalImage = Image;
@@ -66,16 +62,17 @@ contextBridge.executeInMainWorld({
     if (isMain) {
       const systemFonts = new Set();
 
-      getFonts().then((fonts) => {
+      void getFonts().then((fonts) => {
         for (const font of fonts) systemFonts.add(font);
       });
 
+      // Referenced unbound on purpose: invoked below via .call with the receiver.
+      // oxlint-disable-next-line typescript/unbound-method
       const origTest = RegExp.prototype.test;
       RegExp.prototype.test = function (str) {
         // The CJK font-name filter regex in settings.
         // Force it to always pass so all system fonts appear in the font picker.
-        if (this.source === "[\\u4E00-\\u9FA5]" && systemFonts.has(str))
-          return true;
+        if (this.source === "[\\u4E00-\\u9FA5]" && systemFonts.has(str)) return true;
         return origTest.call(this, str);
       };
 
@@ -94,10 +91,7 @@ contextBridge.executeInMainWorld({
               originalSrcPropertyDescriptor.set?.call(this, value);
               return;
             }
-            originalSrcPropertyDescriptor.set?.call(
-              this,
-              value + "&t=" + Date.now()
-            );
+            originalSrcPropertyDescriptor.set?.call(this, value + "&t=" + Date.now());
           },
         });
       }
@@ -105,9 +99,7 @@ contextBridge.executeInMainWorld({
       let fallbackTimeout: NodeJS.Timeout | null = null;
       // We have Electron handle resize handlers for us, so we drop its own handlers to avoid "not responding" resizes
       const handlerRemover = () => {
-        const handlers = document.querySelectorAll(
-          '[class*="App"] > [class*="Handler"]'
-        );
+        const handlers = document.querySelectorAll('[class*="App"] > [class*="Handler"]');
         if (handlers.length === 0) {
           if (fallbackTimeout === null) {
             // Fallback in case there was no handler at all, so long-term performance won't be affected.

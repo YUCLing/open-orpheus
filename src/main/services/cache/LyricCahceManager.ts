@@ -1,12 +1,4 @@
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
 type LyricCacheEntry = {

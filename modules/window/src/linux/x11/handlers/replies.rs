@@ -16,9 +16,23 @@ pub(crate) fn on_reply(conn: &mut X11Conn, code: u8, seq: u16, off: usize) -> bo
     };
 
     if code == 1 {
+        // Every InternAtom reply carries the atom in the same word.
+        let atom = || r32(&conn.rx_buf[off + 8..off + 12], conn.is_le);
         match inj_type {
             InjectedType::InternAtomNetWmMoveresize => {
-                conn.net_wm_moveresize = Some(r32(&conn.rx_buf[off + 8..off + 12], conn.is_le));
+                conn.net_wm_moveresize = Some(atom());
+            }
+            InjectedType::InternAtomNetWmWindowType => {
+                conn.net_wm.window_type = Some(atom());
+            }
+            InjectedType::InternAtomNetWmWindowTypeDesktop => {
+                conn.net_wm.window_type_desktop = Some(atom());
+            }
+            InjectedType::InternAtomNetWmState => {
+                conn.net_wm.state = Some(atom());
+            }
+            InjectedType::InternAtomNetWmStateBelow => {
+                conn.net_wm.state_below = Some(atom());
             }
             InjectedType::QueryExtensionShape => {
                 let present = conn.rx_buf[off + 8] != 0;
