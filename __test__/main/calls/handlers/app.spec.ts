@@ -25,6 +25,8 @@ const hoisted = vi.hoisted(() => ({
   },
   kv: { get: vi.fn(), set: vi.fn() },
   setStartupTask: vi.fn(),
+  /** What `app.ts` asks the pack manager to load. */
+  loadSkinPack: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -47,13 +49,6 @@ vi.mock("electron", () => ({
   nativeImage: { createFromBuffer: vi.fn() },
 }));
 
-vi.mock("@main/services/settings", () => ({ kv: hoisted.kv }));
-vi.mock("@main/services/pack", () => ({
-  // `windows/mini-player.ts` subscribes to the pack manager at module scope,
-  // and the merged graph reaches it from here.
-  default: { loadSkinPack: vi.fn(), webPack: null, on: vi.fn() },
-  NO_WEBPACK_ERROR_MESSAGE: "No usable web pack file found",
-}));
 vi.mock("@main/platform/orpheus", () => ({
   loadFromOrpheusUrl: vi.fn(),
   default: vi.fn(),
@@ -96,6 +91,7 @@ async function freshModules() {
   register({
     settings: { kv: hoisted.kv } as never,
     lifecycle: { setLifecycleState: lifecycle.setLifecycleState },
+    pack: { loadSkinPack: hoisted.loadSkinPack },
   });
 
   return { dispatcher, lifecycle };

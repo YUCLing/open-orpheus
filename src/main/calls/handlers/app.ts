@@ -6,7 +6,6 @@ import { app, BrowserWindow, dialog, nativeImage, ThumbarButton, WebContents } f
 import { registerCallHandler, registerCallbackHandler } from "../dispatcher";
 import { loadFromOrpheusUrl } from "../../platform/orpheus";
 import { fileExists, isMusicFile, pngFromIco } from "../../platform/util";
-import packManager from "../../services/pack";
 import type { ProxyConfiguration, ProxyTypes } from "../../platform/request";
 import { client, getProxyAgent } from "../../platform/request";
 import { disableHardwareAccelerationFlag } from "../../platform/folders";
@@ -20,6 +19,7 @@ import {
 } from "../../platform/arguments";
 import type { SettingsService } from "../../bootstrap/types";
 import type { LifecycleService } from "../../services/lifecycle";
+import type { PackManager } from "../../services/pack";
 
 type StartCommand =
   | { movesrc: string; movedest: string }
@@ -66,6 +66,7 @@ const AUTORUN_ARGS = ["--orpheus-startup=autorun"];
 export interface AppDeps {
   settings: Pick<SettingsService, "kv">;
   lifecycle: Pick<LifecycleService, "setLifecycleState">;
+  pack: Pick<PackManager, "loadSkinPack">;
 }
 
 export function register(deps: AppDeps): void {
@@ -281,7 +282,7 @@ export function register(deps: AppDeps): void {
     "app.loadSkinPackets",
     async (event, name, name2) => {
       try {
-        await packManager.loadSkinPack(name, name2);
+        await deps.pack.loadSkinPack(name, name2);
         return [true];
       } catch (e) {
         LOGGER.error({ packs: [name, name2] }, "Failed to load skin pack: %s", e);

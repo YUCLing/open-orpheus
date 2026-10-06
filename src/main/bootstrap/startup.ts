@@ -225,6 +225,7 @@ export async function startApplication(): Promise<Application> {
     database: ctx.database,
     windows: ctx.windows,
     lifecycle: ctx.lifecycle,
+    pack: packManager,
     audio: { readEffect },
     cookie: {
       getCookies: cookieModule.getCookies,
