@@ -15,7 +15,7 @@ import {
 } from "../../platform/arguments";
 import type { SettingsService } from "../../bootstrap/types";
 import type { LifecycleService } from "../../services/lifecycle";
-import type { PackManager } from "../../services/pack";
+import packManager from "../../services/pack";
 import { fileExists } from "../../platform/utils/fs";
 import { pngFromIco } from "../../platform/utils/image";
 import { disableHardwareAccelerationFlag } from "../../platform/folders";
@@ -68,8 +68,20 @@ const AUTORUN_ARGS = ["--orpheus-startup=autorun"];
 export interface AppDeps {
   settings: Pick<SettingsService, "kv">;
   lifecycle: Pick<LifecycleService, "setLifecycleState">;
-  pack: Pick<PackManager, "loadSkinPack">;
-  /** Skin-button icons come from an `orpheus://` URL. */
+  /**
+   * Platform collaborators, injected rather than imported — but **not** for
+   * substitutability. Their specs' doubles all return constants, which by the
+   * §5.0b test is the case for not threading them.
+   *
+   * They stay because importing them drags whole subtrees into this handler's
+   * unit test: `platform/request` and `platform/orpheus` reach
+   * `platform/cookie`, which dereferences `session.defaultSession.cookies` at
+   * module scope, and `platform/dawn` reaches the telemetry endpoints. Removing
+   * them was measured, not assumed: 12 failures, every one of them
+   * "No \"session\" export is defined on the \"electron\" mock". If a spec ever
+   * mocks enough of that surface, these can go the way `pack` and `files` did.
+   *
+   * Skin-button icons come from an `orpheus://` URL. */
   orpheus: {
     loadFromOrpheusUrl: typeof import("../../platform/orpheus").loadFromOrpheusUrl;
   };
@@ -298,7 +310,7 @@ export function register(deps: AppDeps): void {
     "app.loadSkinPackets",
     async (event, name, name2) => {
       try {
-        await deps.pack.loadSkinPack(name, name2);
+        await packManager.loadSkinPack(name, name2);
         return [true];
       } catch (e) {
         LOGGER.error({ packs: [name, name2] }, "Failed to load skin pack: %s", e);

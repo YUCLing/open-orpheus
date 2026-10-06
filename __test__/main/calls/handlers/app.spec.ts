@@ -26,7 +26,6 @@ const hoisted = vi.hoisted(() => ({
   kv: { get: vi.fn(), set: vi.fn() },
   setStartupTask: vi.fn(),
   /** What `app.ts` asks the pack manager to load. */
-  loadSkinPack: vi.fn(),
   /** Platform collaborators, passed rather than mocked at the module boundary. */
   loadFromOrpheusUrl: vi.fn(),
   statisV2: vi.fn(),
@@ -75,7 +74,6 @@ async function freshModules() {
   register({
     settings: { kv: hoisted.kv } as never,
     lifecycle: { setLifecycleState: lifecycle.setLifecycleState },
-    pack: { loadSkinPack: hoisted.loadSkinPack },
     orpheus: { loadFromOrpheusUrl: hoisted.loadFromOrpheusUrl },
     dawn: { statisV2: hoisted.statisV2, setStatisEndpoint: hoisted.setStatisEndpoint },
     request: { getProxyAgent: hoisted.getProxyAgent, client: hoisted.client as never },
