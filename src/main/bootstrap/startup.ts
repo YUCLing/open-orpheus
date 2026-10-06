@@ -27,7 +27,6 @@ import type { ProxyConfiguration } from "@main/platform/request";
 import * as dawn from "@main/platform/dawn";
 import * as orpheus from "@main/platform/orpheus";
 import * as request from "@main/platform/request";
-import { disableHardwareAccelerationFlag } from "@main/platform/folders";
 import { registerMenuSkinUpdater } from "@main/windows/menu/skin";
 import * as menuSkin from "@main/windows/menu/skin";
 import * as menuWindows from "@main/windows/menu/windows";
@@ -39,8 +38,6 @@ import * as dui from "@main/domain/skin/dui";
 import { ManagedWindow } from "@main/windows/managedWindow";
 import { font } from "@main/platform/gui";
 import type { MenuDeps } from "@main/windows/menu";
-import { fileExists } from "@main/platform/utils/fs";
-import { pngFromIco } from "@main/platform/utils/image";
 import type { Disposable } from "@shared/disposable";
 import type { WindowService } from "./types";
 
@@ -268,8 +265,6 @@ export async function startApplication(): Promise<Application> {
     orpheus,
     dawn,
     request,
-    files: { fileExists, pngFromIco },
-    hardwareAccelerationFlag: disableHardwareAccelerationFlag,
     audio: { readEffect },
     cookie: {
       getCookies: cookieModule.getCookies,

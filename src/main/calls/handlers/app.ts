@@ -16,6 +16,9 @@ import {
 import type { SettingsService } from "../../bootstrap/types";
 import type { LifecycleService } from "../../services/lifecycle";
 import type { PackManager } from "../../services/pack";
+import { fileExists } from "../../platform/utils/fs";
+import { pngFromIco } from "../../platform/utils/image";
+import { disableHardwareAccelerationFlag } from "../../platform/folders";
 
 type StartCommand =
   | { movesrc: string; movedest: string }
@@ -40,12 +43,11 @@ type ThumbnailOptions = {
 const currentThumbnailOptions: ThumbnailOptions = { btnExtends: [] };
 function createButtonFactory(
   webContents: WebContents,
-  orpheus: AppDeps["orpheus"],
-  files: AppDeps["files"]
+  orpheus: AppDeps["orpheus"]
 ): (btn: Button) => Promise<ThumbarButton> {
   return async (btn: Button) => {
     const icon = await orpheus.loadFromOrpheusUrl(btn.url);
-    const buf = files.pngFromIco(icon.content as unknown as Uint8Array);
+    const buf = pngFromIco(icon.content as unknown as Uint8Array);
     return {
       tooltip: btn.tooltip,
       icon: nativeImage.createFromBuffer(Buffer.from(buf)),
@@ -76,13 +78,6 @@ export interface AppDeps {
     statisV2: typeof import("../../platform/dawn").statisV2;
     setStatisEndpoint: typeof import("../../platform/dawn").setStatisEndpoint;
   };
-  /** File probing and icon conversion. */
-  files: {
-    fileExists: typeof import("../../platform/utils/fs").fileExists;
-    pngFromIco: typeof import("../../platform/utils/image").pngFromIco;
-  };
-  /** Path of the disable-hardware-acceleration marker; read and written below. */
-  hardwareAccelerationFlag: string;
   /** Proxy resolution for the renderer's HTTP client. */
   request: {
     getProxyAgent: typeof import("../../platform/request").getProxyAgent;
@@ -179,7 +174,7 @@ export function register(deps: AppDeps): void {
           return [""];
         case "setting":
           if (subItem === "hardware-acceleration") {
-            return [(await deps.files.fileExists(deps.hardwareAccelerationFlag)) ? "0" : "1"];
+            return [(await fileExists(disableHardwareAccelerationFlag)) ? "0" : "1"];
           }
           break;
       }
@@ -203,10 +198,10 @@ export function register(deps: AppDeps): void {
           if (subItem === "hardware-acceleration") {
             if (value === "1") {
               // Enable hardware accel
-              await rm(deps.hardwareAccelerationFlag, { force: true });
+              await rm(disableHardwareAccelerationFlag, { force: true });
             } else {
               // Disable hardware accel
-              await writeFile(deps.hardwareAccelerationFlag, "", {
+              await writeFile(disableHardwareAccelerationFlag, "", {
                 encoding: "utf-8",
               });
             }
@@ -267,9 +262,7 @@ export function register(deps: AppDeps): void {
     mainWindow.setThumbnailToolTip(tooltip || "");
 
     mainWindow.setThumbarButtons(
-      await Promise.all(
-        btns.map(createButtonFactory(mainWindow.webContents, deps.orpheus, deps.files))
-      )
+      await Promise.all(btns.map(createButtonFactory(mainWindow.webContents, deps.orpheus)))
     );
   });
 

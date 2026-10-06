@@ -13,7 +13,6 @@ import { installLoggerStub } from "../../../helpers/globals";
 // need `../arguments`, `../lifecycle` and `../util`, which stay real unless a
 // test says otherwise.
 const hoisted = vi.hoisted(() => ({
-  fileExists: vi.fn<(path: string) => Promise<boolean>>(),
   logger: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -34,7 +33,6 @@ const hoisted = vi.hoisted(() => ({
   setStatisEndpoint: vi.fn(),
   getProxyAgent: vi.fn(),
   client: vi.fn(),
-  pngFromIco: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -81,8 +79,6 @@ async function freshModules() {
     orpheus: { loadFromOrpheusUrl: hoisted.loadFromOrpheusUrl },
     dawn: { statisV2: hoisted.statisV2, setStatisEndpoint: hoisted.setStatisEndpoint },
     request: { getProxyAgent: hoisted.getProxyAgent, client: hoisted.client as never },
-    files: { fileExists: hoisted.fileExists, pngFromIco: hoisted.pngFromIco },
-    hardwareAccelerationFlag: "/tmp/open-orpheus-test/flag",
   });
 
   return { dispatcher, lifecycle };
@@ -108,7 +104,6 @@ let musicFile: string;
 
 beforeEach(async () => {
   vi.unstubAllGlobals();
-  hoisted.fileExists.mockReset().mockResolvedValue(true);
   fixtureDir = await mkdtemp(join(tmpdir(), "open-orpheus-app-"));
   musicFile = join(fixtureDir, "song.mp3");
   await writeFile(musicFile, "");
