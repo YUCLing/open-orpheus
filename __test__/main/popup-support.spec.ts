@@ -45,6 +45,10 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+vi.mock("electron", () => ({
+  app: { on: vi.fn(), whenReady: vi.fn(() => Promise.resolve()) },
+  BrowserWindow: class {},
+}));
 vi.mock("@open-orpheus/window", () => ({
   DesktopEnvironment: { Wayland: "wayland" },
   getDesktopEnvironment: () => mocks.desktop,
@@ -52,16 +56,12 @@ vi.mock("@open-orpheus/window", () => ({
   armNextWindowAsPopup: mocks.arm,
   cancelPendingPopup: mocks.cancel,
   isWindowWaylandPopup: mocks.isPopup,
-}));
-vi.mock("@main/windows/managedWindow", () => ({
-  ManagedWindow: { fromBrowserWindow: (window: { id: string }) => ({ id: window.id }) },
-}));
-vi.mock("@main/windows/menu/windows", () => ({
-  createPopupProbeWindow: () => {
-    const window = new mocks.Window(`probe-${mocks.windows.length}`);
-    mocks.windows.push(window);
-    return window;
-  },
+  drainWindowCallbacks: vi.fn(),
+  isLayerShellAvailable: () => false,
+  onLayerShellRoleRefused: vi.fn(),
+  setInputRegion: vi.fn(),
+  useLayerShellForNextWindow: vi.fn(),
+  validateLayerShellOptions: () => true,
 }));
 installLoggerStub();
 
@@ -73,11 +73,24 @@ installLoggerStub();
  */
 let lifecycle: typeof import("@main/services/lifecycle");
 
+function createProbeWindow() {
+  const window = new mocks.Window(`probe-${mocks.windows.length}`);
+  mocks.windows.push(window);
+  return window as unknown as BrowserWindow;
+}
+function lookupManagedWindow(wnd: BrowserWindow) {
+  return { id: (wnd as unknown as { id: string }).id } as never;
+}
+
 async function loadPopupSupport() {
   // `vi.resetModules()` gives this a fresh state of `Starting`, which is the
   // module's real initial value — nothing to install or reset.
   lifecycle = await import("@main/services/lifecycle");
-  return import("@main/windows/menu/popup-support");
+  const mod = await import("@main/windows/menu/popup-support");
+  return {
+    initializeWaylandPopupSupport: (parent: BrowserWindow) =>
+      mod.initializeWaylandPopupSupport(parent, { createProbeWindow, lookupManagedWindow }),
+  };
 }
 
 describe("session-native popup support", () => {
@@ -97,6 +110,7 @@ describe("session-native popup support", () => {
 
   it("probes once with an explicit anchor and cleans up before caching success", async () => {
     const { initializeWaylandPopupSupport } = await loadPopupSupport();
+    const listenersBefore = lifecycle.events.listenerCount("quitting");
     const window = parent();
     expect(await initializeWaylandPopupSupport(window)).toBe(true);
     expect(await initializeWaylandPopupSupport(window)).toBe(true);
@@ -104,7 +118,7 @@ describe("session-native popup support", () => {
     expect(mocks.windows[0].destroyed).toBe(true);
     expect(mocks.arm).toHaveBeenCalledExactlyOnceWith("parent", "probe-0", 1, 1, 0, 0, 0);
     expect(mocks.cancel).toHaveBeenCalledExactlyOnceWith(1);
-    expect(lifecycle.events.listenerCount("quitting")).toBe(0);
+    expect(lifecycle.events.listenerCount("quitting")).toBe(listenersBefore);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -170,6 +184,7 @@ describe("session-native popup support", () => {
   it("cancels and releases the probe on application shutdown", async () => {
     mocks.isPopup.mockReturnValue(false);
     const { initializeWaylandPopupSupport } = await loadPopupSupport();
+    const listenersBefore = lifecycle.events.listenerCount("quitting");
     const probing = initializeWaylandPopupSupport(parent());
     lifecycle.setLifecycleState(lifecycle.LifecycleState.Quitting);
     await lifecycle.events.emit("quitting");
@@ -177,7 +192,7 @@ describe("session-native popup support", () => {
     await vi.advanceTimersByTimeAsync(5);
     expect(mocks.windows[0].destroyed).toBe(true);
     expect(mocks.cancel).toHaveBeenCalledExactlyOnceWith(1);
-    expect(lifecycle.events.listenerCount("quitting")).toBe(0);
+    expect(lifecycle.events.listenerCount("quitting")).toBe(listenersBefore);
     expect(vi.getTimerCount()).toBe(0);
     expect(await initializeWaylandPopupSupport(parent())).toBe(false);
     expect(mocks.windows).toHaveLength(1);
