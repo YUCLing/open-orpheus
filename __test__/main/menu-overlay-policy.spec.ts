@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getOverlayPolicy } from "../../src/main/menu/overlay-policy";
+import { getOverlayPolicy } from "@main/windows/menu/overlay-policy";
 
 describe("desktop-specific overlay policy", () => {
   it.each(["KDE", " KDE :plasma", "kde"])("arms before KDE window construction: %s", (desktop) => {

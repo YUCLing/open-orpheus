@@ -8,7 +8,7 @@ const config: Config = {
     }),
     alias: {
       $bridge: "../src/bridge",
-      $sharedTypes: "../types",
+      "@shared": "../src/shared",
     },
   },
   vitePlugin: {

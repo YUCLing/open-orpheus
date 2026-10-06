@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import CallDispatcher from "../src/CallDispatcher";
+import CallDispatcher from "@shared/CallDispatcher";
 
 describe("CallDispatcher", () => {
   it("forwards an array result to the callback as separate arguments", async () => {

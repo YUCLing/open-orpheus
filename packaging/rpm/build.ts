@@ -8,7 +8,7 @@ import { buildSrpm, type BuildSrpmOptions } from "./srpm.ts";
 
 export interface BuildRpmOptions extends BuildSrpmOptions {
   /** Node/Electron arch name (e.g. `x64`) used in the default `outDir`. Defaults to the host arch. */
-  arch?: string;
+  arch?: string | undefined;
 }
 
 /**

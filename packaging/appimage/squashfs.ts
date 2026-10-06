@@ -31,7 +31,7 @@ export function squashFsVersion(): SemVer {
 
 export interface SquashFsOptions {
   /** Compressor passed to `-comp`. Defaults to the `mksquashfs` default (usually `gzip`). */
-  compressor?: SquashFsCompressor;
+  compressor?: SquashFsCompressor | undefined;
 }
 
 /**

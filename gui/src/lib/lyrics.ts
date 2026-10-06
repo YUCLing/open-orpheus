@@ -1,7 +1,7 @@
 import Emittery from "emittery";
 
 import type { LyricsContract } from "$bridge/contracts/lyrics-api";
-import type { LyricsStore } from "$sharedTypes/lyrics";
+import type { LyricsStore } from "@shared/types/lyrics";
 
 import { getBridge } from "./bridge";
 

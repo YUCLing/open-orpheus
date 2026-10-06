@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MenuContract } from "../../src/bridge/contracts/menu-api";
-import type { registerIpcHandlers } from "../../src/bridge/register";
+import type { MenuContract } from "@bridge/contracts/menu-api";
+import type { registerIpcHandlers } from "@bridge/register";
 import { installLoggerStub } from "../helpers/globals";
 import type { IpcMainInvokeEvent } from "electron";
 
@@ -92,60 +92,73 @@ vi.mock("@open-orpheus/window", () => ({
   cancelNextWindowFirstCursorEnter: mocks.cancelCapture,
   getCursorPosition: vi.fn(),
 }));
-vi.mock("../../src/main/menu/skin", () => ({ menuSkin: {}, registerMenuSkinUpdater: vi.fn() }));
-vi.mock("../../src/main/menu/popup-support", () => ({
-  initializeWaylandPopupSupport: () => Promise.resolve(mocks.supportsPopup()),
-}));
-vi.mock("../../src/main/window", () => ({
-  ManagedWindow: { fromBrowserWindow: (wnd: { id: string }) => ({ id: wnd.id }) },
-}));
-vi.mock("../../src/main/menu/windows", () => ({
-  createMenuWindow: vi.fn(() => {
-    const wnd = new mocks.Window(`root-${mocks.roots.length}`);
-    mocks.roots.push(wnd);
-    return wnd;
-  }),
-  createSubmenuWindow: vi.fn(() => {
-    const wnd = new mocks.Window(`child-${mocks.children.length}`);
-    mocks.children.push(wnd);
-    return wnd;
-  }),
-  getMenuWindow: () => mocks.roots.at(-1),
-  getOverlayWindow: () => mocks.overlays.at(-1),
-  destroyMenuWindow: () => mocks.roots.at(-1)?.destroy(),
-  destroyOverlayWindow: () => mocks.overlays.at(-1)?.destroy(),
-  createOverlayWindow: vi.fn(() => {
-    mocks.overlayOrder.push("create");
-    const wnd = new mocks.Window(`overlay-${mocks.overlays.length}`);
-    Object.assign(wnd, {
-      show: vi.fn(() => {
-        mocks.overlayOrder.push("show");
-        mocks.enter?.(1200, 700);
-      }),
-    });
-    mocks.overlays.push(wnd);
-    if (mocks.overlayPolicy.capturePhase === "before-create" || !mocks.noFullscreen)
-      mocks.enter?.(1200, 700);
-    return wnd;
-  }),
-}));
-vi.mock("../../src/main/menu/workaround", () => ({
-  overlayPolicy: mocks.overlayPolicy,
-  WorkaroundFlags: { OverlayNoFullscreen: 1 },
-  workaroundEnabled: () => mocks.noFullscreen,
-}));
-vi.mock("../../src/bridge/register", () => ({
-  registerIpcHandlers: (contents: object, _name: string, handlers: MenuHandlers) => {
-    mocks.ipc.set(contents, handlers);
-  },
-}));
-vi.mock("../../src/bridge/common/inputRegion", () => ({ registerInputRegionHandlers: vi.fn() }));
-vi.mock("../../src/main/pack", () => ({ default: {} }));
-vi.mock("../../src/main/skin/dui", () => ({ parseBtnUrl: vi.fn(), parseElementTemplate: vi.fn() }));
-vi.mock("../../src/main/gui", () => ({ font: "Sans" }));
 const logger = installLoggerStub();
 
-import AppMenu from "../../src/main/menu";
+/**
+ * The collaborators an `AppMenu` needs, supplied rather than mocked at the module
+ * boundary. The window factories mirror what the old mocks did, because the
+ * assertions are about which windows a menu creates and destroys.
+ */
+function createOverlayWindow() {
+  mocks.overlayOrder.push("create");
+  const wnd = new mocks.Window(`overlay-${mocks.overlays.length}`);
+  Object.assign(wnd, {
+    show: () => {
+      mocks.overlayOrder.push("show");
+      mocks.enter?.(1200, 700);
+    },
+  });
+  mocks.overlays.push(wnd);
+  if (mocks.overlayPolicy.capturePhase === "before-create" || !mocks.noFullscreen) {
+    mocks.enter?.(1200, 700);
+  }
+  return wnd;
+}
+
+function menuDeps(): MenuDeps {
+  return {
+    skin: { menuSkin: {} as never },
+    windows: {
+      createMenuWindow: () => {
+        const wnd = new mocks.Window(`root-${mocks.roots.length}`);
+        mocks.roots.push(wnd);
+        return wnd as never;
+      },
+      createSubmenuWindow: () => {
+        const wnd = new mocks.Window(`child-${mocks.children.length}`);
+        mocks.children.push(wnd);
+        return wnd as never;
+      },
+      getMenuWindow: () => mocks.roots.at(-1) as never,
+      getOverlayWindow: () => mocks.overlays.at(-1) as never,
+      destroyMenuWindow: () => mocks.roots.at(-1)?.destroy(),
+      destroyOverlayWindow: () => mocks.overlays.at(-1)?.destroy(),
+      createOverlayWindow: createOverlayWindow as never,
+    },
+    workarounds: {
+      overlayPolicy: mocks.overlayPolicy,
+      workaroundEnabled: () => mocks.noFullscreen,
+      WorkaroundFlags: { OverlayNoFullscreen: 1 },
+    } as never,
+    bridge: {
+      registerIpcHandlers: ((contents: object, _name: string, handlers: MenuHandlers) => {
+        mocks.ipc.set(contents, handlers);
+      }) as never,
+      registerInputRegionHandlers: vi.fn(),
+    },
+    pack: { getOrWaitPack: vi.fn() as never },
+    dui: { parseBtnUrl: vi.fn(), parseElementTemplate: vi.fn() } as never,
+    popupSupport: {
+      initializeWaylandPopupSupport: () => Promise.resolve(mocks.supportsPopup()),
+    },
+    managedWindow: {
+      fromBrowserWindow: (wnd: { id: string }) => ({ id: wnd.id }),
+    } as never,
+    font: "Sans" as never,
+  };
+}
+
+import AppMenu, { type MenuDeps } from "@main/windows/menu";
 
 describe("overlay cursor capture ordering", () => {
   beforeEach(() => {
@@ -168,7 +181,7 @@ describe("overlay cursor capture ordering", () => {
     mocks.overlayPolicy.capturePhase = ["kde", "other"].includes(platform)
       ? "before-create"
       : "before-show";
-    const menu = new AppMenu([]);
+    const menu = new AppMenu([], menuDeps());
     try {
       await menu.show();
       const wnd = mocks.overlays[0];
@@ -188,7 +201,7 @@ describe("overlay cursor capture ordering", () => {
   it("arms before creation when fullscreen is forced on GNOME", async () => {
     mocks.overlayPolicy.capturePhase = "before-show";
     mocks.noFullscreen = false;
-    const menu = new AppMenu([]);
+    const menu = new AppMenu([], menuDeps());
     try {
       await menu.show();
       expect(mocks.overlayOrder).toEqual(["capture", "create"]);
@@ -200,7 +213,7 @@ describe("overlay cursor capture ordering", () => {
   it("cancels KDE capture when closed before renderer pull", async () => {
     mocks.overlayPolicy.capturePhase = "before-create";
     mocks.capture.mockImplementation(() => 88);
-    const menu = new AppMenu([]);
+    const menu = new AppMenu([], menuDeps());
     await menu.show();
     menu.close();
     expect(mocks.cancelCapture).toHaveBeenCalledExactlyOnceWith(88);
@@ -231,7 +244,7 @@ describe("Wayland popup single-render opening", () => {
       return 77;
     });
     mocks.ipc.clear();
-    menu = new AppMenu([]);
+    menu = new AppMenu([], menuDeps());
   });
   afterEach(() => {
     menu.close();
@@ -363,7 +376,7 @@ describe("Wayland popup single-render opening", () => {
     );
     menu.close();
     mocks.isPopup.mockReturnValue(true);
-    menu = new AppMenu([]);
+    menu = new AppMenu([], menuDeps());
     await menu.show(new mocks.Window("parent") as never);
     const retry = mocks.roots[1];
     await mocks.ipc.get(retry.webContents)!.reportSize(ipcEvent, 232, 281);

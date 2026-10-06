@@ -8,8 +8,8 @@ import {
   setWindowAsBackground,
 } from "@open-orpheus/window";
 
-import { ManagedWindow } from "../window";
-import { isAppUrl } from "../util";
+import { ManagedWindow } from "./managedWindow";
+import { isAppUrl } from "../platform/utils/url";
 
 export default class MusicDesktopWindow extends ManagedWindow {
   constructor(url: string) {
@@ -60,7 +60,7 @@ export default class MusicDesktopWindow extends ManagedWindow {
     }
   }
 
-  protected beforeSurfaceCreated(): void {
+  protected override beforeSurfaceCreated(): void {
     this.setLayerShell({
       namespace: "Open Orpheus Music Desktop",
       layer: LayerShellLayer.Background,

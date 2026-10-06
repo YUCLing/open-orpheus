@@ -37,13 +37,13 @@ export interface BuildAppImageOptions {
   /** Icons installed into the AppDir, as a `size -> source` map. At least one is required. */
   icon?: Icons;
   /** Prebuilt `.desktop` file to use instead of the shared template. */
-  desktopFile?: string;
+  desktopFile?: string | undefined;
   /** SquashFS compressor. Defaults to the `mksquashfs` default. */
-  compressor?: SquashFsCompressor;
+  compressor?: SquashFsCompressor | undefined;
   /** Runtime file path or URL. Defaults to the official release for `arch`. */
-  runtime?: string;
+  runtime?: string | undefined;
   /** Expected SHA-256 of the runtime. */
-  runtimeChecksum?: string;
+  runtimeChecksum?: string | undefined;
 }
 
 const FIXED_SIZE = /^(\d+)x(\d+)$/;
@@ -101,7 +101,7 @@ async function createAppDir(options: {
   version: string;
   arch: string;
   icons: Icons;
-  desktopFile?: string;
+  desktopFile?: string | undefined;
 }): Promise<void> {
   const { projectRoot, appDir, outDir, appTree, name, version, arch, icons } = options;
 

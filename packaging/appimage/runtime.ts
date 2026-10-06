@@ -28,9 +28,9 @@ export interface RuntimeOptions {
   /** AppImage arch name (e.g. `x86_64`), used by the default URL. */
   arch: string;
   /** Runtime file path or `http(s)` URL. Defaults to `$APPIMAGE_RUNTIME`, then the official release. */
-  runtime?: string;
+  runtime?: string | undefined;
   /** Expected SHA-256 (hex, optionally `sha256:` prefixed). */
-  checksum?: string;
+  checksum?: string | undefined;
 }
 
 /** ELF magic (`\x7fELF`), the only thing a type-2 runtime can start with. */

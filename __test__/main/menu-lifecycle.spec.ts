@@ -3,7 +3,7 @@ import {
   isLiveFocusedWindow,
   runMenuCallbacks,
   scheduleMenuTask,
-} from "../../src/main/menu/lifecycle";
+} from "@main/windows/menu/lifecycle";
 
 describe("menu lifecycle", () => {
   it("cancels old blur tasks when disposing or falling back", () => {

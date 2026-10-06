@@ -5,10 +5,12 @@ import { BrowserWindow, screen } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
 import { DesktopEnvironment, getDesktopEnvironment } from "@open-orpheus/window";
 
-import { ManagedWindow, setMainWindow } from "../window";
+import { ManagedWindow } from "./managedWindow";
 import { window as miniPlayerWindow } from "./mini-player";
-import { LifecycleState, setLifecycleState } from "../lifecycle";
-import { toError } from "../../util";
+import { LifecycleState } from "../services/lifecycle";
+import type { WindowService } from "../bootstrap/types";
+import type { LifecycleService } from "../services/lifecycle";
+import { toError } from "@shared/util";
 
 function getWindowState(wnd: BrowserWindow): "minimize" | "maximize" | "restore" {
   return wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore";
@@ -29,6 +31,11 @@ function getWindowSizeStatus(
   ];
 }
 
+export interface MainWindowDeps {
+  windows: Pick<WindowService, "setMainWindow">;
+  lifecycle: Pick<LifecycleService, "currentState" | "setLifecycleState">;
+}
+
 const mainWindowOptions = {
   width: 1280,
   height: 720,
@@ -41,7 +48,7 @@ const mainWindowOptions = {
 } satisfies BrowserWindowConstructorOptions;
 
 /** Wire the main window's cross-window behaviour and lifecycle. */
-function setupMainWindow(mainWindow: BrowserWindow) {
+function setupMainWindow(deps: MainWindowDeps, mainWindow: BrowserWindow) {
   ["maximize", "minimize", "restore", os.platform() === "linux" ? "resize" : "resized"].forEach(
     (event) => {
       mainWindow.on(event as unknown as "maximize", () => {
@@ -97,30 +104,30 @@ function setupMainWindow(mainWindow: BrowserWindow) {
   // before Electron has connected to the display or once per menu click.
   mainWindow.once("show", () => {
     if (getDesktopEnvironment() !== DesktopEnvironment.Wayland) return;
-    void import("../menu/popup-support")
+    void import("./menu/popup-support")
       .then(({ initializeWaylandPopupSupport }) => initializeWaylandPopupSupport(mainWindow))
       .catch((error) => {
         LOGGER.warn({ err: toError(error) }, "Wayland popup startup probe failed");
       });
   });
 
-  setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);
+  deps.lifecycle.setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);
 
   // Load App URL
   void mainWindow.loadURL("orpheus://orpheus/pub/app.html");
 
-  setMainWindow(mainWindow);
+  deps.windows.setMainWindow(mainWindow);
 }
 
 class MainWindow extends ManagedWindow {
-  constructor() {
+  constructor(deps: MainWindowDeps) {
     super();
     // Closing the main window asks the app to shut down; quitting closes it.
     this.requestCloseApproval(() => this.send("channel.call", "winhelper.onclose"));
-    setupMainWindow(this.createBrowserWindow(mainWindowOptions));
+    setupMainWindow(deps, this.createBrowserWindow(mainWindowOptions));
   }
 }
 
-export default async function createMainWindow() {
-  return new MainWindow();
+export default async function createMainWindow(deps: MainWindowDeps) {
+  return new MainWindow(deps);
 }

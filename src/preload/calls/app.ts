@@ -1,4 +1,4 @@
-import { SECRET_KEY } from "../../constants";
+import { SECRET_KEY } from "@shared/constants";
 import { registerCallHandler } from "../calls";
 import { fireNativeCall } from "../channel";
 import MusicRecognizer from "../MusicRecognizer";

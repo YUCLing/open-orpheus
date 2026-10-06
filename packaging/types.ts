@@ -1,7 +1,7 @@
 import type { Icons } from "./common/icons.ts";
 
 /**
- * Build controls for the custom Debian (.deb) maker (`plugins/MakerDeb.ts`),
+ * Build controls for the custom Debian (.deb) maker (`build-plugins/MakerDeb.ts`),
  * which delegates to the shared prebuilt builder.
  *
  * Package metadata (name, section, maintainer, homepage, description) is not
@@ -16,7 +16,7 @@ export interface MakerDebOptions {
 }
 
 /**
- * Build controls for the custom RPM maker (`plugins/MakerRpm.ts`), which
+ * Build controls for the custom RPM maker (`build-plugins/MakerRpm.ts`), which
  * delegates to the shared prebuilt builder.
  *
  * Package metadata (name, summary, license, homepage) is not configurable here:
@@ -32,7 +32,7 @@ export interface MakerRpmOptions {
 
 /**
  * Configuration for the custom Flatpak maker
- * (`plugins/MakerFlatpak.ts`), which reuses the packaged Electron app through
+ * (`build-plugins/MakerFlatpak.ts`), which reuses the packaged Electron app through
  * a prebuilt-aware Flathub builder manifest and bundles it into a `.flatpak`.
  */
 export interface MakerFlatpakOptions {

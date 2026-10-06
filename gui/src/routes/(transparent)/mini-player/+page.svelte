@@ -18,8 +18,8 @@
     MiniPlayerListData,
     MiniPlayerStyle,
     MiniPlayerTogetherStatus,
-  } from "$sharedTypes/mini-player";
-  import type { Lyrics } from "$sharedTypes/lyrics";
+  } from "@shared/types/mini-player";
+  import type { Lyrics } from "@shared/types/lyrics";
   import { lyricsBridgeEmitter, getLyrics } from "$lib/lyrics";
   import LyricsComponent from "./Lyrics.svelte";
   import { setFont } from "$lib/font";

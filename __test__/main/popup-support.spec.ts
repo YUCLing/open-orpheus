@@ -42,11 +42,13 @@ const mocks = vi.hoisted(() => {
     arm: vi.fn(() => 1 as number | null),
     cancel: vi.fn(),
     isPopup: vi.fn(() => true),
-    quitting: new Set<() => void>(),
-    state: 0,
   };
 });
 
+vi.mock("electron", () => ({
+  app: { on: vi.fn(), whenReady: vi.fn(() => Promise.resolve()) },
+  BrowserWindow: class {},
+}));
 vi.mock("@open-orpheus/window", () => ({
   DesktopEnvironment: { Wayland: "wayland" },
   getDesktopEnvironment: () => mocks.desktop,
@@ -54,31 +56,42 @@ vi.mock("@open-orpheus/window", () => ({
   armNextWindowAsPopup: mocks.arm,
   cancelPendingPopup: mocks.cancel,
   isWindowWaylandPopup: mocks.isPopup,
+  drainWindowCallbacks: vi.fn(),
+  isLayerShellAvailable: () => false,
+  onLayerShellRoleRefused: vi.fn(),
+  setInputRegion: vi.fn(),
+  useLayerShellForNextWindow: vi.fn(),
+  validateLayerShellOptions: () => true,
 }));
-vi.mock("../../src/main/window", () => ({
-  ManagedWindow: { fromBrowserWindow: (window: { id: string }) => ({ id: window.id }) },
-}));
-vi.mock("../../src/main/menu/windows", () => ({
-  createPopupProbeWindow: () => {
-    const window = new mocks.Window(`probe-${mocks.windows.length}`);
-    mocks.windows.push(window);
-    return window;
-  },
-}));
-vi.mock("../../src/main/lifecycle", () => ({
-  LifecycleState: { Quitting: 4 },
-  get state() {
-    return mocks.state;
-  },
-  events: {
-    on: (_event: string, callback: () => void) => {
-      mocks.quitting.add(callback);
-      return () => mocks.quitting.delete(callback);
-    },
-  },
-}));
-
 installLoggerStub();
+
+/**
+ * The lifecycle state is reached through installed accessors rather than a
+ * module the spec replaces. Importing a fresh copy per test and installing a
+ * service is the seam the refactor provides (the accessors answer `Starting`
+ * before `bootstrap()` runs, which is why they are module-level at all).
+ */
+let lifecycle: typeof import("@main/services/lifecycle");
+
+function createProbeWindow() {
+  const window = new mocks.Window(`probe-${mocks.windows.length}`);
+  mocks.windows.push(window);
+  return window as unknown as BrowserWindow;
+}
+function lookupManagedWindow(wnd: BrowserWindow) {
+  return { id: (wnd as unknown as { id: string }).id } as never;
+}
+
+async function loadPopupSupport() {
+  // `vi.resetModules()` gives this a fresh state of `Starting`, which is the
+  // module's real initial value — nothing to install or reset.
+  lifecycle = await import("@main/services/lifecycle");
+  const mod = await import("@main/windows/menu/popup-support");
+  return {
+    initializeWaylandPopupSupport: (parent: BrowserWindow) =>
+      mod.initializeWaylandPopupSupport(parent, { createProbeWindow, lookupManagedWindow }),
+  };
+}
 
 describe("session-native popup support", () => {
   beforeEach(() => {
@@ -86,19 +99,18 @@ describe("session-native popup support", () => {
     vi.resetModules();
     vi.clearAllMocks();
     mocks.windows.length = 0;
-    mocks.quitting.clear();
     mocks.supports.mockReturnValue(true);
     mocks.arm.mockReturnValue(1);
     mocks.isPopup.mockReturnValue(true);
     mocks.desktop = "wayland";
-    mocks.state = 0;
   });
   afterEach(() => vi.useRealTimers());
 
   const parent = () => new mocks.Window("parent") as unknown as BrowserWindow;
 
   it("probes once with an explicit anchor and cleans up before caching success", async () => {
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
+    const listenersBefore = lifecycle.events.listenerCount("quitting");
     const window = parent();
     expect(await initializeWaylandPopupSupport(window)).toBe(true);
     expect(await initializeWaylandPopupSupport(window)).toBe(true);
@@ -106,13 +118,13 @@ describe("session-native popup support", () => {
     expect(mocks.windows[0].destroyed).toBe(true);
     expect(mocks.arm).toHaveBeenCalledExactlyOnceWith("parent", "probe-0", 1, 1, 0, 0, 0);
     expect(mocks.cancel).toHaveBeenCalledExactlyOnceWith(1);
-    expect(mocks.quitting.size).toBe(0);
+    expect(lifecycle.events.listenerCount("quitting")).toBe(listenersBefore);
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("retries an inconclusive conversion on the next menu click", async () => {
     mocks.isPopup.mockReturnValue(false);
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
     const window = parent();
     const probing = initializeWaylandPopupSupport(window);
     await vi.advanceTimersByTimeAsync(200);
@@ -127,7 +139,7 @@ describe("session-native popup support", () => {
 
   it("shares an in-flight startup probe with an early menu click", async () => {
     mocks.isPopup.mockReturnValue(false);
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
     const window = parent();
     const startup = initializeWaylandPopupSupport(window);
     const menu = initializeWaylandPopupSupport(window);
@@ -141,7 +153,7 @@ describe("session-native popup support", () => {
 
   it.each(["windows", "x11", "macos"])("does not probe on %s", async (desktop) => {
     mocks.desktop = desktop;
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
     expect(await initializeWaylandPopupSupport(parent())).toBe(false);
     expect(mocks.supports).not.toHaveBeenCalled();
     expect(mocks.windows).toHaveLength(0);
@@ -149,7 +161,7 @@ describe("session-native popup support", () => {
 
   it("does not create a probe when hooks are disabled", async () => {
     mocks.supports.mockReturnValue(false);
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
     expect(await initializeWaylandPopupSupport(parent())).toBe(false);
     expect(mocks.windows).toHaveLength(0);
     expect(mocks.arm).not.toHaveBeenCalled();
@@ -157,7 +169,7 @@ describe("session-native popup support", () => {
 
   it("cancels on parent close without caching a false incompatibility", async () => {
     mocks.arm.mockReturnValue(null);
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
     const window = new mocks.Window("parent");
     const probing = initializeWaylandPopupSupport(window as unknown as BrowserWindow);
     window.destroy();
@@ -171,15 +183,16 @@ describe("session-native popup support", () => {
 
   it("cancels and releases the probe on application shutdown", async () => {
     mocks.isPopup.mockReturnValue(false);
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
+    const listenersBefore = lifecycle.events.listenerCount("quitting");
     const probing = initializeWaylandPopupSupport(parent());
-    mocks.state = 4;
-    for (const cancel of mocks.quitting) cancel();
+    lifecycle.setLifecycleState(lifecycle.LifecycleState.Quitting);
+    await lifecycle.events.emit("quitting");
     expect(await probing).toBe(false);
     await vi.advanceTimersByTimeAsync(5);
     expect(mocks.windows[0].destroyed).toBe(true);
     expect(mocks.cancel).toHaveBeenCalledExactlyOnceWith(1);
-    expect(mocks.quitting.size).toBe(0);
+    expect(lifecycle.events.listenerCount("quitting")).toBe(listenersBefore);
     expect(vi.getTimerCount()).toBe(0);
     expect(await initializeWaylandPopupSupport(parent())).toBe(false);
     expect(mocks.windows).toHaveLength(1);
@@ -187,7 +200,7 @@ describe("session-native popup support", () => {
 
   it("retries missing popup data after the parent becomes ready", async () => {
     mocks.arm.mockReturnValue(null);
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
     const probing = initializeWaylandPopupSupport(parent());
     await vi.advanceTimersByTimeAsync(200);
     expect(await probing).toBe(false);
@@ -204,7 +217,7 @@ describe("session-native popup support", () => {
     mocks.supports.mockImplementationOnce(() => {
       throw new Error("native interface not ready");
     });
-    const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
+    const { initializeWaylandPopupSupport } = await loadPopupSupport();
     expect(await initializeWaylandPopupSupport(parent())).toBe(false);
     expect(await initializeWaylandPopupSupport(parent())).toBe(true);
     expect(mocks.windows).toHaveLength(1);

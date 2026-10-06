@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
     isReady: vi.fn(() => true),
   },
   flushLogs: vi.fn(),
+  logger: { warn: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("electron", () => ({
@@ -18,26 +19,23 @@ vi.mock("electron", () => ({
   app: hoisted.app,
 }));
 
-// The real module builds a pino transport; the shutdown sequence only needs the
-// flush to exist.
-vi.mock("../../src/main/logger", () => ({
-  default: {},
-  flushLogs: hoisted.flushLogs,
-}));
-
 installLoggerStub();
 
 import {
+  currentState,
   events,
   LifecycleState,
   setLifecycleState,
   setStartupTask,
-  state,
   startupTask,
-} from "../../src/main/lifecycle";
+} from "@main/services/lifecycle";
 
+// The state is module-owned and always live, so there is nothing to install.
+// Reset it explicitly: this group reads the statically imported module, whose
+// state persists between tests in the same file.
 beforeEach(() => {
   vi.clearAllMocks();
+  setLifecycleState(LifecycleState.Starting);
 });
 
 describe("startupTask", () => {
@@ -64,10 +62,10 @@ describe("startupTask", () => {
 describe("setLifecycleState", () => {
   it("tracks the current state", () => {
     setLifecycleState(LifecycleState.MainWindowCreated, {} as never);
-    expect(state).toBe(LifecycleState.MainWindowCreated);
+    expect(currentState()).toBe(LifecycleState.MainWindowCreated);
 
     setLifecycleState(LifecycleState.MainWindowLoaded, {} as never);
-    expect(state).toBe(LifecycleState.MainWindowLoaded);
+    expect(currentState()).toBe(LifecycleState.MainWindowLoaded);
   });
 
   it("emits the event matching the state", async () => {
@@ -96,7 +94,7 @@ describe("setLifecycleState", () => {
     await emitted;
 
     expect(onQuitting).toHaveBeenCalledTimes(1);
-    expect(state).toBe(LifecycleState.Quitting);
+    expect(currentState()).toBe(LifecycleState.Quitting);
   });
 
   it("does not emit for states without an event", () => {
@@ -105,7 +103,7 @@ describe("setLifecycleState", () => {
 
     setLifecycleState(LifecycleState.Starting);
 
-    expect(state).toBe(LifecycleState.Starting);
+    expect(currentState()).toBe(LifecycleState.Starting);
     expect(onStarted).not.toHaveBeenCalled();
   });
 });
@@ -125,7 +123,7 @@ let prependListenerSpy: MockInstance;
 let signalHandlers: Map<string, AppEventHandler>;
 
 async function freshLifecycle(
-  options?: Parameters<typeof import("../../src/main/lifecycle").installLifecycle>[0]
+  options?: Parameters<typeof import("@main/services/lifecycle").installLifecycle>[0]
 ) {
   vi.resetModules();
   signalHandlers.clear();
@@ -134,8 +132,8 @@ async function freshLifecycle(
   hoisted.app.exit.mockClear();
   hoisted.app.isReady.mockReturnValue(true);
 
-  const lifecycle = await import("../../src/main/lifecycle");
-  lifecycle.installLifecycle(options);
+  const lifecycle = await import("@main/services/lifecycle");
+  lifecycle.installLifecycle({ flushLogs: hoisted.flushLogs, ...options });
   return lifecycle;
 }
 
@@ -339,7 +337,7 @@ describe("shutdown tasks", () => {
     lifecycle.registerShutdownTask({
       name: "observer",
       run: () => {
-        states.push(lifecycle.state);
+        states.push(lifecycle.currentState());
       },
     });
 

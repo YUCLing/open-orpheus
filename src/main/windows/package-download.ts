@@ -2,9 +2,9 @@ import path from "node:path";
 
 import type { BrowserWindowConstructorOptions } from "electron";
 
-import packManager from "../pack";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
-import { ManagedWindow } from "../window";
+import packManager from "../services/pack";
+import { PackageDownloadReason } from "@shared/types/package-download";
+import { ManagedWindow } from "./managedWindow";
 
 const packageDownloadWindowOptions = {
   width: 1000,
@@ -36,7 +36,7 @@ class PackageDownloadWindow extends ManagedWindow {
    * Resolves when the package finishes downloading, rejects with `"CANCEL"`
    * when the window is closed early.
    */
-  show(): Promise<void> {
+  override show(): Promise<void> {
     const wnd = this.window;
     if (!wnd) {
       return Promise.reject(new Error("Package download window was not created"));

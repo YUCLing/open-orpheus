@@ -47,11 +47,11 @@ describe("baseManifest", () => {
   });
 
   it("launches through the zypak wrapper", () => {
-    expect(baseManifest(ctx, appModule).command).toBe("electron-wrapper");
+    expect(baseManifest(ctx, appModule)["command"]).toBe("electron-wrapper");
   });
 
   it("adds a branch only when one is given", () => {
-    expect(baseManifest({ ...ctx, branch: "stable" }, appModule).branch).toBe("stable");
+    expect(baseManifest({ ...ctx, branch: "stable" }, appModule)["branch"]).toBe("stable");
     expect(baseManifest(ctx, appModule)).not.toHaveProperty("branch");
   });
 
@@ -74,7 +74,7 @@ describe("baseManifest", () => {
     const extra = { name: "ffmpeg" };
     const manifest = baseManifest({ ...ctx, extraModules: [extra] }, appModule);
 
-    expect(manifest.modules).toEqual([extra, appModule]);
+    expect(manifest["modules"]).toEqual([extra, appModule]);
   });
 });
 
@@ -119,8 +119,8 @@ describe("pnpmNativeSources", () => {
   const arm64Integrity =
     "sha512-q4s9a9X2O3N9aeUFooW24orNrxvu20+jyVUFR5RanPCqOKKPBrgs2iywMkBBx1aXkkzdWT54/mfz8Be8sJlWEw==";
   const integrities = {
-    [PNPM_NATIVE_PACKAGES.x86_64]: x64Integrity,
-    [PNPM_NATIVE_PACKAGES.aarch64]: arm64Integrity,
+    [PNPM_NATIVE_PACKAGES["x86_64"]]: x64Integrity,
+    [PNPM_NATIVE_PACKAGES["aarch64"]]: arm64Integrity,
   };
 
   it("declares one arch-filtered native binary source per arch", () => {
@@ -154,7 +154,7 @@ describe("pnpmNativeSources", () => {
     expect(() =>
       pnpmNativeSources({
         pnpmVersion: "12.8.1",
-        integrities: { ...integrities, [PNPM_NATIVE_PACKAGES.x86_64]: "sha256-YWJj" },
+        integrities: { ...integrities, [PNPM_NATIVE_PACKAGES["x86_64"]]: "sha256-YWJj" },
       })
     ).toThrow(/sha512/);
   });
@@ -163,7 +163,7 @@ describe("pnpmNativeSources", () => {
     expect(() =>
       pnpmNativeSources({
         pnpmVersion: "12.8.1",
-        integrities: { ...integrities, [PNPM_NATIVE_PACKAGES.x86_64]: "sha512-YWJj" },
+        integrities: { ...integrities, [PNPM_NATIVE_PACKAGES["x86_64"]]: "sha512-YWJj" },
       })
     ).toThrow(/64-byte/);
   });

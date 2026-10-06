@@ -7,15 +7,15 @@ import psd from "@webtoon/psd";
 import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
-import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
+import { guiUrl, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "./managedWindow";
 import { registerIpcHandlers } from "../../bridge/register";
 import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
-import type { BtnImages, BtnState } from "../../../types/dui";
+import type { BtnImages, BtnState } from "../../shared/types/dui";
 import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
-import packManager from "../pack";
-import type SkinPack from "../packs/SkinPack";
-import { extractColor } from "../skin/color";
-import { argbToCss, parseBtnState } from "../skin/dui";
+import packManager from "../services/pack";
+import type SkinPack from "../services/packs/SkinPack";
+import { extractColor } from "../domain/skin/color";
+import { argbToCss, parseBtnState } from "../domain/skin/dui";
 import type {
   MiniPlayerLikeMark,
   MiniPlayerPlayInfo,
@@ -24,10 +24,18 @@ import type {
   MiniPlayerFullState,
   MiniPlayerStyle,
   MiniPlayerTogetherStatus,
-} from "$sharedTypes/mini-player";
+} from "@shared/types/mini-player";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
-import { font } from "../gui";
-import { events as settingsEvents, kv as settings } from "../settings";
+import { lyricsDispatcher } from "../domain/lyrics";
+import { font } from "../platform/gui";
+import type { SettingsService, WindowService } from "../bootstrap/types";
+import type { LifecycleService } from "../services/lifecycle";
+
+export interface MiniPlayerDeps {
+  windows: Pick<WindowService, "currentWindow">;
+  lifecycle: Pick<LifecycleService, "currentState">;
+  settings: Pick<SettingsService, "kv" | "events">;
+}
 
 // State
 let playInfo: MiniPlayerPlayInfo | null = null;
@@ -160,7 +168,11 @@ packManager.on("skin2packloaded", async (event) => {
     )
   );
 
-  const style: Partial<MiniPlayerStyle> = {};
+  // Unlike `Partial`, this permits an explicit `undefined`: the skin parser fills
+  // whichever buttons the skin happens to define and leaves the rest targetless.
+  const style: {
+    [K in keyof MiniPlayerStyle]?: MiniPlayerStyle[K] | undefined;
+  } = {};
 
   style.background = bgColor;
 
@@ -281,7 +293,9 @@ packManager.on("skin2packloaded", async (event) => {
     if (btnsFound >= 13) break;
   }
 
-  const listStyle: Partial<MiniPlayerStyle["list"]> = {
+  const listStyle: {
+    [K in keyof MiniPlayerStyle["list"]]?: MiniPlayerStyle["list"][K] | undefined;
+  } = {
     background: listBgColor,
     itemBackground: listItemBgColor,
     hoverBackground: listHoverBgColor,
@@ -431,7 +445,7 @@ const miniPlayerWindowOptions = {
   },
 } satisfies BrowserWindowConstructorOptions;
 
-function setupMiniPlayerWindow(wnd: BrowserWindow): BrowserWindow {
+function setupMiniPlayerWindow(deps: MiniPlayerDeps, wnd: BrowserWindow): BrowserWindow {
   void wnd.loadURL(guiUrl("/mini-player"));
 
   registerIpcHandlers<MiniPlayerContract>(wnd.webContents, "miniPlayer", {
@@ -442,45 +456,47 @@ function setupMiniPlayerWindow(wnd: BrowserWindow): BrowserWindow {
       dragWindow(hwnd);
     },
     fireCall: async (event, cmd, ...args) => {
+      const mainWindow = deps.windows.currentWindow();
       if (!mainWindow || mainWindow.isDestroyed()) return;
       mainWindow.webContents.send("channel.call", cmd, ...args);
     },
   });
-  registerInputRegionHandlers(wnd);
-  registerLyricsHandlers(wnd);
+  registerInputRegionHandlers(wnd, ManagedWindow);
+  registerLyricsHandlers(wnd, lyricsDispatcher);
   return wnd;
 }
 
 /** Closing the window asks the player to close, unless it is being dismissed. */
-function notifyMiniPlayerClose() {
+function notifyMiniPlayerClose(deps: MiniPlayerDeps) {
+  const mainWindow = deps.windows.currentWindow();
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
 }
 
 class MiniPlayerWindow extends ManagedWindow {
-  constructor() {
+  constructor(deps: MiniPlayerDeps) {
     super();
     this.setData("name", "mini_player");
-    this.requestCloseApproval(notifyMiniPlayerClose);
-    setupMiniPlayerWindow(this.createBrowserWindow(miniPlayerWindowOptions));
+    this.requestCloseApproval(() => notifyMiniPlayerClose(deps));
+    setupMiniPlayerWindow(deps, this.createBrowserWindow(miniPlayerWindowOptions));
   }
 }
 
 class MiniPlayerOnDemandWindow extends OnDemandWindow {
-  constructor() {
+  constructor(private readonly deps: MiniPlayerDeps) {
     super();
     this.setData("name", "mini_player");
-    this.requestCloseApproval(notifyMiniPlayerClose);
+    this.requestCloseApproval(() => notifyMiniPlayerClose(this.deps));
   }
 
   createWindow(): BrowserWindow {
-    return setupMiniPlayerWindow(this.createBrowserWindow(miniPlayerWindowOptions));
+    return setupMiniPlayerWindow(this.deps, this.createBrowserWindow(miniPlayerWindowOptions));
   }
 }
 
 /** `"on-demand"` destroys the window when hidden; anything else keeps it. */
-function createWindowForLifecycle(value: unknown): ManagedWindow {
-  return value === "on-demand" ? new MiniPlayerOnDemandWindow() : new MiniPlayerWindow();
+function createWindowForLifecycle(deps: MiniPlayerDeps, value: unknown): ManagedWindow {
+  return value === "on-demand" ? new MiniPlayerOnDemandWindow(deps) : new MiniPlayerWindow(deps);
 }
 
 let lifecycleSwitchRegistered = false;
@@ -491,18 +507,18 @@ let lifecycleSwitchRegistered = false;
  * Registered from the startup path rather than at module scope: this module is
  * evaluated before `settings.initialize()` creates the settings emitter.
  */
-function registerLifecycleSwitch() {
+function registerLifecycleSwitch(deps: MiniPlayerDeps) {
   if (lifecycleSwitchRegistered) return;
   lifecycleSwitchRegistered = true;
 
-  settingsEvents.on("change", (e) => {
+  deps.settings.events.on("change", (e) => {
     if (e.data.key !== "window.lifecycle" || !window) return;
-    window = switchWindowPolicy(window, () => createWindowForLifecycle(e.data.value));
+    window = switchWindowPolicy(window, () => createWindowForLifecycle(deps, e.data.value));
   });
 }
 
 export let window: ManagedWindow;
-export default async function createMiniPlayerWindow() {
-  window = createWindowForLifecycle(await settings.get("window.lifecycle"));
-  registerLifecycleSwitch();
+export default async function createMiniPlayerWindow(deps: MiniPlayerDeps) {
+  window = createWindowForLifecycle(deps, await deps.settings.kv.get("window.lifecycle"));
+  registerLifecycleSwitch(deps);
 }

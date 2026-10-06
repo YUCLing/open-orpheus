@@ -46,17 +46,16 @@ vi.mock("pino", () => {
   };
 });
 
-vi.mock("electron", () => ({ ipcMain: { on: vi.fn() } }));
+vi.mock("electron", () => ({
+  ipcMain: { on: vi.fn() },
+  // `platform/folders` resolves its directories from these at import time, so
+  // the real module can be used instead of mocking it.
+  app: { getPath: vi.fn((name: string) => `/tmp/open-orpheus-test/${name}`) },
+}));
 
 // `logger.ts` rolls, compresses and prunes real files at import time, so each
 // import gets a throwaway log directory instead of the app's own.
 let logDir = "";
-
-vi.mock("../../src/main/folders", () => ({
-  get log() {
-    return logDir;
-  },
-}));
 
 // `isTTY` is inherited from the stream prototype rather than owned by
 // `process.stdout`, so it has to be shadowed with an own property — and the
@@ -77,19 +76,19 @@ async function importLogger(): Promise<TransportTarget[]> {
   // Each import must start from a clean module registry: the target list is
   // built once, at import time.
   vi.resetModules();
-  await import("../../src/main/logger");
+  await import("@main/platform/logger");
   return hoisted.transportTargets;
 }
 
 beforeEach(() => {
   logDir = mkdtempSync(join(tmpdir(), "open-orpheus-logger-"));
   setStdoutIsTty(undefined);
-  delete process.env.OPEN_ORPHEUS_FORCE_PRETTY;
+  delete process.env["OPEN_ORPHEUS_FORCE_PRETTY"];
 });
 
 afterEach(() => {
   setStdoutIsTty(originalIsTty);
-  delete process.env.OPEN_ORPHEUS_FORCE_PRETTY;
+  delete process.env["OPEN_ORPHEUS_FORCE_PRETTY"];
   rmSync(logDir, { recursive: true, force: true });
 });
 
@@ -113,11 +112,11 @@ describe("log transport", () => {
     expect(targets[1].target).toBe("pino-pretty");
     // Pretty output goes to stdout implicitly, so the module must not also
     // open stdout as a raw file destination.
-    expect(targets.some((t) => t.options?.destination === 1)).toBe(false);
+    expect(targets.some((t) => t.options?.["destination"] === 1)).toBe(false);
   });
 
   it("prettifies when OPEN_ORPHEUS_FORCE_PRETTY=1", async () => {
-    process.env.OPEN_ORPHEUS_FORCE_PRETTY = "1";
+    process.env["OPEN_ORPHEUS_FORCE_PRETTY"] = "1";
 
     const targets = await importLogger();
 
@@ -125,7 +124,7 @@ describe("log transport", () => {
   });
 
   it("prettifies when OPEN_ORPHEUS_FORCE_PRETTY=true", async () => {
-    process.env.OPEN_ORPHEUS_FORCE_PRETTY = "true";
+    process.env["OPEN_ORPHEUS_FORCE_PRETTY"] = "true";
 
     const targets = await importLogger();
 
@@ -133,7 +132,7 @@ describe("log transport", () => {
   });
 
   it("ignores other OPEN_ORPHEUS_FORCE_PRETTY values", async () => {
-    process.env.OPEN_ORPHEUS_FORCE_PRETTY = "yes";
+    process.env["OPEN_ORPHEUS_FORCE_PRETTY"] = "yes";
 
     const targets = await importLogger();
 

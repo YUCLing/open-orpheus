@@ -6,7 +6,7 @@ vi.mock("electron", () => ({
 
 import { ipcRenderer } from "electron";
 
-import { isAv3aLocalFile } from "../../src/preload/av3a/detect";
+import { isAv3aLocalFile } from "@preload/av3a/detect";
 
 describe("isAv3aLocalFile", () => {
   beforeEach(() => {

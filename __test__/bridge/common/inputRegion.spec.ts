@@ -11,13 +11,16 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock("node:os", () => ({ default: { platform: hoisted.platform } }));
 
-vi.mock("../../../src/main/window", () => ({
-  ManagedWindow: { fromBrowserWindow: hoisted.fromBrowserWindow },
-}));
-
-import { registerInputRegionHandlers } from "../../../src/bridge/common/inputRegion";
+import { registerInputRegionHandlers } from "@bridge/common/inputRegion";
 
 const regions = [{ x: 0, y: 0, width: 10, height: 10 }];
+
+/** The managed-window factory the main process would supply. */
+const managedWindow = { fromBrowserWindow: hoisted.fromBrowserWindow };
+
+function register(wnd: BrowserWindow) {
+  registerInputRegionHandlers(wnd, managedWindow);
+}
 
 function createFakeWindow({ destroyed = false } = {}) {
   const send = vi.fn();
@@ -61,7 +64,7 @@ describe("registerInputRegionHandlers", () => {
   it("delegates to the managed window and returns its answer", async () => {
     hoisted.fromBrowserWindow.mockReturnValue(hoisted.managed);
     const win = createFakeWindow();
-    registerInputRegionHandlers(win.wnd);
+    register(win.wnd);
 
     await expect(win.invoke("inputRegion.setInputRegions", regions)).resolves.toBe(true);
     expect(hoisted.managed.setWindowInputRegion).toHaveBeenCalledWith(regions);
@@ -74,14 +77,14 @@ describe("registerInputRegionHandlers", () => {
   it("reports failure when the window is not managed", async () => {
     hoisted.fromBrowserWindow.mockReturnValue(undefined);
     const win = createFakeWindow();
-    registerInputRegionHandlers(win.wnd);
+    register(win.wnd);
 
     await expect(win.invoke("inputRegion.setInputRegions", regions)).resolves.toBe(false);
   });
 
   it("ignores calls from a destroyed window", async () => {
     const win = createFakeWindow({ destroyed: true });
-    registerInputRegionHandlers(win.wnd);
+    register(win.wnd);
 
     await expect(win.invoke("inputRegion.setInputRegions", regions)).resolves.toBe(false);
     expect(hoisted.fromBrowserWindow).not.toHaveBeenCalled();
@@ -90,7 +93,7 @@ describe("registerInputRegionHandlers", () => {
   it("clicks through regions on other platforms", async () => {
     hoisted.platform.mockReturnValue("win32");
     const win = createFakeWindow();
-    registerInputRegionHandlers(win.wnd);
+    register(win.wnd);
 
     await expect(win.invoke("inputRegion.setInputRegions", regions)).resolves.toBe(true);
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, {
@@ -101,7 +104,7 @@ describe("registerInputRegionHandlers", () => {
   it("accepts mouse events again for an empty region list", async () => {
     hoisted.platform.mockReturnValue("darwin");
     const win = createFakeWindow();
-    registerInputRegionHandlers(win.wnd);
+    register(win.wnd);
 
     await expect(win.invoke("inputRegion.setInputRegions", [])).resolves.toBe(true);
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(false);

@@ -18,15 +18,17 @@ export interface ScaffoldOptions {
     desktop?: string;
   };
   /** Paths relative to `root` */
-  paths?: {
-    app?: string;
-    icons?: {
-      appName: string;
-      path: string;
-    };
-    desktop?: string;
-    symlink?: string | true;
-  };
+  paths?:
+    | {
+        app?: string;
+        icons?: {
+          appName: string;
+          path: string;
+        };
+        desktop?: string;
+        symlink?: string | true | undefined;
+      }
+    | undefined;
 }
 
 export async function writeScaffold(root: string, options: ScaffoldOptions) {

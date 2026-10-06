@@ -21,7 +21,7 @@ export interface SpecOptions {
   zig: string;
   changelog: string;
   /** Install the build toolchain (rust/node/pnpm) inside `%build`. Defaults to true. */
-  installTools?: boolean;
+  installTools?: boolean | undefined;
   /** Bundle a prebuilt Electron app (Source1) and skip building. Defaults to false. */
   prebuilt?: boolean;
 }

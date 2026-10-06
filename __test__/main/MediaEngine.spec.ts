@@ -9,33 +9,45 @@ const hoisted = vi.hoisted(() => ({
   failing: new Set<string>(),
 }));
 
-vi.mock("../../src/main/audio/OnlineStreamer", () => ({
-  OnlineStreamer: class {
-    constructor(readonly url: string) {}
-
-    on() {
-      return this;
-    }
-
-    destroy(): Promise<void> {
-      if (hoisted.failing.has(this.url)) {
-        return Promise.reject(new Error(`delete failed: ${this.url}`));
-      }
-      return new Promise<void>((resolve) => {
-        hoisted.deletions.set(this.url, resolve);
-      });
-    }
-  },
-}));
-
-// Only read for progress reporting and cache-on-complete, neither of which a
-// teardown test reaches.
-vi.mock("../../src/main/window", () => ({ mainWindow: null }));
-vi.mock("../../src/main/cache", () => ({ playCacheManager: null }));
-
 const logger = installLoggerStub();
 
-import { MediaEngine } from "../../src/main/audio/MediaEngine";
+import { MediaEngine } from "@main/services/audio/MediaEngine";
+import type { OnlineStreamer } from "@main/services/audio/OnlineStreamer";
+
+/**
+ * A streamer whose deletion the test controls. Supplied through
+ * `deps.createStreamer` rather than by mocking the module, so the real one is
+ * never swapped out from under another importer.
+ */
+class FakeStreamer {
+  constructor(readonly url: string) {}
+
+  on() {
+    return this;
+  }
+
+  destroy(): Promise<void> {
+    if (hoisted.failing.has(this.url)) {
+      return Promise.reject(new Error(`delete failed: ${this.url}`));
+    }
+    return new Promise<void>((resolve) => {
+      hoisted.deletions.set(this.url, resolve);
+    });
+  }
+}
+
+/**
+ * The window comes from `deps.windows`; the cache is only read for progress
+ * reporting and cache-on-complete, neither of which a teardown test reaches, so
+ * it is simply absent — which the engine already tolerates.
+ */
+function makeEngine() {
+  return new MediaEngine({
+    windows: { currentWindow: () => null },
+    playCache: () => null,
+    createStreamer: (url) => new FakeStreamer(url) as unknown as OnlineStreamer,
+  });
+}
 
 /** An online (URL) play, the only kind that owns a temp file. */
 function urlPlay(url: string): Parameters<MediaEngine["activate"]>[0] {
@@ -54,7 +66,7 @@ beforeEach(() => {
 
 describe("MediaEngine.dispose", () => {
   it("waits for a deletion an earlier stop() left running", async () => {
-    const engine = new MediaEngine();
+    const engine = makeEngine();
 
     await engine.activate(urlPlay("url-a"));
     await engine.stop(); // Retires url-a without waiting for its deletion.
@@ -80,7 +92,7 @@ describe("MediaEngine.dispose", () => {
   });
 
   it("reports a failed deletion of the current stream, and still resolves", async () => {
-    const engine = new MediaEngine();
+    const engine = makeEngine();
     await engine.activate(urlPlay("url-a"));
     hoisted.failing.add("url-a");
     logger.error.mockClear();
@@ -92,7 +104,7 @@ describe("MediaEngine.dispose", () => {
   });
 
   it("reports a failed deletion that stop() left running", async () => {
-    const engine = new MediaEngine();
+    const engine = makeEngine();
     await engine.activate(urlPlay("url-a"));
     hoisted.failing.add("url-a");
     logger.error.mockClear();
@@ -104,7 +116,7 @@ describe("MediaEngine.dispose", () => {
   });
 
   it("resolves when nothing is playing", async () => {
-    const engine = new MediaEngine();
+    const engine = makeEngine();
 
     await expect(engine.dispose()).resolves.toBeUndefined();
   });

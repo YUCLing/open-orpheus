@@ -9,7 +9,7 @@ type Facade = Record<string, LogFn | ChildFactory>;
 
 /**
  * Build a `LogFn` that forwards a log entry to the main process over IPC
- * (`logger.log`), where the real pino logger in `src/main/logger.ts` handles
+ * (`logger.log`), where the real pino logger in `src/main/platform/logger.ts` handles
  * it. When `bindings` is present, the main process logs through a pino child
  * logger carrying those fields (e.g. `name`, `call`).
  */
@@ -26,11 +26,11 @@ function forward(level: string, bindings: Bindings | undefined): LogFn {
  * it exposes a Proxy that mirrors the pino logger surface. Accessing any
  * property (e.g. `LOGGER.info`, `LOGGER.warn`) returns a {@link LogFn} that
  * forwards the log entry to the main process over IPC (`logger.log`), where
- * the real pino logger in `src/main/logger.ts` handles it.
+ * the real pino logger in `src/main/platform/logger.ts` handles it.
  *
  * `child(bindings)` returns another facade that captures the bindings and
  * applies them to every forwarded entry, so the compile-time injected
- * `_logger.child({ name: "..." })` calls (see `plugins/LoggerPlugin.ts`) work
+ * `_logger.child({ name: "..." })` calls (see `build-plugins/LoggerPlugin.ts`) work
  * in the preload too — the injected binding is a real logger object instead
  * of `undefined`.
  */

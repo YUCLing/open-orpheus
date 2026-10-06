@@ -31,7 +31,7 @@ switch (verb) {
     const server = await createServer({
       configFile: GUI_CONFIG_FILE,
     });
-    await server.listen(parseInt(process.env.DEV_PORT ?? "") ?? 5173);
+    await server.listen(parseInt(process.env["DEV_PORT"] ?? "") ?? 5173);
     process.send?.("READY");
     break;
   }
