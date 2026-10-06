@@ -21,7 +21,7 @@ const hoisted = vi.hoisted(() => ({
   /** Resolver for a `ScheduleShutdown` call the test wants to hold open. */
   release: null as null | (() => void),
   /** Shutdown tasks registered by the module under test. */
-  tasks: [] as Array<{ name: string; run: () => void | Promise<void> }>,
+  tasks: [] as Array<{ name: string; run: (signal: AbortSignal) => void | Promise<void> }>,
   /** Shutdown finalizers registered by the module under test. */
   finalizers: [] as Array<{ name: string; run: () => void | Promise<void> }>,
   /** Windows system-module calls, in order. */
@@ -79,15 +79,6 @@ vi.mock("@open-orpheus/dbus", () => {
   return { DbusClient };
 });
 
-// `shutdown.ts` only needs the registration hooks; importing the real module
-// would pull Electron in.
-vi.mock("@main/services/lifecycle", () => ({
-  registerShutdownTask: (task: { name: string; run: () => void | Promise<void> }) =>
-    hoisted.tasks.push(task),
-  registerShutdownFinalizer: (finalizer: { name: string; run: () => void | Promise<void> }) =>
-    hoisted.finalizers.push(finalizer),
-}));
-
 // The Windows module's *shape* has to be able to differ per test (see
 // `failSystemModule`), and a logged `vi.mock` factory result is cached for the
 // lifetime of the file, so it is registered fresh in `beforeEach` instead.
@@ -107,7 +98,14 @@ function makeSystemModuleMock() {
 }
 
 async function loadModule() {
-  return import("@main/bootstrap/shutdown");
+  const shutdown = await import("@main/bootstrap/shutdown");
+  // Registration is an explicit call now, so the spec is handed the hooks
+  // rather than faking the module that owns them.
+  shutdown.registerShutdownWork({
+    registerShutdownTask: (task) => hoisted.tasks.push(task),
+    registerShutdownFinalizer: (finalizer) => hoisted.finalizers.push(finalizer),
+  });
+  return shutdown;
 }
 
 /** Wait until `predicate` holds, failing if it never does. */
@@ -234,7 +232,7 @@ describe("shutdown task", () => {
     const { setScheduledShutdown, hasManagedScheduledShutdown } = await loadModule();
     await setScheduledShutdown(new Date(Date.now() + 60_000));
 
-    await task().run();
+    await task().run(new AbortController().signal);
 
     expect(hoisted.calls).toContain("CancelScheduledShutdown");
     expect(hasManagedScheduledShutdown()).toBe(false);
@@ -246,7 +244,7 @@ describe("shutdown task", () => {
     await setScheduledShutdown(new Date(Date.now() + 60_000));
 
     keepScheduledShutdownOnExit();
-    await task().run();
+    await task().run(new AbortController().signal);
 
     expect(hoisted.calls).not.toContain("CancelScheduledShutdown");
     expect(hasManagedScheduledShutdown()).toBe(true);
@@ -343,7 +341,7 @@ describe("exit path (win32)", () => {
     await setScheduledShutdown(new Date(Date.now() + 60_000));
 
     keepScheduledShutdownOnExit();
-    await task().run();
+    await task().run(new AbortController().signal);
     await finalizer().run();
 
     expect(hoisted.win32Calls).toEqual(["canShutdown", "shutdownNow"]);
@@ -356,7 +354,7 @@ describe("exit path (win32)", () => {
     const { setScheduledShutdown, hasManagedScheduledShutdown } = await loadModule();
     await setScheduledShutdown(new Date(Date.now() + 60_000));
 
-    await task().run();
+    await task().run(new AbortController().signal);
     await finalizer().run();
 
     expect(hoisted.win32Calls).not.toContain("shutdownNow");
@@ -373,7 +371,7 @@ describe("exit path (win32)", () => {
     await setScheduledShutdown(new Date(Date.now() + 60_000));
 
     keepScheduledShutdownOnExit();
-    await task().run();
+    await task().run(new AbortController().signal);
 
     await expect(finalizer().run()).resolves.toBeUndefined();
     expect(hoisted.win32Calls).toEqual(["canShutdown", "shutdownNow"]);
@@ -401,7 +399,7 @@ describe("exit path (win32)", () => {
     // app must not power the machine off at it either.
     expect(hasManagedScheduledShutdown()).toBe(false);
     keepScheduledShutdownOnExit();
-    await task().run();
+    await task().run(new AbortController().signal);
     await finalizer().run();
     expect(hoisted.win32Calls).not.toContain("shutdownNow");
   });

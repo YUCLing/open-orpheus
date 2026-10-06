@@ -64,6 +64,14 @@ type StateEventData = {
 export interface LifecycleService {
   readonly events: Emittery<LifecycleEvents>;
   currentState(): LifecycleState;
+  /**
+   * Shutdown work is registered through the service so a consumer (and a spec)
+   * receives the hooks instead of importing them — `bootstrap/shutdown.ts` used
+   * to import them, which made its own module scope a registration side effect
+   * and forced its spec to mock this module.
+   */
+  registerShutdownTask(task: ShutdownTask): void;
+  registerShutdownFinalizer(finalizer: ShutdownFinalizer): void;
   setLifecycleState<K extends LifecycleState>(
     lifecycleState: K,
     ...args: K extends keyof StateEventData
@@ -130,7 +138,13 @@ export function setLifecycleState<K extends LifecycleState>(
  */
 export function createLifecycleService(deps: { logger: Logger }): LifecycleService {
   reportEmitFailure = (e) => deps.logger.error({ err: toError(e) }, `Lifecycle event emit error`);
-  return { events, currentState, setLifecycleState };
+  return {
+    events,
+    currentState,
+    setLifecycleState,
+    registerShutdownTask,
+    registerShutdownFinalizer,
+  };
 }
 
 // --- Shutdown -------------------------------------------------------------

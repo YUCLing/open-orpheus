@@ -8,10 +8,12 @@ import { getSystemFonts } from "@open-orpheus/ui";
 
 import { fileExists, normalizePath, sanitizeRelativePath } from "../../platform/util";
 import { registerCallHandler } from "../dispatcher";
+import type { LifecycleService } from "../../services/lifecycle";
 import { getADDeviceId, getDeviceId } from "../../platform/device";
 import {
   hasManagedScheduledShutdown,
   keepScheduledShutdownOnExit,
+  registerShutdownWork,
   ScheduleShutdownStatus,
   setPowerOffFailureHandler,
   setScheduledShutdown,
@@ -120,7 +122,14 @@ async function applyExitWindowSystem(seconds: number, shouldShutdown: boolean) {
 // the system shutdown and recreate the in-app timer the user just cancelled.
 let exitWindowSystemRequest: Promise<void> = Promise.resolve();
 
-export function register(): void {
+export type OsDeps = {
+  lifecycle: Pick<LifecycleService, "registerShutdownTask" | "registerShutdownFinalizer">;
+};
+
+export function register(deps: OsDeps): void {
+  // This module's shutdown work is registered on the way in rather than as an
+  // import side effect, which is what lets a test supply the hooks.
+  registerShutdownWork(deps.lifecycle);
   // The auto-exit countdown's last act is a power-off (Windows) that the system can
   // still refuse at the deadline, and the user has to learn that the machine is
   // staying on. It is reported here because this is the layer that can say so in

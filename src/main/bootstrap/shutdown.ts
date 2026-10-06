@@ -1,7 +1,7 @@
 import type { DbusClient } from "@open-orpheus/dbus";
 import os from "node:os";
 
-import { registerShutdownFinalizer, registerShutdownTask } from "../services/lifecycle";
+import type { LifecycleService } from "../services/lifecycle";
 import { toError } from "@shared/util";
 
 export enum ScheduleShutdownStatus {
@@ -313,32 +313,47 @@ export function keepScheduledShutdownOnExit(): void {
   keepScheduleOnExit = true;
 }
 
-// A normal quit must not leave the machine set to power off. Only the timer
-// above keeps the schedule; every other exit cancels the schedule this app
-// owns, so quitting early keeps the machine on.
-registerShutdownTask({
-  name: "scheduled-shutdown",
-  timeoutMs: 1500,
-  run: async () => {
-    // The quit a completed countdown started is performing that shutdown, so
-    // this must not cancel it.
-    if (keepScheduleOnExit) return;
-    // Nothing to do when this app has no schedule (and none is being created).
-    if (!hasManagedScheduledShutdown()) return;
-    const status = await setScheduledShutdown();
-    if (status !== ScheduleShutdownStatus.Ok && status !== ScheduleShutdownStatus.AlreadySet) {
-      LOGGER.warn({ status }, "Failed to cancel the scheduled shutdown on exit");
-    }
-  },
-});
+/** The hooks this module needs; the composition root supplies them. */
+export type ShutdownWiring = Pick<
+  LifecycleService,
+  "registerShutdownTask" | "registerShutdownFinalizer"
+>;
 
-// The power-off a completed countdown owes is the point of that quit rather than
-// part of the cleanup, so it is a finalizer and not a task: the cleanup tasks
-// exhausting their deadline must not leave the machine on while this app exits.
-registerShutdownFinalizer({
-  name: "scheduled-shutdown-poweroff",
-  run: async () => {
-    if (keepScheduleOnExit) await backend?.afterCountdown?.();
-  },
-});
+/**
+ * Register this module's shutdown work.
+ *
+ * Called by the composition root rather than run as an import side effect: an
+ * import that registers is invisible wiring, and it made the module unusable
+ * without the real lifecycle module (which pulls Electron in).
+ */
+export function registerShutdownWork(lifecycle: ShutdownWiring): void {
+  // A normal quit must not leave the machine set to power off. Only the timer
+  // above keeps the schedule; every other exit cancels the schedule this app
+  // owns, so quitting early keeps the machine on.
+  lifecycle.registerShutdownTask({
+    name: "scheduled-shutdown",
+    timeoutMs: 1500,
+    run: async () => {
+      // The quit a completed countdown started is performing that shutdown, so
+      // this must not cancel it.
+      if (keepScheduleOnExit) return;
+      // Nothing to do when this app has no schedule (and none is being created).
+      if (!hasManagedScheduledShutdown()) return;
+      const status = await setScheduledShutdown();
+      if (status !== ScheduleShutdownStatus.Ok && status !== ScheduleShutdownStatus.AlreadySet) {
+        LOGGER.warn({ status }, "Failed to cancel the scheduled shutdown on exit");
+      }
+    },
+  });
+
+  // The power-off a completed countdown owes is the point of that quit rather than
+  // part of the cleanup, so it is a finalizer and not a task: the cleanup tasks
+  // exhausting their deadline must not leave the machine on while this app exits.
+  lifecycle.registerShutdownFinalizer({
+    name: "scheduled-shutdown-poweroff",
+    run: async () => {
+      if (keepScheduleOnExit) await backend?.afterCountdown?.();
+    },
+  });
+}
 // #endregion

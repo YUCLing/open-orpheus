@@ -7,7 +7,7 @@ import { register as registerDesktop } from "./handlers/desktop";
 import { register as registerDownload } from "./handlers/download";
 import { register as registerMusiclibrary, type MusiclibraryDeps } from "./handlers/musiclibrary";
 import { register as registerNetwork } from "./handlers/network";
-import { register as registerOs } from "./handlers/os";
+import { register as registerOs, type OsDeps } from "./handlers/os";
 import { register as registerPlayer } from "./handlers/player";
 import { register as registerProcess } from "./handlers/process";
 import { register as registerRtc } from "./handlers/rtc";
@@ -22,7 +22,8 @@ export type CallModuleDeps = AppDeps &
   MusiclibraryDeps &
   StorageDeps &
   TrayiconDeps &
-  WinhelperDeps;
+  WinhelperDeps &
+  OsDeps;
 
 export function registerCallModules(deps: CallModuleDeps): Disposable {
   registerApp(deps);
@@ -32,7 +33,7 @@ export function registerCallModules(deps: CallModuleDeps): Disposable {
   registerDesktop();
   registerStorage(deps);
   registerMusiclibrary(deps);
-  registerOs();
+  registerOs(deps);
   registerTrayicon(deps);
   registerNetwork();
   registerDownload();
