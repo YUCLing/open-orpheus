@@ -12,7 +12,6 @@ import { client, getProxyAgent } from "../../platform/request";
 import { disableHardwareAccelerationFlag } from "../../platform/folders";
 import { LifecycleState, startupTask } from "../../services/lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../../platform/dawn";
-import globalLogger from "../../platform/logger";
 import {
   parseLocalFile,
   parseMoveRun,
@@ -76,7 +75,7 @@ export function register(deps: AppDeps): void {
     // Strip the timestamp, extract the module name from 【】, drop a leading
     // comma after it (if present), and log the rest.
     const match = raw.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/);
-    globalLogger.info(
+    LOGGER.info(
       {
         name: "app",
         ...(match && { module: match[1] }),

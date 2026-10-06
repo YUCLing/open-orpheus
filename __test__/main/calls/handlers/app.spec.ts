@@ -47,7 +47,6 @@ vi.mock("electron", () => ({
   nativeImage: { createFromBuffer: vi.fn() },
 }));
 
-vi.mock("@main/platform/logger", () => ({ default: hoisted.logger }));
 vi.mock("@main/services/settings", () => ({ kv: hoisted.kv }));
 vi.mock("@main/services/pack", () => ({
   // `windows/mini-player.ts` subscribes to the pack manager at module scope,
