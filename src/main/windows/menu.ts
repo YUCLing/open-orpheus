@@ -12,7 +12,7 @@ import {
   getDesktopEnvironment,
 } from "@open-orpheus/window";
 
-import { menuSkin, registerMenuSkinUpdater } from "./menu/skin";
+import { menuSkin } from "./menu/skin";
 import type { MenuClickHandler } from "./menu/types";
 import { patchById } from "./menu/types";
 import {
@@ -44,8 +44,6 @@ import {
   waylandWindowId,
 } from "./menu/native-popup";
 import { initializeWaylandPopupSupport } from "./menu/popup-support";
-
-registerMenuSkinUpdater();
 
 const WAYLAND_CURSOR_CAPTURE_DEADLINE_MS = 200;
 const MENU_RENDER_READY_TIMEOUT_MS = 10_000;

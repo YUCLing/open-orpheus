@@ -28,6 +28,7 @@ import * as dawn from "@main/platform/dawn";
 import * as orpheus from "@main/platform/orpheus";
 import * as request from "@main/platform/request";
 import { disableHardwareAccelerationFlag } from "@main/platform/folders";
+import { registerMenuSkinUpdater } from "@main/windows/menu/skin";
 import { fileExists, isMusicFile, pngFromIco } from "@main/platform/util";
 import type { Disposable } from "@shared/disposable";
 import type { WindowService } from "./types";
@@ -48,6 +49,12 @@ export interface Application {
 
 /** The ordered start-up sequence; rejects if the app cannot come up. */
 export async function startApplication(): Promise<Application> {
+  // The menu skin updater subscribes to the pack manager. Registered here rather
+  // than at `menu.ts`'s import: an import that subscribes is invisible wiring, and
+  // it meant a spec could not load the menu without also loading the real pack
+  // manager and photon.
+  registerMenuSkinUpdater();
+
   // Make sure data directory exists
   await mkdir(path.join(dataDir), { recursive: true });
 
