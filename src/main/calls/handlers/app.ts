@@ -5,7 +5,7 @@ import { app, BrowserWindow, dialog, nativeImage, ThumbarButton, WebContents } f
 
 import { registerCallHandler, registerCallbackHandler } from "../dispatcher";
 import { loadFromOrpheusUrl } from "../../platform/orpheus";
-import { fileExists, pngFromIco } from "../../platform/util";
+import { fileExists, isMusicFile, pngFromIco } from "../../platform/util";
 import packManager from "../../services/pack";
 import type { ProxyConfiguration, ProxyTypes } from "../../platform/request";
 import { client, getProxyAgent } from "../../platform/request";
@@ -130,7 +130,7 @@ export function register(deps: AppDeps): void {
               movedest: moveRun[1],
             },
           ];
-        const localFile = await parseLocalFile(v);
+        const localFile = await parseLocalFile(v, { fileExists, isMusicFile });
         if (localFile) return [{ play: localFile }];
         const webCmd = parseWebCommand(v);
         if (webCmd) return [{ webcmd: webCmd }];
@@ -310,7 +310,7 @@ export function register(deps: AppDeps): void {
 
   registerCallHandler<[], [] | [string]>("app.getDefaultMusicPlayPath", async () => {
     if (startupTask?.type === "openFile") return [startupTask.file];
-    const path = await raceArgument((arg) => parseLocalFile(arg));
+    const path = await raceArgument((arg) => parseLocalFile(arg, { fileExists, isMusicFile }));
     return path ? [path] : [];
   });
 

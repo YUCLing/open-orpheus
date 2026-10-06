@@ -109,6 +109,9 @@ let state: LifecycleState = LifecycleState.Starting;
  */
 let reportEmitFailure: ((error: unknown) => void) | undefined;
 
+/** Bound by {@link createLifecycleService}; otherwise the real one is imported. */
+let flushLogs: (() => void) | undefined;
+
 export function currentState(): LifecycleState {
   return state;
 }
@@ -136,8 +139,13 @@ export function setLifecycleState<K extends LifecycleState>(
  * Called once by the composition root. The state is already live before it runs,
  * so there is no ordering requirement on this call and no placeholder to install.
  */
-export function createLifecycleService(deps: { logger: Logger }): LifecycleService {
+export function createLifecycleService(deps: {
+  logger: Logger;
+  /** Defaults to the real log flusher, imported lazily at shutdown. */
+  flushLogs?: () => void;
+}): LifecycleService {
   reportEmitFailure = (e) => deps.logger.error({ err: toError(e) }, `Lifecycle event emit error`);
+  flushLogs = deps.flushLogs;
   return {
     events,
     currentState,
@@ -263,8 +271,16 @@ export function registerShutdownFinalizer(finalizer: ShutdownFinalizer): void {
  */
 async function flushLogBuffer(): Promise<void> {
   try {
-    const { flushLogs } = await import("../platform/logger");
-    flushLogs();
+    if (flushLogs !== undefined) {
+      flushLogs();
+      return;
+    }
+    // Lazy on purpose: importing the logger module evaluates the pino
+    // transport, which `window.ts` and many unit tests have no use for. A
+    // caller that would rather supply the flusher (a test asserting the flush
+    // happened, say) passes one to `createLifecycleService`.
+    const { flushLogs: realFlushLogs } = await import("../platform/logger");
+    realFlushLogs();
   } catch {
     // Best effort: logging must never keep the app from exiting.
   }

@@ -19,13 +19,6 @@ vi.mock("electron", () => ({
   app: hoisted.app,
 }));
 
-// The real module builds a pino transport; the shutdown sequence only needs the
-// flush to exist.
-vi.mock("@main/platform/logger", () => ({
-  default: {},
-  flushLogs: hoisted.flushLogs,
-}));
-
 installLoggerStub();
 
 import {
@@ -141,7 +134,10 @@ async function freshLifecycle(
   hoisted.app.isReady.mockReturnValue(true);
 
   const lifecycle = await import("@main/services/lifecycle");
-  lifecycle.createLifecycleService({ logger: hoisted.logger as never });
+  lifecycle.createLifecycleService({
+    logger: hoisted.logger as never,
+    flushLogs: hoisted.flushLogs,
+  });
   lifecycle.installLifecycle(options);
   return lifecycle;
 }

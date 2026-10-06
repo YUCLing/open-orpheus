@@ -1,7 +1,6 @@
 import { normalize } from "node:path";
 
 import { app } from "electron";
-import { fileExists, isMusicFile } from "./util";
 
 export async function raceArgument<T>(
   predicate: (arg: string, index: number, array: string[]) => Promise<T | null> | T | null,
@@ -34,7 +33,24 @@ export function parseWebCommand(arg: string): string | null {
   return arg.startsWith("orpheus://") ? arg : null;
 }
 
-export async function parseLocalFile(arg: string): Promise<string | null> {
+/** The file checks `parseLocalFile` needs. */
+export interface ArgumentFileChecks {
+  fileExists(path: string): Promise<boolean>;
+  isMusicFile(path: string): boolean;
+}
+
+/**
+ * Whether a path is a local file this app should open.
+ *
+ * `checks` is required rather than defaulted: supplying it lazily changed the
+ * predicate's timing, and the url-vs-file race is a documented behaviour
+ * (`raceArgument` settles with the first predicate to finish). A caller that
+ * imported `util.ts` statically keeps that timing.
+ */
+export async function parseLocalFile(
+  arg: string,
+  checks: ArgumentFileChecks
+): Promise<string | null> {
   const path = normalize(arg);
-  return isMusicFile(path) && (await fileExists(path)) ? path : null;
+  return checks.isMusicFile(path) && (await checks.fileExists(path)) ? path : null;
 }

@@ -2,9 +2,6 @@ import { normalize } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The arguments module only needs `fileExists` and `isMusicFile` from
-// `util.ts`; the rest of that module pulls in Electron and native image
-// helpers, so the two seams are faked here instead.
 const hoisted = vi.hoisted(() => ({
   fileExists: vi.fn<(path: string) => Promise<boolean>>(),
   // Replaced with a real matcher in `beforeEach`.
@@ -12,19 +9,22 @@ const hoisted = vi.hoisted(() => ({
   electronApp: { isPackaged: false },
 }));
 
-vi.mock("@main/platform/util", () => ({
-  fileExists: hoisted.fileExists,
-  isMusicFile: hoisted.isMusicFile,
-}));
-
 vi.mock("electron", () => ({ app: hoisted.electronApp }));
 
 import {
-  parseLocalFile,
+  parseLocalFile as parseLocalFileWithChecks,
   parseMoveRun,
   parseWebCommand,
   raceArgument,
 } from "@main/platform/arguments";
+
+// The checks are a collaborator now, so they are passed rather than mocked at
+// the module boundary. Bound to `hoisted` so per-test implementations apply.
+const parseLocalFile = (arg: string) =>
+  parseLocalFileWithChecks(arg, {
+    fileExists: hoisted.fileExists,
+    isMusicFile: hoisted.isMusicFile,
+  });
 
 /** Stand-in for the real mime lookup used by `isMusicFile`. */
 function looksLikeMusicFile(path: string) {
