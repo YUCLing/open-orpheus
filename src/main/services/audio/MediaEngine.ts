@@ -5,10 +5,10 @@ import { Readable } from "node:stream";
 import mime from "mime";
 
 import type { AudioPlayInfo } from "../../../preload/Player";
-import { playCacheManager } from "../cache";
+import type PlayCacheManager from "../cache/PlayCacheManager";
 import { normalizePath } from "../../platform/util";
 import { toError } from "@shared/util";
-import { OnlineStreamer } from "./OnlineStreamer";
+import type { OnlineStreamer } from "./OnlineStreamer";
 import type { WindowService } from "../../bootstrap/types";
 
 enum MediaType {
@@ -37,6 +37,13 @@ type MediaState = { playInfo: AudioPlayInfo } & (
  */
 export interface MediaEngineDeps {
   windows: Pick<WindowService, "currentWindow">;
+  /**
+   * Read at use, not at construction: the play cache is initialised after this
+   * engine exists, so a captured value would be the `null` from before that.
+   */
+  playCache: () => Pick<PlayCacheManager, "cacheTrack"> | null;
+  /** Builds the streamer for a URL. Injected because a streamer owns a temp file. */
+  createStreamer: (url: string) => OnlineStreamer;
 }
 
 export class MediaEngine {
@@ -93,7 +100,7 @@ export class MediaEngine {
 
     // URL Play
     const songId = playInfo.songId;
-    const streamer = new OnlineStreamer(playInfo.musicurl);
+    const streamer = this.deps.createStreamer(playInfo.musicurl);
 
     streamer.on("progress", (e) => {
       this.sendProgress(e.data.loaded / e.data.total);
@@ -105,7 +112,8 @@ export class MediaEngine {
       if (this.state.playInfo.songId !== songId) return;
       try {
         const buf = await streamer.readBuffer();
-        playCacheManager
+        this.deps
+          .playCache()
           ?.cacheTrack(songId, buf, {
             md5: playInfo.md5,
             bitrate: playInfo.bitrate,

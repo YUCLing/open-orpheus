@@ -8,6 +8,8 @@ import type { AudioPlayInfo } from "../../preload/Player";
 import { sanitizeRelativePath } from "../platform/util";
 import { data as dataDir, pack as packageDir } from "../platform/folders";
 import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
+import { playCacheManager } from "./cache";
+import { OnlineStreamer } from "./audio/OnlineStreamer";
 import { toError } from "@shared/util";
 import { decodeNcae } from "../domain/ncae";
 import { registerIpcHandlers } from "../../bridge/register";
@@ -56,7 +58,11 @@ export async function readEffect(pathInfo: { path: string; pathtype: number }) {
  * This module only wires them to IPC + the protocol; it holds no engine state.
  */
 export function createAudio(deps: AudioDeps) {
-  const mediaEngine = new MediaEngine({ windows: deps.windows });
+  const mediaEngine = new MediaEngine({
+    windows: deps.windows,
+    playCache: () => playCacheManager,
+    createStreamer: (url) => new OnlineStreamer(url),
+  });
   const av3aEngine = new Av3aEngine({ windows: deps.windows });
 
   /**
