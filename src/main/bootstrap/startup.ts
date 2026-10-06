@@ -27,6 +27,8 @@ import type { ProxyConfiguration } from "@main/platform/request";
 import * as dawn from "@main/platform/dawn";
 import * as orpheus from "@main/platform/orpheus";
 import * as request from "@main/platform/request";
+import { disableHardwareAccelerationFlag } from "@main/platform/folders";
+import { fileExists, isMusicFile, pngFromIco } from "@main/platform/util";
 import type { Disposable } from "@shared/disposable";
 import type { WindowService } from "./types";
 
@@ -232,6 +234,8 @@ export async function startApplication(): Promise<Application> {
     orpheus,
     dawn,
     request,
+    files: { fileExists, isMusicFile, pngFromIco },
+    hardwareAccelerationFlag: disableHardwareAccelerationFlag,
     audio: { readEffect },
     cookie: {
       getCookies: cookieModule.getCookies,

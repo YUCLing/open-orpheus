@@ -33,6 +33,7 @@ const hoisted = vi.hoisted(() => ({
   setStatisEndpoint: vi.fn(),
   getProxyAgent: vi.fn(),
   client: vi.fn(),
+  pngFromIco: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -58,16 +59,6 @@ vi.mock("electron", () => ({
 // Partially mocked: the merged import graph reaches more of this module than
 // it used to (domain/xeapi.ts wants `data` and `aegisPublicKey`), so only the
 // value this spec cares about is overridden.
-vi.mock("@main/platform/folders", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@main/platform/folders")>()),
-  disableHardwareAccelerationFlag: "/tmp/open-orpheus-test/flag",
-}));
-vi.mock("@main/platform/util", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@main/platform/util")>()),
-  fileExists: hoisted.fileExists,
-  isMusicFile: hoisted.isMusicFile,
-  pngFromIco: vi.fn(),
-}));
 
 installLoggerStub();
 
@@ -89,6 +80,12 @@ async function freshModules() {
     orpheus: { loadFromOrpheusUrl: hoisted.loadFromOrpheusUrl },
     dawn: { statisV2: hoisted.statisV2, setStatisEndpoint: hoisted.setStatisEndpoint },
     request: { getProxyAgent: hoisted.getProxyAgent, client: hoisted.client as never },
+    files: {
+      fileExists: hoisted.fileExists,
+      isMusicFile: hoisted.isMusicFile,
+      pngFromIco: hoisted.pngFromIco,
+    },
+    hardwareAccelerationFlag: "/tmp/open-orpheus-test/flag",
   });
 
   return { dispatcher, lifecycle };

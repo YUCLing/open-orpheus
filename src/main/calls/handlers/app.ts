@@ -4,9 +4,7 @@ import { rm, stat, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, nativeImage, ThumbarButton, WebContents } from "electron";
 
 import { registerCallHandler, registerCallbackHandler } from "../dispatcher";
-import { fileExists, isMusicFile, pngFromIco } from "../../platform/util";
 import type { ProxyConfiguration, ProxyTypes } from "../../platform/request";
-import { disableHardwareAccelerationFlag } from "../../platform/folders";
 import { LifecycleState, startupTask } from "../../services/lifecycle";
 import type { DawnEntry } from "../../platform/dawn";
 import {
@@ -42,11 +40,12 @@ type ThumbnailOptions = {
 const currentThumbnailOptions: ThumbnailOptions = { btnExtends: [] };
 function createButtonFactory(
   webContents: WebContents,
-  orpheus: AppDeps["orpheus"]
+  orpheus: AppDeps["orpheus"],
+  files: AppDeps["files"]
 ): (btn: Button) => Promise<ThumbarButton> {
   return async (btn: Button) => {
     const icon = await orpheus.loadFromOrpheusUrl(btn.url);
-    const buf = pngFromIco(icon.content as unknown as Uint8Array);
+    const buf = files.pngFromIco(icon.content as unknown as Uint8Array);
     return {
       tooltip: btn.tooltip,
       icon: nativeImage.createFromBuffer(Buffer.from(buf)),
@@ -77,6 +76,14 @@ export interface AppDeps {
     statisV2: typeof import("../../platform/dawn").statisV2;
     setStatisEndpoint: typeof import("../../platform/dawn").setStatisEndpoint;
   };
+  /** File probing and icon conversion. */
+  files: {
+    fileExists: typeof import("../../platform/util").fileExists;
+    isMusicFile: typeof import("../../platform/util").isMusicFile;
+    pngFromIco: typeof import("../../platform/util").pngFromIco;
+  };
+  /** Path of the disable-hardware-acceleration marker; read and written below. */
+  hardwareAccelerationFlag: string;
   /** Proxy resolution for the renderer's HTTP client. */
   request: {
     getProxyAgent: typeof import("../../platform/request").getProxyAgent;
@@ -145,7 +152,7 @@ export function register(deps: AppDeps): void {
               movedest: moveRun[1],
             },
           ];
-        const localFile = await parseLocalFile(v, { fileExists, isMusicFile });
+        const localFile = await parseLocalFile(v, deps.files);
         if (localFile) return [{ play: localFile }];
         const webCmd = parseWebCommand(v);
         if (webCmd) return [{ webcmd: webCmd }];
@@ -173,7 +180,7 @@ export function register(deps: AppDeps): void {
           return [""];
         case "setting":
           if (subItem === "hardware-acceleration") {
-            return [(await fileExists(disableHardwareAccelerationFlag)) ? "0" : "1"];
+            return [(await deps.files.fileExists(deps.hardwareAccelerationFlag)) ? "0" : "1"];
           }
           break;
       }
@@ -197,10 +204,10 @@ export function register(deps: AppDeps): void {
           if (subItem === "hardware-acceleration") {
             if (value === "1") {
               // Enable hardware accel
-              await rm(disableHardwareAccelerationFlag, { force: true });
+              await rm(deps.hardwareAccelerationFlag, { force: true });
             } else {
               // Disable hardware accel
-              await writeFile(disableHardwareAccelerationFlag, "", {
+              await writeFile(deps.hardwareAccelerationFlag, "", {
                 encoding: "utf-8",
               });
             }
@@ -261,7 +268,9 @@ export function register(deps: AppDeps): void {
     mainWindow.setThumbnailToolTip(tooltip || "");
 
     mainWindow.setThumbarButtons(
-      await Promise.all(btns.map(createButtonFactory(mainWindow.webContents, deps.orpheus)))
+      await Promise.all(
+        btns.map(createButtonFactory(mainWindow.webContents, deps.orpheus, deps.files))
+      )
     );
   });
 
@@ -325,7 +334,7 @@ export function register(deps: AppDeps): void {
 
   registerCallHandler<[], [] | [string]>("app.getDefaultMusicPlayPath", async () => {
     if (startupTask?.type === "openFile") return [startupTask.file];
-    const path = await raceArgument((arg) => parseLocalFile(arg, { fileExists, isMusicFile }));
+    const path = await raceArgument((arg) => parseLocalFile(arg, deps.files));
     return path ? [path] : [];
   });
 
