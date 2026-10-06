@@ -8,7 +8,9 @@ import { MusicFile } from "music-tag-native";
 
 import { registerCallHandler } from "../dispatcher";
 import type { DatabaseService } from "../../bootstrap/types";
-import { fileExists, isFileNotFound, isMusicFile, normalizePath } from "../../platform/util";
+import { fileExists, isFileNotFound } from "../../platform/utils/fs";
+import { isMusicFile } from "../../platform/utils/music";
+import { normalizePath } from "../../platform/utils/path";
 import { toError } from "@shared/util";
 import { commentToID3Metadata } from "../../domain/id3";
 

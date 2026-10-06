@@ -5,7 +5,7 @@ import { app, Menu, protocol } from "electron";
 import started from "electron-squirrel-startup";
 
 import { disableHardwareAccelerationFlag, userdata as userdataDir } from "@main/platform/folders";
-import { checkEnvFlagPresent } from "@main/platform/util";
+import { checkEnvFlagPresent } from "@main/platform/utils/env";
 
 export function configureProcess() {
   // Handle creating/removing shortcuts on Windows when installing/uninstalling.

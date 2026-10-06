@@ -7,7 +7,7 @@ import { MusicFile } from "music-tag-native";
 
 import { imageSize } from "@shared/util";
 import { cache } from "../../platform/folders";
-import { selectBestMusicPic } from "../../platform/util";
+import { selectBestMusicPic } from "../../platform/utils/music";
 
 /**
  * Album-art handling shared by the media-session integrations (MPRIS / SMTC /

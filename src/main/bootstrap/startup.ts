@@ -19,7 +19,7 @@ import logger from "@main/platform/logger";
 import packManager, { NO_WEBPACK_ERROR_MESSAGE } from "@main/services/pack";
 import { ensureWebPack, type WebPackLoadDeps, type WebPackProbe } from "@main/services/pack-loader";
 import registerAsProtocolClient from "@main/platform/protocol";
-import { isFileNotFound } from "@main/platform/util";
+import { isFileNotFound } from "@main/platform/utils/fs";
 import showPackgeDownloadWindow from "@main/windows/package-download";
 
 import type WebPack from "@main/services/packs/WebPack";
@@ -39,7 +39,9 @@ import * as dui from "@main/domain/skin/dui";
 import { ManagedWindow } from "@main/windows/managedWindow";
 import { font } from "@main/platform/gui";
 import type { MenuDeps } from "@main/windows/menu";
-import { fileExists, isMusicFile, pngFromIco } from "@main/platform/util";
+import { fileExists } from "@main/platform/utils/fs";
+import { pngFromIco } from "@main/platform/utils/image";
+import { isMusicFile } from "@main/platform/utils/music";
 import type { Disposable } from "@shared/disposable";
 import type { WindowService } from "./types";
 

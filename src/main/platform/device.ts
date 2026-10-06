@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 
 import { data as dataDir } from "./folders";
-import { isFileNotFound } from "./util";
+import { isFileNotFound } from "./utils/fs";
 
 const deviceIdFilePath = join(dataDir, "device_id.json");
 

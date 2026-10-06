@@ -11,18 +11,12 @@ import { vol } from "memfs";
 
 import type { MetaPicture } from "music-tag-native";
 
-import {
-  calculateDbSize,
-  checkEnvFlagPresent,
-  fileExists,
-  getWindowScaleFactor,
-  isAppUrl,
-  isFileNotFound,
-  isMusicFile,
-  normalizePath,
-  sanitizeRelativePath,
-  selectBestMusicPic,
-} from "@main/platform/util";
+import { checkEnvFlagPresent } from "@main/platform/utils/env";
+import { calculateDbSize, fileExists, isFileNotFound } from "@main/platform/utils/fs";
+import { isMusicFile, selectBestMusicPic } from "@main/platform/utils/music";
+import { normalizePath, sanitizeRelativePath } from "@main/platform/utils/path";
+import { isAppUrl } from "@main/platform/utils/url";
+import { getWindowScaleFactor } from "@main/platform/utils/window";
 
 const onPosix = process.platform !== "win32";
 

@@ -5,7 +5,7 @@ import { Protocol } from "electron";
 import mime from "mime";
 
 import type { AudioPlayInfo } from "../../preload/Player";
-import { sanitizeRelativePath } from "../platform/util";
+import { sanitizeRelativePath } from "../platform/utils/path";
 import { data as dataDir, pack as packageDir } from "../platform/folders";
 import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
 import { playCacheManager } from "./cache";

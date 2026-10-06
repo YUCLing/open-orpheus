@@ -5,7 +5,7 @@ import {
 } from "@open-orpheus/window";
 
 import { registerCallHandler } from "../dispatcher";
-import { isAppUrl } from "../../platform/util";
+import { isAppUrl } from "../../platform/utils/url";
 import { registerShutdownTask } from "../../services/lifecycle";
 import MusicDesktopWindow from "../../windows/music-desktop";
 

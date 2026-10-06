@@ -9,13 +9,9 @@ import { MusicFile } from "music-tag-native";
 
 import packManager from "../services/pack";
 import WebPack from "../services/packs/WebPack";
-import {
-  fileExists,
-  isFileNotFound,
-  normalizePath,
-  sanitizeRelativePath,
-  selectBestMusicPic,
-} from "./util";
+import { fileExists, isFileNotFound } from "./utils/fs";
+import { normalizePath, sanitizeRelativePath } from "./utils/path";
+import { selectBestMusicPic } from "./utils/music";
 import { data as dataDir, storage as storageDir, wasm } from "./folders";
 import { client } from "./request";
 

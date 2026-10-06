@@ -8,7 +8,8 @@ import { DesktopEnvironment, dragWindow, getDesktopEnvironment } from "@open-orp
 
 import { registerCallHandler } from "../dispatcher";
 import { loadFromOrpheusUrl } from "../../platform/orpheus";
-import { getWindowScaleFactor, pngFromIco } from "../../platform/util";
+import { pngFromIco } from "../../platform/utils/image";
+import { getWindowScaleFactor } from "../../platform/utils/window";
 import { BasicManagedWindow, ManagedWindow } from "../../windows/managedWindow";
 import AppMenu, { type MenuDeps } from "../../windows/menu";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../../platform/shortcuts";

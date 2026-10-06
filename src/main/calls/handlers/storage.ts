@@ -26,13 +26,9 @@ import {
   setDownloadPath,
 } from "../../platform/folders";
 import { registerCallHandler } from "../dispatcher";
-import {
-  fileExists,
-  isFileNotFound,
-  isMusicFile,
-  normalizePath,
-  sanitizeRelativePath,
-} from "../../platform/util";
+import { fileExists, isFileNotFound } from "../../platform/utils/fs";
+import { isMusicFile } from "../../platform/utils/music";
+import { normalizePath, sanitizeRelativePath } from "../../platform/utils/path";
 import type { DatabaseService, MainWindowAccessor } from "../../bootstrap/types";
 import {
   CacheTrackMeta,

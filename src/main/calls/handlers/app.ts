@@ -78,9 +78,9 @@ export interface AppDeps {
   };
   /** File probing and icon conversion. */
   files: {
-    fileExists: typeof import("../../platform/util").fileExists;
-    isMusicFile: typeof import("../../platform/util").isMusicFile;
-    pngFromIco: typeof import("../../platform/util").pngFromIco;
+    fileExists: typeof import("../../platform/utils/fs").fileExists;
+    isMusicFile: typeof import("../../platform/utils/music").isMusicFile;
+    pngFromIco: typeof import("../../platform/utils/image").pngFromIco;
   };
   /** Path of the disable-hardware-acceleration marker; read and written below. */
   hardwareAccelerationFlag: string;

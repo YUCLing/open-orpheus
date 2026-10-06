@@ -6,7 +6,7 @@ import mime from "mime";
 
 import type { AudioPlayInfo } from "../../../preload/Player";
 import type PlayCacheManager from "../cache/PlayCacheManager";
-import { normalizePath } from "../../platform/util";
+import { normalizePath } from "../../platform/utils/path";
 import { toError } from "@shared/util";
 import type { OnlineStreamer } from "./OnlineStreamer";
 import type { WindowService } from "../../bootstrap/types";
