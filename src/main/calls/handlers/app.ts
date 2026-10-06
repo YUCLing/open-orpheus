@@ -96,44 +96,31 @@ export interface AppDeps {
     getProxyAgent: typeof import("../../platform/request").getProxyAgent;
     client: typeof import("../../platform/request").client;
   };
-  /** The **root** logger, for `app.log`; see `logRendererLine`. */
+  /**
+   * The **root** logger, for `app.log`. Deliberately not the ambient `LOGGER`:
+   * the record is the renderer's own, attributed by `name` and the module parsed
+   * from `【】`, so any `LOGGER` binding — a child for this file or for the
+   * `app.log` command — is overwritten by that explicit `name` anyway, while
+   * still being written into every record. `app.log` forwards every line the
+   * renderer logs, so that write would be paid per line for a masked field.
+   */
   rootLogger: Pick<Logger, "info">;
-}
-
-/**
- * Forward a line the renderer logged.
- *
- * It writes to the **root** logger, passed in rather than taken from the ambient
- * `LOGGER`, and both reasons are specific to this call:
- *
- * - The record is the renderer's own, attributed by `name` and the module parsed
- *   from `【】`. Any `LOGGER` here is a *child*, carrying a binding for this file
- *   or for the `app.log` command — and the explicit `name: "app"` overwrites it,
- *   so the binding is an emitted field that must never appear.
- * - A child's binding is written on every record, and this path forwards every
- *   line the renderer logs. That write would be paid per line to produce a field
- *   that is immediately masked.
- *
- * Passing the sink also makes the record shape assertable in a unit test, which
- * it was not while this went through a build-time-injected binding.
- */
-function logRendererLine(logger: Pick<Logger, "info">, raw: string): void {
-  // Format: `[2026-08-09 10:35:57] 【persistentState】,"...","..."`
-  // Strip the timestamp, extract the module name from 【】, drop a leading
-  // comma after it (if present), and log the rest.
-  const match = raw.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/);
-  logger.info(
-    {
-      name: "app",
-      ...(match && { module: match[1] }),
-    },
-    match ? match[2] : raw
-  );
 }
 
 export function register(deps: AppDeps): void {
   registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
-    logRendererLine(deps.rootLogger, args.map((v) => String(v)).join(" "));
+    const raw = args.map((v) => String(v)).join(" ");
+    // Format: `[2026-08-09 10:35:57] 【persistentState】,"...","..."`
+    // Strip the timestamp, extract the module name from 【】, drop a leading
+    // comma after it (if present), and log the rest.
+    const match = raw.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/);
+    deps.rootLogger.info(
+      {
+        name: "app",
+        ...(match && { module: match[1] }),
+      },
+      match ? match[2] : raw
+    );
   });
 
   registerCallHandler<["dawn", DawnEntry[]], void>("app.statisV2", (event, type, data) => {
