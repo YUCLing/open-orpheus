@@ -100,7 +100,7 @@ export const events = new Emittery<LifecycleEvents>();
  */
 let state: LifecycleState = LifecycleState.Starting;
 
-/** Bound by {@link createLifecycleService}; otherwise the real one is imported. */
+/** Bound by {@link installLifecycle}; otherwise the real one is imported. */
 let flushLogs: (() => void) | undefined;
 
 export function currentState(): LifecycleState {
@@ -124,27 +124,21 @@ export function setLifecycleState<K extends LifecycleState>(
 }
 
 /**
- * Binds error reporting and hands back the same API as an object, for consumers
- * that would rather receive it than import it.
+ * The same API as an object, for consumers that would rather receive it than
+ * import it — `bootstrap` puts it on the ready phase, and window factories take
+ * `Pick<LifecycleService, ...>` slices of it.
  *
- * Called once by the composition root. The state is already live before it runs,
- * so there is no ordering requirement on this call and no placeholder to install.
+ * A module constant, like `events`: nothing here is per-instance, so there is
+ * nothing to construct. `createLifecycleService` used to exist to bind the log
+ * flusher; that belongs to the shutdown sequence, so `installLifecycle` takes it.
  */
-export function createLifecycleService(
-  deps: {
-    /** Defaults to the real log flusher, imported lazily at shutdown. */
-    flushLogs?: () => void;
-  } = {}
-): LifecycleService {
-  flushLogs = deps.flushLogs;
-  return {
-    events,
-    currentState,
-    setLifecycleState,
-    registerShutdownTask,
-    registerShutdownFinalizer,
-  };
-}
+export const lifecycleService: LifecycleService = {
+  events,
+  currentState,
+  setLifecycleState,
+  registerShutdownTask,
+  registerShutdownFinalizer,
+};
 
 // --- Shutdown -------------------------------------------------------------
 //
@@ -161,6 +155,13 @@ const DEFAULT_TASK_TIMEOUT_MS = 1500;
 const FINALIZER_TIMEOUT_MS = 1000;
 
 export interface LifecycleOptions {
+  /**
+   * Flushes the log transport's buffer as the app exits.
+   *
+   * Defaults to the real one, imported lazily at shutdown so that merely
+   * importing this module does not evaluate the pino transport.
+   */
+  flushLogs?: () => void;
   /**
    * Upper bound on the whole shutdown sequence, in milliseconds.
    *
@@ -255,7 +256,7 @@ async function flushLogBuffer(): Promise<void> {
     // Lazy on purpose: importing the logger module evaluates the pino
     // transport, which `window.ts` and many unit tests have no use for. A
     // caller that would rather supply the flusher (a test asserting the flush
-    // happened, say) passes one to `createLifecycleService`.
+    // happened, say) passes one to `installLifecycle`.
     const { flushLogs: realFlushLogs } = await import("../platform/logger");
     realFlushLogs();
   } catch {
@@ -383,6 +384,7 @@ export function installLifecycle(options: LifecycleOptions = {}): void {
   if (lifecycleInstalled) return;
   lifecycleInstalled = true;
 
+  flushLogs = options.flushLogs;
   shutdownDeadlineMs = options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS;
   defaultTaskTimeoutMs = options.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
   finalizerTimeoutMs = options.finalizerTimeoutMs ?? FINALIZER_TIMEOUT_MS;

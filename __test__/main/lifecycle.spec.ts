@@ -133,8 +133,7 @@ async function freshLifecycle(
   hoisted.app.isReady.mockReturnValue(true);
 
   const lifecycle = await import("@main/services/lifecycle");
-  lifecycle.createLifecycleService({ flushLogs: hoisted.flushLogs });
-  lifecycle.installLifecycle(options);
+  lifecycle.installLifecycle({ flushLogs: hoisted.flushLogs, ...options });
   return lifecycle;
 }
 

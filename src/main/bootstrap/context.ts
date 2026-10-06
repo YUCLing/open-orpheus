@@ -1,4 +1,4 @@
-import { createLifecycleService } from "../services/lifecycle";
+import { lifecycleService } from "../services/lifecycle";
 import { createDatabaseService } from "../services/database";
 import { createSettingsService } from "../services/settings";
 import { createWindowService } from "../services/window";
@@ -7,7 +7,7 @@ import type { HostDeps, OpenDatabase, ReadyPhase } from "./types";
 export async function bootstrap(deps: HostDeps): Promise<ReadyPhase> {
   // No install step: the module owns its state and these accessors are always
   // live, so there is nothing to wire up before the graph can read it.
-  const lifecycle = createLifecycleService();
+  const lifecycle = lifecycleService;
 
   const openDatabase = deps.openDatabase ?? (await loadNativeDatabase());
 

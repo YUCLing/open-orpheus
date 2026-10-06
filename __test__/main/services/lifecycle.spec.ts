@@ -4,11 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { installLoggerStub } from "../../helpers/globals";
 
-import {
-  createLifecycleService,
-  LifecycleState,
-  type LifecycleEvents,
-} from "@main/services/lifecycle";
+import { lifecycleService, LifecycleState, type LifecycleEvents } from "@main/services/lifecycle";
 
 function createService() {
   // The module logs through the ambient `LOGGER`; the stub is that sink, so the
@@ -17,7 +13,7 @@ function createService() {
   const events = new Emittery<LifecycleEvents>();
   return {
     events,
-    service: createLifecycleService(),
+    service: lifecycleService,
     logger,
   };
 }
@@ -25,7 +21,7 @@ function createService() {
 /** Emittery notifies listeners from a microtask. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe("createLifecycleService", () => {
+describe("lifecycleService", () => {
   it("starts in the Starting state", () => {
     const { service } = createService();
 
