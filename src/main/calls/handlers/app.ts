@@ -97,20 +97,35 @@ export interface AppDeps {
   };
 }
 
+/**
+ * Forward a line the renderer logged.
+ *
+ * Deliberately a module-level function rather than the handler body. The
+ * build-time logger transform gives `LOGGER` a *command-scoped* child logger
+ * (`{ name: "call", call: "app.log" }`) inside a `registerCallHandler` argument
+ * function, and this record must not carry one: the line is the renderer's, so it
+ * is attributed by `name` and the module extracted from `【】` alone, with the
+ * main-process command that forwarded it deliberately absent. Out here `LOGGER`
+ * is the per-file child, whose own binding the explicit `name` overrides — so the
+ * record is exactly `{ name: "app", module? }`.
+ */
+function logRendererLine(raw: string): void {
+  // Format: `[2026-08-09 10:35:57] 【persistentState】,"...","..."`
+  // Strip the timestamp, extract the module name from 【】, drop a leading
+  // comma after it (if present), and log the rest.
+  const match = raw.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/);
+  LOGGER.info(
+    {
+      name: "app",
+      ...(match && { module: match[1] }),
+    },
+    match ? match[2] : raw
+  );
+}
+
 export function register(deps: AppDeps): void {
   registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
-    const raw = args.map((v) => String(v)).join(" ");
-    // Format: `[2026-08-09 10:35:57] 【persistentState】,"...","..."`
-    // Strip the timestamp, extract the module name from 【】, drop a leading
-    // comma after it (if present), and log the rest.
-    const match = raw.match(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\s*【([^】]+)】\s*,?\s*(.*)$/);
-    LOGGER.info(
-      {
-        name: "app",
-        ...(match && { module: match[1] }),
-      },
-      match ? match[2] : raw
-    );
+    logRendererLine(args.map((v) => String(v)).join(" "));
   });
 
   registerCallHandler<["dawn", DawnEntry[]], void>("app.statisV2", (event, type, data) => {
