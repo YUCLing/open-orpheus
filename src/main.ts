@@ -10,7 +10,6 @@ import "@main/bootstrap/error";
 import { app, dialog } from "electron";
 
 import { toError } from "@shared/util";
-import logger from "@main/platform/logger";
 import { installLifecycle, registerShutdownTask, setStartupTask } from "@main/services/lifecycle";
 import { configureProcess } from "@main/bootstrap/process-setup";
 import { parseLocalFile, parseWebCommand, raceArgument } from "@main/platform/arguments";
@@ -27,7 +26,7 @@ let application: Application | undefined;
 // Signals and quitting are wired as early as possible, so a signal arriving
 // during start-up still exits with the right code. This owns the
 // `window-all-closed` and `before-quit` handlers the entry used to hand-roll.
-installLifecycle({ logger });
+installLifecycle();
 
 // §3.3: the app-scoped registrations are torn down as one step of the shutdown
 // sequence, rather than from a second `before-quit` listener.

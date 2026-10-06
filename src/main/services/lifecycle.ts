@@ -1,6 +1,5 @@
 import { app, type BrowserWindow } from "electron";
 import Emittery from "emittery";
-import type { Logger } from "pino";
 
 import { toError } from "@shared/util";
 
@@ -101,14 +100,6 @@ export const events = new Emittery<LifecycleEvents>();
  */
 let state: LifecycleState = LifecycleState.Starting;
 
-/**
- * Where emit failures are reported, bound by {@link createLifecycleService}.
- *
- * Until then a failed emit is dropped. That is the only thing in this module
- * that depends on configuration — the state never does.
- */
-let reportEmitFailure: ((error: unknown) => void) | undefined;
-
 /** Bound by {@link createLifecycleService}; otherwise the real one is imported. */
 let flushLogs: (() => void) | undefined;
 
@@ -129,7 +120,7 @@ export function setLifecycleState<K extends LifecycleState>(
   if (!event) return;
   events
     .emit(event as keyof LifecycleEvents, args[0] as LifecycleEvents[keyof LifecycleEvents])
-    .catch((e) => reportEmitFailure?.(e));
+    .catch((e) => LOGGER.error({ err: toError(e) }, `Lifecycle event emit error`));
 }
 
 /**
@@ -139,12 +130,12 @@ export function setLifecycleState<K extends LifecycleState>(
  * Called once by the composition root. The state is already live before it runs,
  * so there is no ordering requirement on this call and no placeholder to install.
  */
-export function createLifecycleService(deps: {
-  logger: Logger;
-  /** Defaults to the real log flusher, imported lazily at shutdown. */
-  flushLogs?: () => void;
-}): LifecycleService {
-  reportEmitFailure = (e) => deps.logger.error({ err: toError(e) }, `Lifecycle event emit error`);
+export function createLifecycleService(
+  deps: {
+    /** Defaults to the real log flusher, imported lazily at shutdown. */
+    flushLogs?: () => void;
+  } = {}
+): LifecycleService {
   flushLogs = deps.flushLogs;
   return {
     events,
@@ -171,14 +162,6 @@ const FINALIZER_TIMEOUT_MS = 1000;
 
 export interface LifecycleOptions {
   /**
-   * Where the shutdown sequence reports. Optional so a caller that has no
-   * logger — the shutdown specs, for instance — can still install the
-   * sequence. Nothing is imported here on purpose: this module is loaded by
-   * unit tests that must not evaluate the pino transport, and the previous
-   * `LOGGER` compile-time global is gone (P1-5).
-   */
-  logger?: Logger;
-  /**
    * Upper bound on the whole shutdown sequence, in milliseconds.
    *
    * Overridable so the bounds below can be exercised by tests without waiting
@@ -193,12 +176,6 @@ export interface LifecycleOptions {
    */
   finalizerTimeoutMs?: number;
 }
-
-/**
- * Set by `installLifecycle`. Before that the sequence cannot run, so there is
- * nothing to report; the no-op keeps `logSkipped` and friends callable.
- */
-let log: Pick<Logger, "warn" | "error"> = { warn() {}, error() {} };
 
 let shutdownDeadlineMs = SHUTDOWN_DEADLINE_MS;
 let defaultTaskTimeoutMs = DEFAULT_TASK_TIMEOUT_MS;
@@ -288,7 +265,10 @@ async function flushLogBuffer(): Promise<void> {
 
 function logSkipped(tasks: ShutdownTask[]): void {
   if (tasks.length === 0) return;
-  log.warn({ tasks: tasks.map((task) => task.name) }, `Shutdown tasks skipped: deadline reached`);
+  LOGGER.warn(
+    { tasks: tasks.map((task) => task.name) },
+    `Shutdown tasks skipped: deadline reached`
+  );
 }
 
 /** Resolves when `signal` aborts, or immediately if it already has. */
@@ -335,15 +315,15 @@ async function runShutdownTasks(): Promise<void> {
       if (outcome === "done") continue;
 
       if (deadline.aborted) {
-        log.warn({ task: task.name }, `Shutdown task cut off by the shutdown deadline`);
+        LOGGER.warn({ task: task.name }, `Shutdown task cut off by the shutdown deadline`);
         logSkipped(queue.slice(index + 1));
         break;
       }
 
-      log.warn({ task: task.name, timeoutMs: budget }, `Shutdown task timed out`);
+      LOGGER.warn({ task: task.name, timeoutMs: budget }, `Shutdown task timed out`);
     } catch (e) {
       // One failing task must not skip the rest of the cleanup.
-      log.error({ err: toError(e), task: task.name }, `Shutdown task failed`);
+      LOGGER.error({ err: toError(e), task: task.name }, `Shutdown task failed`);
     }
   }
 
@@ -373,11 +353,11 @@ async function runShutdownFinalizers(): Promise<void> {
       ]);
 
       if (outcome === "expired") {
-        log.warn({ finalizer: finalizer.name }, `Shutdown finalizer timed out`);
+        LOGGER.warn({ finalizer: finalizer.name }, `Shutdown finalizer timed out`);
       }
     } catch (e) {
       // One failing finalizer must not stop the rest.
-      log.error({ err: toError(e), finalizer: finalizer.name }, `Shutdown finalizer failed`);
+      LOGGER.error({ err: toError(e), finalizer: finalizer.name }, `Shutdown finalizer failed`);
     }
   }
 }
@@ -403,7 +383,6 @@ export function installLifecycle(options: LifecycleOptions = {}): void {
   if (lifecycleInstalled) return;
   lifecycleInstalled = true;
 
-  log = options.logger ?? { warn() {}, error() {} };
   shutdownDeadlineMs = options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS;
   defaultTaskTimeoutMs = options.taskTimeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
   finalizerTimeoutMs = options.finalizerTimeoutMs ?? FINALIZER_TIMEOUT_MS;
@@ -426,7 +405,7 @@ export function installLifecycle(options: LifecycleOptions = {}): void {
     // windows hide while the tasks run rather than after.
     setLifecycleState(LifecycleState.Quitting);
     void runShutdownTasks()
-      .catch((e) => log.error({ err: toError(e) }, `Shutdown failed`))
+      .catch((e) => LOGGER.error({ err: toError(e) }, `Shutdown failed`))
       .finally(() => {
         shutdownState = "done";
         app.quit();
@@ -446,7 +425,7 @@ export function installLifecycle(options: LifecycleOptions = {}): void {
     shutdownState = "running";
     setLifecycleState(LifecycleState.Quitting);
     void runShutdownTasks()
-      .catch((e) => log.error({ err: toError(e) }, `Shutdown failed`))
+      .catch((e) => LOGGER.error({ err: toError(e) }, `Shutdown failed`))
       .finally(() => exitNow(code));
   };
 

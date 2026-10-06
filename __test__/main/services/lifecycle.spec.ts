@@ -1,7 +1,8 @@
 import Emittery from "emittery";
 import type { BrowserWindow } from "electron";
-import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
+
+import { installLoggerStub } from "../../helpers/globals";
 
 import {
   createLifecycleService,
@@ -10,11 +11,13 @@ import {
 } from "@main/services/lifecycle";
 
 function createService() {
-  const logger = { error: vi.fn() } as unknown as Logger;
+  // The module logs through the ambient `LOGGER`; the stub is that sink, so the
+  // assertion targets the logger this test installed rather than an injected one.
+  const logger = installLoggerStub();
   const events = new Emittery<LifecycleEvents>();
   return {
     events,
-    service: createLifecycleService({ logger }),
+    service: createLifecycleService(),
     logger,
   };
 }

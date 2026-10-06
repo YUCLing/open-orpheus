@@ -22,7 +22,6 @@ vi.mock("electron", () => ({
 installLoggerStub();
 
 import {
-  createLifecycleService,
   currentState,
   events,
   LifecycleState,
@@ -134,10 +133,7 @@ async function freshLifecycle(
   hoisted.app.isReady.mockReturnValue(true);
 
   const lifecycle = await import("@main/services/lifecycle");
-  lifecycle.createLifecycleService({
-    logger: hoisted.logger as never,
-    flushLogs: hoisted.flushLogs,
-  });
+  lifecycle.createLifecycleService({ flushLogs: hoisted.flushLogs });
   lifecycle.installLifecycle(options);
   return lifecycle;
 }
