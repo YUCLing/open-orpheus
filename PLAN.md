@@ -552,6 +552,16 @@ BootstrapPhase` exists to type them away), break the per-spec graph isolation
   to be _declared_ for audit, which a locator cannot express. §5.0's "a composition
   root, which is not a container" already said the same thing.
 
+**A mock of our own module can be load-bearing in ways its exports do not show.**
+`popup-support.spec` mocked `@main/windows/managedWindow` for a fake
+`fromBrowserWindow` — and it also acted as a **barrier**, keeping the real window
+subsystem (and its Electron import) out of a popup-probing unit test. Removing it
+surfaced both roles at once: the spec then loaded `managedWindow` for real, which
+needs `app.on`, `app.whenReady` and the vendor window surface at import time, and
+`native-popup` needs a wrapper resolver the fake had been supplying. So converting
+that spec needs the window-resolver seam first. Before deleting one of these mocks,
+check what it is _preventing from loading_, not only what it returns.
+
 ### 5.1 Composition root
 
 ```
