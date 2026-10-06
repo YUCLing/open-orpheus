@@ -60,7 +60,6 @@ const hoisted = vi.hoisted(() => {
     layerShellAvailable: vi.fn(() => true),
     /** Layer-shell declarations made by the time a window was constructed. */
     layerCallsAtConstruction: [] as number[],
-    lifecycle: { state: 0 },
     shutdownFinalizers: [] as Array<{ name: string; run: () => void }>,
     drainWindowCallbacks: vi.fn(),
     appOnCalls,
@@ -84,25 +83,6 @@ vi.mock("@open-orpheus/window", () => ({
   decorateWindowTitle: hoisted.decorateTitle,
   drainWindowCallbacks: hoisted.drainWindowCallbacks,
   isLayerShellAvailable: hoisted.layerShellAvailable,
-}));
-
-vi.mock("@main/services/lifecycle", () => ({
-  LifecycleState: {
-    Starting: 0,
-    MainWindowCreated: 1,
-    MainWindowLoaded: 2,
-    Started: 3,
-    Quitting: 4,
-  },
-  currentState: () => hoisted.lifecycle.state,
-  get state() {
-    return hoisted.lifecycle.state;
-  },
-  events: { on: vi.fn() },
-  setLifecycleState: vi.fn(),
-  registerShutdownFinalizer: (finalizer: { name: string; run: () => void }) => {
-    hoisted.shutdownFinalizers.push(finalizer);
-  },
 }));
 
 vi.mock("electron", () => {
@@ -248,9 +228,22 @@ vi.mock("electron", () => {
   };
 });
 
-import { ManagedWindow, OnDemandWindow, switchWindowPolicy } from "@main/windows/managedWindow";
+import {
+  ManagedWindow,
+  OnDemandWindow,
+  registerWindowReaper,
+  switchWindowPolicy,
+} from "@main/windows/managedWindow";
+import { LifecycleState, setLifecycleState } from "@main/services/lifecycle";
 import { LayerShellLayer } from "@open-orpheus/window";
 import type AppMenu from "@main/windows/menu";
+
+// The window layer registers its shutdown work through an explicit call now, so
+// the spec is handed the hook instead of mocking the lifecycle module to
+// observe it. The state above it is the real module's, driven directly.
+registerWindowReaper({
+  registerShutdownFinalizer: (finalizer) => hoisted.shutdownFinalizers.push(finalizer),
+});
 
 const WAYLAND = 0;
 const X11 = 1;
@@ -311,7 +304,7 @@ beforeEach(() => {
   hoisted.layerShellAvailable.mockReset();
   hoisted.layerShellAvailable.mockReturnValue(true);
   hoisted.layerCallsAtConstruction.length = 0;
-  hoisted.lifecycle.state = 0;
+  setLifecycleState(LifecycleState.Starting);
 });
 
 afterEach(() => {
@@ -576,7 +569,7 @@ describe("ManagedWindow close policy", () => {
     }
     const managed = new ApprovingWindow();
     const wnd = asFake(managed.window);
-    hoisted.lifecycle.state = 4; // LifecycleState.Quitting
+    setLifecycleState(LifecycleState.Quitting);
 
     wnd.close();
 
@@ -751,7 +744,7 @@ describe("OnDemandWindow hiding", () => {
     const managed = new TestOnDemandWindow();
     const wnd = await showOnDemand(managed);
 
-    hoisted.lifecycle.state = 4; // LifecycleState.Quitting
+    setLifecycleState(LifecycleState.Quitting);
     wnd.hide();
 
     // The window is only off screen: a shutdown task may still need its

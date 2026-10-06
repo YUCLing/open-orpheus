@@ -19,12 +19,8 @@ import type { LayerShellOptions } from "@open-orpheus/window";
 export type { LayerShellOptions };
 
 import type AppMenu from "./menu";
-import {
-  currentState,
-  events as lifecycleEvents,
-  LifecycleState,
-  registerShutdownFinalizer,
-} from "../services/lifecycle";
+import { currentState, events as lifecycleEvents, LifecycleState } from "../services/lifecycle";
+import type { LifecycleService } from "../services/lifecycle";
 
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
 const managedBrowserWindows = new Set<BrowserWindow>();
@@ -56,15 +52,29 @@ const CALLBACK_REAP_INTERVAL_MS = 50;
 // of new menu activity; this timer must not keep the application alive.
 const callbackReaper = setInterval(() => drainWindowCallbacks(), CALLBACK_REAP_INTERVAL_MS);
 callbackReaper.unref();
-// Keep reaping while shutdown tasks dispose their resources. A finalizer also
-// runs on signal-driven app.exit(), and cannot be skipped by the task deadline.
-registerShutdownFinalizer({
-  name: "window-callbacks",
-  run: () => {
-    clearInterval(callbackReaper);
-    drainWindowCallbacks();
-  },
-});
+/** The hook this module needs; the composition root supplies it. */
+export type WindowReaperWiring = Pick<LifecycleService, "registerShutdownFinalizer">;
+
+/**
+ * Register the callback reaper as shutdown work.
+ *
+ * Called by the composition root rather than run at import: an import that
+ * registers is invisible wiring, and it meant the window spec could only observe
+ * this by mocking the lifecycle module.
+ *
+ * A *finalizer* rather than a task on purpose — it also runs on signal-driven
+ * `app.exit()` and cannot be skipped by the task deadline, so reaping continues
+ * while shutdown tasks dispose their resources.
+ */
+export function registerWindowReaper(lifecycle: WindowReaperWiring): void {
+  lifecycle.registerShutdownFinalizer({
+    name: "window-callbacks",
+    run: () => {
+      clearInterval(callbackReaper);
+      drainWindowCallbacks();
+    },
+  });
+}
 
 /**
  * Take every window off screen as soon as the app starts shutting down, so the

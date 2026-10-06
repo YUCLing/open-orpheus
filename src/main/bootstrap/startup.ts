@@ -240,6 +240,9 @@ export async function startApplication(): Promise<Application> {
   // `onExit(() => app.quit())` came from `@open-orpheus/lifecycle`, a module
   // main deleted when it grew the shutdown sequence.
 
+  // The window layer's own shutdown work, registered on the way in.
+  (await import("@main/windows/managedWindow")).registerWindowReaper(ctx.lifecycle);
+
   // Create main window
   await (
     await import("@main/windows/main")
