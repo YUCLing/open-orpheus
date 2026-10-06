@@ -1,6 +1,8 @@
-import { normalize } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, normalize } from "node:path";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type CallDispatcher from "@shared/CallDispatcher";
 
@@ -12,7 +14,6 @@ import { installLoggerStub } from "../../../helpers/globals";
 // test says otherwise.
 const hoisted = vi.hoisted(() => ({
   fileExists: vi.fn<(path: string) => Promise<boolean>>(),
-  isMusicFile: vi.fn((path: string) => path.length > 0),
   logger: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -80,11 +81,7 @@ async function freshModules() {
     orpheus: { loadFromOrpheusUrl: hoisted.loadFromOrpheusUrl },
     dawn: { statisV2: hoisted.statisV2, setStatisEndpoint: hoisted.setStatisEndpoint },
     request: { getProxyAgent: hoisted.getProxyAgent, client: hoisted.client as never },
-    files: {
-      fileExists: hoisted.fileExists,
-      isMusicFile: hoisted.isMusicFile,
-      pngFromIco: hoisted.pngFromIco,
-    },
+    files: { fileExists: hoisted.fileExists, pngFromIco: hoisted.pngFromIco },
     hardwareAccelerationFlag: "/tmp/open-orpheus-test/flag",
   });
 
@@ -102,15 +99,24 @@ function stubProcessArgv(argv: string[]) {
   vi.stubGlobal("process", { ...process, argv });
 }
 
-/** Stand-in for the real mime lookup used by `isMusicFile`. */
-function looksLikeMusicFile(path: string) {
-  return /\.(mp3|flac|wav|m4a|ogg|opus|aac)$/i.test(path);
-}
+/**
+ * `parseLocalFile` uses the real file checks now, so the tests that reach it
+ * need a real tree: a music file to find and a non-music file to reject.
+ */
+let fixtureDir: string;
+let musicFile: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.unstubAllGlobals();
   hoisted.fileExists.mockReset().mockResolvedValue(true);
-  hoisted.isMusicFile.mockReset().mockImplementation(looksLikeMusicFile);
+  fixtureDir = await mkdtemp(join(tmpdir(), "open-orpheus-app-"));
+  musicFile = join(fixtureDir, "song.mp3");
+  await writeFile(musicFile, "");
+  await writeFile(join(fixtureDir, "cover.jpg"), "");
+});
+
+afterEach(async () => {
+  await rm(fixtureDir, { recursive: true, force: true });
 });
 
 describe("app.getAppStartCommand", () => {
@@ -165,11 +171,11 @@ describe("app.getAppStartCommand", () => {
 
   it("parses a local file argument", async () => {
     const { dispatcher } = await freshModules();
-    stubProcessArgv(["electron", ".", "some/song.mp3"]);
+    stubProcessArgv(["electron", ".", musicFile]);
 
     const [command] = await call(dispatcher!, "app.getAppStartCommand");
 
-    expect(command).toEqual({ play: normalize("some/song.mp3") });
+    expect(command).toEqual({ play: normalize(musicFile) });
   });
 
   it("prefers an orpheus URL over a local file in the same argv", async () => {
@@ -189,8 +195,6 @@ describe("app.getAppStartCommand", () => {
     stubProcessArgv(["electron", ".", "--moverun", "/music/old.mp3", "/music/new.mp3"]);
     // Music files are not filtered out here; the ordering inside the predicate
     // is what decides.
-    hoisted.isMusicFile.mockReturnValue(true);
-
     const [command] = await call(dispatcher!, "app.getAppStartCommand");
 
     expect(command).toEqual({
@@ -213,27 +217,25 @@ describe("app.getDefaultMusicPlayPath", () => {
   it("returns nothing when the startup task is not a local file", async () => {
     const { dispatcher, lifecycle } = await freshModules();
     lifecycle.setStartupTask({ type: "openUrl", url: "orpheus://song/1" });
-    stubProcessArgv(["electron", ".", "some/song.mp3"]);
+    stubProcessArgv(["electron", ".", musicFile]);
 
     const [path] = await call(dispatcher!, "app.getDefaultMusicPlayPath");
 
-    expect(path).toBe(normalize("some/song.mp3"));
+    expect(path).toBe(normalize(musicFile));
   });
 
   it("falls back to a music file in the process argv", async () => {
     const { dispatcher } = await freshModules();
-    stubProcessArgv(["electron", ".", "some/song.mp3"]);
+    stubProcessArgv(["electron", ".", musicFile]);
 
     const [path] = await call(dispatcher!, "app.getDefaultMusicPlayPath");
 
-    expect(hoisted.isMusicFile).toHaveBeenCalledWith(normalize("some/song.mp3"));
-    expect(path).toBe(normalize("some/song.mp3"));
+    expect(path).toBe(normalize(musicFile));
   });
 
   it("returns nothing when no argument is a local file", async () => {
     const { dispatcher } = await freshModules();
     stubProcessArgv(["electron", ".", "--some-flag"]);
-    hoisted.isMusicFile.mockReturnValue(false);
 
     const [path] = await call(dispatcher!, "app.getDefaultMusicPlayPath");
 

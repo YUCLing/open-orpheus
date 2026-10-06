@@ -13,8 +13,6 @@ import { toError } from "@shared/util";
 import { installLifecycle, registerShutdownTask, setStartupTask } from "@main/services/lifecycle";
 import { configureProcess } from "@main/bootstrap/process-setup";
 import { parseLocalFile, parseWebCommand, raceArgument } from "@main/platform/arguments";
-import { fileExists } from "@main/platform/utils/fs";
-import { isMusicFile } from "@main/platform/utils/music";
 import { startApplication, type Application } from "@main/bootstrap/startup";
 
 configureProcess();
@@ -88,7 +86,7 @@ app.on("second-instance", async (event, argv) => {
   const cmd = await raceArgument<[number, string]>(async (arg) => {
     const webCmd = parseWebCommand(arg);
     if (webCmd) return [3, webCmd];
-    const localFile = await parseLocalFile(arg, { fileExists, isMusicFile });
+    const localFile = await parseLocalFile(arg);
     if (localFile) return [2, localFile];
     return null;
   }, argv);

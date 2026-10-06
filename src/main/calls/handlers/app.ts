@@ -79,7 +79,6 @@ export interface AppDeps {
   /** File probing and icon conversion. */
   files: {
     fileExists: typeof import("../../platform/utils/fs").fileExists;
-    isMusicFile: typeof import("../../platform/utils/music").isMusicFile;
     pngFromIco: typeof import("../../platform/utils/image").pngFromIco;
   };
   /** Path of the disable-hardware-acceleration marker; read and written below. */
@@ -152,7 +151,7 @@ export function register(deps: AppDeps): void {
               movedest: moveRun[1],
             },
           ];
-        const localFile = await parseLocalFile(v, deps.files);
+        const localFile = await parseLocalFile(v);
         if (localFile) return [{ play: localFile }];
         const webCmd = parseWebCommand(v);
         if (webCmd) return [{ webcmd: webCmd }];
@@ -334,7 +333,7 @@ export function register(deps: AppDeps): void {
 
   registerCallHandler<[], [] | [string]>("app.getDefaultMusicPlayPath", async () => {
     if (startupTask?.type === "openFile") return [startupTask.file];
-    const path = await raceArgument((arg) => parseLocalFile(arg, deps.files));
+    const path = await raceArgument((arg) => parseLocalFile(arg));
     return path ? [path] : [];
   });
 

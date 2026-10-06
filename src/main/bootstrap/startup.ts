@@ -41,7 +41,6 @@ import { font } from "@main/platform/gui";
 import type { MenuDeps } from "@main/windows/menu";
 import { fileExists } from "@main/platform/utils/fs";
 import { pngFromIco } from "@main/platform/utils/image";
-import { isMusicFile } from "@main/platform/utils/music";
 import type { Disposable } from "@shared/disposable";
 import type { WindowService } from "./types";
 
@@ -269,7 +268,7 @@ export async function startApplication(): Promise<Application> {
     orpheus,
     dawn,
     request,
-    files: { fileExists, isMusicFile, pngFromIco },
+    files: { fileExists, pngFromIco },
     hardwareAccelerationFlag: disableHardwareAccelerationFlag,
     audio: { readEffect },
     cookie: {

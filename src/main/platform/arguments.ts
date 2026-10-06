@@ -2,6 +2,9 @@ import { normalize } from "node:path";
 
 import { app } from "electron";
 
+import { fileExists } from "./utils/fs";
+import { isMusicFile } from "./utils/music";
+
 export async function raceArgument<T>(
   predicate: (arg: string, index: number, array: string[]) => Promise<T | null> | T | null,
   argv?: string[]
@@ -33,24 +36,15 @@ export function parseWebCommand(arg: string): string | null {
   return arg.startsWith("orpheus://") ? arg : null;
 }
 
-/** The file checks `parseLocalFile` needs. */
-export interface ArgumentFileChecks {
-  fileExists(path: string): Promise<boolean>;
-  isMusicFile(path: string): boolean;
-}
-
 /**
  * Whether a path is a local file this app should open.
  *
- * `checks` is required rather than defaulted: supplying it lazily changed the
- * predicate's timing, and the url-vs-file race is a documented behaviour
- * (`raceArgument` settles with the first predicate to finish). A caller that
- * imported `util.ts` statically keeps that timing.
+ * The checks are imported, not injected. They are leaf utilities whose fakes
+ * would only ever return a constant, and the fs probe is what makes this
+ * predicate lose the race in `raceArgument` — a property worth exercising for
+ * real rather than supplying.
  */
-export async function parseLocalFile(
-  arg: string,
-  checks: ArgumentFileChecks
-): Promise<string | null> {
+export async function parseLocalFile(arg: string): Promise<string | null> {
   const path = normalize(arg);
-  return checks.isMusicFile(path) && (await checks.fileExists(path)) ? path : null;
+  return isMusicFile(path) && (await fileExists(path)) ? path : null;
 }

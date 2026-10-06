@@ -1,43 +1,53 @@
-import { normalize } from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, normalize } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => ({
-  fileExists: vi.fn<(path: string) => Promise<boolean>>(),
-  // Replaced with a real matcher in `beforeEach`.
-  isMusicFile: vi.fn((path: string) => path.length > 0),
   electronApp: { isPackaged: false },
 }));
 
 vi.mock("electron", () => ({ app: hoisted.electronApp }));
 
 import {
-  parseLocalFile as parseLocalFileWithChecks,
+  parseLocalFile,
   parseMoveRun,
   parseWebCommand,
   raceArgument,
 } from "@main/platform/arguments";
 
-// The checks are a collaborator now, so they are passed rather than mocked at
-// the module boundary. Bound to `hoisted` so per-test implementations apply.
-const parseLocalFile = (arg: string) =>
-  parseLocalFileWithChecks(arg, {
-    fileExists: hoisted.fileExists,
-    isMusicFile: hoisted.isMusicFile,
-  });
+/**
+ * `parseLocalFile` imports the real checks, so these tests use a real tree of
+ * files rather than fakes. It runs with the temp directory as the working
+ * directory, which keeps the assertions about *relative* paths honest — and it
+ * is the only way to test the property that matters most here: the disk probe is
+ * genuinely asynchronous, which is why a local file loses the race in
+ * `raceArgument` to a URL that matches synchronously.
+ */
+let fixtureDir: string;
+let previousCwd: string;
 
-/** Stand-in for the real mime lookup used by `isMusicFile`. */
-function looksLikeMusicFile(path: string) {
-  return /\.(mp3|flac|wav|m4a|ogg|opus|aac)$/i.test(path);
-}
+const MUSIC = ["song.mp3", "music/album/song.mp3", "music/song.mp3"];
 
-beforeEach(() => {
+beforeEach(async () => {
   hoisted.electronApp.isPackaged = false;
-  hoisted.fileExists.mockReset().mockResolvedValue(true);
-  hoisted.isMusicFile.mockReset().mockImplementation(looksLikeMusicFile);
+  fixtureDir = await mkdtemp(join(tmpdir(), "open-orpheus-args-"));
+  for (const relative of MUSIC) {
+    const target = join(fixtureDir, relative);
+    await mkdir(join(target, ".."), { recursive: true });
+    await writeFile(target, "");
+  }
+  // Exists, but is not music; and a directory, which is not music either.
+  await writeFile(join(fixtureDir, "cover.jpg"), "");
+  await mkdir(join(fixtureDir, "music-dir"), { recursive: true });
+  previousCwd = process.cwd();
+  process.chdir(fixtureDir);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  process.chdir(previousCwd);
+  await rm(fixtureDir, { recursive: true, force: true });
   vi.unstubAllGlobals();
 });
 
@@ -151,56 +161,49 @@ describe("parseMoveRun", () => {
 
 describe("parseLocalFile", () => {
   it("returns the normalised path of an existing music file", async () => {
+    // The file exists only at the normalised path, so resolving to it is proof
+    // the disk probe ran and succeeded.
     await expect(parseLocalFile("song.mp3")).resolves.toBe("song.mp3");
     await expect(parseLocalFile("music/album/song.mp3")).resolves.toBe(
       normalize("music/album/song.mp3")
     );
-
-    expect(hoisted.fileExists).toHaveBeenCalledWith(normalize("music/album/song.mp3"));
   });
 
   it("normalises the path before checking it", async () => {
-    await parseLocalFile("music/./album/../song.mp3");
-
-    expect(hoisted.fileExists).toHaveBeenCalledWith(normalize("music/song.mp3"));
+    // `music/./album/../song.mp3` is created as `music/song.mp3`, and the value
+    // that comes back is normalised — so normalisation precedes the probe.
+    await expect(parseLocalFile("music/./album/../song.mp3")).resolves.toBe(
+      normalize("music/song.mp3")
+    );
   });
 
   it("rejects paths that are not music files", async () => {
+    // `cover.jpg` is a real file: it is rejected for what it is, not because it
+    // is missing.
     await expect(parseLocalFile("cover.jpg")).resolves.toBeNull();
     await expect(parseLocalFile("no-extension")).resolves.toBeNull();
-
-    expect(hoisted.fileExists).not.toHaveBeenCalled();
   });
 
   it("rejects music files that do not exist on disk", async () => {
-    hoisted.fileExists.mockResolvedValue(false);
-
     await expect(parseLocalFile("missing.mp3")).resolves.toBeNull();
   });
 
   it("rejects an empty argument", async () => {
+    // "." is not a music file.
     await expect(parseLocalFile("")).resolves.toBeNull();
-
-    // "." is not a music file, so the disk is never touched.
-    expect(hoisted.isMusicFile).toHaveBeenCalledWith(".");
-    expect(hoisted.fileExists).not.toHaveBeenCalled();
   });
 
   it("checks every argument on its own", async () => {
-    // Only a single path is considered: joining the surrounding argv into one
-    // path is no longer attempted, so exactly one path ever reaches the disk.
-    await expect(parseLocalFile("music")).resolves.toBeNull();
+    // A directory and a path that does not exist; each argument is judged alone
+    // rather than joined into one path.
+    await expect(parseLocalFile("music-dir")).resolves.toBeNull();
     await expect(parseLocalFile("my album")).resolves.toBeNull();
     await expect(parseLocalFile("song.mp3")).resolves.toBe("song.mp3");
-
-    expect(hoisted.fileExists).toHaveBeenCalledExactlyOnceWith("song.mp3");
   });
 });
 
 describe.runIf(process.platform === "win32")("parseLocalFile on Windows", () => {
   it("converts forward slashes to backslashes", async () => {
     await expect(parseLocalFile("music/album/song.mp3")).resolves.toBe("music\\album\\song.mp3");
-
-    expect(hoisted.fileExists).toHaveBeenCalledWith("music\\album\\song.mp3");
   });
 });
