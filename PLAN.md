@@ -137,7 +137,7 @@ comment loses nothing for a reader who never saw the conversation, delete it.
 | Own-module `vi.mock` sites        | ~~11 in 10~~ ~~**0**~~ **29 in 9** **[V]** | **0** — reached at P1-12        | P1    |
 | Specs importing via `../../src/…` | ~~~38 sites~~ **0** **[V]**                | 0                               | P0    |
 | `$sharedTypes` declared in        | ~~4 places~~ **0** **[V]**                 | **0** — retired in P2-4         | P2    |
-| `src/main.ts`                     | ~~486~~ ~~**74**~~ **126** **[V]**         | thin entry                      | P1    |
+| `src/main.ts`                     | ~~486~~ ~~**74**~~ **99** **[V]**          | thin entry                      | P1    |
 | `strict` in root `tsconfig.json`  | ~~off~~ **on** **[V]**                     | on — measured 0 errors          | P0    |
 | App graph bootable in Vitest      | ~~no~~ **yes**                             | yes (via `createTestContext()`) | P1/P3 |
 
@@ -148,7 +148,7 @@ comment loses nothing for a reader who never saw the conversation, delete it.
   `calls/handlers/app` — which mock our own modules directly. The refactor's number was about
   _our_ test architecture, and merging cannot hold it against specs the branch does not own.
   Closing it is P1-12-shaped work on main's specs, deliberately not attempted here.
-- **`src/main.ts` is 126 lines**, not 74: main's `open-file`, `open-url` and richer
+- **`src/main.ts` is 99 lines**, not 74: main's `open-file`, `open-url` and richer
   `second-instance` handlers (local files via `raceArgument`) came in on top of the thin entry,
   and `installLifecycle({ logger })` replaced the hand-rolled quit handlers.
 - **The lint toolchain is main's.** `eslint.config.ts` and `.prettierignore` were deleted
