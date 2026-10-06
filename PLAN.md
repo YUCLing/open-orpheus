@@ -134,7 +134,7 @@ comment loses nothing for a reader who never saw the conversation, delete it.
 
 | Metric                            | Now                                        | Target                          | Phase |
 | --------------------------------- | ------------------------------------------ | ------------------------------- | ----- |
-| Own-module `vi.mock` sites        | ~~11 in 10~~ ~~**0**~~ **29 in 9** **[V]** | **0** — reached at P1-12        | P1    |
+| Own-module `vi.mock` sites        | ~~11 in 10~~ ~~**0**~~ **27 in 8** **[V]** | **0** — reached at P1-12        | P1    |
 | Specs importing via `../../src/…` | ~~~38 sites~~ **0** **[V]**                | 0                               | P0    |
 | `$sharedTypes` declared in        | ~~4 places~~ **0** **[V]**                 | **0** — retired in P2-4         | P2    |
 | `src/main.ts`                     | ~~486~~ ~~**74**~~ **99** **[V]**          | thin entry                      | P1    |
@@ -143,11 +143,16 @@ comment loses nothing for a reader who never saw the conversation, delete it.
 
 **After the merge with `main` (2026-09-22).** Three of these moved, and the reason matters:
 
-- **Own-module `vi.mock` went back to 29 in 9 files.** Every one comes from upstream specs —
+- **Own-module `vi.mock` went back to 29 in 9 files, and is down to 27 in 8.** Every one came
+  from upstream specs —
   `menu-popup`, `window`, `shutdown`, `popup-support`, `logger`, `MediaEngine`, `lifecycle`,
   `calls/handlers/app` — which mock our own modules directly. The refactor's number was about
   _our_ test architecture, and merging cannot hold it against specs the branch does not own.
-  Closing it is P1-12-shaped work on main's specs, deliberately not attempted here.
+  Two were removable with the seams the refactor already has (`MediaEngine.spec`'s window mock
+  was dead, and `logger.spec`'s `folders` mock only stood in for `app.getPath`); the other 27
+  need new seams, because the modules under test still import `pack`/`cache`/`OnlineStreamer`
+  singletons and the module-level `currentState`/`events` accessors. Closing the rest is
+  P1-12-shaped work on specs the branch does not own, deliberately not attempted here.
 - **`src/main.ts` is 99 lines**, not 74: main's `open-file`, `open-url` and richer
   `second-instance` handlers (local files via `raceArgument`) came in on top of the thin entry,
   and `installLifecycle({ logger })` replaced the hand-rolled quit handlers.
