@@ -24,6 +24,9 @@ import showPackgeDownloadWindow from "@main/windows/package-download";
 
 import type WebPack from "@main/services/packs/WebPack";
 import type { ProxyConfiguration } from "@main/platform/request";
+import * as dawn from "@main/platform/dawn";
+import * as orpheus from "@main/platform/orpheus";
+import * as request from "@main/platform/request";
 import type { Disposable } from "@shared/disposable";
 import type { WindowService } from "./types";
 
@@ -226,6 +229,9 @@ export async function startApplication(): Promise<Application> {
     windows: ctx.windows,
     lifecycle: ctx.lifecycle,
     pack: packManager,
+    orpheus,
+    dawn,
+    request,
     audio: { readEffect },
     cookie: {
       getCookies: cookieModule.getCookies,

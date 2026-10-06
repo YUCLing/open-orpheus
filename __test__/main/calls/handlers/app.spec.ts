@@ -27,6 +27,12 @@ const hoisted = vi.hoisted(() => ({
   setStartupTask: vi.fn(),
   /** What `app.ts` asks the pack manager to load. */
   loadSkinPack: vi.fn(),
+  /** Platform collaborators, passed rather than mocked at the module boundary. */
+  loadFromOrpheusUrl: vi.fn(),
+  statisV2: vi.fn(),
+  setStatisEndpoint: vi.fn(),
+  getProxyAgent: vi.fn(),
+  client: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -49,18 +55,6 @@ vi.mock("electron", () => ({
   nativeImage: { createFromBuffer: vi.fn() },
 }));
 
-vi.mock("@main/platform/orpheus", () => ({
-  loadFromOrpheusUrl: vi.fn(),
-  default: vi.fn(),
-}));
-vi.mock("@main/platform/request", () => ({
-  client: {},
-  getProxyAgent: vi.fn(),
-}));
-vi.mock("@main/platform/dawn", () => ({
-  statisV2: vi.fn(),
-  setStatisEndpoint: vi.fn(),
-}));
 // Partially mocked: the merged import graph reaches more of this module than
 // it used to (domain/xeapi.ts wants `data` and `aegisPublicKey`), so only the
 // value this spec cares about is overridden.
@@ -92,6 +86,9 @@ async function freshModules() {
     settings: { kv: hoisted.kv } as never,
     lifecycle: { setLifecycleState: lifecycle.setLifecycleState },
     pack: { loadSkinPack: hoisted.loadSkinPack },
+    orpheus: { loadFromOrpheusUrl: hoisted.loadFromOrpheusUrl },
+    dawn: { statisV2: hoisted.statisV2, setStatisEndpoint: hoisted.setStatisEndpoint },
+    request: { getProxyAgent: hoisted.getProxyAgent, client: hoisted.client as never },
   });
 
   return { dispatcher, lifecycle };

@@ -4,13 +4,11 @@ import { rm, stat, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, nativeImage, ThumbarButton, WebContents } from "electron";
 
 import { registerCallHandler, registerCallbackHandler } from "../dispatcher";
-import { loadFromOrpheusUrl } from "../../platform/orpheus";
 import { fileExists, isMusicFile, pngFromIco } from "../../platform/util";
 import type { ProxyConfiguration, ProxyTypes } from "../../platform/request";
-import { client, getProxyAgent } from "../../platform/request";
 import { disableHardwareAccelerationFlag } from "../../platform/folders";
 import { LifecycleState, startupTask } from "../../services/lifecycle";
-import { DawnEntry, setStatisEndpoint, statisV2 } from "../../platform/dawn";
+import type { DawnEntry } from "../../platform/dawn";
 import {
   parseLocalFile,
   parseMoveRun,
@@ -42,9 +40,12 @@ type ThumbnailOptions = {
   tooltip?: string | undefined;
 };
 const currentThumbnailOptions: ThumbnailOptions = { btnExtends: [] };
-function createButtonFactory(webContents: WebContents): (btn: Button) => Promise<ThumbarButton> {
+function createButtonFactory(
+  webContents: WebContents,
+  orpheus: AppDeps["orpheus"]
+): (btn: Button) => Promise<ThumbarButton> {
   return async (btn: Button) => {
-    const icon = await loadFromOrpheusUrl(btn.url);
+    const icon = await orpheus.loadFromOrpheusUrl(btn.url);
     const buf = pngFromIco(icon.content as unknown as Uint8Array);
     return {
       tooltip: btn.tooltip,
@@ -67,6 +68,20 @@ export interface AppDeps {
   settings: Pick<SettingsService, "kv">;
   lifecycle: Pick<LifecycleService, "setLifecycleState">;
   pack: Pick<PackManager, "loadSkinPack">;
+  /** Skin-button icons come from an `orpheus://` URL. */
+  orpheus: {
+    loadFromOrpheusUrl: typeof import("../../platform/orpheus").loadFromOrpheusUrl;
+  };
+  /** Usage statistics; a no-op unless an endpoint was set. */
+  dawn: {
+    statisV2: typeof import("../../platform/dawn").statisV2;
+    setStatisEndpoint: typeof import("../../platform/dawn").setStatisEndpoint;
+  };
+  /** Proxy resolution for the renderer's HTTP client. */
+  request: {
+    getProxyAgent: typeof import("../../platform/request").getProxyAgent;
+    client: typeof import("../../platform/request").client;
+  };
 }
 
 export function register(deps: AppDeps): void {
@@ -86,7 +101,7 @@ export function register(deps: AppDeps): void {
   });
 
   registerCallHandler<["dawn", DawnEntry[]], void>("app.statisV2", (event, type, data) => {
-    statisV2(type, data);
+    deps.dawn.statisV2(type, data);
   });
 
   registerCallHandler<string[], void>("app.exit", (event, action, ...params) => {
@@ -246,7 +261,7 @@ export function register(deps: AppDeps): void {
     mainWindow.setThumbnailToolTip(tooltip || "");
 
     mainWindow.setThumbarButtons(
-      await Promise.all(btns.map(createButtonFactory(mainWindow.webContents)))
+      await Promise.all(btns.map(createButtonFactory(mainWindow.webContents, deps.orpheus)))
     );
   });
 
@@ -274,7 +289,7 @@ export function register(deps: AppDeps): void {
     ],
     [boolean]
   >("app.initUrls", (event, urls) => {
-    setStatisEndpoint(urls.dawn, urls.refer);
+    deps.dawn.setStatisEndpoint(urls.dawn, urls.refer);
     return [true];
   });
 
@@ -516,9 +531,9 @@ export function register(deps: AppDeps): void {
           UserName: username,
           Password: password,
         };
-        const agent = await getProxyAgent(cfg);
+        const agent = await deps.request.getProxyAgent(cfg);
         try {
-          const req = await client(url, {
+          const req = await deps.request.client(url, {
             ...(agent ? { agent } : {}),
             throwHttpErrors: false,
           });
