@@ -11,11 +11,11 @@ import { parseLrc, parseYrc } from "../lyrics/parse";
 import { sanitizeRelativePath } from "../util";
 import {
   createDesktopLyricsPreview,
-  window as desktopLyricsWindow,
   lyricsStyle,
   refreshLyricsStyle,
   setLyricsLocked,
   setLyricsOffset,
+  setLyricsAlwaysOnTop,
   updateLyricsPlayInfo,
 } from "../windows/desktop-lyrics";
 import {
@@ -225,8 +225,8 @@ registerCallHandler<[boolean], [boolean]>("player.setLineMode", (event, singleLi
   return [refreshLyricsStyle()];
 });
 
-registerCallHandler<[boolean], [boolean]>("player.setDesktopLyricTopMost", (event, topMost) => {
-  desktopLyricsWindow.setAlwaysOnTop(topMost);
+registerCallHandler<[boolean], [boolean]>("player.setDesktopLyricTopMost", (_event, topMost) => {
+  setLyricsAlwaysOnTop(topMost);
   return [true];
 });
 

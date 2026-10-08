@@ -285,6 +285,7 @@ mod tests {
 
     #[test]
     fn a_new_connection_only_knows_the_display() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let conn = WaylandConn::new();
 
         assert_eq!(conn.ifaces.len(), 1);
@@ -295,6 +296,7 @@ mod tests {
 
     #[test]
     fn resets_keep_the_display_but_drop_everything_else() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = connected();
         conn.stolen_ids.push(99);
         conn.injected_ids.insert(99);
@@ -309,6 +311,7 @@ mod tests {
 
     #[test]
     fn injected_ids_are_recycled_from_the_stolen_pool() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.stolen_ids.extend([7, 8]);
 
@@ -321,6 +324,7 @@ mod tests {
 
     #[test]
     fn purging_a_toplevel_clears_its_mappings() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = connected();
 
         conn.purge(30);
@@ -334,6 +338,7 @@ mod tests {
 
     #[test]
     fn purging_an_xdg_surface_takes_its_toplevel_with_it() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = connected();
 
         conn.purge(20);
@@ -346,6 +351,7 @@ mod tests {
 
     #[test]
     fn purging_a_surface_forgets_its_focus_and_toplevel() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = connected();
         conn.pointer_focus.insert(40, 10);
 
@@ -362,6 +368,7 @@ mod tests {
 
     #[test]
     fn purging_a_seat_forgets_the_devices_it_owned() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(5, Iface::WlSeat);
         conn.pointer_seat.insert(6, 5);
@@ -377,6 +384,7 @@ mod tests {
 
     #[test]
     fn purging_a_pointer_forgets_its_focus() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(6, Iface::WlPointer);
         conn.pointer_focus.insert(6, 10);
@@ -390,6 +398,7 @@ mod tests {
 
     #[test]
     fn window_objects_resolve_to_their_wl_surface() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let conn = connected();
 
         assert_eq!(
@@ -1299,11 +1308,6 @@ mod popup_tests {
 
     use super::*;
 
-    // These interleavings observe the same global connection lock. Serialize
-    // them, like the injection fixtures, so one race cannot satisfy another's
-    // "connection locked" checkpoint before its worker has reached it.
-    static CONNECTION_RACES: Mutex<()> = Mutex::new(());
-
     fn wait_for_connection_lock() {
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -1320,7 +1324,7 @@ mod popup_tests {
 
     #[test]
     fn cancellation_holds_connection_until_reserved_id_is_recycled() {
-        let _guard = CONNECTION_RACES.lock().unwrap();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 93_601;
         let mut conn = WaylandConn::new();
@@ -1367,7 +1371,7 @@ mod popup_tests {
 
     #[test]
     fn axis_registration_is_atomic_with_close_and_rejects_stale_identity() {
-        let _guard = CONNECTION_RACES.lock().unwrap();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 93_602;
         let mut conn = WaylandConn::new();
@@ -1423,10 +1427,9 @@ mod popup_tests {
 
     #[test]
     fn popup_publication_is_atomic_with_close_and_fd_reuse() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         use std::sync::{TryLockError, mpsc};
         use std::thread;
-
-        let _guard = CONNECTION_RACES.lock().unwrap();
 
         init_state();
         let fd = 93_001;
@@ -1489,7 +1492,7 @@ mod popup_tests {
 
     #[test]
     fn an_already_assigned_target_role_cannot_reserve_a_popup() {
-        let _guard = CONNECTION_RACES.lock().unwrap();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 93_005;
         let parent_id = "popup-assigned-parent";
@@ -1522,7 +1525,7 @@ mod popup_tests {
 
     #[test]
     fn popup_reservation_requires_parent_anchor_and_object_id_data() {
-        let _guard = CONNECTION_RACES.lock().unwrap();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 93_004;
         let window_id = "popup-data-readiness";
@@ -1569,6 +1572,7 @@ mod popup_tests {
 
     #[test]
     fn stale_window_mapping_does_not_allocate_on_reused_fd() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 93_002;
         let mut replacement = WaylandConn::new();
@@ -1599,6 +1603,7 @@ mod popup_tests {
 
     #[test]
     fn token_allocation_skips_zero_and_live_tokens_after_wrap() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let counter = AtomicU32::new(u32::MAX);
         let token = next_unused_token(&counter, |candidate| candidate == u32::MAX);
         assert_eq!(token, 1);
@@ -1606,6 +1611,7 @@ mod popup_tests {
 
     #[test]
     fn popup_reservation_only_accepts_its_managed_window() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 93_501;
         clear_runtime_state_for_fd(fd);
@@ -1632,6 +1638,7 @@ mod popup_tests {
 
     #[test]
     fn runtime_state_cleanup_is_connection_and_surface_scoped() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 91_001;
         let other_fd = 91_002;
@@ -1737,6 +1744,7 @@ mod popup_tests {
 
     #[test]
     fn purging_surface_clears_pointer_focus_and_position() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(10, Iface::WlSurface);
         conn.pointer_focus.insert(20, 10);
@@ -1750,6 +1758,7 @@ mod popup_tests {
 
     #[test]
     fn cancelling_parent_popup_recycles_reserved_id() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let fd = 92_001;
         clear_runtime_state_for_fd(fd);

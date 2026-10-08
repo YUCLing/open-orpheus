@@ -110,7 +110,7 @@ describe("session-native popup support", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("retries an inconclusive conversion on the next menu click", async () => {
+  it("caches a conversion timeout so later clicks use overlay immediately", async () => {
     mocks.isPopup.mockReturnValue(false);
     const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
     const window = parent();
@@ -118,10 +118,10 @@ describe("session-native popup support", () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(await probing).toBe(false);
     mocks.isPopup.mockReturnValue(true);
-    expect(await initializeWaylandPopupSupport(window)).toBe(true);
-    expect(mocks.windows).toHaveLength(2);
+    expect(await initializeWaylandPopupSupport(window)).toBe(false);
+    expect(mocks.windows).toHaveLength(1);
     expect(mocks.windows[0].destroyed).toBe(true);
-    expect(mocks.cancel).toHaveBeenCalledTimes(2);
+    expect(mocks.cancel).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -185,7 +185,7 @@ describe("session-native popup support", () => {
     expect(mocks.windows).toHaveLength(1);
   });
 
-  it("retries missing popup data after the parent becomes ready", async () => {
+  it("caches an arming timeout instead of probing again on subsequent clicks", async () => {
     mocks.arm.mockReturnValue(null);
     const { initializeWaylandPopupSupport } = await import("../../src/main/menu/popup-support");
     const probing = initializeWaylandPopupSupport(parent());
@@ -195,8 +195,8 @@ describe("session-native popup support", () => {
     expect(mocks.windows[0].destroyed).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
     mocks.arm.mockReturnValue(1);
-    expect(await initializeWaylandPopupSupport(parent())).toBe(true);
-    expect(mocks.windows).toHaveLength(2);
+    expect(await initializeWaylandPopupSupport(parent())).toBe(false);
+    expect(mocks.windows).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
   });
 

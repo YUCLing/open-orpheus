@@ -662,7 +662,7 @@ export abstract class ManagedWindow<
       if (!wnd) return;
       if (this.applyPostShowState()) return;
       if (attempt >= REAPPLY_DELAYS_MS.length) {
-        console.warn(`[window] gave up re-applying native state for window ${wnd.id}`);
+        LOGGER.warn({ windowId: this.id }, "Gave up re-applying native window state");
         return;
       }
       this._reapplyTimer = setTimeout(step, REAPPLY_DELAYS_MS[attempt++]);

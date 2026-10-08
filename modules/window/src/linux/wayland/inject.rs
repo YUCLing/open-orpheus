@@ -193,7 +193,7 @@ mod tests {
     use std::io::Read;
     use std::os::fd::AsRawFd;
     use std::os::unix::net::UnixStream;
-    use std::sync::{Mutex, MutexGuard};
+    use std::sync::Mutex;
 
     use crate::linux::Rect;
     use crate::linux::proxy::{SINKS, Sink};
@@ -202,17 +202,6 @@ mod tests {
     use super::*;
 
     const WINDOW: &str = "window-1";
-
-    /// The injection path reads two process-global registries: `LAST_BUTTON` and
-    /// `CUSTOM_ID_MAP` (under the shared `WINDOW` key). Tests therefore run one
-    /// at a time rather than fighting over them.
-    static PRESS_STATE: Mutex<()> = Mutex::new(());
-
-    fn lock_press_state() -> MutexGuard<'static, ()> {
-        PRESS_STATE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 
     /// A connection the proxy can inject into. Injected bytes are written to the
     /// app side of a socketpair, so the test reads them off the peer.
@@ -243,10 +232,14 @@ mod tests {
         /// Drop the state another test may have left under this fd.
         fn forget(&self) {
             if let Some(m) = CONNS.get() {
-                m.lock().unwrap().remove(&self.fd);
+                m.lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&self.fd);
             }
             if let Some(m) = SINKS.get() {
-                m.lock().unwrap().remove(&self.fd);
+                m.lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&self.fd);
             }
         }
 
@@ -310,14 +303,40 @@ mod tests {
         fn drop(&mut self) {
             self.forget();
             if let Some(m) = CUSTOM_ID_MAP.get() {
-                m.lock().unwrap().remove(WINDOW);
+                m.lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(WINDOW);
             }
         }
     }
 
     #[test]
+    fn fixture_cleanup_does_not_panic_again_after_a_registry_is_poisoned() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let fixture = Fixture::new();
+        fn poison<T>(mutex: &Mutex<T>) {
+            assert!(
+                std::panic::catch_unwind(|| {
+                    let _guard = mutex.lock().unwrap();
+                    panic!("simulate a failed test while holding a registry");
+                })
+                .is_err()
+            );
+        }
+        poison(CONNS.get().unwrap());
+        poison(SINKS.get().unwrap());
+        poison(CUSTOM_ID_MAP.get().unwrap());
+        let cleanup = std::panic::catch_unwind(|| drop(fixture));
+        // Do not leave intentional poison behind for subsequent fixtures.
+        CONNS.get().unwrap().clear_poison();
+        SINKS.get().unwrap().clear_poison();
+        CUSTOM_ID_MAP.get().unwrap().clear_poison();
+        assert!(cleanup.is_ok());
+    }
+
+    #[test]
     fn clearing_the_input_region_sends_only_the_surface_request() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut fixture = Fixture::new();
         fixture.with_connection();
 
@@ -332,7 +351,7 @@ mod tests {
 
     #[test]
     fn setting_rects_creates_populates_assigns_and_releases_the_region() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut fixture = Fixture::new();
         fixture.with_connection();
         let rects = [
@@ -372,7 +391,7 @@ mod tests {
 
     #[test]
     fn an_unknown_window_id_injects_nothing() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut fixture = Fixture::new();
         fixture.with_connection();
 
@@ -383,7 +402,7 @@ mod tests {
 
     #[test]
     fn a_region_needs_a_compositor() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut fixture = Fixture::new();
         fixture.with_connection();
         fixture.with_conn(|conn| conn.compositor_id = None);
@@ -401,7 +420,7 @@ mod tests {
 
     #[test]
     fn a_failed_injection_returns_the_id_to_the_pool() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let fixture = Fixture::new();
         fixture.with_connection();
 
@@ -426,7 +445,7 @@ mod tests {
 
     #[test]
     fn a_toplevel_move_replays_the_remembered_press() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut fixture = Fixture::new();
         fixture.with_connection();
         fixture.with_conn(|conn| {
@@ -456,7 +475,7 @@ mod tests {
 
     #[test]
     fn a_toplevel_move_falls_back_to_the_xdg_chain() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut fixture = Fixture::new();
         fixture.with_connection();
         fixture.with_conn(|conn| {
@@ -493,7 +512,7 @@ mod tests {
 
     #[test]
     fn a_toplevel_move_needs_a_press_a_toplevel_and_a_sink() {
-        let _serial = lock_press_state();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut fixture = Fixture::new();
         fixture.with_connection();
 

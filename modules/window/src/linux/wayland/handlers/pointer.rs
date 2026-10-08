@@ -62,6 +62,7 @@ mod tests {
 
     #[test]
     fn left_and_right_clicks_both_capture_the_parent_relative_anchor() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         const LEFT_BUTTON: u32 = 0x110;
         const RIGHT_BUTTON: u32 = 0x111;
         for button in [LEFT_BUTTON, RIGHT_BUTTON] {

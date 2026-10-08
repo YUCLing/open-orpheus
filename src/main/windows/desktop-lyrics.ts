@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 import { BrowserWindow, screen } from "electron";
-import type { BrowserWindowConstructorOptions } from "electron";
+import type { BrowserWindowConstructorOptions, Rectangle } from "electron";
 import photon from "@silvia-odwyer/photon-node";
 import { DesktopEnvironment, dragWindow, getDesktopEnvironment } from "@open-orpheus/window";
 
@@ -23,6 +23,15 @@ import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
 import { registerLyricsHandlers } from "../../bridge/common/lyrics";
 import { registerSettingsHandlers } from "../../bridge/common/settings";
 import { events as settingsEvents, kv as settings } from "../settings";
+import { clearMenuTrigger, rememberMenuTrigger } from "../menu/trigger";
+import {
+  getWindowStackingAdapter,
+  initializeWindowStackingAdapter,
+  disableWindowStackingAdapter,
+  type WindowStackingAdapter,
+  type StackingResult,
+} from "./stacking-adapter";
+import { toError } from "../../util";
 
 export const lyricsStyle: LyricsStyle = {
   font: {
@@ -95,6 +104,23 @@ const desktopLyricsWindowOptions = {
 } satisfies BrowserWindowConstructorOptions;
 
 function setupDesktopLyricsWindow(wnd: BrowserWindow): BrowserWindow {
+  const managed = ManagedWindow.fromBrowserWindow(wnd);
+  const adapter = getWindowStackingAdapter();
+  if (managed && adapter) {
+    const applyStacking = () => {
+      if (wnd.isDestroyed()) return;
+      // A lifecycle hand-off transfers the previous wrapper's title. Renew
+      // the adapter identity for this wrapper before sending its request.
+      managed.setTitle(lyricsWindowTitle(managed));
+      requestLyricsStacking(adapter, managed);
+    };
+    wnd.on("show", applyStacking);
+    wnd.once("closed", () => {
+      void adapter.release(managed.id).catch((err) => {
+        LOGGER.warn({ err: toError(err) }, "Failed to release lyrics stacking adapter");
+      });
+    });
+  }
   void wnd.loadURL(guiUrl("/desktop-lyrics"));
 
   wnd.on("blur", () => {
@@ -114,6 +140,12 @@ function setupDesktopLyricsWindow(wnd: BrowserWindow): BrowserWindow {
       updateLyricsPlayInfo(lyricsPlayInfo);
     },
     performAction: async (_event, action: string) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        clearMenuTrigger(mainWindow);
+        if (action === "setting" && de === DesktopEnvironment.Wayland) {
+          rememberMenuTrigger(mainWindow, wnd);
+        }
+      }
       performAction(action);
     },
     onMouseWheel: async (_event, pageX: number, pageY: number, delta: number, modifier = 0) => {
@@ -156,30 +188,118 @@ function notifyDesktopLyricsClose() {
   performAction("close");
 }
 
+function lyricsWindowTitle(managed: ManagedWindow): string {
+  return getWindowStackingAdapter()
+    ? `${desktopLyricsWindowOptions.title} (${process.pid}:${managed.id})`
+    : desktopLyricsWindowOptions.title;
+}
+
 class DesktopLyricsWindow extends ManagedWindow {
-  constructor() {
+  constructor(topMost: boolean, bounds?: Rectangle) {
     super();
     this.setData("name", "desktop_lyrics");
+    this.setData("alwaysOnTop", topMost);
     this.requestCloseApproval(notifyDesktopLyricsClose);
-    setupDesktopLyricsWindow(this.createBrowserWindow(desktopLyricsWindowOptions));
+    setupDesktopLyricsWindow(
+      this.createBrowserWindow({
+        ...desktopLyricsWindowOptions,
+        ...bounds,
+        title: lyricsWindowTitle(this),
+      })
+    );
   }
 }
 
 class DesktopLyricsOnDemandWindow extends OnDemandWindow {
-  constructor() {
+  constructor(
+    topMost: boolean,
+    private readonly bounds?: Rectangle
+  ) {
     super();
     this.setData("name", "desktop_lyrics");
+    this.setData("alwaysOnTop", topMost);
     this.requestCloseApproval(notifyDesktopLyricsClose);
   }
 
   createWindow(): BrowserWindow {
-    return setupDesktopLyricsWindow(this.createBrowserWindow(desktopLyricsWindowOptions));
+    return setupDesktopLyricsWindow(
+      this.createBrowserWindow({
+        ...desktopLyricsWindowOptions,
+        ...this.bounds,
+        title: lyricsWindowTitle(this),
+      })
+    );
   }
 }
 
 /** `"on-demand"` destroys the window when hidden; anything else keeps it. */
-function createWindowForLifecycle(value: unknown): ManagedWindow {
-  return value === "on-demand" ? new DesktopLyricsOnDemandWindow() : new DesktopLyricsWindow();
+function createWindowForLifecycle(
+  value: unknown,
+  topMost = false,
+  bounds?: Rectangle
+): ManagedWindow {
+  return value === "on-demand"
+    ? new DesktopLyricsOnDemandWindow(topMost, bounds)
+    : new DesktopLyricsWindow(topMost, bounds);
+}
+
+/** Replace the surface without asking the player to close its lyrics. */
+function replaceLyricsWindow(lifecycle: unknown, topMost: boolean) {
+  const bounds = window.window?.getBounds();
+  window.setData("alwaysOnTop", topMost);
+  window = switchWindowPolicy(window, () => createWindowForLifecycle(lifecycle, topMost, bounds));
+}
+
+/** The player's existing "always on top" option is the only source of truth. */
+export function setLyricsAlwaysOnTop(topMost: boolean) {
+  if (!window) return;
+  window.setAlwaysOnTop(topMost);
+  const adapter = getWindowStackingAdapter();
+  if (adapter) {
+    window.setTitle(lyricsWindowTitle(window));
+    requestLyricsStacking(adapter, window);
+  }
+}
+
+const stackingRequestSequence = new WeakMap<ManagedWindow, number>();
+
+function requestLyricsStacking(adapter: WindowStackingAdapter, managed: ManagedWindow) {
+  const sequence = (stackingRequestSequence.get(managed) ?? 0) + 1;
+  stackingRequestSequence.set(managed, sequence);
+  void adapter
+    .setAbove(
+      { id: managed.id, title: managed.title, pid: process.pid },
+      Boolean(managed.getData("alwaysOnTop"))
+    )
+    .then(
+      (result) => {
+        if (stackingRequestSequence.get(managed) === sequence)
+          handleStackingResult(adapter, managed, result);
+      },
+      (err) => {
+        LOGGER.warn({ err: toError(err) }, "Lyrics stacking request rejected");
+        if (stackingRequestSequence.get(managed) === sequence)
+          handleStackingResult(adapter, managed, "failed");
+      }
+    )
+    .catch((err) => {
+      LOGGER.error({ err: toError(err) }, "Could not restore the lyrics fallback policy");
+    });
+}
+
+function handleStackingResult(
+  adapter: WindowStackingAdapter,
+  managed: ManagedWindow,
+  result: StackingResult
+) {
+  if (result !== "unsupported" && result !== "failed") return;
+  if (window !== managed || !managed.window || managed.window.isDestroyed()) return;
+  if (!disableWindowStackingAdapter(adapter)) return;
+  LOGGER.warn({ result }, "Lyrics stacking adapter failed; using the existing window policy");
+  replaceLyricsWindow(
+    managed instanceof OnDemandWindow ? "on-demand" : undefined,
+    Boolean(managed.getData("alwaysOnTop"))
+  );
 }
 
 let lifecycleSwitchRegistered = false;
@@ -196,12 +316,13 @@ function registerLifecycleSwitch() {
 
   settingsEvents.on("change", (e) => {
     if (e.data.key !== "window.lifecycle" || !window) return;
-    window = switchWindowPolicy(window, () => createWindowForLifecycle(e.data.value));
+    replaceLyricsWindow(e.data.value, window.getData("alwaysOnTop") ?? false);
   });
 }
 
 export let window: ManagedWindow;
 export default async function createDesktopLyricsWindow() {
+  await initializeWindowStackingAdapter();
   window = createWindowForLifecycle(await settings.get("window.lifecycle"));
   registerLifecycleSwitch();
 }

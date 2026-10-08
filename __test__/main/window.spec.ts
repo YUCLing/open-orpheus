@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BrowserWindow } from "electron";
+import { installLoggerStub } from "../helpers/globals";
 
 /** Every TypeScript source file under `dir`, recursively. */
 async function collectSourceFiles(dir: string): Promise<string[]> {
@@ -64,6 +65,13 @@ const hoisted = vi.hoisted(() => {
     shutdownFinalizers: [] as Array<{ name: string; run: () => void }>,
     drainWindowCallbacks: vi.fn(),
     appOnCalls,
+    lyricsLifecycle: "normal",
+    stackingAdapterEnabled: false,
+    setAbove: vi.fn(async () => "requested"),
+    releaseStacking: vi.fn(async () => {}),
+    lyricsSettingsCallbacks: [] as Array<
+      (event: { data: { key: string; value: unknown } }) => void
+    >,
     appOn: vi.fn((event: string, handler: unknown) => {
       appOnCalls.push([event, handler]);
     }),
@@ -84,7 +92,33 @@ vi.mock("@open-orpheus/window", () => ({
   decorateWindowTitle: hoisted.decorateTitle,
   drainWindowCallbacks: hoisted.drainWindowCallbacks,
   isLayerShellAvailable: hoisted.layerShellAvailable,
+  dragWindow: vi.fn(),
 }));
+
+vi.mock("@silvia-odwyer/photon-node", () => ({ default: {} }));
+vi.mock("../../src/main/windows/stacking-adapter", () => ({
+  disableWindowStackingAdapter: vi.fn(() => {
+    hoisted.stackingAdapterEnabled = false;
+    return true;
+  }),
+  initializeWindowStackingAdapter: vi.fn(async () => {}),
+  getWindowStackingAdapter: () =>
+    hoisted.stackingAdapterEnabled
+      ? { setAbove: hoisted.setAbove, release: hoisted.releaseStacking }
+      : null,
+}));
+vi.mock("../../src/main/settings", () => ({
+  kv: { get: async () => hoisted.lyricsLifecycle },
+  events: {
+    on: (_event: string, callback: (event: { data: { key: string; value: unknown } }) => void) => {
+      hoisted.lyricsSettingsCallbacks.push(callback);
+      return () => {};
+    },
+  },
+}));
+vi.mock("../../src/bridge/common/inputRegion", () => ({ registerInputRegionHandlers: vi.fn() }));
+vi.mock("../../src/bridge/common/lyrics", () => ({ registerLyricsHandlers: vi.fn() }));
+vi.mock("../../src/bridge/common/settings", () => ({ registerSettingsHandlers: vi.fn() }));
 
 vi.mock("../../src/main/lifecycle", () => ({
   LifecycleState: {
@@ -243,8 +277,202 @@ vi.mock("electron", () => {
   return {
     app: { on: hoisted.appOn, whenReady: hoisted.whenReady },
     BrowserWindow: FakeBrowserWindow,
+    screen: {
+      getCursorScreenPoint: () => ({ x: 0, y: 0 }),
+      getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    },
     shell: { openExternal: vi.fn() },
   };
+});
+
+describe("desktop lyrics always-on-top option", () => {
+  let lyrics: typeof import("../../src/main/windows/desktop-lyrics");
+
+  beforeEach(async () => {
+    installLoggerStub();
+    vi.stubGlobal("GUI_VITE_DEV_SERVER_URL", undefined);
+    hoisted.lyricsLifecycle = "normal";
+    lyrics ??= await import("../../src/main/windows/desktop-lyrics");
+    lyrics.window?.destroy();
+    await lyrics.default();
+  });
+
+  afterEach(() => {
+    lyrics.window.destroy();
+    hoisted.stackingAdapterEnabled = false;
+    vi.unstubAllGlobals();
+  });
+
+  it("uses the desktop adapter without replacing the ordinary lyrics window", async () => {
+    hoisted.stackingAdapterEnabled = true;
+    lyrics.window.destroy();
+    await lyrics.default();
+    const initial = lyrics.window;
+    const wnd = asFake(initial.window);
+    wnd.show();
+    lyrics.setLyricsAlwaysOnTop(true);
+    expect(lyrics.window).toBe(initial);
+    expect(initial.layerShell).toBeNull();
+    expect(wnd.isDestroyed()).toBe(false);
+    expect(hoisted.setAbove).toHaveBeenLastCalledWith(
+      { id: initial.id, title: initial.title, pid: process.pid },
+      true
+    );
+    lyrics.setLyricsAlwaysOnTop(false);
+    expect(lyrics.window).toBe(initial);
+    expect(hoisted.setAbove).toHaveBeenLastCalledWith(
+      { id: initial.id, title: initial.title, pid: process.pid },
+      false
+    );
+    initial.destroy();
+    expect(hoisted.releaseStacking).toHaveBeenCalledWith(initial.id);
+  });
+
+  it("recreates the lyrics through the existing policy after a backend failure", async () => {
+    hoisted.stackingAdapterEnabled = true;
+    lyrics.window.destroy();
+    await lyrics.default();
+    const previous = lyrics.window;
+    hoisted.setAbove.mockResolvedValueOnce("failed");
+    lyrics.setLyricsAlwaysOnTop(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(hoisted.stackingAdapterEnabled).toBe(false);
+    expect(lyrics.window).not.toBe(previous);
+    expect(lyrics.window.getData("alwaysOnTop")).toBe(true);
+    expect(lyrics.window.layerShell).toBeNull();
+    expect(asFake(lyrics.window.window).setAlwaysOnTop).toHaveBeenLastCalledWith(true);
+    expect(hoisted.releaseStacking).toHaveBeenCalledWith(previous.id);
+  });
+
+  it("renews adapter identity when lifecycle switching transfers the previous title", async () => {
+    hoisted.stackingAdapterEnabled = true;
+    lyrics.window.destroy();
+    await lyrics.default();
+    lyrics.setLyricsAlwaysOnTop(true);
+    asFake(lyrics.window.window).show();
+    const oldTitle = lyrics.window.title;
+    for (const callback of hoisted.lyricsSettingsCallbacks) {
+      callback({ data: { key: "window.lifecycle", value: "on-demand" } });
+    }
+    asFake(lyrics.window.window).emit("ready-to-show");
+    for (const callback of hoisted.lyricsSettingsCallbacks) {
+      callback({ data: { key: "window.lifecycle", value: "normal" } });
+    }
+    expect(lyrics.window.title).not.toBe(oldTitle);
+    expect(lyrics.window.title).toBe(`Open Orpheus Lyrics (${process.pid}:${lyrics.window.id})`);
+    expect(hoisted.setAbove).toHaveBeenLastCalledWith(
+      { id: lyrics.window.id, title: lyrics.window.title, pid: process.pid },
+      true
+    );
+  });
+
+  it("starts as an ordinary window until the player requests always-on-top", () => {
+    expect(lyrics.window.layerShell).toBeNull();
+    expect(lyrics.window.getData("alwaysOnTop")).toBe(false);
+    const initial = lyrics.window;
+    lyrics.setLyricsAlwaysOnTop(false);
+    expect(lyrics.window).toBe(initial);
+  });
+
+  it("uses Electron on the same visible window even when layer shell is available", () => {
+    hoisted.layerShellAvailable.mockReturnValue(true);
+    const initial = lyrics.window;
+    const old = asFake(lyrics.window.window);
+    old.setBounds({ x: 112, y: 229, width: 640, height: 120 });
+    lyrics.window.setWindowInputRegion(regions);
+    old.show();
+    lyrics.setLyricsAlwaysOnTop(true);
+    expect(lyrics.window).toBe(initial);
+    expect(old.isDestroyed()).toBe(false);
+    expect(lyrics.window.getData("alwaysOnTop")).toBe(true);
+    expect(lyrics.window.layerShell).toBeNull();
+    expect(old.setAlwaysOnTop).toHaveBeenLastCalledWith(true);
+    expect(asFake(lyrics.window.window).isVisible()).toBe(true);
+    expect(asFake(lyrics.window.window).getBounds()).toEqual({
+      x: 112,
+      y: 229,
+      width: 640,
+      height: 120,
+    });
+    expect(hoisted.setInputRegion).toHaveBeenCalledWith(
+      lyrics.window.id,
+      regions.map(({ x, y, width, height }) => ({ x, y, w: width, h: height }))
+    );
+  });
+
+  it("turns the option off on the same ordinary window without changing bounds", () => {
+    asFake(lyrics.window.window).setBounds({ x: 112, y: 229, width: 640, height: 120 });
+    lyrics.setLyricsAlwaysOnTop(true);
+    const ordinary = asFake(lyrics.window.window);
+    lyrics.setLyricsAlwaysOnTop(false);
+    expect(ordinary.isDestroyed()).toBe(false);
+    expect(ordinary.setAlwaysOnTop).toHaveBeenLastCalledWith(false);
+    expect(lyrics.window.layerShell).toBeNull();
+    expect(lyrics.window.getData("alwaysOnTop")).toBe(false);
+    expect(asFake(lyrics.window.window).getBounds()).toEqual({
+      x: 112,
+      y: 229,
+      width: 640,
+      height: 120,
+    });
+  });
+
+  it("does not recreate the window for repeated requests with the same option", () => {
+    lyrics.setLyricsAlwaysOnTop(true);
+    const ordinary = lyrics.window;
+    lyrics.setLyricsAlwaysOnTop(true);
+    expect(lyrics.window).toBe(ordinary);
+    expect(lyrics.window.layerShell).toBeNull();
+  });
+
+  it.each([WAYLAND, X11, 2, 3])(
+    "keeps the original API when layer shell is unavailable on desktop %s",
+    (desktop) => {
+      hoisted.desktop.mockReturnValue(desktop);
+      hoisted.layerShellAvailable.mockReturnValue(false);
+      const initial = lyrics.window;
+      const wnd = asFake(initial.window);
+      lyrics.setLyricsAlwaysOnTop(true);
+      expect(lyrics.window).toBe(initial);
+      expect(initial.layerShell).toBeNull();
+      expect(wnd.setAlwaysOnTop).toHaveBeenLastCalledWith(true);
+    }
+  );
+
+  it("keeps a hidden window hidden when changing always-on-top", () => {
+    lyrics.setLyricsAlwaysOnTop(true);
+    expect(asFake(lyrics.window.window).isVisible()).toBe(false);
+  });
+
+  it("forwards focus loss to the existing lyrics controls renderer", () => {
+    lyrics.setLyricsAlwaysOnTop(true);
+    const wnd = asFake(lyrics.window.window);
+    wnd.emit("blur");
+    expect(wnd.webContents.send).toHaveBeenCalledWith("desktopLyrics.blur");
+  });
+
+  it("preserves the option and size when changing lifecycle to on-demand", () => {
+    asFake(lyrics.window.window).setBounds({ x: 100, y: 200, width: 640, height: 120 });
+    lyrics.setLyricsAlwaysOnTop(true);
+    for (const callback of hoisted.lyricsSettingsCallbacks) {
+      callback({ data: { key: "window.lifecycle", value: "on-demand" } });
+    }
+    expect(lyrics.window).toBeInstanceOf(OnDemandWindow);
+    expect(lyrics.window.window).toBeNull();
+    void lyrics.window.show();
+    const wnd = asFake(lyrics.window.window);
+    wnd.emit("ready-to-show");
+    expect(lyrics.window.layerShell).toBeNull();
+    expect(wnd.setAlwaysOnTop).toHaveBeenLastCalledWith(true);
+    expect(wnd.getBounds()).toEqual({ x: 100, y: 200, width: 640, height: 120 });
+    lyrics.setLyricsAlwaysOnTop(false);
+    const normal = asFake(lyrics.window.window);
+    normal.emit("ready-to-show");
+    expect(lyrics.window).toBeInstanceOf(OnDemandWindow);
+    expect(lyrics.window.layerShell).toBeNull();
+    expect(normal.isVisible()).toBe(true);
+  });
 });
 
 import { ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../../src/main/window";

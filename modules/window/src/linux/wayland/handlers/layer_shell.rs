@@ -55,6 +55,9 @@ pub(crate) fn on_registry_global_remove(conn: &mut WaylandConn, msg: &WlMessage)
 /// declaration is selected by the managed id resolved by `roles`, with unnamed
 /// declarations as a positional fallback. Missing preconditions leave the
 /// window an ordinary toplevel rather than risking a protocol error.
+/// Re-created toplevel objects on an existing layer surface are converted again.
+/// An ordinary toplevel surface cannot change roles; refusal uses its retained
+/// managed window ID even when destruction removed the application's lookup.
 ///
 /// A surface that already holds the role is converted again with the
 /// declaration that put it there, because the compositor will not hand the
@@ -239,6 +242,9 @@ pub(crate) fn on_client_toplevel_request(
 ) -> Action {
     match msg.opcode {
         REQ_DESTROY => {
+            if let Some(layer) = conn.layer_windows.get(&msg.object_id) {
+                state::cancel_pending_popup_for_parent(fd, layer.xdg_surface, conn);
+            }
             conn.purge(msg.object_id);
             Action::Replace(vec![layer_shell::destroy(msg.object_id)])
         }
@@ -376,8 +382,6 @@ pub(crate) fn on_decoration_object_request(conn: &mut WaylandConn, msg: &WlMessa
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, MutexGuard};
-
     use super::super::super::codec::{
         DECORATION_CLIENT_SIDE, EVT_DECORATION_CONFIGURE, EVT_GLOBAL, EVT_GLOBAL_REMOVE,
         EVT_LAYER_CLOSED, EVT_LAYER_CONFIGURE, EVT_TOPLEVEL_CLOSE, EVT_TOPLEVEL_CONFIGURE,
@@ -394,10 +398,6 @@ mod tests {
     use super::super::super::state::{self, CONNS, CUSTOM_ID_MAP};
     use super::super::super::test_support::{message, wl_string, word};
     use super::*;
-
-    /// The declaration queue and availability flag are process-global, so the
-    /// tests that touch them run one at a time.
-    static SERIAL: Mutex<()> = Mutex::new(());
 
     fn header(buf: &[u8]) -> (u32, u16, usize) {
         let packed = u32::from_ne_bytes(buf[4..8].try_into().unwrap());
@@ -473,15 +473,12 @@ mod tests {
         conn
     }
 
-    fn fixture() -> (MutexGuard<'static, ()>, WaylandConn) {
-        let guard = SERIAL
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+    fn fixture() -> WaylandConn {
         state::init_state();
         // Drain the declaration queue without touching the global connection
         // state other tests are using.
         while state::take_layer_window_declaration().is_some() {}
-        (guard, connected())
+        connected()
     }
 
     /// Convert the pending window the way the dispatcher would.
@@ -499,7 +496,8 @@ mod tests {
 
     #[test]
     fn named_declarations_are_consumed_and_cancelled_only_by_their_owner() {
-        let (_guard, _conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let _conn = fixture();
         assert!(state::declare_named_layer_window(
             options(),
             Some("layer-a".into())
@@ -517,7 +515,8 @@ mod tests {
 
     #[test]
     fn registry_globals_are_tracked_and_layer_shell_noticed() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
 
         let mut body = word(63);
         body.extend_from_slice(&wl_string("zwlr_layer_shell_v1"));
@@ -533,12 +532,10 @@ mod tests {
         assert!(conn.globals.contains_key(&63));
     }
 
-    /// Availability is read from the live connections, so a compositor that
-    /// withdraws the global is no longer reported as able to take layer
-    /// surfaces — the flag this used to keep could not go back to false.
     #[test]
     fn availability_follows_the_global_and_goes_away_with_it() {
-        let (_guard, _conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let _conn = fixture();
 
         // A connection with no globals yet: nothing is available.
         let registered = Registered::new(7, WaylandConn::new());
@@ -563,7 +560,8 @@ mod tests {
 
     #[test]
     fn a_global_that_is_not_layer_shell_is_only_recorded() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
 
         let mut body = word(64);
         body.extend_from_slice(&wl_string("wl_shm"));
@@ -579,7 +577,8 @@ mod tests {
 
     #[test]
     fn a_declaration_converts_the_next_toplevel() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         assert!(state::declare_layer_window(options()));
 
         let mut fx = Effects::default();
@@ -630,7 +629,8 @@ mod tests {
 
     #[test]
     fn without_a_declaration_the_toplevel_is_untouched() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
 
         let mut fx = Effects::default();
         let action = on_get_toplevel(
@@ -648,7 +648,8 @@ mod tests {
 
     #[test]
     fn a_declaration_without_a_layer_shell_falls_back_to_a_toplevel() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         conn.layer_shell_global = None;
         assert!(state::declare_layer_window(options()));
 
@@ -669,7 +670,8 @@ mod tests {
 
     #[test]
     fn client_toplevel_requests_are_never_forwarded() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         convert(&mut conn);
 
         // A title is captured and swallowed rather than reaching a surface
@@ -717,7 +719,8 @@ mod tests {
 
     #[test]
     fn xdg_surface_requests_are_translated() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         convert(&mut conn);
 
         // The compositor's xdg_surface has no role, so geometry is dropped.
@@ -755,7 +758,8 @@ mod tests {
 
     #[test]
     fn layer_events_are_synthesised_as_xdg_events() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         convert(&mut conn);
 
         let mut body = word(123);
@@ -784,7 +788,8 @@ mod tests {
 
     #[test]
     fn declarations_are_queued_cancelled_and_validated() {
-        let (_guard, _conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let _conn = fixture();
 
         assert!(state::declare_layer_window(options()));
         assert!(state::cancel_layer_window());
@@ -802,7 +807,8 @@ mod tests {
 
     #[test]
     fn a_declaration_without_size_or_anchors_covers_the_output() {
-        let (_guard, _conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let _conn = fixture();
 
         assert!(state::declare_layer_window(LayerShellOptions {
             namespace: "open-orpheus-layers".into(),
@@ -816,7 +822,8 @@ mod tests {
 
     #[test]
     fn decoration_for_a_layer_window_is_answered_client_side() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         convert(&mut conn);
 
         let mut body = word(60);
@@ -845,7 +852,8 @@ mod tests {
 
     #[test]
     fn decoration_for_an_ordinary_toplevel_is_forwarded() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
 
         let mut body = word(60);
         body.extend_from_slice(&word(30));
@@ -858,7 +866,8 @@ mod tests {
 
     #[test]
     fn popup_decoration_and_icon_requests_never_reach_the_compositor() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         conn.ifaces.insert(30, Iface::XdgPopupShim);
         let mut body = word(60);
         body.extend_from_slice(&word(30));
@@ -884,7 +893,8 @@ mod tests {
 
     #[test]
     fn requests_on_the_stub_decoration_are_dropped() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         conn.ifaces.insert(60, Iface::ZxdgToplevelDecoration);
 
         let action = on_decoration_object_request(&mut conn, &message(60, 1, &word(1)));
@@ -896,11 +906,10 @@ mod tests {
         assert!(!conn.ifaces.contains_key(&60));
     }
 
-    /// `set_icon(toplevel, icon)` — the icon object is fine, the toplevel it
-    /// names is not one the compositor knows about.
     #[test]
     fn set_icon_for_a_layer_window_is_dropped() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         convert(&mut conn);
 
         let mut body = word(30);
@@ -912,7 +921,8 @@ mod tests {
 
     #[test]
     fn set_icon_for_an_ordinary_toplevel_is_forwarded() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
 
         let mut body = word(30);
         body.extend_from_slice(&word(70));
@@ -921,13 +931,10 @@ mod tests {
         assert!(matches!(action, Action::Forward));
     }
 
-    /// Hiding and showing a window makes the client build a new xdg_toplevel
-    /// over the same wl_surface, which the compositor still knows as a layer
-    /// surface. Asking it for a toplevel there is a protocol error, so the new
-    /// role object has to be converted again.
     #[test]
     fn a_converted_surface_is_converted_again_for_a_new_toplevel() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         convert(&mut conn);
         assert!(conn.layer_surfaces.contains_key(&10));
 
@@ -957,7 +964,8 @@ mod tests {
 
     #[test]
     fn a_surface_that_was_never_converted_stays_ordinary() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         conn.ifaces.insert(40, Iface::XdgSurface);
         conn.xdg_to_wl.insert(40, 11);
 
@@ -974,7 +982,8 @@ mod tests {
 
     #[test]
     fn destroying_the_surface_forgets_its_layer_role() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         convert(&mut conn);
 
         conn.purge(10);
@@ -982,12 +991,10 @@ mod tests {
         assert!(conn.layer_surfaces.is_empty(), "a new surface starts clean");
     }
 
-    /// A surface that has been an ordinary toplevel can never take the layer
-    /// role — the compositor keeps the role for the surface's whole life and
-    /// answers the attempt with a fatal protocol error.
     #[test]
     fn a_surface_that_is_already_a_toplevel_is_not_converted() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         conn.toplevel_surfaces.insert(10);
         assert!(state::declare_layer_window(options()));
 
@@ -1007,15 +1014,10 @@ mod tests {
         assert!(conn.layer_surfaces.is_empty());
     }
 
-    /// The refusal is reported by the name the application knows the window
-    /// under, which is what lets it re-create the window.
-    ///
-    /// The name has to survive the destroy that clears the lookup the
-    /// application uses: at this point the old toplevel is gone and the new one
-    /// has not set a title yet.
     #[test]
     fn a_refused_role_is_reported_by_window_id() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         conn.toplevel_surfaces.insert(10);
         conn.surface_ids.insert(10, "4711".into());
         assert!(state::declare_layer_window(options()));
@@ -1037,11 +1039,10 @@ mod tests {
         assert_eq!(fx.layer_shell_refused.as_deref(), Some("4711"));
     }
 
-    /// A surface that was never a toplevel is still converted when a
-    /// declaration is waiting, so the guard cannot regress the normal path.
     #[test]
     fn an_unknown_surface_is_still_converted() {
-        let (_guard, mut conn) = fixture();
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
+        let mut conn = fixture();
         assert!(state::declare_layer_window(options()));
 
         let mut fx = Effects::default();

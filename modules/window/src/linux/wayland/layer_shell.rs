@@ -323,6 +323,7 @@ mod tests {
 
     #[test]
     fn sizes_and_opcodes_match_the_protocol() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         assert_eq!(header(&destroy(7)), (7, REQ_LAYER_DESTROY, 8));
         assert_eq!(header(&set_size(7, 1, 2)), (7, REQ_LAYER_SET_SIZE, 16));
         assert_eq!(header(&set_anchor(7, 15)), (7, REQ_LAYER_SET_ANCHOR, 12));
@@ -353,6 +354,7 @@ mod tests {
 
     #[test]
     fn bind_carries_the_interface_and_version() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let bytes = bind(1, 63, 5, 500);
         let (oid, op, size) = header(&bytes);
         assert_eq!((oid, op), (1, REQ_BIND));
@@ -375,6 +377,7 @@ mod tests {
 
     #[test]
     fn get_layer_surface_pads_the_namespace() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let bytes = get_layer_surface(9, 30, 10, LAYER_OVERLAY, "wl");
         let (oid, op, size) = header(&bytes);
         assert_eq!((oid, op), (9, REQ_GET_LAYER_SURFACE));
@@ -395,6 +398,7 @@ mod tests {
 
     #[test]
     fn popup_parents_are_nulled_in_place() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut body = Vec::new();
         push_u32(&mut body, 99);
         push_u32(&mut body, 77);
@@ -411,6 +415,7 @@ mod tests {
 
     #[test]
     fn validation_rejects_state_the_compositor_would_error_on() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let base = LayerShellOptions {
             namespace: "test".into(),
             anchor: ANCHOR_TOP | ANCHOR_BOTTOM | ANCHOR_LEFT | ANCHOR_RIGHT,
@@ -473,6 +478,7 @@ mod tests {
 
     #[test]
     fn an_empty_declaration_defaults_to_covering_the_output() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let empty = LayerShellOptions {
             namespace: "test".into(),
             ..Default::default()
@@ -506,6 +512,7 @@ mod tests {
 
     #[test]
     fn on_demand_keyboard_falls_back_before_version_four() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let options = LayerShellOptions {
             namespace: "test".into(),
             keyboard_interactivity: KEYBOARD_ON_DEMAND,

@@ -10,6 +10,8 @@ import { loadFromOrpheusUrl } from "../orpheus";
 import { getWindowScaleFactor, pngFromIco } from "../util";
 import { BasicManagedWindow, mainWindow, ManagedWindow } from "../window";
 import AppMenu from "../menu";
+import { takeMenuTrigger } from "../menu/trigger";
+import { takeTrayPanel } from "../menu/tray-panel";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
 import * as settings from "../settings";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
@@ -32,6 +34,10 @@ type MenuContainer = {
   menu_type: "normal";
 };
 type MenuRequest = [MenuContainer, number];
+
+// The renderer receives updates and click results; the triggering window owns
+// the menu lifetime. Keep only a weak routing reference across that boundary.
+const menuRequests = new WeakMap<BrowserWindow, { menu?: WeakRef<AppMenu> }>();
 
 // TODO: Implement this properly
 registerCallHandler<[], [boolean]>("winhelper.isWindowFullScreen", () => [false]);
@@ -323,7 +329,7 @@ registerCallHandler<MenuRequest, void>("winhelper.updateMenu", async (event, dat
   if (!wnd) return;
   const managed = ManagedWindow.fromBrowserWindow(wnd);
   if (!managed) return;
-  const menu = managed.getData("menu");
+  const menu = menuRequests.get(wnd)?.menu?.deref() ?? managed.getData("menu");
   if (!menu) {
     return;
   }
@@ -341,8 +347,13 @@ function parseMenuData(menuData: MenuRequest[0]) {
 registerCallHandler<MenuRequest, void>("winhelper.popupMenu", async (event, data, id) => {
   const wnd = BrowserWindow.fromWebContents(event.sender);
   if (!wnd) return;
-  const managed = ManagedWindow.fromBrowserWindow(wnd);
+  // A lyrics action is handled by the web app in the main window, but its
+  // native popup and pointer anchor belong to the window that was clicked.
+  const menuParent = takeMenuTrigger(wnd) ?? wnd;
+  const managed = ManagedWindow.fromBrowserWindow(menuParent);
   if (!managed) return;
+  const request: { menu?: WeakRef<AppMenu> } = {};
+  menuRequests.set(wnd, request);
   const parsedMenuData = parseMenuData(data);
   const platform = os.platform();
   const injectShowMainWindowMenuItem =
@@ -390,10 +401,42 @@ registerCallHandler<MenuRequest, void>("winhelper.popupMenu", async (event, data
     }
     event.sender.send("channel.call", "winhelper.onmenuclick", itemId, id);
   };
-  const menu = new AppMenu(parsedMenuData.content);
+  const isTrayMenu = parsedMenuData.content.some((item) => item.menu_id === "exitApp");
+  // Settings lookup may have yielded to another renderer request. Do not let
+  // an older call consume the newer tray activation's reservation.
+  if (
+    menuRequests.get(wnd) !== request ||
+    wnd.isDestroyed() ||
+    menuParent.isDestroyed() ||
+    event.sender.isDestroyed()
+  )
+    return;
+  const trayPanel = isTrayMenu ? await takeTrayPanel(event.sender.id) : undefined;
+  if (
+    trayPanel === null ||
+    menuRequests.get(wnd) !== request ||
+    wnd.isDestroyed() ||
+    menuParent.isDestroyed() ||
+    event.sender.isDestroyed()
+  ) {
+    trayPanel?.cancel();
+    return;
+  }
+  const menu = new AppMenu(parsedMenuData.content, trayPanel, isTrayMenu);
+  request.menu = new WeakRef(menu);
+  menu.on("close", () => {
+    if (menuRequests.get(wnd) === request) menuRequests.delete(wnd);
+  });
+  if (menuParent !== wnd) {
+    const dismiss = () => menu.close();
+    wnd.once("closed", dismiss);
+    menu.on("close", () => {
+      wnd.off("closed", dismiss);
+    });
+  }
   managed.setMenu(menu);
   menu.setClickHandler(onClick);
-  await menu.show(wnd);
+  await menu.show(menuParent);
 });
 
 registerCallHandler<[string], void>("winhelper.setClipBoardData", (event, data) => {

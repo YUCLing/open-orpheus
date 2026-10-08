@@ -344,6 +344,7 @@ mod deleted_id_tests {
 
     #[test]
     fn a_reserved_id_is_not_recycled_twice_or_returned_to_the_client() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         let deleted = message(1, 1, &42_u32.to_ne_bytes());
         assert!(matches!(
@@ -359,6 +360,7 @@ mod deleted_id_tests {
 
     #[test]
     fn a_full_pool_still_suppresses_duplicates_but_forwards_new_ids() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.stolen_ids = (10..42).collect();
         let duplicate = message(1, 1, &10_u32.to_ne_bytes());
@@ -379,6 +381,7 @@ mod popup_shadow_tests {
 
     #[test]
     fn positioner_uses_content_size_and_preserves_the_anchor() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         use super::super::super::{
             codec::{REQ_GET_TOPLEVEL, decode},
             state::{self, PENDING_POPUPS, PendingPopup},
@@ -453,6 +456,7 @@ mod popup_shadow_tests {
 
     #[test]
     fn geometry_excludes_shadow_and_configure_restores_buffer_size() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = padded_connection();
         let raw = request(40, 3, 24, &[0, 0, 280, 329]);
         let msg = WlMessage::new(40, 3, raw);
@@ -474,6 +478,7 @@ mod popup_shadow_tests {
 
     #[test]
     fn shadow_state_dies_with_role_surface_and_connection() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         for id in [10, 40, 50] {
             let mut conn = padded_connection();
             conn.purge(id);

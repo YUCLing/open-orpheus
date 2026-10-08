@@ -16,7 +16,8 @@ import {
 import { createPopupProbeWindow } from "./windows";
 
 // A desktop name or an xdg-shell global cannot prove our role mapping works.
-// Cache confirmed support in this process; retry inconclusive probes.
+// Cache the completed startup probe, including failure, for this process.
+// A cancelled probe may retry with a live parent.
 let nativePopupSupported: boolean | undefined;
 let popupSupportProbe: Promise<boolean> | null = null;
 
@@ -39,7 +40,8 @@ export async function initializeWaylandPopupSupport(parent: BrowserWindow): Prom
   }
   popupSupportProbe = probePopup(parent)
     .then((result) => {
-      // Missing role data, timeouts and cancellation do not prove incompatibility.
+      // Cancellation is not a completed capability check. A timed-out probe
+      // chooses overlay for this session instead of delaying every menu click.
       if (result !== null && nativePopupSupported === undefined) {
         nativePopupSupported = result;
       }
@@ -92,30 +94,30 @@ async function probePopup(parent: BrowserWindow): Promise<boolean | null> {
                 probe.showInactive();
                 void waitForWaylandPopup(waylandWindowId(probe), isCancelled).then(
                   (converted) => {
-                    finish(converted ? true : null);
+                    finish(converted);
                   },
                   (error) => {
                     LOGGER.warn({ err: toError(error) }, "Wayland popup probe conversion failed");
-                    finish(null);
+                    finish(false);
                   }
                 );
               } catch (error) {
                 LOGGER.warn({ err: toError(error) }, "Wayland popup probe show failed");
-                finish(null);
+                finish(false);
               }
             },
             (_reason, error) => {
               if (error !== undefined) {
                 LOGGER.warn({ err: toError(error) }, "Wayland popup probe arming failed");
               }
-              finish(null);
+              finish(false);
             },
             0
           )
         );
       } catch (error) {
         LOGGER.warn({ err: toError(error) }, "Wayland popup probe initialization failed");
-        finish(null);
+        finish(false);
       }
     });
     return cancelled ? null : supported;

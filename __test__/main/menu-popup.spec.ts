@@ -97,7 +97,9 @@ vi.mock("../../src/main/menu/popup-support", () => ({
   initializeWaylandPopupSupport: () => Promise.resolve(mocks.supportsPopup()),
 }));
 vi.mock("../../src/main/window", () => ({
-  ManagedWindow: { fromBrowserWindow: (wnd: { id: string }) => ({ id: wnd.id }) },
+  ManagedWindow: {
+    fromBrowserWindow: (wnd: { id: string }) => ({ id: wnd.id, setTitle: vi.fn() }),
+  },
 }));
 vi.mock("../../src/main/menu/windows", () => ({
   createMenuWindow: vi.fn(() => {
@@ -245,6 +247,23 @@ describe("Wayland popup single-render opening", () => {
     return { root, handlers };
   }
 
+  it("keeps a popup open when its focus returns before the blur deadline", async () => {
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    root.emit("blur");
+    root.isFocused = () => true;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(root.destroyed).toBe(false);
+  });
+
+  it("still dismisses a popup that remains unfocused after the blur deadline", async () => {
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    root.emit("blur");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(root.destroyed).toBe(true);
+  });
+
   it.each(["gnome", "niri", "kde", "other"])(
     "prefers the same native popup on %s",
     async (platform) => {
@@ -283,6 +302,66 @@ describe("Wayland popup single-render opening", () => {
     expect(mocks.roots).toHaveLength(0);
     expect(mocks.arm).not.toHaveBeenCalled();
     expect(mocks.overlays.at(-1)?.destroyed).toBe(false);
+  });
+
+  it("lets the desktop position tray panels without anchoring to the main window", async () => {
+    const panel = {
+      title: "Open Orpheus Tray Panel test",
+      place: vi.fn(async () => {}),
+      cancel: vi.fn(),
+      onDismiss: vi.fn((_callback: () => void) => vi.fn()),
+    };
+    menu = new AppMenu([], panel);
+    mocks.supportsPopup.mockReturnValue(false);
+    const parent = new mocks.Window("parent");
+    await menu.show(parent as never);
+    expect(mocks.supportsPopup).not.toHaveBeenCalled();
+    const root = mocks.roots[0];
+    const handlers = mocks.ipc.get(root.webContents)!;
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await Promise.resolve();
+    expect(panel.place).toHaveBeenCalledOnce();
+    expect(mocks.arm).not.toHaveBeenCalled();
+    expect(root.webContents.send).toHaveBeenCalledWith("menu.popupReady");
+    parent.emit("blur");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(root.destroyed).toBe(false);
+    panel.onDismiss.mock.calls[0][0]();
+    expect(panel.cancel).toHaveBeenCalledOnce();
+    expect(root.destroyed).toBe(true);
+    expect(panel.onDismiss.mock.results[0].value).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])(
+    "uses the original overlay for tray menus without an adapter, regardless of popup support (%s)",
+    async (supported) => {
+      menu = new AppMenu([], undefined, true);
+      mocks.supportsPopup.mockReturnValue(supported);
+      await menu.show(new mocks.Window("parent") as never);
+      expect(mocks.supportsPopup).not.toHaveBeenCalled();
+      expect(mocks.arm).not.toHaveBeenCalled();
+      expect(mocks.roots).toHaveLength(0);
+      expect(mocks.overlays).toHaveLength(1);
+      expect(mocks.overlays[0].destroyed).toBe(false);
+    }
+  );
+
+  it("restores the existing overlay if desktop tray-panel placement fails", async () => {
+    const panel = {
+      title: "Open Orpheus Tray Panel test",
+      place: vi.fn(async () => {
+        throw new Error("Missing adapter");
+      }),
+      cancel: vi.fn(),
+      onDismiss: vi.fn((_callback: () => void) => vi.fn()),
+    };
+    menu = new AppMenu([], panel);
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(root.destroyed).toBe(true);
+    expect(mocks.overlays).toHaveLength(1);
   });
 
   it("falls back to the existing overlay when the availability check throws", async () => {
@@ -519,5 +598,27 @@ describe("Wayland popup single-render opening", () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(root.destroyed).toBe(true);
     expect(child.destroyed).toBe(true);
+  });
+
+  it("dismisses native popups on blur", async () => {
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    root.emit("blur");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(root.destroyed).toBe(true);
+  });
+
+  it.each(["wayland", "windows"])("keeps a submenu that regains focus on %s", async (desktop) => {
+    mocks.desktop = desktop;
+    const { root, handlers } = await openRoot();
+    await handlers.reportSize(ipcEvent, 232, 281);
+    await handlers.openSubmenu(ipcEvent, [], {}, 232, 40);
+    const child = mocks.children[0];
+    await mocks.ipc.get(child.webContents)!.reportSize(ipcEvent, 120, 80);
+    child.emit("blur");
+    child.isFocused = () => true;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(root.destroyed).toBe(false);
+    expect(child.destroyed).toBe(false);
   });
 });

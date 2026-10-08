@@ -268,16 +268,23 @@ mod tests {
         fn forget(&self) {
             let fd = self.fd();
             for map in [RX_BUFS.get(), TX_BUFS.get()].into_iter().flatten() {
-                map.lock().unwrap().remove(&fd);
+                map.lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&fd);
             }
             for map in [RX_PENDING_CTRL.get(), TX_PENDING_CTRL.get()]
                 .into_iter()
                 .flatten()
             {
-                map.lock().unwrap().remove(&fd);
+                map.lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&fd);
             }
             if let Some(conns) = CONNS.get() {
-                conns.lock().unwrap().remove(&fd);
+                conns
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&fd);
             }
         }
 
@@ -315,6 +322,7 @@ mod tests {
 
     #[test]
     fn complete_messages_round_trip_byte_for_byte() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
 
@@ -334,6 +342,7 @@ mod tests {
 
     #[test]
     fn the_two_directions_buffer_independently() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
 
@@ -357,6 +366,7 @@ mod tests {
 
     #[test]
     fn control_data_waits_for_its_message() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
         let payload = message_bytes(3, 1, &[1, 2, 3, 4]);
@@ -390,6 +400,7 @@ mod tests {
 
     #[test]
     fn intercepted_events_are_swallowed_by_the_pipeline() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
         conn.register();
@@ -410,6 +421,7 @@ mod tests {
 
     #[test]
     fn answers_owed_to_the_client_survive_a_chunk_without_a_whole_message() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
         conn.register();
@@ -443,6 +455,7 @@ mod tests {
 
     #[test]
     fn what_the_codec_decodes_is_what_gets_forwarded() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
         conn.register();
@@ -461,6 +474,7 @@ mod tests {
 
     #[test]
     fn an_overlong_backlog_is_dropped_so_the_stream_resyncs() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
         // Registered so the resync has connection state to abandon.
@@ -499,6 +513,7 @@ mod tests {
 
     #[test]
     fn a_padded_message_round_trips_through_the_filter() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let conn = Conn::new();
 

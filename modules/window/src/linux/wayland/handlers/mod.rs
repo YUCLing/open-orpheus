@@ -168,6 +168,7 @@ mod tests {
 
     #[test]
     fn unknown_objects_and_opcodes_are_forwarded() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         let mut fx = Effects::default();
 
@@ -192,6 +193,7 @@ mod tests {
 
     #[test]
     fn registry_binds_are_tracked() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         let mut fx = Effects::default();
 
@@ -222,6 +224,7 @@ mod tests {
 
     #[test]
     fn device_creation_records_the_owning_seat() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         let mut fx = Effects::default();
         conn.ifaces.insert(3, Iface::WlSeat);
@@ -242,6 +245,7 @@ mod tests {
 
     #[test]
     fn window_object_creation_links_the_whole_chain() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         let mut fx = Effects::default();
         conn.ifaces.insert(2, Iface::WlCompositor);
@@ -281,6 +285,7 @@ mod tests {
 
     #[test]
     fn a_custom_title_is_recorded_and_stripped() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         init_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(30, Iface::XdgToplevel);
@@ -335,6 +340,7 @@ mod tests {
 
     #[test]
     fn pointer_events_track_focus_and_buttons() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(6, Iface::WlPointer);
         conn.pointer_seat.insert(6, 3);
@@ -385,6 +391,7 @@ mod tests {
 
     #[test]
     fn touch_downs_are_captured_for_the_owning_seat() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(7, Iface::WlTouch);
         conn.touch_seat.insert(7, 3);
@@ -413,6 +420,7 @@ mod tests {
 
     #[test]
     fn releasing_a_device_drops_its_tracking() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         conn.ifaces.insert(7, Iface::WlTouch);
         conn.touch_seat.insert(7, 3);
@@ -430,6 +438,7 @@ mod tests {
 
     #[test]
     fn destroyed_ids_are_stolen_up_to_a_limit() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
 
         let mut fx = Effects::default();
@@ -453,6 +462,7 @@ mod tests {
 
     #[test]
     fn injected_ids_are_recycled_regardless_of_the_cap() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let mut conn = WaylandConn::new();
         for id in 0..32 {
             conn.stolen_ids.push(id);

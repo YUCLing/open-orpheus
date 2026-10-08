@@ -7,10 +7,13 @@ import { mainWindow } from "./window";
 import { registerShutdownTask } from "./lifecycle";
 import { kv as settings } from "./settings";
 import showManageWindow from "./windows/manage";
+import { noteTrayMenuRequest } from "./menu/tray-panel";
+import { registerTrayActivation } from "./menu/tray-activation";
 
 import iconFilename from "../../assets/icon_256.png?no-inline";
 
 let quitRequested = false;
+let releaseTrayActivation: (() => void) | undefined;
 
 const defaultIconPath = resolve(import.meta.dirname, `.${iconFilename}`);
 const defaultMenuItems: MenuItemConstructorOptions[] = [
@@ -86,6 +89,13 @@ async function clickHandler() {
   // Linux can only receives click, so a different behavior is used
   // The `onclick` will be send when main window is invisible, and `onrightclick` will be send when main window is visible
   const clickBehavior = await settings.get("tray.clickBehavior");
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (
+    os.platform() === "linux" &&
+    (clickBehavior === "always-show-menu" ||
+      (mainWindow.isVisible() && clickBehavior !== "always-show-main-window"))
+  )
+    noteTrayMenuRequest(mainWindow.webContents.id);
   mainWindow.webContents.send(
     "channel.call",
     // We only send rightclick here if is Linux, the main window is visible, and the user has not set the click behavior to "always-show-main-window",
@@ -100,6 +110,7 @@ async function clickHandler() {
 
 function rightClickHandler() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
+  noteTrayMenuRequest(mainWindow.webContents.id);
   mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
 }
 
@@ -123,11 +134,7 @@ export function install() {
       Menu.buildFromTemplate([
         {
           label: "显示网易云音乐菜单",
-          click: () => {
-            // Although it can't be non-existing...
-            if (!mainWindow || mainWindow.isDestroyed()) return;
-            mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
-          },
+          click: rightClickHandler,
         },
         {
           type: "separator",
@@ -139,12 +146,15 @@ export function install() {
     trayIcon.setContextMenu(null);
   }
   trayInstalled = true;
+  releaseTrayActivation = registerTrayActivation(rightClickHandler);
 }
 
 export function uninstall() {
   if (!trayInstalled) {
     throw new Error("Tray icon not installed");
   }
+  releaseTrayActivation?.();
+  releaseTrayActivation = undefined;
   trayIcon.setToolTip("");
   trayIcon.off("click", clickHandler);
   trayIcon.off("right-click", rightClickHandler);
@@ -155,6 +165,8 @@ export function uninstall() {
 
 /** Destroy the tray icon on shutdown. */
 export function destroyTray() {
+  releaseTrayActivation?.();
+  releaseTrayActivation = undefined;
   trayIcon.destroy();
 }
 

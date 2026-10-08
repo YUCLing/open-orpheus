@@ -153,6 +153,7 @@ mod tests {
 
     #[test]
     fn foreign_window_cannot_consume_popup_and_initial_requests_keep_order() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let fd = 94_001;
         let mut conn = reserved(fd);
         assert!(send(fd, &mut conn, &message(40, REQ_GET_TOPLEVEL, &word(50))).is_empty());
@@ -200,6 +201,7 @@ mod tests {
 
     #[test]
     fn commit_without_identity_flushes_an_ordinary_role_instead_of_guessing() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let fd = 94_002;
         let mut conn = reserved(fd);
         send(fd, &mut conn, &message(40, REQ_GET_TOPLEVEL, &word(50)));
@@ -214,6 +216,7 @@ mod tests {
 
     #[test]
     fn cancellation_before_title_does_not_convert_a_destroyed_menu() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let fd = 94_003;
         let mut conn = reserved(fd);
         send(fd, &mut conn, &message(40, REQ_GET_TOPLEVEL, &word(50)));
@@ -233,6 +236,7 @@ mod tests {
 
     #[test]
     fn related_decoration_and_icon_initialization_wait_for_window_identity() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         for (fd, owner, converted) in [(94_004, "menu-target", true), (94_005, "foreign", false)] {
             let mut conn = reserved(fd);
             conn.ifaces.insert(7, Iface::ZxdgDecorationManager);
@@ -296,6 +300,7 @@ mod tests {
 
     #[test]
     fn another_windows_decoration_flushes_without_consuming_the_popup() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let fd = 94_006;
         let mut conn = reserved(fd);
         conn.ifaces.insert(7, Iface::ZxdgDecorationManager);
@@ -323,6 +328,7 @@ mod tests {
 
     #[test]
     fn decoration_destruction_flushes_queued_initialization_in_order() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let fd = 94_007;
         let mut conn = reserved(fd);
         conn.ifaces.insert(7, Iface::ZxdgDecorationManager);
@@ -351,6 +357,7 @@ mod tests {
 
     #[test]
     fn cancellation_with_queued_decoration_preserves_an_ordinary_window() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let fd = 94_008;
         let mut conn = reserved(fd);
         conn.ifaces.insert(7, Iface::ZxdgDecorationManager);

@@ -99,12 +99,10 @@ const submenuWindowOptions = {
 } satisfies BrowserWindowConstructorOptions;
 
 /** Popup menu opened next to the main menu. */
-export class SubmenuWindow extends ManagedWindow {
-  readonly browserWindow: BrowserWindow;
-
+class SubmenuWindow extends ManagedWindow {
   constructor(width = menuWindowOptions.width, height = menuWindowOptions.height) {
     super();
-    this.browserWindow = this.createBrowserWindow({ ...submenuWindowOptions, width, height });
+    this.createBrowserWindow({ ...submenuWindowOptions, width, height });
     this.loadGuiRoute("/menu");
   }
 }
@@ -140,7 +138,7 @@ export function createSubmenuWindow(
   width = menuWindowOptions.width,
   height = menuWindowOptions.height
 ): BrowserWindow {
-  return new SubmenuWindow(width, height).browserWindow;
+  return unwrap(new SubmenuWindow(width, height));
 }
 
 export function createOverlayWindow(): BrowserWindow {

@@ -7,6 +7,16 @@
 
 use super::codec::WlMessage;
 
+// Fixtures in different modules touch the same process-wide connection,
+// declaration and pointer registries. Per-module locks cannot isolate them.
+// This guard belongs to the test, never to production or its worker threads.
+pub(crate) fn lock_state() -> std::sync::MutexGuard<'static, ()> {
+    static STATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Round `len` up to the next multiple of 4, the Wayland word size.
 pub(crate) fn padded_len(len: usize) -> usize {
     len.next_multiple_of(4)
@@ -82,6 +92,7 @@ mod tests {
 
     #[test]
     fn a_message_is_padded_and_described_by_its_padded_length() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let padded = message_bytes(3, 1, &[1, 2, 3]);
 
         assert_eq!(padded.len(), 12, "8 + 3 rounds up to 12");
@@ -95,6 +106,7 @@ mod tests {
 
     #[test]
     fn a_string_length_counts_its_nul_terminator() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let aligned = wl_string("wlp");
         assert_eq!(
             u32::from_ne_bytes(aligned[..4].try_into().expect("4 bytes")),

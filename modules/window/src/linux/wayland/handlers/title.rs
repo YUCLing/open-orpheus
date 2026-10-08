@@ -73,6 +73,7 @@ mod tests {
 
     #[test]
     fn a_decorated_title_is_rewritten_without_the_id() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let message = set_title(31, "Now Playing");
         assert_eq!(header(&message), (31, REQ_SET_TITLE, 24));
 
@@ -85,6 +86,7 @@ mod tests {
 
     #[test]
     fn an_empty_real_title_is_still_a_valid_message() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let message = set_title(31, "");
         assert_eq!(header(&message), (31, REQ_SET_TITLE, 16));
         assert_eq!(&message[8..12], &1u32.to_ne_bytes());
@@ -92,6 +94,7 @@ mod tests {
 
     #[test]
     fn a_title_with_multibyte_characters_keeps_the_right_length() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let message = set_title(31, "曲名");
         assert_eq!(header(&message), (31, REQ_SET_TITLE, 20));
         let len = u32::from_ne_bytes(message[8..12].try_into().unwrap());
@@ -101,6 +104,7 @@ mod tests {
 
     #[test]
     fn the_decoration_round_trips_through_parse_and_rewrite() {
+        let _state_guard = crate::linux::wayland::test_support::lock_state();
         let decorated = decorate_title("4711", "Real Title");
         assert_eq!(parse_custom_title(&decorated), Some(("4711", "Real Title")));
         let rewritten = set_title(9, "Real Title");

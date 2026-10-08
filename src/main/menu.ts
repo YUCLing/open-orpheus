@@ -33,6 +33,7 @@ import type { ElementTemplate } from "./skin/dui";
 import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
 import type { AppMenuItem } from "$sharedTypes/menu";
 import { font } from "./gui";
+import { ManagedWindow } from "./window";
 import { toError } from "../util";
 import { isLiveFocusedWindow, runMenuCallbacks, scheduleMenuTask } from "./menu/lifecycle";
 import { overlayPolicy, workaroundEnabled, WorkaroundFlags } from "./menu/workaround";
@@ -43,6 +44,7 @@ import {
   waylandWindowId,
 } from "./menu/native-popup";
 import { initializeWaylandPopupSupport } from "./menu/popup-support";
+import type { TrayPanel } from "./menu/tray-panel";
 
 registerMenuSkinUpdater();
 
@@ -119,9 +121,17 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
   /** style path → parsed template, preloaded from skin pack */
   templates: Record<string, ElementTemplate> = {};
 
-  constructor(public items: AppMenuItem[]) {
+  constructor(
+    public items: AppMenuItem[],
+    private readonly trayPanel?: TrayPanel,
+    private readonly isTrayMenu = trayPanel !== undefined
+  ) {
     super();
     parseButtonUrls(this.items);
+    if (trayPanel) {
+      this.dismissCleanups.push(trayPanel.cancel);
+      this.dismissCleanups.push(trayPanel.onDismiss(() => this.close()));
+    }
   }
 
   setClickHandler(handler: MenuClickHandler) {
@@ -207,6 +217,16 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     try {
       const desktopEnvironment = getDesktopEnvironment();
       if (desktopEnvironment === DesktopEnvironment.Wayland) {
+        // The system tray is not a surface owned by the main window.
+        // Without a desktop adapter, retain the original overlay positioning.
+        if (this.isTrayMenu) {
+          if (parentWindow && this.trayPanel) {
+            this.showWaylandPopup(parentWindow);
+          } else {
+            this.showOverlay();
+          }
+          return;
+        }
         let supportsPopup = false;
         if (parentWindow) {
           try {
@@ -369,7 +389,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
       );
     };
     parentWindow.webContents.on("before-mouse-event", dismissOnParentInput);
-    parentWindow.on("blur", dismissOnParentBlur);
+    if (!this.trayPanel) parentWindow.on("blur", dismissOnParentBlur);
     parentWindow.once("closed", dismiss);
     this.dismissCleanups.push(() => {
       parentWindow.off("closed", dismiss);
@@ -392,6 +412,26 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
           width = actualWidth;
           height = actualHeight;
           popup?.setSize(width, height);
+          if (this.trayPanel && popup) {
+            const panel = popup;
+            ManagedWindow.fromBrowserWindow(panel)?.setTitle(this.trayPanel.title);
+            // The tray is owned by the desktop, not the main-window surface.
+            panel.showInactive();
+            void this.trayPanel.place().then(
+              () => {
+                if (!this.closed && !panel.isDestroyed() && activePopup === panel) {
+                  popupMapped = true;
+                  panel.webContents.send("menu.popupReady");
+                  panel.focus();
+                }
+              },
+              (err) => {
+                if (!this.closed && activePopup === panel)
+                  fallbackToOverlay("tray-panel placement failed", err);
+              }
+            );
+            return;
+          }
           const cancelArm = armNativeWaylandPopupWhenReady(
             waylandWindowId(parentWindow),
             waylandWindowId(popup!),
@@ -459,6 +499,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
             this.dismissCleanups,
             () => {
               if (activePopup !== popup) return;
+              if (isLiveFocusedWindow(popup)) return;
               if (isLiveFocusedWindow(this.submenuWindow)) return;
               dismiss();
             },
@@ -683,7 +724,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
         this.scheduleDismiss(
           this.submenuCleanups,
           () => {
-            if (!isCurrent() || parent.isFocused()) return;
+            if (!isCurrent() || popup.isFocused() || parent.isFocused()) return;
             this.close();
           },
           100
@@ -922,6 +963,7 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
             this.submenuCleanups,
             () => {
               if (generation !== this.submenuGeneration) return;
+              if (isLiveFocusedWindow(sub)) return;
               // If focus went back to the main menu, keep open.
               if (isLiveFocusedWindow(wnd)) return;
               this.close();
