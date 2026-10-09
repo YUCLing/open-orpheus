@@ -165,7 +165,7 @@ const config: ForgeConfig = {
       authors: pkg.author?.name ?? "",
       setupIcon: metadata.squirrel.setupIcon,
     }),
-    new MakerZIP({}, ["darwin"]),
+    new MakerZIP({}),
     new MakerFlatpak({
       id: metadata.appId,
       runtimeVersion: metadata.flatpak.runtimeVersion,
