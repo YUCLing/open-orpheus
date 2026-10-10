@@ -12,11 +12,35 @@ on:
         required: false
         type: string
         default: ""
+      sign:
+        description: Code sign the Windows package with SignPath
+        required: false
+        type: boolean
+        default: false
+      signing-policy-slug:
+        description: SignPath signing policy to sign with
+        required: false
+        type: string
+        default: "test-signing"
+    secrets:
+      SIGNPATH_API_TOKEN:
+        description: SignPath REST API token, used when signing is requested
+        required: false
 
 jobs:
   build:
     name: Build on ${{ inputs.runner }}
     runs-on: ${{ inputs.runner }}
+
+    permissions:
+      contents: read
+      # The signing action deletes its intermediate artifact again.
+      actions: write
+
+    env:
+      SIGNPATH_ORGANIZATION_ID: "78f52296-f235-4362-9707-5ba898c881dc"
+      SIGNPATH_PROJECT_SLUG: "open-orpheus"
+      SIGNPATH_SIGNING_POLICY_SLUG: ${{ inputs.signing-policy-slug }}
 
     steps:
       - name: Checkout repository
@@ -79,10 +103,79 @@ jobs:
           sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install -y flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08 org.electronjs.Electron2.BaseApp//26.08
 
-      - name: Build application bundles
-        run: pnpm make
+      - name: Package application
+        if: inputs.sign
         env:
           EXTRACT_LICENSES_TO: out/license
+        run: pnpm package
+
+      - name: Sign package
+        if: inputs.sign
+        uses: ./.github/actions/sign-artifact
+        with:
+          name: intermediate-unsigned-package-${{ inputs.runner }}
+          # The whole packaged directory, so every binary it contains is signed in
+          # one request. The hierarchy below the wildcard is kept, which is what
+          # lets the signed copy be extracted back over `out/`.
+          path: out/open-orpheus-win32-*
+          artifact-configuration-slug: zip
+          output-artifact-directory: out
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+
+      - name: Build application bundles
+        # Signing replaces the package in place, so the makers have to reuse it
+        # instead of repackaging over the signed files.
+        run: pnpm make ${{ inputs.sign && '--from-package' || '' }}
+        env:
+          EXTRACT_LICENSES_TO: out/license
+
+      # Squirrel appends its own binaries — `squirrel.exe` (installed as
+      # `Update.exe`) and the launcher stub — to the package *after* packing it,
+      # so the package pass above cannot cover them.
+      - name: Sign squirrel package
+        if: inputs.sign && runner.os == 'Windows'
+        uses: ./.github/actions/sign-artifact
+        with:
+          name: intermediate-unsigned-nupkg-${{ inputs.runner }}
+          path: out/make/squirrel.windows/*/*-full.nupkg
+          # A .nupkg is its own composite format, so upload it as a file instead
+          # of letting `upload-artifact` wrap it in a ZIP.
+          archive: "false"
+          artifact-configuration-slug: nupkg
+          output-artifact-directory: out/signed/squirrel
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+
+      # The installer embeds its own copy of the package, made before the package
+      # was signed: swap in the signed one, rebuild the payload and fix RELEASES.
+      - name: Rebuild squirrel installer
+        if: inputs.sign && runner.os == 'Windows'
+        id: squirrel-repack
+        run: node scripts/repack-squirrel.ts repack --signed-nupkg out/signed/squirrel
+
+      - name: Sign squirrel installer
+        if: inputs.sign && runner.os == 'Windows'
+        uses: ./.github/actions/sign-artifact
+        with:
+          name: intermediate-unsigned-setup-${{ inputs.runner }}
+          path: ${{ steps.squirrel-repack.outputs.release-dir }}/*Setup.exe
+          archive: "false"
+          output-artifact-directory: ${{ steps.squirrel-repack.outputs.release-dir }}
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+
+      # Rebuilding rewrote the installer, so the signatures have to be checked
+      # again — including that it really carries the signed package.
+      - name: Verify squirrel signatures
+        if: inputs.sign && startsWith(inputs.runner, 'windows')
+        run: node scripts/repack-squirrel.ts verify
 
       - name: Upload licenses
         uses: actions/upload-artifact@v7
