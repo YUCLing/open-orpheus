@@ -9,14 +9,16 @@
 //! or dropped instead of being forwarded. Nothing here binds a global or
 //! decides a role; that is [`super::conversion`]'s job.
 
+use std::os::fd::RawFd;
+
 use super::super::codec::{
     DECORATION_CLIENT_SIDE, EVT_LAYER_CLOSED, EVT_LAYER_CONFIGURE, Iface, REQ_ACK_CONFIGURE,
-    REQ_DECORATION_DESTROY, REQ_DESTROY, REQ_GET_POPUP, REQ_GET_TOPLEVEL, REQ_SET_TITLE,
-    REQ_SET_WINDOW_GEOMETRY, WlMessage,
+    REQ_DECORATION_DESTROY, REQ_DESTROY, REQ_GET_POPUP, REQ_GET_TOPLEVEL, REQ_MOVE, REQ_RESIZE,
+    REQ_SET_TITLE, REQ_SET_WINDOW_GEOMETRY, WlMessage,
 };
 use super::super::layer_shell;
 use super::super::state::WaylandConn;
-use super::{Action, Effects};
+use super::{Action, Effects, grab};
 
 /// Requests from a client that still believes its window is an `xdg_toplevel`.
 ///
@@ -24,6 +26,7 @@ use super::{Action, Effects};
 /// layer surface, so forwarding any xdg-toplevel opcode would be misread as a
 /// different layer request (or rejected outright).
 pub(crate) fn on_client_toplevel_request(
+    fd: RawFd,
     conn: &mut WaylandConn,
     msg: &WlMessage,
     fx: &mut Effects,
@@ -33,6 +36,9 @@ pub(crate) fn on_client_toplevel_request(
             conn.purge(msg.object_id);
             Action::Replace(vec![layer_shell::destroy(msg.object_id)])
         }
+        // Layer shell has no move and no interactive resize, so the proxy
+        // replays the gesture itself against the surface it converted.
+        REQ_MOVE | REQ_RESIZE => grab::begin(fd, conn, msg),
         REQ_SET_TITLE => {
             // The smuggled window id still has to be captured, but a title has
             // no meaning for a layer surface.
@@ -224,6 +230,10 @@ mod tests {
     use super::super::conversion;
     use super::*;
 
+    /// A connection of this test module's own: none of these cases reads the
+    /// press registry the gesture validation consults.
+    const FD: RawFd = 42;
+
     /// Convert window 30 the way `flush_role` would, for the tests that only
     /// need a converted window to exist.
     fn convert(conn: &mut WaylandConn) -> Vec<Vec<u8>> {
@@ -241,6 +251,7 @@ mod tests {
         let title = decorate_title("layer-window-99", "Real");
         let mut fx = Effects::default();
         let action = on_client_toplevel_request(
+            FD,
             &mut conn,
             &message(30, REQ_SET_TITLE, &wl_string(&title)),
             &mut fx,
@@ -255,6 +266,7 @@ mod tests {
         // Anything else is dropped too: the compositor only knows a layer
         // surface under this id.
         let action = on_client_toplevel_request(
+            FD,
             &mut conn,
             &message(30, REQ_MOVE, &word(1)),
             &mut Effects::default(),
@@ -263,6 +275,7 @@ mod tests {
 
         // Destroying the toplevel destroys the layer surface.
         let messages = replaced(on_client_toplevel_request(
+            FD,
             &mut conn,
             &message(30, REQ_DESTROY, &[]),
             &mut Effects::default(),

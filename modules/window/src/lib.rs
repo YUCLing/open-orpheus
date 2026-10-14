@@ -42,6 +42,14 @@ pub enum LayerShellLayer {
 pub struct LayerShellOptions {
     /// Purpose of the surface, e.g. `"open-orpheus-menu"`. Required.
     pub namespace: String,
+    /// The output to create the surface on, by the name the compositor knows
+    /// (for example `"DP-1"`) — the name `onLayerSurfaceOutput` reports. The
+    /// compositor picks when this is absent or names an output it never
+    /// advertised.
+    ///
+    /// A layer surface keeps the output it was created with for its whole life,
+    /// so this is the only way to put a window on a particular one.
+    pub output: Option<String>,
     /// Defaults to the top layer.
     pub layer: Option<LayerShellLayer>,
     pub anchor_top: Option<bool>,
@@ -311,6 +319,158 @@ pub fn is_window_pointer_inside(window_id: String) -> bool {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = window_id;
+        false
+    }
+}
+
+/// Where a layer surface the user moved or resized ended up.
+///
+/// The coordinates are the ones the window's policy is written in, which is the
+/// same logical space Electron reports.
+#[napi(object)]
+pub struct LayerSurfaceGeometry {
+    /// The managed window id the surface belongs to.
+    pub window_id: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Listen for a gesture the user pushed past the edge of the output it is on.
+///
+/// The window stopped at the edge because a layer surface keeps the output it
+/// was created with, and there is no request to move it to another one; this is
+/// the moment at which the application can decide to create the window again on
+/// the output next to it. `edges` uses the xdg-toplevel resize edge flags: the
+/// top, bottom, left and right of the window are 1, 2, 4 and 8.
+///
+/// Only for Wayland on Linux.
+#[napi]
+pub fn on_layer_surface_pushed(
+    env: Env,
+    #[napi(ts_arg_type = "(windowId: string, edges: number) => void")] callback: Function<
+        FnArgs<(String, u32)>,
+        (),
+    >,
+) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::linux::on_layer_surface_pushed as on_layer_surface_pushed_impl;
+        on_layer_surface_pushed_impl(env, callback)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = callback;
+        env.throw("Only supports Linux")
+    }
+}
+
+/// Listen for a layer surface the user finished moving or resizing.
+///
+/// A compositor never tells a client where a layer surface is, and the native
+/// layer is the one replaying the gesture, so this is the only way an
+/// application learns where a surface ended up — and the only way it can put a
+/// window it recreates back there.
+///
+/// Only for Wayland on Linux.
+#[napi]
+pub fn on_layer_surface_geometry(
+    env: Env,
+    #[napi(ts_arg_type = "(geometry: LayerSurfaceGeometry) => void")] callback: Function<
+        LayerSurfaceGeometry,
+        (),
+    >,
+) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::linux::on_layer_surface_geometry as on_layer_surface_geometry_impl;
+        on_layer_surface_geometry_impl(env, callback)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = callback;
+        env.throw("Only supports Linux")
+    }
+}
+
+/// Listen for the output a converted window's layer surface ended up on.
+///
+/// A layer surface keeps the output the compositor created it on, and nothing
+/// in the protocol ever says which that was — a client is only told that its
+/// surface entered an output. That name is what a window created again after a
+/// drag past the screen edge has to be asked for by, and it is the proxy's own
+/// name for the output, so the application hands it straight back without
+/// matching it against anything.
+///
+/// Only for Wayland on Linux.
+#[napi]
+pub fn on_layer_surface_output(
+    env: Env,
+    #[napi(ts_arg_type = "(windowId: string, output: string) => void")] callback: Function<
+        FnArgs<(String, String)>,
+        (),
+    >,
+) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use crate::linux::on_layer_surface_output as on_layer_surface_output_impl;
+        on_layer_surface_output_impl(env, callback)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = callback;
+        env.throw("Only supports Linux")
+    }
+}
+
+/// Record how large the output a converted window's layer surface lives on is.
+///
+/// A compositor never tells a client how big an output is, and a layer surface
+/// cannot move to another one — so a gesture the proxy replays has no way of
+/// knowing where the window would stop being reachable. Reporting the size of
+/// the screen the window is on is what keeps a drag inside it, with a strip of
+/// the window left on screen. Sizes are in the same logical coordinates the
+/// window's policy is written in, and do nothing for a window that is not a
+/// layer surface.
+///
+/// Only for Wayland on Linux.
+#[napi]
+pub fn set_window_layer_bounds(window_id: String, width: u32, height: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::set_layer_bounds(window_id, width, height)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window_id, width, height);
+        false
+    }
+}
+
+/// Change the size a converted window's layer surface asks for.
+///
+/// A layer surface's size belongs to the application, and the client cannot ask
+/// for one itself: a buffer of another size attached to a surface the
+/// compositor keeps at the size it was told would mismatch it. The request is
+/// applied at the window's next commit, like every double-buffered surface
+/// state, and does nothing for a window that is not a layer surface.
+///
+/// Only for Wayland on Linux.
+#[napi]
+pub fn set_window_layer_size(window_id: String, width: u32, height: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::set_layer_size(window_id, width, height)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window_id, width, height);
         false
     }
 }

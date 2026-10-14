@@ -34,6 +34,9 @@ const hoisted = vi.hoisted(() => {
    * otherwise wipe what `src/main/window.ts` registered when it was imported.
    */
   const layerShellRefusedCallbacks: unknown[] = [];
+  const layerGeometryCallbacks: unknown[] = [];
+  const layerPushedCallbacks: unknown[] = [];
+  const layerOutputCallbacks: unknown[] = [];
   const appOnCalls: Array<[string, unknown]> = [];
   const whenReadyPromises: Promise<unknown>[] = [];
 
@@ -42,6 +45,8 @@ const hoisted = vi.hoisted(() => {
     desktop: vi.fn(() => 0),
     setInputRegion: vi.fn(() => true),
     setWindowLayerShell: vi.fn(() => true),
+    setWindowLayerBounds: vi.fn(() => true),
+    setWindowLayerSize: vi.fn(() => true),
     transferWindowState: vi.fn(() => true),
     forgetWindowState: vi.fn(() => true),
     showFailure: null as Error | null,
@@ -49,6 +54,18 @@ const hoisted = vi.hoisted(() => {
     layerShellRefusedCallbacks,
     onLayerShellRefused: vi.fn((callback: unknown) => {
       layerShellRefusedCallbacks.push(callback);
+    }),
+    layerGeometryCallbacks,
+    onLayerSurfaceGeometry: vi.fn((callback: unknown) => {
+      layerGeometryCallbacks.push(callback);
+    }),
+    layerPushedCallbacks,
+    onLayerSurfacePushed: vi.fn((callback: unknown) => {
+      layerPushedCallbacks.push(callback);
+    }),
+    layerOutputCallbacks,
+    onLayerSurfaceOutput: vi.fn((callback: unknown) => {
+      layerOutputCallbacks.push(callback);
     }),
     whenReadyPromises,
     whenReady: vi.fn(() => {
@@ -79,10 +96,15 @@ vi.mock("@open-orpheus/window", () => ({
   getDesktopEnvironment: hoisted.desktop,
   setInputRegion: hoisted.setInputRegion,
   setWindowLayerShell: hoisted.setWindowLayerShell,
+  setWindowLayerBounds: hoisted.setWindowLayerBounds,
+  setWindowLayerSize: hoisted.setWindowLayerSize,
   transferWindowState: hoisted.transferWindowState,
   forgetWindowState: hoisted.forgetWindowState,
   validateLayerShellOptions: hoisted.validateLayerShell,
   onLayerShellRoleRefused: hoisted.onLayerShellRefused,
+  onLayerSurfaceGeometry: hoisted.onLayerSurfaceGeometry,
+  onLayerSurfacePushed: hoisted.onLayerSurfacePushed,
+  onLayerSurfaceOutput: hoisted.onLayerSurfaceOutput,
   decorateWindowTitle: hoisted.decorateTitle,
   drainWindowCallbacks: hoisted.drainWindowCallbacks,
   isLayerShellAvailable: hoisted.layerShellAvailable,
@@ -304,6 +326,10 @@ beforeEach(() => {
   hoisted.setInputRegion.mockReturnValue(true);
   hoisted.setWindowLayerShell.mockReset();
   hoisted.setWindowLayerShell.mockReturnValue(true);
+  hoisted.setWindowLayerBounds.mockReset();
+  hoisted.setWindowLayerBounds.mockReturnValue(true);
+  hoisted.setWindowLayerSize.mockReset();
+  hoisted.setWindowLayerSize.mockReturnValue(true);
   hoisted.transferWindowState.mockReset();
   hoisted.transferWindowState.mockReturnValue(true);
   hoisted.forgetWindowState.mockReset();
@@ -647,6 +673,53 @@ describe("ManagedWindow native state", () => {
 
     expect(managed.setWindowInputRegion(regions)).toBe(false);
   });
+
+  it("reports the screen a layer surface lives on", () => {
+    const managed = new TestWindow();
+    const wnd = asFake(managed.window);
+
+    // A layer surface cannot move to another output, so the native layer needs
+    // the size of this one to keep a drag inside it.
+    expect(managed.setLayerBounds(2560, 1440)).toBe(true);
+    expect(hoisted.setWindowLayerBounds).toHaveBeenCalledExactlyOnceWith(
+      managedId(wnd),
+      2560,
+      1440
+    );
+  });
+
+  it("reports no screen where no layer surface can exist", () => {
+    hoisted.desktop.mockReturnValue(X11);
+    const managed = new TestWindow();
+
+    expect(managed.setLayerBounds(2560, 1440)).toBe(false);
+    expect(hoisted.setWindowLayerBounds).not.toHaveBeenCalled();
+  });
+
+  it("sizes a layer surface through the native layer", () => {
+    const managed = new TestWindow();
+    const wnd = asFake(managed.window);
+
+    // A converted window cannot resize itself: the compositor keeps the size
+    // its layer surface was given. Sub-pixel values are the caller's business.
+    expect(managed.setLayerSize(640.4, 180.6)).toBe(true);
+    expect(hoisted.setWindowLayerSize).toHaveBeenCalledExactlyOnceWith(managedId(wnd), 640, 181);
+  });
+
+  it("leaves resizing to the window where no layer surface can exist", () => {
+    hoisted.desktop.mockReturnValue(X11);
+    const managed = new TestWindow();
+
+    expect(managed.setLayerSize(640, 180)).toBe(false);
+    expect(hoisted.setWindowLayerSize).not.toHaveBeenCalled();
+  });
+
+  it("reports a size the native layer could not send", () => {
+    hoisted.setWindowLayerSize.mockReturnValue(false);
+    const managed = new TestWindow();
+
+    expect(managed.setLayerSize(640, 180)).toBe(false);
+  });
 });
 
 describe("OnDemandWindow recreation", () => {
@@ -712,6 +785,48 @@ describe("OnDemandWindow hiding", () => {
     // renderer, so it must not be destroyed or unbound.
     expect(wnd.destroyed).toBe(false);
     expect(managed.window).toBe(wnd);
+  });
+});
+
+describe("ManagedWindow.moveNameTo only", () => {
+  it("moves the name and nothing else", () => {
+    // A window is looked up by name, and the lookup takes whichever wrapper
+    // comes first — so the one being replaced has to stop answering to it, or
+    // the next hide or show lands on a window that is already gone.
+    const managed = new TestWindow();
+    managed.setData("name", "desktop_lyrics");
+    const next = new TestWindow();
+    hoisted.transferWindowState.mockClear();
+
+    managed.moveNameTo(next);
+
+    expect(next.getData("name")).toBe("desktop_lyrics");
+    expect(managed.getData("name")).toBe("");
+    expect(ManagedWindow.fromName("desktop_lyrics")).toBe(next);
+    // Its own native state is the replacement's to register: for a window
+    // being placed on another screen, that placement is the point of
+    // replacing it.
+    expect(hoisted.transferWindowState).not.toHaveBeenCalled();
+  });
+});
+
+describe("replacing a window under the same name", () => {
+  it("does not hand on a name that has already been handed over", () => {
+    // Two replacements of one window would otherwise leave the second
+    // answering to nothing at all — and the first is then a window on screen
+    // that the name does not lead to.
+    const name = "handed-over-name";
+    const first = new TestWindow();
+    first.setData("name", name);
+    const second = new TestWindow();
+    const third = new TestWindow();
+
+    first.moveNameTo(second);
+    first.moveNameTo(third);
+
+    expect(second.getData("name")).toBe(name);
+    expect(third.getData("name")).toBeUndefined();
+    expect(ManagedWindow.fromName(name)).toBe(second);
   });
 });
 
@@ -902,6 +1017,70 @@ describe("ManagedWindow layer shell", () => {
     const event = await refused;
     expect(event.name).toBe("layerShellRefused");
     expect(event.data).toBe(managed.window);
+  });
+
+  it("surfaces where the native layer left a moved window", async () => {
+    // The listener is registered once the app is ready.
+    await hoisted.whenReadyPromises.at(-1);
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    const reported = managed.once("layerGeometry");
+    const reportGeometry = hoisted.layerGeometryCallbacks.at(-1) as (geometry: {
+      windowId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }) => void;
+    expect(reportGeometry).toBeTypeOf("function");
+
+    // The native layer replays the gesture, so it is the only thing that knows
+    // where the surface ended up.
+    reportGeometry({ windowId: managed.id, x: 120, y: 48, width: 640, height: 180 });
+
+    const event = await reported;
+    expect(event.name).toBe("layerGeometry");
+    expect(event.data).toEqual({ x: 120, y: 48, width: 640, height: 180 });
+  });
+
+  it("surfaces a gesture that ran out of screen", async () => {
+    await hoisted.whenReadyPromises.at(-1);
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    const pushed = managed.once("layerPushed");
+    const reportPush = hoisted.layerPushedCallbacks.at(-1) as (
+      windowId: string,
+      edges: number
+    ) => void;
+    expect(reportPush).toBeTypeOf("function");
+
+    // The window stopped at the edge because a layer surface cannot move to
+    // another output, which is where the application takes over.
+    reportPush(managed.id, 8);
+
+    const event = await pushed;
+    expect(event.name).toBe("layerPushed");
+    expect(event.data).toEqual({ edges: 8 });
+  });
+
+  it("surfaces the screen a layer surface ended up on", async () => {
+    await hoisted.whenReadyPromises.at(-1);
+    const managed = new TestWindow();
+    managed.setLayerShell(options);
+    const reported = managed.once("layerOutput");
+    const reportOutput = hoisted.layerOutputCallbacks.at(-1) as (
+      windowId: string,
+      output: string
+    ) => void;
+    expect(reportOutput).toBeTypeOf("function");
+
+    // The compositor picked the output when it created the surface and never
+    // says which: this is the one name the two halves share.
+    reportOutput(managed.id, "DP-2");
+
+    const event = await reported;
+    expect(event.name).toBe("layerOutput");
+    expect(event.data).toEqual({ output: "DP-2" });
   });
 
   it("registers once for an on-demand window's first surface", () => {

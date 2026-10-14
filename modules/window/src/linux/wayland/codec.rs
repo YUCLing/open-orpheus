@@ -12,6 +12,14 @@ pub(crate) enum Iface {
     WlSeat,
     WlPointer,
     WlTouch,
+    /// A `wl_output` the client bound, tracked for its name and description.
+    WlOutput,
+    /// The client's `zxdg_output_manager_v1`.
+    ZxdgOutputManager,
+    /// A `zxdg_output_v1` the client created for one `wl_output`: it carries
+    /// the output's logical position and size, which is the coordinate space a
+    /// layer surface is placed in.
+    ZxdgOutput,
     WlSurface,
     XdgWmBase,
     XdgPositioner,
@@ -48,6 +56,7 @@ pub(crate) const EVT_BUTTON: u16 = 3;
 pub(crate) const EVT_AXIS: u16 = 4;
 pub(crate) const EVT_MOTION: u16 = 2;
 pub(crate) const BTN_PRESSED: u32 = 1;
+pub(crate) const BTN_RELEASED: u32 = 0;
 pub(crate) const EVT_TOUCH_DOWN: u16 = 0;
 pub(crate) const WL_TOUCH_RELEASE: u16 = 0;
 pub(crate) const REQ_GET_XDG_SURFACE: u16 = 2;
@@ -58,6 +67,7 @@ pub(crate) const REQ_ACK_CONFIGURE: u16 = 4;
 pub(crate) const REQ_CREATE_POSITIONER: u16 = 1;
 pub(crate) const REQ_SET_TITLE: u16 = 2;
 pub(crate) const REQ_MOVE: u16 = 5;
+pub(crate) const REQ_RESIZE: u16 = 6;
 pub(crate) const REQ_SET_INPUT_REGION: u16 = 5;
 pub(crate) const REQ_COMMIT: u16 = 6;
 pub(crate) const WL_POINTER_RELEASE: u16 = 1;
@@ -76,6 +86,31 @@ pub(crate) const REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT: u16 = 5;
 // xdg_popup events
 pub(crate) const EVT_POPUP_CONFIGURE: u16 = 0;
 pub(crate) const EVT_POPUP_DONE: u16 = 1;
+
+// wl_output events. The ones that say which output this is, and how large it
+// is when the client's own zxdg_output_v1 has not said; the rest pass through
+// untouched.
+pub(crate) const EVT_OUTPUT_GEOMETRY: u16 = 0;
+pub(crate) const EVT_OUTPUT_MODE: u16 = 1;
+pub(crate) const EVT_OUTPUT_SCALE: u16 = 3;
+pub(crate) const EVT_OUTPUT_NAME: u16 = 4;
+pub(crate) const EVT_OUTPUT_DESCRIPTION: u16 = 5;
+
+/// `wl_output.mode`'s flags: the output is in this mode now. An output
+/// advertises every mode it can be in, and only this one is the size it draws.
+pub(crate) const MODE_CURRENT: u32 = 1;
+
+// wl_surface events. Which output a surface is on is the one thing about an
+// output a client is ever told, and it is what a layer surface is placed by.
+pub(crate) const EVT_SURFACE_ENTER: u16 = 0;
+pub(crate) const EVT_SURFACE_LEAVE: u16 = 1;
+
+// zxdg_output_manager_v1 requests
+pub(crate) const REQ_GET_XDG_OUTPUT: u16 = 1;
+
+// zxdg_output_v1 events
+pub(crate) const EVT_XDG_OUTPUT_LOGICAL_SIZE: u16 = 1;
+pub(crate) const EVT_XDG_OUTPUT_NAME: u16 = 3;
 
 // wl_registry events
 pub(crate) const EVT_GLOBAL: u16 = 0;
@@ -223,6 +258,18 @@ impl WlMessage {
 
     pub(crate) fn fixed_arg(&self, offset: usize) -> Option<i32> {
         rfixed_i32(&self.body, offset)
+    }
+
+    /// A `fixed` argument with its fractional part kept.
+    ///
+    /// Pointer coordinates are 24.8 fixed point; the integer truncation
+    /// [`WlMessage::fixed_arg`] applies is fine for an anchor, but a drag that
+    /// accumulated truncated positions would drift.
+    pub(crate) fn fixed_f64(&self, offset: usize) -> Option<f64> {
+        self.body
+            .get(offset..offset + 4)
+            .and_then(|b| b.try_into().ok())
+            .map(|b| i32::from_ne_bytes(b) as f64 / 256.0)
     }
 
     /// Parses a length-prefixed string argument at `offset`.
