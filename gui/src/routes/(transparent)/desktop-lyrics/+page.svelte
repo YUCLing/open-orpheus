@@ -14,6 +14,7 @@
   import * as settings from "$lib/settings";
   import multihover from "$lib/multihover";
   import { onpointerdrag } from "$lib/pointer";
+  import { paintPulseAttachment } from "$lib/paintPulse";
 
   const api = getBridge<DesktopLyricsContract>("desktopLyrics");
 
@@ -117,7 +118,7 @@
     if (!lyricStyle) return;
     if (lyricStyle.vertical !== previousVertical) {
       previousVertical = lyricStyle.vertical;
-      api.changeOrientation();
+      api.changeOrientation(lyricStyle.vertical);
     }
   });
 
@@ -192,10 +193,30 @@
       currentTime = e.data.time * 1000;
       playing = e.data.playState;
     });
+
+    reportScreenSize();
+    window.addEventListener("resize", reportScreenSize);
+    api.events.requestScreenSize(reportScreenSize);
+    return () => window.removeEventListener("resize", reportScreenSize);
   });
+
+  /**
+   * Tell the main process how large the screen is.
+   *
+   * A layer surface lives on one output and cannot be moved to another one, so
+   * the native layer has to know where that output ends: the renderer is the
+   * only half that can read it, and it is also the half that knows when the
+   * window has moved to a different screen.
+   */
+  function reportScreenSize() {
+    api.reportScreenSize(Math.round(window.screen.width), Math.round(window.screen.height));
+  }
 
   function onDrag() {
     if (locked) return;
+    // The size is what stops the drag at the edge of the screen rather than
+    // pushing the window off it, so it is worth refreshing before every one.
+    reportScreenSize();
     api.dragWindow();
   }
 </script>
@@ -220,6 +241,7 @@
     class:cursor-grab={!locked}
     class:flex-col={!lyricStyle.vertical}
     {@attach onpointerdrag(onDrag)}
+    {@attach paintPulseAttachment}
     onpointerenter={() => {
       clearTimeout(disableTimer);
     }}

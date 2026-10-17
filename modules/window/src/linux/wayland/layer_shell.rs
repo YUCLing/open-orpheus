@@ -50,6 +50,12 @@ const MAX_NAMESPACE_LEN: usize = 32;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LayerShellOptions {
     pub(crate) namespace: String,
+    /// The output the surface has to be created on, by the name the compositor
+    /// knows it by; `None` lets the compositor pick.
+    ///
+    /// [`super::state::layer_output_label`] hands the application that name, so
+    /// the same string travels back.
+    pub(crate) output: Option<String>,
     pub(crate) layer: u32,
     pub(crate) anchor: u32,
     pub(crate) width: u32,
@@ -66,6 +72,7 @@ impl Default for LayerShellOptions {
     fn default() -> Self {
         Self {
             namespace: String::new(),
+            output: None,
             layer: LAYER_TOP,
             anchor: 0,
             width: 0,
@@ -179,18 +186,23 @@ pub(crate) fn bind(registry_id: u32, global_name: u32, version: u32, new_id: u32
 }
 
 /// `zwlr_layer_shell_v1.get_layer_surface(id, surface, output, layer, namespace)`.
+///
+/// `output` is the `wl_output` the surface is to live on, or `0` to let the
+/// compositor pick the most recently used one. A layer surface keeps the output
+/// it was created with for the rest of its life, so this is the only moment at
+/// which a window can be placed on a particular one.
 pub(crate) fn get_layer_surface(
     shell_id: u32,
     new_id: u32,
     surface_id: u32,
+    output_id: u32,
     layer: u32,
     namespace: &str,
 ) -> Vec<u8> {
     let mut body = Vec::new();
     push_u32(&mut body, new_id);
     push_u32(&mut body, surface_id);
-    // A null output lets the compositor pick the most recently used one.
-    push_u32(&mut body, 0);
+    push_u32(&mut body, output_id);
     push_u32(&mut body, layer);
     push_string(&mut body, namespace);
     message(shell_id, REQ_GET_LAYER_SURFACE, &body)
@@ -380,8 +392,19 @@ mod tests {
     }
 
     #[test]
+    fn get_layer_surface_carries_the_output_it_was_given() {
+        // The output argument is the only difference from the compositor's own
+        // choice, which a null id asks for.
+        let named = get_layer_surface(9, 30, 10, 42, LAYER_OVERLAY, "wl");
+        let chosen = get_layer_surface(9, 30, 10, 0, LAYER_OVERLAY, "wl");
+
+        assert_eq!(u32::from_ne_bytes(named[16..20].try_into().unwrap()), 42);
+        assert_eq!(u32::from_ne_bytes(chosen[16..20].try_into().unwrap()), 0);
+    }
+
+    #[test]
     fn get_layer_surface_pads_the_namespace() {
-        let bytes = get_layer_surface(9, 30, 10, LAYER_OVERLAY, "wl");
+        let bytes = get_layer_surface(9, 30, 10, 0, LAYER_OVERLAY, "wl");
         let (oid, op, size) = header(&bytes);
         assert_eq!((oid, op), (9, REQ_GET_LAYER_SURFACE));
         assert_eq!(size % 4, 0);

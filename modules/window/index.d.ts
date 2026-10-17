@@ -96,6 +96,16 @@ export declare const enum LayerShellLayer {
 export interface LayerShellOptions {
   /** Purpose of the surface, e.g. `"open-orpheus-menu"`. Required. */
   namespace: string
+  /**
+   * The output to create the surface on, by the name the compositor knows
+   * (for example `"DP-1"`) — the name `onLayerSurfaceOutput` reports. The
+   * compositor picks when this is absent or names an output it never
+   * advertised.
+   *
+   * A layer surface keeps the output it was created with for its whole life,
+   * so this is the only way to put a window on a particular one.
+   */
+  output?: string
   /** Defaults to the top layer. */
   layer?: LayerShellLayer
   anchorTop?: boolean
@@ -119,6 +129,21 @@ export interface LayerShellOptions {
 }
 
 /**
+ * Where a layer surface the user moved or resized ended up.
+ *
+ * The coordinates are the ones the window's policy is written in, which is the
+ * same logical space Electron reports.
+ */
+export interface LayerSurfaceGeometry {
+  /** The managed window id the surface belongs to. */
+  windowId: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
  * Listen for windows whose layer-shell role was refused.
  *
  * A compositor never releases a surface's role, so a window whose surface is
@@ -131,6 +156,45 @@ export interface LayerShellOptions {
 export declare function onLayerShellRoleRefused(callback: (windowId: string) => void): void
 
 /**
+ * Listen for a layer surface the user finished moving or resizing.
+ *
+ * A compositor never tells a client where a layer surface is, and the native
+ * layer is the one replaying the gesture, so this is the only way an
+ * application learns where a surface ended up — and the only way it can put a
+ * window it recreates back there.
+ *
+ * Only for Wayland on Linux.
+ */
+export declare function onLayerSurfaceGeometry(callback: (geometry: LayerSurfaceGeometry) => void): void
+
+/**
+ * Listen for the output a converted window's layer surface ended up on.
+ *
+ * A layer surface keeps the output the compositor created it on, and nothing
+ * in the protocol ever says which that was — a client is only told that its
+ * surface entered an output. That name is what a window created again after a
+ * drag past the screen edge has to be asked for by, and it is the proxy's own
+ * name for the output, so the application hands it straight back without
+ * matching it against anything.
+ *
+ * Only for Wayland on Linux.
+ */
+export declare function onLayerSurfaceOutput(callback: (windowId: string, output: string) => void): void
+
+/**
+ * Listen for a gesture the user pushed past the edge of the output it is on.
+ *
+ * The window stopped at the edge because a layer surface keeps the output it
+ * was created with, and there is no request to move it to another one; this is
+ * the moment at which the application can decide to create the window again on
+ * the output next to it. `edges` uses the xdg-toplevel resize edge flags: the
+ * top, bottom, left and right of the window are 1, 2, 4 and 8.
+ *
+ * Only for Wayland on Linux.
+ */
+export declare function onLayerSurfacePushed(callback: (windowId: string, edges: number) => void): void
+
+/**
  * Set regions that the window is used to receive inputs.
  *
  * Only for Linux.
@@ -138,6 +202,21 @@ export declare function onLayerShellRoleRefused(callback: (windowId: string) => 
 export declare function setInputRegion(windowHandle: string | Buffer, rects?: { x: number, y: number, w: number, h: number }[] | null): boolean
 
 export declare function setWindowAsBackground(hwnd: Buffer): void
+
+/**
+ * Record how large the output a converted window's layer surface lives on is.
+ *
+ * A compositor never tells a client how big an output is, and a layer surface
+ * cannot move to another one — so a gesture the proxy replays has no way of
+ * knowing where the window would stop being reachable. Reporting the size of
+ * the screen the window is on is what keeps a drag inside it, with a strip of
+ * the window left on screen. Sizes are in the same logical coordinates the
+ * window's policy is written in, and do nothing for a window that is not a
+ * layer surface.
+ *
+ * Only for Wayland on Linux.
+ */
+export declare function setWindowLayerBounds(windowId: string, width: number, height: number): boolean
 
 /**
  * Register (or clear) the layer-shell policy for a managed window.
@@ -153,6 +232,19 @@ export declare function setWindowAsBackground(hwnd: Buffer): void
  * options are not stored, and the window is still created as an ordinary one.
  */
 export declare function setWindowLayerShell(windowId: string, options?: LayerShellOptions | undefined | null): boolean
+
+/**
+ * Change the size a converted window's layer surface asks for.
+ *
+ * A layer surface's size belongs to the application, and the client cannot ask
+ * for one itself: a buffer of another size attached to a surface the
+ * compositor keeps at the size it was told would mismatch it. The request is
+ * applied at the window's next commit, like every double-buffered surface
+ * state, and does nothing for a window that is not a layer surface.
+ *
+ * Only for Wayland on Linux.
+ */
+export declare function setWindowLayerSize(windowId: string, width: number, height: number): boolean
 
 /**
  * Register the intent to present `target_window_id` as an xdg_popup of
