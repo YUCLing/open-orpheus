@@ -5,6 +5,7 @@
 //! tables below are the single index of every intercept point.
 
 mod conversion;
+pub(crate) mod grab;
 mod objects;
 mod pointer;
 pub(crate) mod roles;
@@ -13,12 +14,13 @@ mod title;
 mod touch;
 
 use std::os::fd::RawFd;
+use std::sync::OnceLock;
 
 use super::codec::{
     EVT_DELETE_ID, EVT_GLOBAL, EVT_GLOBAL_REMOVE, Iface, REQ_BIND, REQ_COMMIT, REQ_CREATE_SURFACE,
     REQ_DESTROY, REQ_GET_POINTER, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_TOPLEVEL_DECORATION,
-    REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE, REQ_SET_WINDOW_GEOMETRY,
-    WL_POINTER_RELEASE, WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
+    REQ_GET_TOUCH, REQ_GET_XDG_OUTPUT, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE,
+    REQ_SET_WINDOW_GEOMETRY, WL_POINTER_RELEASE, WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
 };
 use super::inject;
 use super::state::WaylandConn;
@@ -37,13 +39,49 @@ pub(crate) enum Action {
 /// released (global state updates / user callbacks).
 #[derive(Default)]
 pub(crate) struct Effects {
-    pub(crate) button: Option<(u32, u32, u32, i32, i32)>,
+    /// The press that just landed: seat, serial, surface, where on it, and the
+    /// button it was made with.
+    pub(crate) button: Option<(u32, u32, u32, i32, i32, u32)>,
     /// A window whose surface could not take the layer role, by custom id.
     pub(crate) layer_shell_refused: Option<String>,
     pub(crate) entered: Vec<(u32, i32, i32)>,
     pub(crate) arm_watchers_for: Vec<u32>,
     pub(crate) pointer_axes: Vec<(u32, u32)>,
     pub(crate) destroyed_surfaces: Vec<u32>,
+    /// Layer-surface requests an emulated gesture wants sent to the compositor.
+    pub(crate) layer_requests: Vec<Vec<u8>>,
+}
+
+/// Whether the proxy narrates what it makes of layer-surface traffic.
+///
+/// Off unless `ORPHEUS_LAYER_DEBUG` is set: the proxy has no logger, and a drag
+/// that does not land where it should is otherwise invisible from outside.
+pub(crate) fn layer_debug_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("ORPHEUS_LAYER_DEBUG").is_ok_and(|value| value != "0" && !value.is_empty())
+    })
+}
+
+/// Log one line about layer-surface handling, when the switch is on.
+pub(crate) fn layer_debug(message: impl FnOnce() -> String) {
+    if layer_debug_enabled() {
+        eprintln!("[proxy:layer] {}", message());
+    }
+}
+
+/// Log one decision of a layer-surface gesture, always.
+///
+/// The per-motion traffic behind a drag is only interesting with the switch on,
+/// but the handful of decisions it makes are not: a gesture that goes nowhere
+/// has no other way of saying why, and from outside it looks exactly like one
+/// that was never started.
+///
+/// Written to the standard error the application inherits, and not to a file:
+/// these calls happen inside the hooks the proxy has installed over the
+/// process's own syscalls, where opening one is a call back into them.
+pub(crate) fn layer_note(message: impl FnOnce() -> String) {
+    eprintln!("[proxy:layer] {}", message());
 }
 
 pub(crate) fn dispatch_request(
@@ -64,7 +102,7 @@ fn dispatch_request_inner(
     // A converted window answers to xdg-shell opcodes but must not reach the
     // compositor as xdg-shell.
     if conn.layer_windows.contains_key(&msg.object_id) {
-        return shadow::on_client_toplevel_request(conn, msg, fx);
+        return shadow::on_client_toplevel_request(fd, conn, msg, fx);
     }
     if conn.xdg_to_layer.contains_key(&msg.object_id) {
         return shadow::on_client_xdg_surface_request(conn, msg);
@@ -91,6 +129,7 @@ fn dispatch_request_inner(
         (Iface::WlCompositor, REQ_CREATE_SURFACE) => objects::on_create_surface(conn, msg),
         (Iface::WlSeat, REQ_GET_POINTER) => objects::on_get_pointer(conn, msg),
         (Iface::WlSeat, REQ_GET_TOUCH) => objects::on_get_touch(conn, msg),
+        (Iface::ZxdgOutputManager, REQ_GET_XDG_OUTPUT) => objects::on_get_xdg_output(conn, msg),
         (Iface::XdgWmBase, REQ_GET_XDG_SURFACE) => objects::on_get_xdg_surface(conn, msg),
         (Iface::ZxdgDecorationManager, REQ_GET_TOPLEVEL_DECORATION) => {
             shadow::on_get_toplevel_decoration(conn, msg)
@@ -153,6 +192,18 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
 
     if conn.layer_windows.contains_key(&msg.object_id) {
         return shadow::on_layer_event(conn, msg);
+    }
+
+    if conn.outputs.contains_key(&msg.object_id) {
+        return objects::on_output_event(conn, msg);
+    }
+
+    if conn.xdg_outputs.contains_key(&msg.object_id) {
+        return objects::on_xdg_output_event(conn, msg);
+    }
+
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlSurface) {
+        return objects::on_surface_event(conn, msg, fx);
     }
 
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlPointer) {
@@ -372,7 +423,7 @@ mod tests {
         args.extend_from_slice(&word(0x110));
         args.extend_from_slice(&word(BTN_PRESSED));
         dispatch_event(&mut conn, &message(6, EVT_BUTTON, &args), &mut fx);
-        assert_eq!(fx.button, Some((3, 77, 10, 64, -32)));
+        assert_eq!(fx.button, Some((3, 77, 10, 64, -32, 0x110)));
 
         // A release does not start a drag.
         let mut fx = Effects::default();
@@ -414,7 +465,7 @@ mod tests {
         args.extend_from_slice(&(32i32 << 8).to_ne_bytes());
         let mut fx = Effects::default();
         dispatch_event(&mut conn, &message(7, EVT_TOUCH_DOWN, &args), &mut fx);
-        assert_eq!(fx.button, Some((3, 21, 10, 16, 32)));
+        assert_eq!(fx.button, Some((3, 21, 10, 16, 32, 0)));
 
         // Any other touch event (wl_touch.up is opcode 1) is passed through.
         let mut fx = Effects::default();

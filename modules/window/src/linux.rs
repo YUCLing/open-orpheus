@@ -144,6 +144,7 @@ fn to_wayland_options(options: &crate::LayerShellOptions) -> wayland::LayerShell
 
     wayland::LayerShellOptions {
         namespace: options.namespace.clone(),
+        output: options.output.clone(),
         layer: match options.layer {
             Some(crate::LayerShellLayer::Background) => wayland::LAYER_BACKGROUND,
             Some(crate::LayerShellLayer::Bottom) => wayland::LAYER_BOTTOM,
@@ -369,6 +370,106 @@ pub fn window_last_press_age_ms(window_id: String) -> Option<u32> {
 
 pub fn window_pointer_inside(window_id: String) -> bool {
     wayland::window_pointer_inside(&window_id)
+}
+
+pub fn on_layer_surface_pushed(
+    env: Env,
+    callback: Function<FnArgs<(String, u32)>, ()>,
+) -> Result<()> {
+    if disable_display_server_hooks() {
+        return env.throw("onLayerSurfacePushed is unavailable when Wayland hooks are disabled");
+    }
+
+    let callback = callback.build_threadsafe_function().build_callback(
+        |ctx: ThreadsafeCallContext<(String, u32)>| {
+            Ok(std::convert::Into::<FnArgs<(String, u32)>>::into(ctx.value))
+        },
+    )?;
+
+    if !wayland::on_layer_pushed(Box::new(move |window_id: String, edges: u32| {
+        callback.call((window_id, edges), ThreadsafeFunctionCallMode::NonBlocking);
+    })) {
+        return env.throw(
+            "onLayerSurfacePushed is unavailable because Wayland hooks are not initialized",
+        );
+    }
+
+    Ok(())
+}
+
+pub fn on_layer_surface_output(
+    env: Env,
+    callback: Function<FnArgs<(String, String)>, ()>,
+) -> Result<()> {
+    if disable_display_server_hooks() {
+        return env.throw("onLayerSurfaceOutput is unavailable when Wayland hooks are disabled");
+    }
+
+    let callback = callback.build_threadsafe_function().build_callback(
+        |ctx: ThreadsafeCallContext<(String, String)>| {
+            Ok(std::convert::Into::<FnArgs<(String, String)>>::into(
+                ctx.value,
+            ))
+        },
+    )?;
+
+    if !wayland::on_layer_output(Box::new(move |window_id: String, output: String| {
+        callback.call((window_id, output), ThreadsafeFunctionCallMode::NonBlocking);
+    })) {
+        return env.throw(
+            "onLayerSurfaceOutput is unavailable because Wayland hooks are not initialized",
+        );
+    }
+
+    Ok(())
+}
+
+pub fn on_layer_surface_geometry(
+    env: Env,
+    callback: Function<crate::LayerSurfaceGeometry, ()>,
+) -> Result<()> {
+    if disable_display_server_hooks() {
+        return env.throw("onLayerSurfaceGeometry is unavailable when Wayland hooks are disabled");
+    }
+
+    let callback = callback
+        .build_threadsafe_function()
+        .build_callback(|ctx: ThreadsafeCallContext<crate::LayerSurfaceGeometry>| Ok(ctx.value))?;
+
+    if !wayland::on_layer_geometry(Box::new(
+        move |window_id: String, x: i32, y: i32, width: u32, height: u32| {
+            callback.call(
+                crate::LayerSurfaceGeometry {
+                    window_id,
+                    x,
+                    y,
+                    width,
+                    height,
+                },
+                ThreadsafeFunctionCallMode::NonBlocking,
+            );
+        },
+    )) {
+        return env.throw(
+            "onLayerSurfaceGeometry is unavailable because Wayland hooks are not initialized",
+        );
+    }
+
+    Ok(())
+}
+
+pub fn set_layer_bounds(window_id: String, width: u32, height: u32) -> bool {
+    if disable_display_server_hooks() || !wayland::is_wayland() {
+        return false;
+    }
+    wayland::set_layer_bounds(&window_id, width, height)
+}
+
+pub fn set_layer_size(window_id: String, width: u32, height: u32) -> bool {
+    if disable_display_server_hooks() || !wayland::is_wayland() {
+        return false;
+    }
+    wayland::set_layer_size(&window_id, width, height)
 }
 
 pub fn capture_window_next_pointer_axis(

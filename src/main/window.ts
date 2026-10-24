@@ -10,7 +10,12 @@ import {
   getDesktopEnvironment,
   isLayerShellAvailable,
   onLayerShellRoleRefused,
+  onLayerSurfaceGeometry,
+  onLayerSurfaceOutput,
+  onLayerSurfacePushed,
   setInputRegion,
+  setWindowLayerBounds,
+  setWindowLayerSize,
   setWindowLayerShell,
   transferWindowState,
   validateLayerShellOptions,
@@ -69,6 +74,22 @@ registerShutdownFinalizer({
   },
 });
 
+/**
+ * Whether the loaded native module has everything the layer-shell path needs.
+ *
+ * The application and the native module are built separately, and a stale
+ * native module does not fail loudly on its own: the policy it registers is one
+ * whose geometry nothing can move, so a drag is simply ignored. Callers check
+ * this and keep the window an ordinary one, where the compositor does the
+ * dragging itself.
+ */
+export const isLayerShellNativeComplete =
+  typeof setWindowLayerSize === "function" &&
+  typeof setWindowLayerBounds === "function" &&
+  typeof onLayerSurfaceGeometry === "function" &&
+  typeof onLayerSurfaceOutput === "function" &&
+  typeof onLayerSurfacePushed === "function";
+
 export let mainWindow: BrowserWindow | null = null;
 
 /**
@@ -115,6 +136,32 @@ export interface WindowEvents {
    * role.
    */
   layerShellRefused: BrowserWindow;
+  /**
+   * The user finished moving or resizing this window's layer surface.
+   *
+   * A compositor never tells a client where a layer surface is, and the native
+   * layer is the one replaying the gesture, so this is the only report of where
+   * the window ended up. Coordinates are the ones the policy was given.
+   */
+  layerGeometry: { x: number; y: number; width: number; height: number };
+  /**
+   * A gesture the user pushed past the edge of the output this window's layer
+   * surface lives on.
+   *
+   * A layer surface keeps the output it was created on, so this is the point at
+   * which the application can decide to create the window again on the one next
+   * to it. `edges` uses the xdg-toplevel resize edge flags.
+   */
+  layerPushed: { edges: number };
+  /**
+   * The output this window's layer surface is on.
+   *
+   * The compositor chooses the output when it creates the surface and never
+   * reports the choice, so this is the only thing that says which screen the
+   * window is on — and the name it carries is the one to give back to
+   * [`LayerShellOptions.output`] to put a window there again.
+   */
+  layerOutput: { output: string };
 }
 
 export type WindowData = {
@@ -163,6 +210,25 @@ void app.whenReady().then(() => {
     const managed = ManagedWindow.fromId(windowId);
     const wnd = managed?.window;
     if (managed && wnd) void managed.emit("layerShellRefused", wnd);
+  });
+  if (!isLayerShellNativeComplete) {
+    LOGGER.error(
+      "the native window module is older than the application: layer-shell windows would ignore " +
+        "drags, so they stay ordinary windows. Rebuild it with `pnpm build:modules`."
+    );
+    return;
+  }
+  onLayerSurfaceGeometry(({ windowId, x, y, width, height }) => {
+    const managed = ManagedWindow.fromId(windowId);
+    if (managed) void managed.emit("layerGeometry", { x, y, width, height });
+  });
+  onLayerSurfacePushed((windowId, edges) => {
+    const managed = ManagedWindow.fromId(windowId);
+    if (managed) void managed.emit("layerPushed", { edges });
+  });
+  onLayerSurfaceOutput((windowId, output) => {
+    const managed = ManagedWindow.fromId(windowId);
+    if (managed) void managed.emit("layerOutput", { output });
   });
 });
 
@@ -435,6 +501,37 @@ export abstract class ManagedWindow<
   }
 
   /**
+   * Tell the native layer how large the screen this window is on is.
+   *
+   * A layer surface cannot move to another output, so a drag the native layer
+   * replays has to know where this one ends; the renderer reads its own screen
+   * and reports it. Without a report a gesture that loses the window is undone
+   * instead, which is the fallback rather than the rule.
+   */
+  setLayerBounds(width: number, height: number): boolean {
+    if (!this.isWayland() || !isLayerShellNativeComplete) return false;
+    return setWindowLayerBounds(this.id, Math.round(width), Math.round(height));
+  }
+
+  /**
+   * Change the size this window's layer surface asks for.
+   *
+   * A layer surface's size belongs to the application, and the compositor keeps
+   * asking for the one it was given until it is told otherwise; a converted
+   * client cannot resize itself, because the buffer it attaches would not match
+   * the surface. Callers therefore have to route their own resizes through this
+   * for a window they registered with [`setLayerShell`].
+   *
+   * The value means "sent": like every double-buffered surface state, it is
+   * applied at the window's next commit. Returns `false` for a window that is
+   * not a layer surface, which is also the answer everywhere but Wayland.
+   */
+  setLayerSize(width: number, height: number): boolean {
+    if (!this.isWayland() || !isLayerShellNativeComplete) return false;
+    return setWindowLayerSize(this.id, Math.round(width), Math.round(height));
+  }
+
+  /**
    * Release the native state this wrapper recorded (its layer-shell policy and
    * input region).
    *
@@ -679,6 +776,29 @@ export abstract class ManagedWindow<
       if (managed?.id === id) return managed;
     }
   }
+  /**
+   * Hand the name this window is looked up by to its replacement.
+   *
+   * A window is found by name — that is how the rest of the application closes,
+   * hides or shows one it never held a reference to — and a name is not unique:
+   * the lookup takes whichever wrapper comes first. Two wrappers answering to
+   * one name would therefore send those calls to the one that has already been
+   * replaced, whose window is gone and whose `hide` does nothing.
+   *
+   * Only the name moves. The replacement registers its own native state, which
+   * for a window being placed somewhere else is the whole point of replacing
+   * it: see [`switchWindowPolicy`] for the other case, where the state is what
+   * has to move.
+   */
+  moveNameTo(target: ManagedWindow): void {
+    const name = this.getData("name");
+    // A name that has already been handed over is not one to hand on: an empty
+    // one would leave the replacement answering to nothing.
+    if (typeof name !== "string" || name === "") return;
+    target.setData("name", name);
+    this.setData("name", "");
+  }
+
   static fromName(name: string) {
     for (const ref of managedWindows) {
       const managed = ref.deref();

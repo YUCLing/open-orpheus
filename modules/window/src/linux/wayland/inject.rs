@@ -7,6 +7,7 @@ use crate::linux::Rect;
 
 use super::super::proxy::sink_for;
 use super::codec::*;
+use super::layer_shell;
 use super::state::*;
 
 /// `wl_compositor.create_region(new_id)`.
@@ -220,6 +221,133 @@ pub(super) fn transfer_input_region(from_id: &str, to_id: &str) -> bool {
     true
 }
 
+/// `wl_surface.commit()`, for a surface whose layer state the proxy set.
+///
+/// Every layer-surface setter is double-buffered: nothing a gesture writes
+/// takes effect until the surface is committed, and the window's own commits
+/// only happen when it has something to redraw. A window that is idle — lyrics
+/// with nothing moving on them — therefore never commits during a drag, and the
+/// position would sit unapplied until some unrelated event produced a frame.
+/// The proxy wrote the state, so the proxy commits it; the client's own commits
+/// are unaffected, and committing a surface with no new buffer is what asks a
+/// compositor for its first configure.
+pub(super) fn surface_commit_request(wl_surface_id: u32) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(8);
+    buf.extend_from_slice(&wl_surface_id.to_ne_bytes());
+    buf.extend_from_slice(&((8u32 << 16) | REQ_COMMIT as u32).to_ne_bytes());
+    buf
+}
+
+/// Send a group of synthesised layer-shell requests for one converted window.
+///
+/// These cannot go through the app-facing socketpair the way every other
+/// injection does: the id they name is a layer surface to the compositor but
+/// the client's `xdg_toplevel`, and the outbound filter reads it in the
+/// client's namespace — where `set_size` is opcode `0`, the toplevel's
+/// `destroy`. They are written to the compositor directly instead, under the
+/// connection's write lock, exactly as the X11 path does.
+///
+/// Resolving the window and writing the requests are one critical section, and
+/// the lock is taken first and the state read after it — the order the proxy's
+/// own outbound path takes them in. That order is what makes the pair safe: the
+/// client can destroy the object these name at any moment, and a request for an
+/// object the compositor has already been told to forget is a protocol error
+/// that closes the application's whole display connection. A window still
+/// recorded once the lock is held is one whose destroy has not been forwarded
+/// yet, because forwarding is what holds the same lock, and destroying the
+/// surface is what removes the record.
+///
+/// `build` gets the connection and the window's `wl_surface`, and returns the
+/// requests to write — the whole group at once, so nothing the client sends can
+/// land in the middle of it — or `None` for a window that is not there.
+pub(super) fn send_layer_requests(
+    window_id: &str,
+    build: impl FnOnce(&mut WaylandConn, u32) -> Option<Vec<Vec<u8>>>,
+) -> bool {
+    let Some(conns) = CONNS.get() else {
+        return false;
+    };
+    // The fd is what the sink is found by. Everything the requests are built
+    // from is read again below, once nothing can change it.
+    let fd = {
+        let Ok(known) = conns.lock() else {
+            return false;
+        };
+        match window_surface_in(&known, window_id) {
+            Some((fd, _)) => fd,
+            None => return false,
+        }
+    };
+    let Some(sink) = sink_for(fd) else {
+        return false;
+    };
+    let Some(lock) = sink.write_lock.as_ref() else {
+        return false;
+    };
+    let Ok(_guard) = lock.lock() else {
+        return false;
+    };
+    let requests = {
+        let Ok(mut known) = conns.lock() else {
+            return false;
+        };
+        let Some((_, wl_surface)) = window_surface_in(&known, window_id) else {
+            return false;
+        };
+        let Some(conn) = known.get_mut(&fd) else {
+            return false;
+        };
+        build(conn, wl_surface)
+    };
+    let Some(requests) = requests else {
+        return false;
+    };
+    let mut sent = true;
+    for request in &requests {
+        if !sink.send_to_server(request) {
+            sent = false;
+        }
+    }
+    if !sent {
+        super::handlers::layer_note(|| {
+            format!("a layer request for {window_id} could not be sent")
+        });
+    }
+    sent
+}
+
+/// Change the size a converted window's layer surface asks for.
+///
+/// A layer surface's size is the application's to say, but a converted client
+/// cannot ask for one: a buffer of a different size attached to a surface the
+/// compositor keeps at the size it was told would mismatch it. `0` is refused
+/// rather than sent — the compositor reads a zero axis as "you decide", which
+/// only works with both opposite anchors. The request takes effect at the
+/// window's next commit, like every other double-buffered surface state.
+pub(super) fn set_layer_size(window_id: &str, width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 {
+        return false;
+    }
+    send_layer_requests(window_id, |conn, wl_surface| {
+        let layer_id = conn.wl_to_layer.get(&wl_surface).copied()?;
+        let geometry = LayerGeometry {
+            width,
+            height,
+            ..conn.layer_windows.get(&layer_id)?.geometry
+        };
+        if !set_layer_geometry(conn, layer_id, geometry) {
+            return None;
+        }
+        // The size takes effect at a commit, and the proxy is the one that
+        // asked for it, so it commits it too — in the same group, so that the
+        // client cannot land anything between the two.
+        Some(vec![
+            layer_shell::set_size(layer_id, width, height),
+            surface_commit_request(wl_surface),
+        ])
+    })
+}
+
 pub(super) fn send_xdg_toplevel_move() -> bool {
     let Some(button) = LAST_BUTTON
         .get()
@@ -250,10 +378,18 @@ pub(super) fn send_xdg_toplevel_move() -> bool {
             return false;
         };
 
-        conn.wl_to_top
+        // A converted window has no toplevel on the compositor's side: its
+        // layer surface reuses the id the client gave the toplevel, and the
+        // proxy replays the move against that.
+        conn.wl_to_layer
             .get(&wl_surf_id)
             .copied()
-            .filter(|id| conn.ifaces.get(id) == Some(&Iface::XdgToplevel))
+            .or_else(|| {
+                conn.wl_to_top
+                    .get(&wl_surf_id)
+                    .copied()
+                    .filter(|id| conn.ifaces.get(id) == Some(&Iface::XdgToplevel))
+            })
             .or_else(|| {
                 let xdg_id = conn
                     .xdg_to_wl
@@ -357,7 +493,7 @@ mod tests {
                 Sink {
                     real_fd: self.peer.as_raw_fd(),
                     app_fd,
-                    write_lock: None,
+                    write_lock: Some(std::sync::Arc::new(Mutex::new(()))),
                 },
             );
         }
@@ -391,6 +527,23 @@ mod tests {
             let map = CONNS.get().expect("initialised");
             let mut guard = map.lock().unwrap();
             read(guard.get_mut(&self.fd).expect("a connection"))
+        }
+
+        /// Everything written straight to the server, in order.
+        ///
+        /// [`Sink::send_to_server`] writes to the real connection, so these
+        /// bytes surface at the *other* end from `injected`'s.
+        fn server_bound(&mut self) -> Vec<u8> {
+            self._app.set_nonblocking(true).expect("nonblocking");
+            let mut out = Vec::new();
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = self._app.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                out.extend_from_slice(&buf[..n]);
+            }
+            out
         }
 
         /// Everything the proxy injected, in order.
@@ -694,6 +847,89 @@ mod tests {
         );
     }
 
+    /// Turn the fixture's window into a converted one, the way the proxy does.
+    fn convert_to_layer(fixture: &Fixture) {
+        fixture.with_conn(|conn| {
+            conn.ifaces.insert(9, Iface::ZwlrLayerSurface);
+            conn.wl_to_layer.insert(7, 9);
+            conn.surface_roles
+                .insert(7, SurfaceRole::Layer(super::super::test_support::options()));
+            conn.layer_windows.insert(
+                9,
+                LayerWindow {
+                    wl_surface: 7,
+                    xdg_surface: 20,
+                    geometry: LayerGeometry {
+                        width: 800,
+                        height: 225,
+                        margin_left: 0,
+                        margin_top: 0,
+                    },
+                    bounds: None,
+                    output: None,
+                },
+            );
+        });
+    }
+
+    #[test]
+    fn a_layer_size_change_bypasses_the_client_namespace() {
+        let _serial = lock_press_state();
+        let mut fixture = Fixture::new();
+        fixture.with_connection();
+        convert_to_layer(&fixture);
+
+        assert!(set_layer_size(WINDOW, 640, 180));
+
+        // Straight to the compositor, in the layer's own namespace: through
+        // the client's socketpair this opcode would read as `destroy`.
+        assert_eq!(
+            fixture.server_bound(),
+            [
+                request(9, REQ_LAYER_SET_SIZE, 16, &[640, 180]),
+                // The size is double-buffered, so the proxy commits what it
+                // asked for rather than waiting for the window to redraw.
+                request(7, REQ_COMMIT, 8, &[]),
+            ]
+            .concat()
+        );
+        // The recorded geometry follows, so a later drag starts from the size
+        // the window actually has, and so does the role a later show converts
+        // the surface with.
+        fixture.with_conn(|conn| {
+            assert_eq!(conn.layer_windows.get(&9).unwrap().geometry.width, 640);
+            match conn.surface_roles.get(&7) {
+                Some(SurfaceRole::Layer(options)) => {
+                    assert_eq!((options.width, options.height), (640, 180));
+                }
+                other => panic!("expected a layer role, got {other:?}"),
+            }
+        });
+    }
+
+    #[test]
+    fn a_layer_size_change_needs_a_converted_window() {
+        let _serial = lock_press_state();
+        let fixture = Fixture::new();
+        fixture.with_connection();
+
+        assert!(!set_layer_size(WINDOW, 640, 180));
+        assert!(!set_layer_size("nothing-recorded", 640, 180));
+    }
+
+    #[test]
+    fn a_zero_axis_is_refused_rather_than_sent() {
+        let _serial = lock_press_state();
+        let mut fixture = Fixture::new();
+        fixture.with_connection();
+        convert_to_layer(&fixture);
+
+        // Zero means "compositor decides" to the protocol, which is only valid
+        // with both anchors on that axis.
+        assert!(!set_layer_size(WINDOW, 0, 180));
+        assert!(fixture.server_bound().is_empty());
+    }
+
     #[test]
     fn a_toplevel_move_replays_the_remembered_press() {
         let _serial = lock_press_state();
@@ -714,6 +950,7 @@ mod tests {
                     wl_surface_id: 7,
                     x: 0,
                     y: 0,
+                    button: 0x110,
                     at: std::time::Instant::now(),
                 },
             );
@@ -748,6 +985,7 @@ mod tests {
                     wl_surface_id: 7,
                     x: 0,
                     y: 0,
+                    button: 0x110,
                     at: std::time::Instant::now(),
                 },
             );
@@ -784,6 +1022,7 @@ mod tests {
                     wl_surface_id: 7,
                     x: 0,
                     y: 0,
+                    button: 0x110,
                     at: std::time::Instant::now(),
                 },
             );

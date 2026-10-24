@@ -22,11 +22,160 @@ pub(crate) struct PopupGeometry {
 
 // ── Per-connection tracking state ──────────────────────────────────────────
 
+/// Where a converted window's layer surface currently sits.
+///
+/// Only meaningful for a surface anchored to the top and left edges, which is
+/// the shape the proxy can move by hand: the margins then are the position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct LayerGeometry {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) margin_left: i32,
+    pub(crate) margin_top: i32,
+}
+
+/// What the proxy knows about a `wl_output` the client bound.
+///
+/// A layer surface is created on one output and keeps it for life, so a window
+/// that has to appear on another one has to be created on it: this is what the
+/// proxy can name an output by when the application asks for one.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OutputInfo {
+    /// The compositor's own name for it, e.g. `DP-1` (wl_output v4).
+    pub(crate) name: Option<String>,
+    /// Its human-readable description, e.g. the monitor model.
+    pub(crate) description: Option<String>,
+    /// The name its `zxdg_output_v1` gives it, when the client made one. This
+    /// is the name a toolkit builds its display label from, so it is the one an
+    /// application is most likely to hand back.
+    pub(crate) xdg_name: Option<String>,
+    /// Its size in the logical coordinates a layer surface is placed in, as
+    /// reported by `zxdg_output_v1`.
+    pub(crate) logical_size: Option<(u32, u32)>,
+    /// The size of the mode it is running, in the pixels it draws (wl_output).
+    pub(crate) mode: Option<(u32, u32)>,
+    /// Which way round it draws that mode (wl_output's transform): one of the
+    /// quarter turns is a screen standing on its side, and its mode is still the
+    /// landscape one the panel was made with.
+    pub(crate) transform: Option<u32>,
+    /// How many of those pixels go into one logical one (wl_output).
+    pub(crate) scale: Option<i32>,
+}
+
+impl OutputInfo {
+    /// Whether the application's name for an output is this one.
+    ///
+    /// Applications know outputs by what their platform reports, which is the
+    /// compositor's name or its description depending on both, so either one
+    /// matches.
+    pub(crate) fn matches(&self, wanted: &str) -> bool {
+        self.names().any(|known| known == wanted)
+    }
+
+    /// Every name this output is known by, best first.
+    pub(crate) fn names(&self) -> impl Iterator<Item = &str> {
+        [&self.xdg_name, &self.name, &self.description]
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+    }
+
+    /// The name to hand the application, if the output has one yet.
+    pub(crate) fn label(&self) -> Option<String> {
+        self.names().next().map(str::to_string)
+    }
+
+    /// How large the output is, in the logical coordinates a layer surface's
+    /// margins are measured in.
+    ///
+    /// The client's own `zxdg_output_v1` says so directly and is what a client
+    /// that has one is placed by. Without it the mode and the scale still add
+    /// up to the same thing, rounded to the smaller answer: a size that is too
+    /// small holds a window further inside the screen, and a size that is too
+    /// large lets a drag take it off the edge it cannot come back from.
+    pub(crate) fn size(&self) -> Option<(u32, u32)> {
+        if let Some(size) = self.logical_size.filter(|(w, h)| *w > 0 && *h > 0) {
+            return Some(size);
+        }
+        let (mut width, mut height) = self.mode?;
+        // A quarter turn — the odd transforms are the 90° and 270° ones — draws
+        // that mode the other way round.
+        if self.transform.is_some_and(|turn| turn % 2 == 1) {
+            std::mem::swap(&mut width, &mut height);
+        }
+        let scale = self.scale.unwrap_or(1).max(1) as u32;
+        Some((width.div_ceil(scale), height.div_ceil(scale)))
+    }
+}
+
 /// A window the proxy converted into a layer surface on the compositor side.
 #[derive(Clone, Debug)]
 pub(crate) struct LayerWindow {
     pub(crate) wl_surface: u32,
     pub(crate) xdg_surface: u32,
+    /// The size and position the layer surface was last given.
+    pub(crate) geometry: LayerGeometry,
+    /// The size of the output the surface lives on, as the application measured
+    /// it. A gesture keeps the window inside it, so a window cannot be dragged
+    /// where the user cannot reach it.
+    pub(crate) bounds: Option<(u32, u32)>,
+    /// The output the surface was created on, when the application asked for
+    /// one by name. The compositor picked it otherwise, and only the surface's
+    /// own `enter` event can say which that was.
+    pub(crate) output: Option<u32>,
+}
+
+/// Which interactive gesture a [`LayerGrab`] is replaying.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GrabMode {
+    Move,
+    /// The edges the pointer grabbed, as the protocol's edge flags.
+    Resize(u32),
+}
+
+/// An interactive move or resize the proxy is driving for a layer surface.
+///
+/// A layer surface has no compositor-side move or interactive resize, so the
+/// proxy drives both itself, from the pointer's position within the surface —
+/// the only position a client is ever told — and the geometry the surface has
+/// now. A move is a feedback loop rather than a sum of steps: the pointer stays
+/// where it was grabbed, so each step only has to undo the drift the window's
+/// own movement introduced, and a step that lands wrong is corrected by the
+/// next one instead of being carried for the rest of the drag. A resize needs
+/// no such loop: the size is not part of the surface's position, so pointer
+/// coordinates do not move with it, and the gesture's start is a fixed point
+/// for the whole of it.
+#[derive(Clone, Debug)]
+pub(crate) struct LayerGrab {
+    /// The client's id for the toplevel, reused as the layer surface id.
+    pub(crate) layer_id: u32,
+    pub(crate) wl_surface: u32,
+    /// The pointer whose motion drives the gesture.
+    pub(crate) pointer_id: u32,
+    pub(crate) mode: GrabMode,
+    /// Pointer position in surface-local coordinates when the gesture started.
+    ///
+    /// The coordinates a grab is given do not move under it: the press fixes
+    /// what they are measured against for the whole gesture, so this is the
+    /// point the window was grabbed at and every later position is that plus
+    /// the pointer's own movement.
+    pub(crate) origin: (f64, f64),
+    /// The button the press this gesture was started on was made with.
+    ///
+    /// A gesture belongs to one button: without this, a second button pressed
+    /// and released in the middle of a drag would end it.
+    pub(crate) button: Option<u32>,
+    /// Whether the pointer was last seen out of the window.
+    ///
+    /// A window that follows the pointer keeps it inside; a window that cannot
+    /// move any further — one pinned at the edge of the output it lives on —
+    /// lets the pointer out of it, and that is the gesture a user is pushing
+    /// past the edge with. The last position is what counts, so a step that
+    /// went past the window on its own is taken back by the next one.
+    pub(crate) left: bool,
+    /// Geometry when the gesture started.
+    pub(crate) size: (u32, u32),
+    pub(crate) margins: (i32, i32),
 }
 
 /// The role a `wl_surface` has taken for the rest of its life.
@@ -127,6 +276,21 @@ pub(crate) struct WaylandConn {
     /// happen first. The id is released when both are done, and the callback's
     /// events are hidden until then.
     pub(crate) reservations: HashMap<u32, Reservation>,
+    /// The serial of the last `wl_pointer.enter` per surface.
+    ///
+    /// An interactive move or resize may name either the press or the enter
+    /// that started it, so both are accepted when a gesture is validated.
+    pub(crate) pointer_enter_serial: HashMap<u32, u32>,
+    /// The interactive move or resize the proxy is replaying, if any.
+    pub(crate) layer_grab: Option<LayerGrab>,
+    /// The `wl_output` objects the client bound, by their interface id.
+    pub(crate) outputs: HashMap<u32, OutputInfo>,
+    /// The client's `zxdg_output_manager_v1`, if it bound one.
+    pub(crate) xdg_output_manager_id: Option<u32>,
+    /// `zxdg_output_v1` objects by the `wl_output` each was made for.
+    pub(crate) xdg_outputs: HashMap<u32, u32>,
+    /// The output each surface is on, from its own `enter` events.
+    pub(crate) surface_outputs: HashMap<u32, u32>,
 }
 
 impl WaylandConn {
@@ -160,6 +324,12 @@ impl WaylandConn {
             pending_role: None,
             pending_xdg_surface: None,
             reservations: HashMap::new(),
+            pointer_enter_serial: HashMap::new(),
+            layer_grab: None,
+            outputs: HashMap::new(),
+            xdg_output_manager_id: None,
+            xdg_outputs: HashMap::new(),
+            surface_outputs: HashMap::new(),
         }
     }
 
@@ -193,6 +363,12 @@ impl WaylandConn {
         self.pending_role = None;
         self.pending_xdg_surface = None;
         self.reservations.clear();
+        self.pointer_enter_serial.clear();
+        self.layer_grab = None;
+        self.outputs.clear();
+        self.xdg_output_manager_id = None;
+        self.xdg_outputs.clear();
+        self.surface_outputs.clear();
     }
 
     pub(crate) fn alloc_injected_id(&mut self) -> Option<u32> {
@@ -215,6 +391,13 @@ impl WaylandConn {
         {
             self.pending_xdg_surface = None;
         }
+        // A gesture cannot outlive any of the objects it names: the surface it
+        // moves, the layer object behind it, or the pointer driving it.
+        if self.layer_grab.as_ref().is_some_and(|grab| {
+            grab.layer_id == id || grab.wl_surface == id || grab.pointer_id == id
+        }) {
+            self.layer_grab = None;
+        }
         match self.ifaces.get(&id).copied() {
             Some(Iface::WlPointer) => {
                 self.pointer_focus.remove(&id);
@@ -225,6 +408,7 @@ impl WaylandConn {
                 self.touch_seat.remove(&id);
             }
             Some(Iface::WlSurface) => {
+                self.surface_outputs.remove(&id);
                 if let Some(layer_id) = self.wl_to_layer.remove(&id) {
                     self.purge(layer_id);
                 }
@@ -278,6 +462,17 @@ impl WaylandConn {
                     self.xdg_to_layer.remove(&window.xdg_surface);
                 }
             }
+            Some(Iface::WlOutput) => {
+                self.outputs.remove(&id);
+                self.xdg_outputs.retain(|_, output| *output != id);
+                self.surface_outputs.retain(|_, output| *output != id);
+            }
+            Some(Iface::ZxdgOutputManager) if self.xdg_output_manager_id == Some(id) => {
+                self.xdg_output_manager_id = None;
+            }
+            Some(Iface::ZxdgOutput) => {
+                self.xdg_outputs.remove(&id);
+            }
             Some(Iface::WlSeat) => {
                 self.pointer_seat.retain(|_, v| *v != id);
                 self.touch_seat.retain(|_, v| *v != id);
@@ -322,10 +517,98 @@ impl WaylandConn {
 
 #[cfg(test)]
 mod tests {
+    use super::super::codec::{Iface, REQ_COMMIT, REQ_LAYER_SET_MARGIN};
     use super::super::layer_shell::{ANCHOR_ALL, LAYER_BACKGROUND};
-    use super::super::test_support::{options, serial};
+    use super::super::test_support::{AttachedSink, options, request, serial};
 
     use super::*;
+
+    /// A converted window that has been placed against the corner of a screen
+    /// it is not on, which is where a window created with another screen's
+    /// placement ends up.
+    fn misplaced_window(conn: &mut WaylandConn, window_id: &str) {
+        conn.ifaces.insert(10, Iface::WlSurface);
+        conn.ifaces.insert(30, Iface::ZwlrLayerSurface);
+        conn.wl_to_layer.insert(10, 30);
+        conn.surface_ids.insert(10, window_id.into());
+        conn.layer_windows.insert(
+            30,
+            LayerWindow {
+                wl_surface: 10,
+                xdg_surface: 20,
+                geometry: LayerGeometry {
+                    width: 800,
+                    height: 225,
+                    margin_left: 2560 - 800,
+                    margin_top: 1400,
+                },
+                bounds: None,
+                output: None,
+            },
+        );
+    }
+
+    #[test]
+    fn the_size_the_application_reports_pulls_a_window_onto_its_screen() {
+        let _guard = serial();
+        init_state();
+        let fd = 93_701;
+        let window_id = "the-placements-window";
+        let mut conn = WaylandConn::new();
+        misplaced_window(&mut conn, window_id);
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+        let mut sink = AttachedSink::new(fd);
+
+        // The renderer is the half that can read the screen it is on, so this
+        // is a size that belongs to the output the window really is on — and a
+        // window outside it is one the user cannot reach.
+        assert!(set_layer_bounds(window_id, 1280, 720));
+
+        let conns = CONNS.get().unwrap().lock().unwrap();
+        let layer = conns.get(&fd).unwrap().layer_windows.get(&30).unwrap();
+        assert_eq!(layer.bounds, Some((1280, 720)));
+        assert_eq!(layer.geometry.margin_left, 1280 - 800);
+        assert_eq!(layer.geometry.margin_top, 720 - 225);
+        drop(conns);
+        // The window is put back on the screen it is on, in the same group as
+        // the commit that applies it.
+        assert_eq!(
+            sink.written(),
+            [
+                request(30, REQ_LAYER_SET_MARGIN, 24, &[720 - 225, 0, 0, 1280 - 800]),
+                request(10, REQ_COMMIT, 8, &[]),
+            ]
+            .concat()
+        );
+        clear_runtime_state_for_fd(fd);
+    }
+
+    #[test]
+    fn a_size_the_window_is_already_inside_leaves_it_alone() {
+        let _guard = serial();
+        init_state();
+        let fd = 93_702;
+        let window_id = "a-window-already-inside";
+        let mut conn = WaylandConn::new();
+        misplaced_window(&mut conn, window_id);
+        conn.layer_windows
+            .get_mut(&30)
+            .unwrap()
+            .geometry
+            .margin_left = 40;
+        conn.layer_windows.get_mut(&30).unwrap().geometry.margin_top = 60;
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+        let _sink = AttachedSink::new(fd);
+
+        assert!(set_layer_bounds(window_id, 1280, 720));
+
+        let conns = CONNS.get().unwrap().lock().unwrap();
+        let layer = conns.get(&fd).unwrap().layer_windows.get(&30).unwrap();
+        assert_eq!(layer.geometry.margin_left, 40);
+        assert_eq!(layer.geometry.margin_top, 60);
+        drop(conns);
+        clear_runtime_state_for_fd(fd);
+    }
 
     /// Serialize on the shared lock and start from empty policy state; the
     /// policy map is process-global, so every module that touches it does this.
@@ -402,6 +685,26 @@ mod tests {
         );
         assert_eq!(layer_policy("replacement"), Some(options));
         clear_all_layer_policies();
+    }
+
+    #[test]
+    fn an_output_is_found_by_the_name_or_the_description() {
+        let mut conn = WaylandConn::new();
+        conn.outputs.insert(
+            7,
+            OutputInfo {
+                name: Some("DP-1".into()),
+                description: Some("Dell Inc. DELL U2720Q".into()),
+                ..OutputInfo::default()
+            },
+        );
+
+        // Either of the two names a platform might report the output by.
+        assert_eq!(output_for_name(&conn, "DP-1"), Some(7));
+        assert_eq!(output_for_name(&conn, "Dell Inc. DELL U2720Q"), Some(7));
+        // An output the client never bound is not an error: the compositor
+        // picks, which is what a null output id means.
+        assert_eq!(output_for_name(&conn, "DP-9"), None);
     }
 
     #[test]
@@ -642,6 +945,8 @@ pub(crate) struct LastButton {
     pub(crate) wl_surface_id: u32,
     pub(crate) x: i32,
     pub(crate) y: i32,
+    /// The button it was made with, or `0` when the event did not say.
+    pub(crate) button: u32,
     /// When the press arrived, so a caller can tell a deliberate click from a
     /// press that merely happened at some point in the past.
     pub(crate) at: Instant,
@@ -762,6 +1067,207 @@ fn window_roles() -> Option<&'static Mutex<HashMap<String, WindowRole>>> {
 /// The role a managed window registered, if any.
 fn window_role(window_id: &str) -> Option<WindowRole> {
     window_roles()?.lock().ok()?.get(window_id).cloned()
+}
+
+/// Record the geometry a converted window's layer surface now has.
+///
+/// The cached role options are what a later role object on the same surface is
+/// converted with — hiding and showing a window builds a new one — so they have
+/// to carry the geometry the window has now, not the one it was first created
+/// with, or a drag would be undone by a hide.
+pub(crate) fn set_layer_geometry(
+    conn: &mut WaylandConn,
+    layer_id: u32,
+    geometry: LayerGeometry,
+) -> bool {
+    let Some(window) = conn.layer_windows.get_mut(&layer_id) else {
+        return false;
+    };
+    window.geometry = geometry;
+    let wl_surface = window.wl_surface;
+    if let Some(SurfaceRole::Layer(options)) = conn.surface_roles.get_mut(&wl_surface) {
+        options.width = geometry.width;
+        options.height = geometry.height;
+        options.margin_left = geometry.margin_left;
+        options.margin_top = geometry.margin_top;
+    }
+    true
+}
+
+/// The `wl_output` object the application names, if it is one the client bound.
+pub(crate) fn output_for_name(conn: &WaylandConn, wanted: &str) -> Option<u32> {
+    conn.outputs
+        .iter()
+        .find(|(_, info)| info.matches(wanted))
+        .map(|(id, _)| *id)
+}
+
+/// The managed window a converted layer surface belongs to, and its geometry.
+pub(crate) fn layer_geometry(conn: &WaylandConn, layer_id: u32) -> Option<(String, LayerGeometry)> {
+    let window = conn.layer_windows.get(&layer_id)?;
+    let window_id = conn.surface_ids.get(&window.wl_surface)?.clone();
+    Some((window_id, window.geometry))
+}
+
+/// `margin` moved as little as it must be to put a `surface`-sized window
+/// wholly inside an `output`-sized one.
+///
+/// Both values are in the output's own coordinates, and this is the whole of
+/// the window's reach: a layer surface cannot move to another output, so a
+/// window past the edge of its own is clipped out of sight and out of reach —
+/// the pointer is over something else, and the motion that drives a gesture
+/// stops arriving.
+///
+/// Whole, not partly: the part of a window that accepts the pointer is the part
+/// of it that has something to show, so a window hanging over the edge leaves
+/// the user a strip that cannot be grabbed — and a compositor that arranges a
+/// surface anchored to the top left *shrinks* it to the room left on the
+/// output, which would leave the geometry the gesture believes in a lie.
+pub(crate) fn keep_inside(margin: i32, surface: u32, output: u32) -> i32 {
+    match margin_range(surface, output) {
+        Some((least, most)) => margin.clamp(least, most),
+        None => margin,
+    }
+}
+
+/// The margins a window of `surface` size can have inside an `output`-sized
+/// one: all of it on screen, or nothing held at all.
+///
+/// `None` for a window larger than the output, which has no such margin — it is
+/// left where it is rather than pinned to a wall it cannot fit against.
+pub(crate) fn margin_range(surface: u32, output: u32) -> Option<(i32, i32)> {
+    let most = output as i32 - surface as i32;
+    (most >= 0).then_some((0, most))
+}
+
+/// The requests that put a converted window back inside the output it is on.
+///
+/// A window can turn up outside its screen: created on one screen with a
+/// placement measured from another's corner, or restored from a placement that
+/// no longer fits. A layer surface has no way back from there — it is clipped
+/// out of sight and past the reach of any pointer, so no gesture can even be
+/// started on it. Every moment at which the proxy learns how large that screen
+/// is is a moment at which it can be pulled back in: when the surface says
+/// which output it is on, and when the application reports the size it
+/// measured. `None` when it is already inside, or when there is nothing to hold
+/// it by.
+pub(crate) fn pull_inside_output(conn: &mut WaylandConn, layer_id: u32) -> Option<Vec<Vec<u8>>> {
+    let (width, height) = layer_bounds(conn, layer_id)?;
+    let current = conn.layer_windows.get(&layer_id)?.geometry;
+    // A compositor arranges a surface anchored to the top left by the room it
+    // has left on the output, and shrinks the surface to fit: a window larger
+    // than its screen would be drawn smaller than the geometry a gesture
+    // believes in, which is worse than being told it cannot be that large.
+    let size = (current.width.min(width), current.height.min(height));
+    let inside = LayerGeometry {
+        width: size.0,
+        height: size.1,
+        margin_left: keep_inside(current.margin_left, size.0, width),
+        margin_top: keep_inside(current.margin_top, size.1, height),
+    };
+    if inside == current {
+        return None;
+    }
+    let wl_surface = conn.layer_windows.get(&layer_id)?.wl_surface;
+    set_layer_geometry(conn, layer_id, inside);
+    // The application keeps the placement it is told about, so a placement it
+    // cannot use is worth correcting rather than left to be asked for again.
+    remember_layer_geometry(conn, layer_id);
+    if let Some((window_id, geometry)) = layer_geometry(conn, layer_id) {
+        fire_layer_geometry(&window_id, geometry);
+    }
+    let mut requests = super::handlers::grab::geometry_requests(layer_id, current, inside);
+    requests.push(super::inject::surface_commit_request(wl_surface));
+    Some(requests)
+}
+
+/// The output a converted window's surface is on, if the proxy knows.
+///
+/// The surface's own `enter` events are the authority: the compositor picked
+/// the output when it created the surface, and the only other thing that names
+/// one is the policy the application created the window with.
+pub(crate) fn layer_output(conn: &WaylandConn, layer_id: u32) -> Option<u32> {
+    let window = conn.layer_windows.get(&layer_id)?;
+    conn.surface_outputs
+        .get(&window.wl_surface)
+        .copied()
+        .or(window.output)
+}
+
+/// What the application knows the output a converted window lives on by.
+///
+/// This is what a window created again after a drag past the screen edge has to
+/// be asked for by name, so it is the proxy's own name for the output rather
+/// than the application's — the application hands it straight back, and there
+/// is nothing left to match up.
+pub(crate) fn layer_output_label(conn: &WaylandConn, layer_id: u32) -> Option<String> {
+    conn.outputs.get(&layer_output(conn, layer_id)?)?.label()
+}
+
+/// How large the output a converted window lives on is, in the logical
+/// coordinates its margins are measured in.
+///
+/// The compositor's own answer comes first, and the size the application
+/// measured is the fallback: without one of them a gesture cannot tell where
+/// the screen ends, and a window dragged past it would be out of reach. A size
+/// of nothing is not an answer — an output that has only just been announced
+/// reports one, and a window held inside nothing would be pinned to a corner.
+pub(crate) fn layer_bounds(conn: &WaylandConn, layer_id: u32) -> Option<(u32, u32)> {
+    let from_compositor = layer_output(conn, layer_id)
+        .and_then(|id| conn.outputs.get(&id).and_then(OutputInfo::size));
+    from_compositor.or_else(|| conn.layer_windows.get(&layer_id)?.bounds)
+}
+
+/// Record the size of the output a converted window's layer surface lives on.
+///
+/// The compositor never tells a client how big the output is, and a layer
+/// surface cannot move to another one: without this a gesture could push the
+/// window off the edge it lives on, where it is clipped out of sight and out of
+/// reach. The application measures its own screen and reports it.
+pub(crate) fn set_layer_bounds(window_id: &str, width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 {
+        return false;
+    }
+    // A window cannot be created off its screen and stay reachable, and a size
+    // reported for the screen it is not on would be worse than none: this is the
+    // size of the screen the window is actually on, which is what makes it worth
+    // holding the window by.
+    super::inject::send_layer_requests(window_id, |conn, wl_surface| {
+        let layer_id = conn.wl_to_layer.get(&wl_surface).copied()?;
+        let window = conn.layer_windows.get_mut(&layer_id)?;
+        window.bounds = Some((width, height));
+        Some(pull_inside_output(conn, layer_id).unwrap_or_default())
+    })
+}
+
+/// Remember a converted window's current geometry as its policy.
+///
+/// A window the application re-creates under the same managed id — an on-demand
+/// window being shown again — is converted from the policy, so without this it
+/// would come back at the place it was first given rather than where the user
+/// left it. Called when a gesture ends, not per motion event.
+pub(crate) fn remember_layer_geometry(conn: &WaylandConn, layer_id: u32) -> bool {
+    let Some(window) = conn.layer_windows.get(&layer_id) else {
+        return false;
+    };
+    let Some(window_id) = conn.surface_ids.get(&window.wl_surface) else {
+        return false;
+    };
+    let geometry = window.geometry;
+    let Some(roles) = window_roles() else {
+        return false;
+    };
+    let Ok(mut roles) = roles.lock() else {
+        return false;
+    };
+    let Some(WindowRole::Layer(options)) = roles.get_mut(window_id) else {
+        return false;
+    };
+    options.width = geometry.width;
+    options.height = geometry.height;
+    options.margin_left = geometry.margin_left;
+    options.margin_top = geometry.margin_top;
+    true
 }
 
 /// Whether a connection knows a compositor that takes layer surfaces.
@@ -1060,6 +1566,108 @@ pub(crate) fn clear_last_button_for_surface(fd: RawFd, wl_surface_id: u32) {
         if last_button.latest == Some((fd, wl_surface_id)) {
             last_button.latest = None;
         }
+    }
+}
+
+// ── Layer-surface geometry ────────────────────────────────────────────────
+
+/// Reports where the user left a layer surface, by managed window id.
+///
+/// The compositor never tells a client where a surface is, so a window the
+/// application wants to put back has to be told by the layer that moved it.
+pub(crate) type LayerGeometryCb = Box<dyn Fn(String, i32, i32, u32, u32) + Send + Sync>;
+
+pub(crate) static LAYER_GEOMETRY: OnceLock<Mutex<Option<LayerGeometryCb>>> = OnceLock::new();
+
+/// Register the one listener for a finished move or resize.
+pub(crate) fn on_layer_geometry(cb: LayerGeometryCb) -> bool {
+    let slot = LAYER_GEOMETRY.get_or_init(|| Mutex::new(None));
+    let Ok(mut slot) = slot.lock() else {
+        return false;
+    };
+    *slot = Some(cb);
+    true
+}
+
+pub(crate) fn fire_layer_geometry(window_id: &str, geometry: LayerGeometry) {
+    let Some(slot) = LAYER_GEOMETRY.get() else {
+        return;
+    };
+    let Ok(slot) = slot.lock() else {
+        return;
+    };
+    if let Some(callback) = slot.as_ref() {
+        callback(
+            window_id.to_string(),
+            geometry.margin_left,
+            geometry.margin_top,
+            geometry.width,
+            geometry.height,
+        );
+    }
+}
+
+/// Reports a gesture the user pushed past the edge of the output it lives on.
+///
+/// The window stopped there because it cannot go any further — a layer surface
+/// keeps the output it was created with — which is the only moment at which the
+/// application can decide to put it on the one next to it, by creating it
+/// again. `edges` uses the xdg-toplevel resize edge flags.
+pub(crate) type LayerPushedCb = Box<dyn Fn(String, u32) + Send + Sync>;
+
+/// Reports which output a converted window ended up on.
+///
+/// A layer surface cannot be asked where it is, and an application only knows
+/// its screens by what the platform reports, so this is the one word the two
+/// halves have in common: the proxy says it, and the application hands it back
+/// when it wants the window created on that screen again.
+pub(crate) type LayerOutputCb = Box<dyn Fn(String, String) + Send + Sync>;
+
+pub(crate) static LAYER_OUTPUT: OnceLock<Mutex<Option<LayerOutputCb>>> = OnceLock::new();
+
+/// Register the one listener for the output a window ended up on.
+pub(crate) fn on_layer_output(cb: LayerOutputCb) -> bool {
+    let slot = LAYER_OUTPUT.get_or_init(|| Mutex::new(None));
+    let Ok(mut slot) = slot.lock() else {
+        return false;
+    };
+    *slot = Some(cb);
+    true
+}
+
+pub(crate) fn fire_layer_output(window_id: &str, output: &str) {
+    let Some(slot) = LAYER_OUTPUT.get() else {
+        return;
+    };
+    let Ok(slot) = slot.lock() else {
+        return;
+    };
+    if let Some(callback) = slot.as_ref() {
+        callback(window_id.to_string(), output.to_string());
+    }
+}
+
+pub(crate) static LAYER_PUSHED: OnceLock<Mutex<Option<LayerPushedCb>>> = OnceLock::new();
+
+/// Register the one listener for a gesture that ran out of output.
+pub(crate) fn on_layer_pushed(cb: LayerPushedCb) -> bool {
+    let slot = LAYER_PUSHED.get_or_init(|| Mutex::new(None));
+    let Ok(mut slot) = slot.lock() else {
+        return false;
+    };
+    *slot = Some(cb);
+    true
+}
+
+pub(crate) fn fire_layer_pushed(window_id: &str, edges: u32) {
+    let Some(slot) = LAYER_PUSHED.get() else {
+        return;
+    };
+    let Ok(slot) = slot.lock() else {
+        return;
+    };
+    if let Some(callback) = slot.as_ref() {
+        callback(window_id.to_string(), edges);
     }
 }
 
@@ -1589,6 +2197,7 @@ mod popup_tests {
                         wl_surface_id: surface,
                         x: 0,
                         y: 0,
+                        button: 0x110,
                         at: Instant::now(),
                     },
                 );
@@ -1831,6 +2440,7 @@ mod popup_tests {
                 wl_surface_id: 10,
                 x: 3,
                 y: 4,
+                button: 0x110,
                 at: Instant::now(),
             },
         );
