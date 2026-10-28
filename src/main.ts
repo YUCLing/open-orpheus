@@ -47,7 +47,7 @@ if (started) {
 }
 
 // Enforce single instance
-if (!app.requestSingleInstanceLock()) {
+if (!("OPEN_ORPHEUS_IGNORE_SINGLE_INSTANCE" in process.env) && !app.requestSingleInstanceLock()) {
   app.quit();
 }
 
