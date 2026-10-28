@@ -5,7 +5,13 @@ import { app } from "electron";
 export const downloadTemp = resolve(app.getPath("temp"), "open-orpheus-download-temp");
 export const streamerTemp = resolve(app.getPath("temp"), "open-orpheus-streamer-temp");
 
-export const data = resolve(app.isPackaged ? app.getPath("userData") : "data");
+export const data = resolve(
+  app.isPackaged
+    ? app.getPath("userData")
+    : "CUSTOM_DATA_DIR" in process.env
+      ? process.env.CUSTOM_DATA_DIR!
+      : "data"
+);
 
 export const log = resolve(data, "logs");
 export const pack = resolve(data, "package");

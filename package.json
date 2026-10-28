@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@electron-forge/cli": "^8.0.1",
+    "@electron-forge/core": "^8.0.1",
     "@electron-forge/maker-squirrel": "^8.0.1",
     "@electron-forge/maker-zip": "^8.0.1",
     "@electron-forge/plugin-auto-unpack-natives": "^8.0.1",
@@ -46,6 +47,7 @@
     "@electron/fuses": "catalog:",
     "@keyv/sqlite": "6.1.0",
     "@open-orpheus/audio-effect": "workspace:*",
+    "@playwright/test": "^1.64.1",
     "@types/audioworklet": "^0.0.100",
     "@types/ejs": "^3.1.5",
     "@types/electron-squirrel-startup": "^1.0.2",
