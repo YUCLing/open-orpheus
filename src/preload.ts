@@ -3,9 +3,10 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
-import { isMain } from "./preload/util";
+import { channel } from "./preload/util";
 
 import "./preload/channel";
+import { fireNativeCall } from "./preload/channel";
 
 import "./preload/calls/index";
 
@@ -15,9 +16,15 @@ async function getSCFonts(): Promise<string[]> {
   return fonts;
 }
 
-LOGGER.debug({ isMain }, "Installing main-world patches");
+const mainWorldInterface = {
+  getSCFonts,
+  fireNativeCall,
+  dragWindow: () => ipcRenderer.invoke("channel.call", "winhelper.dragWindow"),
+};
+
+LOGGER.debug({ channel }, "Installing main-world patches");
 contextBridge.executeInMainWorld({
-  func: (isMain: boolean, getFonts: typeof getSCFonts) => {
+  func: (channel: string, api: typeof mainWorldInterface) => {
     const originalContentDocumentDescriptor = Object.getOwnPropertyDescriptor(
       HTMLIFrameElement.prototype,
       "contentDocument"
@@ -62,10 +69,10 @@ contextBridge.executeInMainWorld({
       return img;
     } as unknown as typeof Image;
 
-    if (isMain) {
+    if (channel === "main") {
       const systemFonts = new Set();
 
-      void getFonts().then((fonts) => {
+      void api.getSCFonts().then((fonts) => {
         for (const font of fonts) systemFonts.add(font);
       });
 
@@ -122,7 +129,108 @@ contextBridge.executeInMainWorld({
       };
       // Use `mousemove` because this means the app is fully ready
       window.addEventListener("mousemove", handlerRemover);
+    } else if (channel === "pet") {
+      // #region Pointer utilities
+      // From /gui/src/lib/pointer.ts
+      const THRESHOLD_SQ = 2;
+      function onpointerdrag(el: HTMLElement, callback: (e: PointerEvent) => void) {
+        let pointerId: number | null = null;
+        let sx = 0,
+          sy = 0;
+
+        const onpointerdown = (e: PointerEvent) => {
+          if (pointerId !== null) return;
+          if (e.pointerType === "mouse" && e.button !== 0) return; // For mouse, only track left button
+
+          e.preventDefault();
+
+          pointerId = e.pointerId;
+          sx = e.clientX;
+          sy = e.clientY;
+
+          window.addEventListener("pointermove", onpointermove);
+          window.addEventListener("pointerup", stop);
+          window.addEventListener("pointercancel", stop);
+          window.addEventListener("blur", stop);
+        };
+
+        const onpointermove = (e: PointerEvent) => {
+          if (e.pointerId !== pointerId) return;
+          const dx = e.clientX - sx,
+            dy = e.clientY - sy;
+          if (dx * dx + dy * dy >= THRESHOLD_SQ) {
+            stop();
+            callback(e);
+          }
+        };
+
+        const stop = (e?: PointerEvent | FocusEvent) => {
+          if (e instanceof PointerEvent && e.pointerId !== pointerId) return;
+          pointerId = null;
+          window.removeEventListener("pointermove", onpointermove);
+          window.removeEventListener("pointerup", stop);
+          window.removeEventListener("pointercancel", stop);
+          window.removeEventListener("blur", stop);
+        };
+
+        el.addEventListener("pointerdown", onpointerdown);
+
+        return () => {
+          el.removeEventListener("pointerdown", onpointerdown);
+          stop();
+        };
+      }
+
+      function getMouseEvent(type: string, event: PointerEvent) {
+        const x = event.clientX,
+          y = event.clientY,
+          scale = window.devicePixelRatio,
+          px = x * scale,
+          py = y * scale;
+        return { type, x, y, px, py };
+      }
+      function subscribeMouseEvent<K extends keyof HTMLElementEventMap>(
+        el: HTMLElement,
+        event: K,
+        type: string
+      ) {
+        const handler = (e: Event) => {
+          if (!(e instanceof PointerEvent)) return;
+          api.fireNativeCall("desktoppet.onMouseEvent", getMouseEvent(type, e));
+        };
+        el.addEventListener(event, handler);
+        return () => el.removeEventListener(event, handler);
+      }
+      // #endregion
+      addEventListener("DOMContentLoaded", () => {
+        let currentRenderer: HTMLElement | null = null;
+        let unsubscribe: (() => void) | null = null;
+        const observer = new MutationObserver(() => {
+          const renderer = document.getElementById("pet-desktop-renderer");
+          if (!renderer || currentRenderer === renderer) return;
+          if (unsubscribe) unsubscribe();
+          currentRenderer = renderer;
+          // We need to capture the mouse events, so we cannot use this.
+          renderer.style.setProperty("-webkit-app-region", "no-drag");
+          const unsubs = [
+            subscribeMouseEvent(renderer, "pointerenter", "hoverenter"),
+            subscribeMouseEvent(renderer, "pointerleave", "hoverleave"),
+            subscribeMouseEvent(renderer, "pointermove", "hover"),
+            subscribeMouseEvent(renderer, "click", "click"),
+            onpointerdrag(renderer, api.dragWindow),
+          ];
+          unsubscribe = () => {
+            for (const unsub of unsubs) unsub();
+          };
+        });
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["id"],
+        });
+      });
     }
   },
-  args: [isMain, getSCFonts],
+  args: [channel, mainWorldInterface],
 });

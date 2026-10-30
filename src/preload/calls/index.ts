@@ -1,4 +1,4 @@
-import { isMain } from "../util";
+import { channel } from "../util";
 
 import "./app";
 import "./os";
@@ -7,7 +7,7 @@ import "./update";
 import "./im";
 import "./nimsys";
 
-if (isMain) {
+if (channel === "main") {
   // Only main window uses player
   void Promise.all([import("./audioplayer"), import("./audioeffect"), import("./player")]).then(
     () => {

@@ -3,6 +3,7 @@ import "./audioeffect";
 import "./winhelper";
 import "./browser";
 import "./desktop";
+import "./desktoppet";
 import "./storage";
 import "./musiclibrary";
 import "./os";

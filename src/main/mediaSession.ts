@@ -21,6 +21,9 @@ export interface Metadata {
   album: string;
 }
 
+/** Unique play ID for current track play session. */
+export let playId: string | null = null;
+
 /** Single source of truth for playback state (see playback/PlaybackController). */
 export const playbackController = new PlaybackController();
 
@@ -163,6 +166,9 @@ export const mediaSession = {
 };
 
 lifecycleEvents.on("mainwindowcreated", ({ data: mainWindow }) => {
+  mainWindow.webContents.ipc.on("player.playidupdate", (e, id) => {
+    playId = id;
+  });
   mainWindow.webContents.ipc.on("player.timeupdate", (e, time) => {
     playbackController.applyPosition(time);
   });
