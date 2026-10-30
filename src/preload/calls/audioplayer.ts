@@ -15,6 +15,7 @@ registerCallHandler<[string, AudioPlayInfo], void>("audioplayer.load", async (id
     },
     "Audio load requested"
   );
+  ipcRenderer.send("player.playidupdate", playInfo.playId);
   await player.load(playInfo);
 });
 

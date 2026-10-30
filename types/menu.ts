@@ -13,6 +13,7 @@ export type AppMenuItem = {
   enable: boolean;
   separator: boolean;
   children: AppMenuItem[] | null;
+  raw_text?: string;
   hotkey?: string;
   image_color: string;
   image_path?: string;
