@@ -249,7 +249,8 @@ export abstract class ManagedWindow<
    * or carry someone else's; it is taken, prevented, and written back by this
    * module instead. Attached only where the title is decorated.
    */
-  private readonly _pageTitleListener = (event: { preventDefault(): void }, title: string) => {
+  private readonly _pageTitleListener = (event: Electron.Event, title: string) => {
+    if (event.defaultPrevented) return; // Someone already handled this.
     event.preventDefault();
     if (title === this.decoratedTitle()) return;
     this.setTitle(title);

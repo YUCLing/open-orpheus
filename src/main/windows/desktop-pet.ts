@@ -25,13 +25,16 @@ export default class DesktopPetWindow extends ManagedWindow {
         additionalArguments: ["--preload-channel=pet"],
       },
     });
-    let timeupdateUnsub: UnsubscribeFunction | null = null;
+    // Blocking the page setting title of the window.
+    wnd.prependListener("page-title-updated", (e) => e.preventDefault());
     wnd.on("will-move", () => {
       this.sendMouseEvent("dragstart");
     });
     wnd.on("moved", () => {
       this.sendMouseEvent("dragend");
     });
+
+    let timeupdateUnsub: UnsubscribeFunction | null = null;
     wnd.on("show", () => {
       if (timeupdateUnsub) timeupdateUnsub();
       timeupdateUnsub = playbackController.on("timeupdate", ({ data }) => {
@@ -45,6 +48,7 @@ export default class DesktopPetWindow extends ManagedWindow {
     wnd.on("closed", () => {
       if (timeupdateUnsub) timeupdateUnsub();
     });
+
     if (isAppUrl(url)) {
       void wnd.loadURL(url);
     } else {
