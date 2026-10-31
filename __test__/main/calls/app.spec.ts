@@ -64,10 +64,14 @@ vi.mock("../../../src/main/dawn", () => ({
 vi.mock("../../../src/main/folders", () => ({
   disableHardwareAccelerationFlag: "/tmp/open-orpheus-test/flag",
 }));
-vi.mock("../../../src/main/util", () => ({
+vi.mock("../../../src/main/util/fs", () => ({
   fileExists: hoisted.fileExists,
-  isMusicFile: hoisted.isMusicFile,
+}));
+vi.mock("../../../src/main/util/image", () => ({
   pngFromIco: vi.fn(),
+}));
+vi.mock("../../../src/main/util/musicFile", () => ({
+  isMusicFile: hoisted.isMusicFile,
 }));
 
 installLoggerStub();

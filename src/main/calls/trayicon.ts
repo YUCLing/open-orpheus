@@ -1,6 +1,6 @@
 import { nativeImage } from "electron";
 
-import { pngFromIco } from "../util";
+import { pngFromIco } from "../util/image";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { install, setIcon, setTooltip, trayInstalled, uninstall } from "../tray";
 import { registerCallHandler } from "../calls";

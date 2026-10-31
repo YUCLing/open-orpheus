@@ -32,8 +32,8 @@ vi.mock("../../src/main/audio/OnlineStreamer", () => ({
 // teardown test reaches.
 vi.mock("../../src/main/window", () => ({ mainWindow: null }));
 vi.mock("../../src/main/cache", () => ({ playCacheManager: null }));
-// Only path normalization is used here; the real module imports Electron.
-vi.mock("../../src/main/util", () => ({
+// Only path normalization is used here.
+vi.mock("../../src/main/util/path", () => ({
   normalizePath: (value: string) => value,
 }));
 

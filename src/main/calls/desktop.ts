@@ -7,7 +7,7 @@ import {
 import { registerCallHandler } from "../calls";
 import { registerShutdownTask } from "../lifecycle";
 import MusicDesktopWindow from "../windows/music-desktop";
-import { isAppUrl } from "../util";
+import { isAppUrl } from "../util/url";
 
 export let musicDesktopWindow: MusicDesktopWindow | null = null;
 
