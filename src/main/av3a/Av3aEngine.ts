@@ -1,6 +1,6 @@
 import type { AudioPlayInfo } from "../../preload/Player";
 import { mainWindow } from "../window";
-import { normalizePath } from "../util";
+import { normalizePath } from "../util/path";
 import { toError } from "../../util";
 import { playCacheManager } from "../cache";
 import { OnlineStreamer } from "../audio/OnlineStreamer";

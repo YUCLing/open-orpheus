@@ -1,7 +1,8 @@
 import { normalize } from "node:path";
 
 import { app } from "electron";
-import { fileExists, isMusicFile } from "./util";
+import { fileExists } from "./util/fs";
+import { isMusicFile } from "./util/musicFile";
 
 export async function raceArgument<T>(
   predicate: (arg: string, index: number, array: string[]) => Promise<T | null> | T | null,

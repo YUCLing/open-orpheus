@@ -15,15 +15,9 @@ import {
   setDownloadPath,
 } from "../folders";
 import { registerCallHandler } from "../calls";
-import {
-  fileExists,
-  isFileNotFound,
-  isMusicFile,
-  isWritableDir,
-  move,
-  normalizePath,
-  sanitizeRelativePath,
-} from "../util";
+import { fileExists, isFileNotFound, isWritableDir, move } from "../util/fs";
+import { isMusicFile } from "../util/musicFile";
+import { normalizePath, sanitizeRelativePath } from "../util/path";
 import { webDb } from "../database";
 import {
   CacheTrackMeta,

@@ -11,20 +11,19 @@ import { vol } from "memfs";
 
 import type { MetaPicture } from "music-tag-native";
 
+import { checkEnvFlagPresent } from "../../src/main/util/env";
 import {
   calculateDbSize,
-  checkEnvFlagPresent,
   fileExists,
-  getWindowScaleFactor,
-  isAppUrl,
   isFileNotFound,
-  isMusicFile,
   isWritableDir,
   move,
-  normalizePath,
-  sanitizeRelativePath,
-  selectBestMusicPic,
-} from "../../src/main/util";
+} from "../../src/main/util/fs";
+import { isMusicFile } from "../../src/main/util/musicFile";
+import { selectBestMusicPic } from "../../src/main/util/musicPicture";
+import { normalizePath, sanitizeRelativePath } from "../../src/main/util/path";
+import { isAppUrl } from "../../src/main/util/url";
+import { getWindowScaleFactor } from "../../src/main/util/window";
 
 const onPosix = process.platform !== "win32";
 

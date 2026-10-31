@@ -6,7 +6,8 @@ import { app, BrowserWindow, Notification, powerSaveBlocker, screen, shell } fro
 
 import { getSystemFonts } from "@open-orpheus/ui";
 
-import { fileExists, normalizePath, sanitizeRelativePath } from "../util";
+import { fileExists } from "../util/fs";
+import { normalizePath, sanitizeRelativePath } from "../util/path";
 import { registerCallHandler } from "../calls";
 import { getADDeviceId, getDeviceId } from "../device";
 import {

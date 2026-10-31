@@ -4,7 +4,7 @@ import { screen } from "electron";
 import type { UnsubscribeFunction } from "emittery";
 
 import { ManagedWindow } from "../window";
-import { isAppUrl } from "../util";
+import { isAppUrl } from "../util/url";
 import { playbackController, playId } from "../mediaSession";
 
 export default class DesktopPetWindow extends ManagedWindow {

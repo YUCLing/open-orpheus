@@ -8,7 +8,7 @@ import { registerCallHandler } from "../calls";
 import { storage as storageDir } from "../folders";
 import { lyricsDispatcher } from "../lyrics";
 import { parseLrc, parseYrc } from "../lyrics/parse";
-import { sanitizeRelativePath } from "../util";
+import { sanitizeRelativePath } from "../util/path";
 import {
   createDesktopLyricsPreview,
   window as desktopLyricsWindow,

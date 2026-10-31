@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { registerCallHandler } from "../calls";
 import startDownload, { type DownloadTask } from "../download";
 import { data as dataDir, downloadTemp } from "../folders";
-import { normalizePath, sanitizeRelativePath } from "../util";
+import { normalizePath, sanitizeRelativePath } from "../util/path";
 
 type DownloadStartRequest = {
   ext_header: string;
