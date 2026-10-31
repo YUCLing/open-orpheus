@@ -20,6 +20,7 @@ import {
   isFileNotFound,
   isMusicFile,
   isWritableDir,
+  move,
   normalizePath,
   sanitizeRelativePath,
   selectBestMusicPic,
@@ -227,5 +228,90 @@ describe("isAppUrl", () => {
     expect(isAppUrl("file:///etc/passwd")).toBe(false);
     expect(isAppUrl("orpheus://orpheus.evil.example/")).toBe(false);
     expect(isAppUrl("not a url")).toBe(false);
+  });
+});
+
+describe("move", () => {
+  const fsError = (code: string) => Object.assign(new Error(code), { code });
+
+  beforeEach(() => {
+    vol.reset();
+    vol.mkdirSync("/archive", { recursive: true });
+  });
+
+  it("renames a file within the same device", async () => {
+    vol.fromJSON({ "/music/song.mp3": "audio" });
+
+    await move("/music/song.mp3", "/archive/song.mp3");
+
+    expect(vol.existsSync("/music/song.mp3")).toBe(false);
+    expect(vol.readFileSync("/archive/song.mp3", "utf8")).toBe("audio");
+  });
+
+  it("renames a directory within the same device", async () => {
+    vol.fromJSON({
+      "/music/album/track1.mp3": "one",
+      "/music/album/art/cover.jpg": "art",
+    });
+
+    await move("/music/album", "/archive/album");
+
+    expect(vol.existsSync("/music/album")).toBe(false);
+    expect(vol.readFileSync("/archive/album/track1.mp3", "utf8")).toBe("one");
+    expect(vol.readFileSync("/archive/album/art/cover.jpg", "utf8")).toBe("art");
+  });
+
+  it("does not copy when rename succeeds", async () => {
+    vol.fromJSON({ "/music/song.mp3": "audio" });
+    const cp = vi.spyOn(vol.promises, "cp");
+
+    await move("/music/song.mp3", "/archive/song.mp3");
+
+    expect(cp).not.toHaveBeenCalled();
+  });
+
+  it("falls back to copy and delete when moving across devices", async () => {
+    vol.fromJSON({
+      "/music/album/track1.mp3": "one",
+      "/music/album/art/cover.jpg": "art",
+    });
+    vi.spyOn(vol.promises, "rename").mockRejectedValueOnce(fsError("EXDEV"));
+
+    await move("/music/album", "/archive/album");
+
+    expect(vol.existsSync("/music/album")).toBe(false);
+    expect(vol.readFileSync("/archive/album/track1.mp3", "utf8")).toBe("one");
+    expect(vol.readFileSync("/archive/album/art/cover.jpg", "utf8")).toBe("art");
+  });
+
+  it("keeps the source when the cross-device copy fails", async () => {
+    vol.fromJSON({ "/music/song.mp3": "audio" });
+    vi.spyOn(vol.promises, "rename").mockRejectedValueOnce(fsError("EXDEV"));
+    vi.spyOn(vol.promises, "cp").mockRejectedValueOnce(fsError("ENOSPC"));
+
+    await expect(move("/music/song.mp3", "/archive/song.mp3")).rejects.toThrow("ENOSPC");
+
+    expect(vol.readFileSync("/music/song.mp3", "utf8")).toBe("audio");
+    expect(vol.existsSync("/archive/song.mp3")).toBe(false);
+  });
+
+  it("rethrows errors other than EXDEV without touching the source", async () => {
+    vol.fromJSON({ "/music/song.mp3": "audio" });
+    vi.spyOn(vol.promises, "rename").mockRejectedValueOnce(fsError("EACCES"));
+    const cp = vi.spyOn(vol.promises, "cp");
+
+    await expect(move("/music/song.mp3", "/archive/song.mp3")).rejects.toThrow("EACCES");
+
+    expect(cp).not.toHaveBeenCalled();
+    expect(vol.readFileSync("/music/song.mp3", "utf8")).toBe("audio");
+  });
+
+  it("accepts URL arguments", async () => {
+    vol.fromJSON({ "/music/song.mp3": "audio" });
+
+    await move(new URL("file:///music/song.mp3"), new URL("file:///archive/song.mp3"));
+
+    expect(vol.existsSync("/music/song.mp3")).toBe(false);
+    expect(vol.readFileSync("/archive/song.mp3", "utf8")).toBe("audio");
   });
 });

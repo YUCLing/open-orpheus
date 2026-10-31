@@ -1,15 +1,5 @@
 import { FSWatcher, watch } from "node:fs";
-import {
-  copyFile,
-  cp,
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 
 import { app, dialog, Notification } from "electron";
@@ -30,6 +20,7 @@ import {
   isFileNotFound,
   isMusicFile,
   isWritableDir,
+  move,
   normalizePath,
   sanitizeRelativePath,
 } from "../util";
@@ -551,7 +542,7 @@ async function handleFileBatch(
         await mkdir(dirname(dest), { recursive: true });
         try {
           if (type === "copy") await copyFile(src, dest);
-          else await rename(src, dest);
+          else await move(src, dest);
         } catch (err) {
           // Simply no-op if source doesn't exist
           if (!isFileNotFound(err)) {

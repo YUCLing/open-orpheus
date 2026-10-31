@@ -1,5 +1,5 @@
 import { resolve, join, normalize, sep } from "node:path";
-import { access, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, rename, rm, stat, unlink } from "node:fs/promises";
 import os from "node:os";
 
 import { BrowserWindow, screen } from "electron";
@@ -123,5 +123,22 @@ export function isAppUrl(url: string): boolean {
     return protocol === "orpheus:" && hostname === "orpheus";
   } catch {
     return false;
+  }
+}
+
+/**
+ * Try move file or folder with the least efforts.
+ */
+export async function move(src: string | URL, dest: string | URL) {
+  try {
+    await rename(src, dest);
+  } catch (e) {
+    if (e instanceof Error && "code" in e && e.code === "EXDEV") {
+      // The file/folder is being moved across the devices.
+      await cp(src, dest, { recursive: true });
+      await rm(src, { recursive: true, force: true });
+      return;
+    }
+    throw e;
   }
 }
