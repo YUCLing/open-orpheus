@@ -1,4 +1,5 @@
 import Emittery from "emittery";
+import type { LoopStatus, PlaybackMode } from "$sharedTypes/playback-mode";
 
 import { PlaybackStatus, TrackInfo } from "../types";
 
@@ -15,6 +16,8 @@ export type PlayerCommandEvents = {
   setPosition: number;
   /** Volume, 0..1. */
   volume: number;
+  shuffle: boolean;
+  loopStatus: LoopStatus;
   raise: undefined;
   quit: undefined;
 };
@@ -44,6 +47,7 @@ export interface MediaSessionAdapter extends Emittery<PlayerCommandEvents> {
   onDuration(duration: number | null): void;
   onRate(rate: number): void;
   onVolume(volume: number): void;
+  onPlaybackMode?(mode: PlaybackMode): void;
   dispose(): void;
 }
 

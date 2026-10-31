@@ -1,4 +1,5 @@
 import Emittery from "emittery";
+import { mprisPlaybackMode, type PlaybackMode } from "$sharedTypes/playback-mode";
 
 import { MediaSession, PlaybackStatus as DbusPlaybackStatus } from "@open-orpheus/dbus";
 
@@ -41,6 +42,7 @@ export default class MprisAdapter
    * some other (concurrent or in-app) change must not be mistaken for it.
    */
   private volumeApplied: { volume: number; write: Promise<unknown> } | null = null;
+  private modeApplied: Promise<void> | null = null;
 
   constructor() {
     super();
@@ -91,6 +93,15 @@ export default class MprisAdapter
           if (applied?.volume === event.volume) await applied.write;
           break;
         }
+        case "SetShuffle":
+          await this.emit("shuffle", event.shuffle);
+          await this.modeApplied;
+          break;
+        case "SetLoopStatus":
+          // The native setter validates the three MPRIS values first.
+          await this.emit("loopStatus", event.loopStatus as "None" | "Playlist" | "Track");
+          await this.modeApplied;
+          break;
       }
     });
   }
@@ -146,6 +157,16 @@ export default class MprisAdapter
       volume,
       write: this.mediaSession.setVolume(volume) as Promise<unknown>,
     };
+  }
+
+  onPlaybackMode(mode: PlaybackMode): void {
+    const { loopStatus, shuffle } = mprisPlaybackMode(mode);
+    this.modeApplied = this.mediaSession.setPlaybackMode(loopStatus, shuffle);
+    // A later Properties.Set also awaits this promise, while in-app changes
+    // have no caller to observe a native publishing failure.
+    void this.modeApplied.catch((err) => {
+      LOGGER.warn({ err: toError(err) }, "Failed to publish MPRIS playback mode");
+    });
   }
 
   dispose(): void {

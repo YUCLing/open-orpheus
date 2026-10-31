@@ -1,4 +1,5 @@
 import Emittery from "emittery";
+import type { PlaybackMode } from "$sharedTypes/playback-mode";
 
 import { PlaybackChange, PlaybackSnapshot, PlaybackStatus, TrackInfo } from "./types";
 
@@ -32,6 +33,7 @@ export type PlaybackControllerEvents = {
   ratechanged: number;
   /** Derived, diffed: volume changed. */
   volumechanged: number;
+  modechanged: PlaybackMode;
 };
 
 /**
@@ -49,6 +51,7 @@ export default class PlaybackController extends Emittery<PlaybackControllerEvent
     duration: null,
     rate: 1,
     volume: 1,
+    playbackMode: null,
   };
 
   private lastPositionEmitAt = 0;
@@ -155,6 +158,12 @@ export default class PlaybackController extends Emittery<PlaybackControllerEvent
     if (this._snapshot.volume === volume) return;
     this._snapshot.volume = volume;
     void this.emit("volumechanged", volume);
+  }
+
+  applyPlaybackMode(mode: PlaybackMode): void {
+    if (this._snapshot.playbackMode === mode) return;
+    this._snapshot.playbackMode = mode;
+    void this.emit("modechanged", mode);
   }
 
   private schedulePositionEmit(position: number): void {
