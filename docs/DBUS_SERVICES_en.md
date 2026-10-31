@@ -1,8 +1,46 @@
 # D-Bus Services
 
-On Linux, Open Orpheus publishes read-only D-Bus services on the session bus so external lyric displays, desktop widgets, and scripts can read the current lyrics and track information. The service is registered when the app starts; there is no extra toggle.
+On Linux, Open Orpheus publishes MPRIS playback controls and a read-only lyrics service on the session bus for desktop widgets, external lyric displays, and scripts. Services are registered when the app starts; there is no extra toggle.
 
 > Runtime introspection is the authoritative interface definition. This document and the XML snapshot checked into the repository are for reading and code generation only. If they disagree with the running service, trust runtime introspection.
+
+## MPRIS playback modes
+
+The normal installation uses bus name `org.mpris.MediaPlayer2.open-orpheus`,
+object path `/org/mpris/MediaPlayer2`, and interface `org.mpris.MediaPlayer2.Player`.
+Flatpak uses `org.mpris.MediaPlayer2.<FLATPAK_ID>` as its bus name.
+
+`Shuffle` and `LoopStatus` are writable and publish actual changes through
+`PropertiesChanged`. A write completes after the renderer confirms the mode;
+unavailable integration, a three-second confirmation timeout, or an invalid
+value returns an error. In-app changes are also published.
+
+| Renderer mode | `Shuffle` | `LoopStatus` |
+| --- | --- | --- |
+| Sequential | `false` | `None` |
+| Repeat playlist | `false` | `Playlist` |
+| Repeat track | `false` | `Track` |
+| Random | `true` | `Playlist` |
+
+Orpheus has mutually exclusive modes. Enabling shuffle exits track repeat;
+disabling shuffle returns to playlist repeat. Setting `Track` or `None` exits
+shuffle; setting `Playlist` preserves existing shuffle. Heartbeat and FM have
+no exact MPRIS equivalent and report `false` / `None`.
+
+```sh
+busctl --user set-property org.mpris.MediaPlayer2.open-orpheus \
+  /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player Shuffle b true
+
+busctl --user set-property org.mpris.MediaPlayer2.open-orpheus \
+  /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player LoopStatus s Track
+```
+
+The renderer bridge currently targets Orpheus's webpack 4 runtime. It discovers
+the initialized playing store by shape and dispatches the page's own
+`playing/switchPlayingMode` action, without fixed module IDs or resource-pack
+rewrites. Discovery stops after 30 seconds; a successful connection subscribes
+to store changes without polling. Revalidate this bridge when the resource pack
+changes its runtime framework.
 
 ## Lyrics service
 

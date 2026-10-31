@@ -1,8 +1,48 @@
 # D-Bus 服务
 
-Open Orpheus 在 Linux 上会通过会话总线（session bus）提供只读的 D-Bus 服务，供外部歌词显示、桌面组件、脚本等读取当前歌词与曲目信息。服务随应用启动而注册，不需要额外开关。
+Open Orpheus 在 Linux 上通过会话总线（session bus）提供 MPRIS 播放控制和只读歌词服务，供桌面组件、外部歌词显示及脚本使用。服务随应用启动而注册，不需要额外开关。
 
 > 运行时自省（introspection）是唯一权威的接口定义。本文档以及仓库中检入的 XML 快照仅用于阅读和代码生成；如果二者与运行中的服务不一致，以运行时自省结果为准。
+
+## MPRIS 播放方式
+
+普通安装的服务名称为 `org.mpris.MediaPlayer2.open-orpheus`，对象路径为
+`/org/mpris/MediaPlayer2`，播放器接口为 `org.mpris.MediaPlayer2.Player`。
+Flatpak 使用 `org.mpris.MediaPlayer2.<FLATPAK_ID>` 作为服务名称。
+
+`Shuffle` 和 `LoopStatus` 均可读写，并通过 `PropertiesChanged` 回报实际状态。
+DMS 等客户端写入后，应用等待页面确认对应模式，再完成 D-Bus 调用；页面未就绪、
+三秒内未确认或属性值非法时返回错误。应用内切换模式也会同步到 MPRIS。
+
+| 页面播放方式 | `Shuffle` | `LoopStatus` |
+| --- | --- | --- |
+| 顺序播放 | `false` | `None` |
+| 列表循环 | `false` | `Playlist` |
+| 单曲循环 | `false` | `Track` |
+| 随机播放 | `true` | `Playlist` |
+
+页面只有一个互斥模式：开启随机播放会退出单曲循环；关闭随机播放会回到列表循环；
+设置 `Track` 或 `None` 会退出随机播放；在随机播放时设置 `Playlist` 会保留随机。
+心动模式和私人漫游没有完全对应的 MPRIS 模式，读取时报告 `false` / `None`。
+
+```sh
+busctl --user introspect org.mpris.MediaPlayer2.open-orpheus \
+  /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player
+
+# 开启随机播放
+busctl --user set-property org.mpris.MediaPlayer2.open-orpheus \
+  /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player Shuffle b true
+
+# 切换到单曲循环
+busctl --user set-property org.mpris.MediaPlayer2.open-orpheus \
+  /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player LoopStatus s Track
+```
+
+模式桥接目前针对 Orpheus 的 webpack 4 页面，通过已初始化的播放 store 读取状态并
+调用页面自身的 `playing/switchPlayingMode`。不依赖固定模块编号，不修改资源包。
+启动发现有 30 秒上限，连接成功后只订阅状态变化；未来资源包替换其运行框架时需要重新验证。
+
+本机修复验证记录见 [MPRIS 播放方式验收](MPRIS_PLAYBACK_MODE_ACCEPTANCE.md)。
 
 ## 歌词服务
 
