@@ -15,11 +15,11 @@ DMS 等客户端写入后，应用等待页面确认对应模式，再完成 D-B
 三秒内未确认或属性值非法时返回错误。应用内切换模式也会同步到 MPRIS。
 
 | 页面播放方式 | `Shuffle` | `LoopStatus` |
-| --- | --- | --- |
-| 顺序播放 | `false` | `None` |
-| 列表循环 | `false` | `Playlist` |
-| 单曲循环 | `false` | `Track` |
-| 随机播放 | `true` | `Playlist` |
+| ------------ | --------- | ------------ |
+| 顺序播放     | `false`   | `None`       |
+| 列表循环     | `false`   | `Playlist`   |
+| 单曲循环     | `false`   | `Track`      |
+| 随机播放     | `true`    | `Playlist`   |
 
 页面只有一个互斥模式：开启随机播放会退出单曲循环；关闭随机播放会回到列表循环；
 设置 `Track` 或 `None` 会退出随机播放；在随机播放时设置 `Playlist` 会保留随机。
@@ -41,8 +41,6 @@ busctl --user set-property org.mpris.MediaPlayer2.open-orpheus \
 模式桥接目前针对 Orpheus 的 webpack 4 页面，通过已初始化的播放 store 读取状态并
 调用页面自身的 `playing/switchPlayingMode`。不依赖固定模块编号，不修改资源包。
 启动发现有 30 秒上限，连接成功后只订阅状态变化；未来资源包替换其运行框架时需要重新验证。
-
-本机修复验证记录见 [MPRIS 播放方式验收](MPRIS_PLAYBACK_MODE_ACCEPTANCE.md)。
 
 ## 歌词服务
 

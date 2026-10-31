@@ -15,12 +15,12 @@ Flatpak uses `org.mpris.MediaPlayer2.<FLATPAK_ID>` as its bus name.
 unavailable integration, a three-second confirmation timeout, or an invalid
 value returns an error. In-app changes are also published.
 
-| Renderer mode | `Shuffle` | `LoopStatus` |
-| --- | --- | --- |
-| Sequential | `false` | `None` |
-| Repeat playlist | `false` | `Playlist` |
-| Repeat track | `false` | `Track` |
-| Random | `true` | `Playlist` |
+| Renderer mode   | `Shuffle` | `LoopStatus` |
+| --------------- | --------- | ------------ |
+| Sequential      | `false`   | `None`       |
+| Repeat playlist | `false`   | `Playlist`   |
+| Repeat track    | `false`   | `Track`      |
+| Random          | `true`    | `Playlist`   |
 
 Orpheus has mutually exclusive modes. Enabling shuffle exits track repeat;
 disabling shuffle returns to playlist repeat. Setting `Track` or `None` exits
