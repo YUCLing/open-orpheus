@@ -8,7 +8,8 @@ import type { Progress } from "got";
 import { registerCallHandler } from "../calls";
 import { serialData } from "../crypto";
 import { client, type ProxyTypes } from "../request";
-import { isFileNotFound, normalizePath } from "../util";
+import { isFileNotFound } from "../util/fs";
+import { normalizePath } from "../util/path";
 import globalLogger from "../logger";
 
 type UploadPayload = {

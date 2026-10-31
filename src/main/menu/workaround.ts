@@ -1,4 +1,4 @@
-import { checkEnvFlagPresent } from "../util";
+import { checkEnvFlagPresent } from "../util/env";
 import { getOverlayPolicy } from "./overlay-policy";
 
 export let workaroundFlags = 0;
