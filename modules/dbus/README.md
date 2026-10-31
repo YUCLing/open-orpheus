@@ -122,6 +122,13 @@ The handler is free to call back into `MediaSession` (for example to report the
 new `volume` from `setVolume`) while a command is in flight. Property updates
 go through shared state and never wait on an in-flight command.
 
+`LoopStatus` and `Shuffle` are writable. Their setters dispatch `SetLoopStatus`
+and `SetShuffle`; the handler must apply the request to the player, then call
+`setPlaybackMode(loopStatus, shuffle)` with the confirmed state. This updates
+both properties together and emits only their changes. An invalid loop status
+or a rejected handler returns a D-Bus error and leaves the properties intact.
+In-app mode changes use the same `setPlaybackMode` method.
+
 MPRIS `Position` is extrapolated in the native service from the last reported
 position, playback rate, and the optional `advancing` flag, so clients polling
 it between the throttled updates see the current position rather than a stale

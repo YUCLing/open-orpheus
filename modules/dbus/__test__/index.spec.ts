@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 
 import test from "ava";
 
-import { MediaSession, PlaybackStatus } from "../index.js";
+import { DbusClient, MediaSession, PlaybackStatus } from "../index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -74,6 +74,22 @@ async function getProperty(destination: string, property: string): Promise<strin
 
 async function getPosition(destination: string): Promise<number> {
   return Number(await getProperty(destination, "Position"));
+}
+
+async function setProperty(destination: string, property: string, value: string): Promise<void> {
+  await execFileAsync("gdbus", [
+    "call",
+    "--session",
+    "--dest",
+    destination,
+    "--object-path",
+    OBJECT_PATH,
+    "--method",
+    `${PROPERTIES_INTERFACE}.Set`,
+    PLAYER_INTERFACE,
+    property,
+    value,
+  ]);
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -170,6 +186,98 @@ serial("reports a missing handler instead of hanging", async (t) => {
   const error = await t.throwsAsync(callPlayer(destination, "Play"));
   t.regex(errorText(error), /No media session event handler is registered/);
   t.truthy(session);
+});
+
+serial(
+  "advertises writable playback modes and waits for the renderer before replying",
+  async (t) => {
+    const { session, destination } = newSession();
+    const { stdout: xml } = await execFileAsync("gdbus", [
+      "introspect",
+      "--session",
+      "--dest",
+      destination,
+      "--object-path",
+      OBJECT_PATH,
+      "--xml",
+    ]);
+    t.regex(xml, /<property[^>]*name="Shuffle"[^>]*access="readwrite"/);
+    t.regex(xml, /<property[^>]*name="LoopStatus"[^>]*access="readwrite"/);
+
+    session.setEventHandler(async (_err, event) => {
+      if (event.type === "SetShuffle") {
+        await sleep(30);
+        await session.setPlaybackMode("Playlist", event.shuffle);
+      } else if (event.type === "SetLoopStatus") {
+        await sleep(30);
+        await session.setPlaybackMode(event.loopStatus, false);
+      }
+    });
+
+    await setProperty(destination, "Shuffle", "<true>");
+    t.is(await getProperty(destination, "Shuffle"), "true");
+    t.is(await getProperty(destination, "LoopStatus"), "Playlist");
+    for (const status of ["Track", "None", "Playlist"]) {
+      await setProperty(destination, "LoopStatus", `<'${status}'>`);
+      t.is(await getProperty(destination, "LoopStatus"), status);
+      t.is(await getProperty(destination, "Shuffle"), "false");
+    }
+  }
+);
+
+serial("rejects invalid or unconfirmed mode writes without changing properties", async (t) => {
+  const { session, destination } = newSession();
+  session.setEventHandler(async () => {
+    throw new Error("mode was not confirmed");
+  });
+  const invalid = await t.throwsAsync(setProperty(destination, "LoopStatus", "<'invalid'>"));
+  t.regex(errorText(invalid), /InvalidArgs/);
+  const rejected = await t.throwsAsync(setProperty(destination, "Shuffle", "<true>"));
+  t.regex(errorText(rejected), /mode was not confirmed/);
+  session.setEventHandler(null);
+  const missing = await t.throwsAsync(setProperty(destination, "LoopStatus", "<'Track'>"));
+  t.regex(errorText(missing), /No media session event handler/);
+  t.is(await getProperty(destination, "LoopStatus"), "None");
+  t.is(await getProperty(destination, "Shuffle"), "false");
+});
+
+serial("publishes in-app mode changes together and suppresses unchanged signals", async (t) => {
+  const { session, destination } = newSession();
+  const client = new DbusClient("session");
+  const changes: unknown[][] = [];
+  const subscription = await client.subscribe(
+    {
+      sender: destination,
+      path: OBJECT_PATH,
+      interfaceName: PROPERTIES_INTERFACE,
+      member: "PropertiesChanged",
+    },
+    (_err, signal) => {
+      changes.push(signal.body);
+    }
+  );
+  try {
+    await session.setPlaybackMode("Playlist", true);
+    // The Get round trip also lets the queued signal reach the JS handler.
+    t.is(await getProperty(destination, "Shuffle"), "true");
+    await sleep(30);
+    t.deepEqual(changes, [
+      [
+        PLAYER_INTERFACE,
+        {
+          LoopStatus: { signature: "s", value: "Playlist" },
+          Shuffle: { signature: "b", value: true },
+        },
+        [],
+      ],
+    ]);
+    await session.setPlaybackMode("Playlist", true);
+    await sleep(30);
+    t.is(changes.length, 1);
+  } finally {
+    subscription.unsubscribe();
+    await client.disconnect();
+  }
 });
 
 serial("interpolates Position between the throttled updates", async (t) => {
