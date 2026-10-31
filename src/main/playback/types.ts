@@ -1,3 +1,5 @@
+import type { PlaybackMode } from "$sharedTypes/playback-mode";
+
 /** Real playback state, as reported to OS media-session integrations. */
 export enum PlaybackStatus {
   Playing = "playing",
@@ -37,4 +39,5 @@ export interface PlaybackSnapshot {
   duration: number | null;
   rate: number;
   volume: number;
+  playbackMode: PlaybackMode | null;
 }

@@ -1,4 +1,5 @@
 import Emittery from "emittery";
+import { modeForLoopStatus, modeForShuffle, type PlaybackMode } from "$sharedTypes/playback-mode";
 
 import { mainWindow } from "../window";
 import { PlayerCommandEvents } from "./adapters/MediaSessionAdapter";
@@ -21,6 +22,7 @@ const INTENT_TTL_MS = 3000;
  * not leave the caller (and the D-Bus reply behind it) waiting forever.
  */
 const VOLUME_TTL_MS = 3000;
+const MODE_TTL_MS = 3000;
 
 /**
  * Translates media-session commands (MPRIS / SMTC / MPNowPlayingInfo adapters)
@@ -50,6 +52,7 @@ export default class PlayerCommandRouter {
    */
   private readonly inflight: PlaybackStatus[] = [];
   private expiryTimer: ReturnType<typeof setTimeout> | null = null;
+  private modeQueue: Promise<void> = Promise.resolve();
 
   /**
    * @param player Playback state source, read on demand.
@@ -70,6 +73,8 @@ export default class PlayerCommandRouter {
     commands.on("seek", ({ data }) => this.send("player.seek", data));
     commands.on("setPosition", ({ data }) => this.send("player.seekto", data));
     commands.on("volume", ({ data }) => this.setVolume(data));
+    commands.on("shuffle", ({ data }) => this.setMode((mode) => modeForShuffle(mode, data)));
+    commands.on("loopStatus", ({ data }) => this.setMode((mode) => modeForLoopStatus(mode, data)));
   }
 
   /** Where playback is headed once every in-flight toggle has landed. */
@@ -200,6 +205,35 @@ export default class PlayerCommandRouter {
 
   private send(channel: string, ...args: unknown[]): void {
     mainWindow?.webContents.send(channel, ...args);
+  }
+
+  /** Serialize mode writes so each request starts from confirmed renderer state. */
+  private setMode(target: (current: PlaybackMode) => PlaybackMode): Promise<void> {
+    const request = this.modeQueue.then(async () => {
+      const current = this.player.snapshot.playbackMode;
+      if (!mainWindow || current === null) throw new Error("Playback mode is not available");
+      const mode = target(current);
+      if (mode === current) return;
+      const expired = new AbortController();
+      const timer = setTimeout(
+        () => expired.abort(new Error(`Playback mode ${mode} was not confirmed`)),
+        MODE_TTL_MS
+      );
+      const confirmed = this.player.once("modechanged", {
+        predicate: ({ data }) => data === mode,
+        signal: expired.signal,
+      });
+      void confirmed.catch(() => {});
+      try {
+        this.send("player.playbackmode", mode);
+        await confirmed;
+      } finally {
+        clearTimeout(timer);
+        expired.abort();
+      }
+    });
+    this.modeQueue = request.catch(() => {});
+    return request;
   }
 
   private sendHotkey(name: string): void {

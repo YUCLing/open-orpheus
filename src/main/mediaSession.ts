@@ -1,4 +1,5 @@
 import os from "node:os";
+import { isPlaybackMode } from "$sharedTypes/playback-mode";
 
 import { toError } from "../util";
 import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
@@ -108,6 +109,12 @@ export async function createMediaSession(): Promise<void> {
   playbackController.on("durationchanged", ({ data }) => adapter.onDuration(data));
   playbackController.on("ratechanged", ({ data }) => adapter.onRate(data));
   playbackController.on("volumechanged", ({ data }) => adapter.onVolume(data));
+  playbackController.on("modechanged", ({ data }) => adapter.onPlaybackMode?.(data));
+  // The renderer may have reported its initial mode while the platform adapter
+  // was still loading.
+  if (playbackController.snapshot.playbackMode !== null) {
+    adapter.onPlaybackMode?.(playbackController.snapshot.playbackMode);
+  }
 
   registerShutdownTask({ name: "media-session", run: disposeMediaSession });
 }
@@ -191,5 +198,8 @@ lifecycleEvents.on("mainwindowcreated", ({ data: mainWindow }) => {
 
   mainWindow.webContents.ipc.on("player.volumechange", (e, volume) => {
     playbackController.applyVolume(volume);
+  });
+  mainWindow.webContents.ipc.on("player.playbackmodechange", (e, mode) => {
+    if (isPlaybackMode(mode)) playbackController.applyPlaybackMode(mode);
   });
 });

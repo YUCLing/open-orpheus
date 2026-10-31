@@ -4,11 +4,16 @@ const hoisted = vi.hoisted(() => ({
   updates: [] as Array<Record<string, unknown>>,
   metadata: [] as unknown[],
   seeked: [] as number[],
+  modes: [] as unknown[],
+  handler: null as null | ((err: null, event: Record<string, unknown>) => Promise<void>),
+  publishMode: vi.fn(async () => {}),
 }));
 
 vi.mock("@open-orpheus/dbus", () => ({
   MediaSession: class {
-    readonly setEventHandler = vi.fn();
+    readonly setEventHandler = vi.fn((handler) => {
+      hoisted.handler = handler;
+    });
     readonly setMetadata = vi.fn(async (metadata: unknown) => {
       hoisted.metadata.push(metadata);
     });
@@ -19,6 +24,10 @@ vi.mock("@open-orpheus/dbus", () => ({
       hoisted.seeked.push(time);
     });
     readonly setVolume = vi.fn(async () => {});
+    readonly setPlaybackMode = vi.fn((loopStatus: string, shuffle: boolean) => {
+      hoisted.modes.push({ loopStatus, shuffle });
+      return hoisted.publishMode();
+    });
   },
   PlaybackStatus: { Playing: 0, Paused: 1, Stopped: 2 },
 }));
@@ -44,6 +53,9 @@ beforeEach(() => {
   hoisted.updates.length = 0;
   hoisted.metadata.length = 0;
   hoisted.seeked.length = 0;
+  hoisted.modes.length = 0;
+  hoisted.publishMode.mockReset();
+  hoisted.publishMode.mockResolvedValue(undefined);
 });
 
 describe("MprisAdapter", () => {
@@ -86,5 +98,63 @@ describe("MprisAdapter", () => {
     adapter.onStatus(PlaybackStatus.Paused);
 
     expect(lastUpdate()).toMatchObject({ position: 0, advancing: false });
+  });
+
+  it("reports actual mutually exclusive renderer modes", () => {
+    const adapter = new MprisAdapter();
+    for (const mode of [
+      "playOrder",
+      "playCycle",
+      "playOneCycle",
+      "playRandom",
+      "playAi",
+      "playFm",
+    ] as const) {
+      adapter.onPlaybackMode(mode);
+    }
+    expect(hoisted.modes).toEqual([
+      { loopStatus: "None", shuffle: false },
+      { loopStatus: "Playlist", shuffle: false },
+      { loopStatus: "Track", shuffle: false },
+      { loopStatus: "Playlist", shuffle: true },
+      { loopStatus: "None", shuffle: false },
+      { loopStatus: "None", shuffle: false },
+    ]);
+  });
+
+  it("replies after both renderer confirmation and native mode publication", async () => {
+    const adapter = new MprisAdapter();
+    let finishPublish!: () => void;
+    hoisted.publishMode.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPublish = resolve;
+        })
+    );
+    adapter.on("shuffle", async ({ data }) => {
+      expect(data).toBe(true);
+      adapter.onPlaybackMode("playRandom");
+    });
+    let settled = false;
+    const pending = hoisted.handler!(null, { type: "SetShuffle", shuffle: true }).then(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(settled).toBe(false);
+    finishPublish();
+    await pending;
+    expect(settled).toBe(true);
+  });
+
+  it("forwards repeat requests and propagates renderer failure", async () => {
+    const adapter = new MprisAdapter();
+    adapter.on("loopStatus", ({ data }) => {
+      expect(data).toBe("Track");
+      throw new Error("renderer unavailable");
+    });
+    await expect(
+      hoisted.handler!(null, { type: "SetLoopStatus", loopStatus: "Track" })
+    ).rejects.toThrow();
+    expect(hoisted.modes).toEqual([]);
   });
 });
