@@ -153,7 +153,18 @@ describe("PlayerCommandRouter command routing", () => {
 
     const subscribed = on.mock.calls.map(([eventName]) => String(eventName));
     expect(subscribed.sort()).toEqual(
-      ["next", "pause", "play", "previous", "seek", "setPosition", "toggle", "volume"].sort()
+      [
+        "loopStatus",
+        "next",
+        "pause",
+        "play",
+        "previous",
+        "seek",
+        "setPosition",
+        "shuffle",
+        "toggle",
+        "volume",
+      ].sort()
     );
   });
 
@@ -284,5 +295,80 @@ describe("PlayerCommandRouter volume handshake", () => {
 
     // Emittery wraps listener errors, so only the rejection is observable here.
     await expect(commands.emit("volume", 0.5)).rejects.toThrow();
+  });
+});
+
+describe("PlayerCommandRouter playback modes", () => {
+  it.each([
+    ["playOrder", "shuffle", true, "playRandom"],
+    ["playOneCycle", "shuffle", true, "playRandom"],
+    ["playRandom", "shuffle", false, "playCycle"],
+    ["playRandom", "loopStatus", "Track", "playOneCycle"],
+    ["playRandom", "loopStatus", "None", "playOrder"],
+    ["playOrder", "loopStatus", "Playlist", "playCycle"],
+  ] as const)("confirms %s + %s=%s as %s", async (current, command, value, target) => {
+    const { player, commands } = setup(PlaybackStatus.Paused);
+    player.applyPlaybackMode(current);
+    const pending =
+      command === "shuffle"
+        ? commands.emit(command, value as boolean)
+        : commands.emit(command, value as "Track" | "None" | "Playlist");
+    await flushMicrotasks();
+    expect(send).toHaveBeenLastCalledWith("player.playbackmode", target);
+    expect(player.snapshot.playbackMode).toBe(current);
+    player.applyPlaybackMode(target);
+    await pending;
+  });
+
+  it("keeps random order when enabling playlist repeat and skips unchanged writes", async () => {
+    const { player, commands } = setup(PlaybackStatus.Paused);
+    player.applyPlaybackMode("playRandom");
+    await commands.emit("loopStatus", "Playlist");
+    await commands.emit("shuffle", true);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("serializes overlapping requests using each preceding confirmed mode", async () => {
+    const { player, commands } = setup(PlaybackStatus.Paused);
+    player.applyPlaybackMode("playOrder");
+    const first = commands.emit("shuffle", true);
+    const second = commands.emit("shuffle", false);
+    await flushMicrotasks();
+    expect(send).toHaveBeenCalledTimes(1);
+    player.applyPlaybackMode("playRandom");
+    await first;
+    await flushMicrotasks();
+    expect(send).toHaveBeenLastCalledWith("player.playbackmode", "playCycle");
+    player.applyPlaybackMode("playCycle");
+    await second;
+  });
+
+  it("rejects writes before initialization or without a window", async () => {
+    const { player, commands } = setup(PlaybackStatus.Paused);
+    await expect(commands.emit("shuffle", true)).rejects.toThrow();
+    player.applyPlaybackMode("playOrder");
+    host.window = null;
+    await expect(commands.emit("loopStatus", "Track")).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("times out unconfirmed writes and permits subsequent requests", async () => {
+    vi.useFakeTimers();
+    try {
+      const { player, commands } = setup(PlaybackStatus.Paused);
+      player.applyPlaybackMode("playOrder");
+      const first = commands.emit("shuffle", true).catch(() => "rejected");
+      await flushMicrotasks();
+      player.applyPlaybackMode("playOneCycle"); // a different report cannot confirm random
+      await vi.advanceTimersByTimeAsync(3500);
+      expect(await first).toBe("rejected");
+      const next = commands.emit("loopStatus", "Playlist");
+      await flushMicrotasks();
+      player.applyPlaybackMode("playCycle");
+      await next;
+      expect(player.listenerCount("modechanged")).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
