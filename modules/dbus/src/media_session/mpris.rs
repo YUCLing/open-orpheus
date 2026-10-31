@@ -732,6 +732,8 @@ mod tests {
     fn player_state(playback: PlaybackState, elapsed: Duration) -> PlayerState {
         PlayerState {
             volume: 1.0,
+            loop_status: "None".to_string(),
+            shuffle: false,
             playback_state: Some(playback),
             playback_updated_at: Instant::now() - elapsed,
             metadata: None,
