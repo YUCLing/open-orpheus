@@ -19,6 +19,11 @@ jobs:
   build:
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.build == 'true' }}
+    # The called workflow deletes the intermediate signing artifacts again, which
+    # needs a token that may write to Actions.
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -32,3 +37,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       runner: ${{ matrix.runner }}
+      # Signing is requested for Windows builds of main only.
+      sign: ${{ startsWith(matrix.runner, 'windows') && github.ref_name == 'main' }}
+    secrets:
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
