@@ -12,7 +12,7 @@ use zbus::{
     Connection, DeserializeDict, ObjectPath, OwnedObjectPath, SerializeDict, Type, Variant,
 };
 
-use crate::media_session::{lock, EventDispatcher, MediaSessionEvents, PlaybackStatus};
+use crate::media_session::{lock, EventDispatcher, LoopStatus, MediaSessionEvents, PlaybackStatus};
 
 const NO_TRACK_OBJECT_PATH: &str = "/org/mpris/MediaPlayer2/TrackList/NoTrack";
 
@@ -42,7 +42,7 @@ pub struct PlaybackState {
 /// in-flight command that is waiting for the very JS call trying to take it.
 pub struct PlayerState {
     pub volume: f64,
-    pub loop_status: String,
+    pub loop_status: LoopStatus,
     pub shuffle: bool,
     pub playback_state: Option<PlaybackState>,
     /// When `playback_state.position` was sampled. MPRIS `Position` is
@@ -56,7 +56,7 @@ impl PlayerState {
     pub fn new() -> Self {
         Self {
             volume: 1.0,
-            loop_status: "None".to_string(),
+            loop_status: LoopStatus::None,
             shuffle: false,
             playback_state: None,
             playback_updated_at: Instant::now(),
@@ -379,12 +379,12 @@ impl PlayerInterface {
 
     #[zbus(property(emits_changed_signal = "false"))]
     async fn loop_status(&self) -> String {
-        lock(&self.state).loop_status.clone()
+        lock(&self.state).loop_status.as_str().to_string()
     }
 
     #[zbus(property)]
     async fn set_loop_status(&self, loop_status: String) -> Result<(), Error> {
-        validate_loop_status(&loop_status)?;
+        let loop_status = LoopStatus::parse(&loop_status)?;
         self.dispatch(MediaSessionEvents::SetLoopStatus { loop_status })
             .await
     }
@@ -581,12 +581,22 @@ pub async fn update_volume(
     emit_volume_changed(iface_ref.signal_emitter(), volume).await
 }
 
-fn validate_loop_status(loop_status: &str) -> Result<(), Error> {
-    match loop_status {
-        "None" | "Track" | "Playlist" => Ok(()),
-        _ => Err(Error::InvalidArgs(format!(
-            "Invalid LoopStatus: {loop_status}"
-        ))),
+impl LoopStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::Track => "Track",
+            Self::Playlist => "Playlist",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, Error> {
+        match value {
+            "None" => Ok(Self::None),
+            "Track" => Ok(Self::Track),
+            "Playlist" => Ok(Self::Playlist),
+            _ => Err(Error::InvalidArgs(format!("Invalid LoopStatus: {value}"))),
+        }
     }
 }
 
@@ -595,17 +605,16 @@ fn validate_loop_status(loop_status: &str) -> Result<(), Error> {
 pub async fn update_playback_mode(
     conn: &Connection,
     state: &Arc<StdMutex<PlayerState>>,
-    loop_status: String,
+    loop_status: LoopStatus,
     shuffle: bool,
 ) -> Result<(), String> {
-    validate_loop_status(&loop_status).map_err(|e| e.to_string())?;
     let iface_ref = player_interface(conn).await?;
     let mut changed = HashMap::new();
     {
         let mut state = lock(state);
         if state.loop_status != loop_status {
-            state.loop_status = loop_status.clone();
-            changed.insert("LoopStatus", Variant::from(loop_status));
+            state.loop_status = loop_status;
+            changed.insert("LoopStatus", Variant::from(loop_status.as_str()));
         }
         if state.shuffle != shuffle {
             state.shuffle = shuffle;
@@ -732,7 +741,7 @@ mod tests {
     fn player_state(playback: PlaybackState, elapsed: Duration) -> PlayerState {
         PlayerState {
             volume: 1.0,
-            loop_status: "None".to_string(),
+            loop_status: LoopStatus::None,
             shuffle: false,
             playback_state: Some(playback),
             playback_updated_at: Instant::now() - elapsed,

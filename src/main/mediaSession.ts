@@ -1,5 +1,5 @@
 import os from "node:os";
-import { isPlaybackMode } from "@shared/types/playback-mode";
+import { isPlaybackMode } from "@shared/playbackMode";
 
 import { toError } from "@shared/util";
 import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";

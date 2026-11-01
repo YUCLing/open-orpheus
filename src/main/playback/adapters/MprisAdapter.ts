@@ -1,12 +1,18 @@
 import Emittery from "emittery";
-import { mprisPlaybackMode, type PlaybackMode } from "@shared/types/playback-mode";
 
-import { MediaSession, PlaybackStatus as DbusPlaybackStatus } from "@open-orpheus/dbus";
+import {
+  LoopStatus as DbusLoopStatus,
+  MediaSession,
+  PlaybackStatus as DbusPlaybackStatus,
+} from "@open-orpheus/dbus";
 
 import type { MprisMetadata } from "@open-orpheus/dbus";
-import { client } from "../../request";
+import type { PlaybackMode } from "@shared/types/playback-mode";
 import { imageSize, toError } from "@shared/util";
+
+import { client } from "../../request";
 import { artworkFileExists, artworkFileUrl, cacheArtwork, remoteArtExt } from "../artwork";
+import { mprisPlaybackMode } from "../modes";
 import { PlaybackStatus, TrackInfo } from "../types";
 import { MediaSessionAdapter, PlayerCommandEvents } from "./MediaSessionAdapter";
 
@@ -98,8 +104,7 @@ export default class MprisAdapter
           await this.modeApplied;
           break;
         case "SetLoopStatus":
-          // The native setter validates the three MPRIS values first.
-          await this.emit("loopStatus", event.loopStatus as "None" | "Playlist" | "Track");
+          await this.emit("loopStatus", event.loopStatus);
           await this.modeApplied;
           break;
       }
@@ -161,7 +166,12 @@ export default class MprisAdapter
 
   onPlaybackMode(mode: PlaybackMode): void {
     const { loopStatus, shuffle } = mprisPlaybackMode(mode);
-    this.modeApplied = this.mediaSession.setPlaybackMode(loopStatus, shuffle);
+    const nativeLoopStatus = {
+      None: DbusLoopStatus.None,
+      Track: DbusLoopStatus.Track,
+      Playlist: DbusLoopStatus.Playlist,
+    }[loopStatus];
+    this.modeApplied = this.mediaSession.setPlaybackMode(nativeLoopStatus, shuffle);
     // A later Properties.Set also awaits this promise, while in-app changes
     // have no caller to observe a native publishing failure.
     void this.modeApplied.catch((err) => {

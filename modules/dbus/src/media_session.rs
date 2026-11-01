@@ -23,6 +23,14 @@ pub enum PlaybackStatus {
     Stopped,
 }
 
+#[napi(string_enum)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum LoopStatus {
+    None,
+    Track,
+    Playlist,
+}
+
 #[allow(dead_code)]
 struct Playlist {}
 
@@ -37,7 +45,7 @@ pub enum MediaSessionEvents {
     Seek { delta: i64 },
     SetPosition { position: i64 },
     SetVolume { volume: f64 },
-    SetLoopStatus { loop_status: String },
+    SetLoopStatus { loop_status: LoopStatus },
     SetShuffle { shuffle: bool },
 }
 
@@ -167,7 +175,7 @@ impl MediaSession {
     pub fn set_playback_mode<'a>(
         &'a self,
         env: &'a Env,
-        loop_status: String,
+        loop_status: LoopStatus,
         shuffle: bool,
     ) -> Result<Object<'a>> {
         let conn = self.conn.clone();

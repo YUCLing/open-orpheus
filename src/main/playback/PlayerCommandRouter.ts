@@ -1,8 +1,9 @@
 import Emittery from "emittery";
-import { modeForLoopStatus, modeForShuffle, type PlaybackMode } from "@shared/types/playback-mode";
+import type { PlaybackMode } from "@shared/types/playback-mode";
 
 import { mainWindow } from "../window";
 import { PlayerCommandEvents } from "./adapters/MediaSessionAdapter";
+import { modeForLoopStatus, modeForShuffle } from "./modes";
 import type PlaybackController from "./PlaybackController";
 import { PlaybackStatus } from "./types";
 

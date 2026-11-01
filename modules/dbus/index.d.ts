@@ -101,7 +101,7 @@ export declare class MediaSession {
   setEventHandler(handler?: (((err: Error | null, arg: MediaSessionEvents) => Promise<undefined> | undefined)) | undefined | null): void
   setMetadata(metadata?: MprisMetadata | undefined | null): Promise<void>
   setVolume(volume: number): Promise<void>
-  setPlaybackMode(loopStatus: string, shuffle: boolean): Promise<void>
+  setPlaybackMode(loopStatus: LoopStatus, shuffle: boolean): Promise<void>
   updatePlaybackState(playbackState?: PlaybackState | undefined | null): Promise<void>
   sendSeeked(time: number): Promise<void>
 }
@@ -240,6 +240,12 @@ export interface DbusVariant {
   value: unknown
 }
 
+export declare const enum LoopStatus {
+  None = 'None',
+  Track = 'Track',
+  Playlist = 'Playlist',
+}
+
 export type MediaSessionEvents =
   | { type: 'Raise' }
   | { type: 'Quit' }
@@ -250,7 +256,7 @@ export type MediaSessionEvents =
   | { type: 'Seek'; delta: number }
   | { type: 'SetPosition'; position: number }
   | { type: 'SetVolume'; volume: number }
-  | { type: 'SetLoopStatus'; loopStatus: string }
+  | { type: 'SetLoopStatus'; loopStatus: LoopStatus }
   | { type: 'SetShuffle'; shuffle: boolean }
 
 export interface MprisMetadata {

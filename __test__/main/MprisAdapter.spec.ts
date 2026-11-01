@@ -30,6 +30,7 @@ vi.mock("@open-orpheus/dbus", () => ({
     });
   },
   PlaybackStatus: { Playing: 0, Paused: 1, Stopped: 2 },
+  LoopStatus: { None: "None", Track: "Track", Playlist: "Playlist" },
 }));
 
 vi.mock("../../src/main/request", () => ({
@@ -100,7 +101,7 @@ describe("MprisAdapter", () => {
     expect(lastUpdate()).toMatchObject({ position: 0, advancing: false });
   });
 
-  it("reports actual mutually exclusive renderer modes", () => {
+  it("reports actual mutually exclusive renderer modes", async () => {
     const adapter = new MprisAdapter();
     for (const mode of [
       "playOrder",
@@ -112,6 +113,7 @@ describe("MprisAdapter", () => {
     ] as const) {
       adapter.onPlaybackMode(mode);
     }
+    await vi.waitFor(() => expect(hoisted.modes).toHaveLength(6));
     expect(hoisted.modes).toEqual([
       { loopStatus: "None", shuffle: false },
       { loopStatus: "Playlist", shuffle: false },

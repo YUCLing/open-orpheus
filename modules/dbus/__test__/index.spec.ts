@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 
 import test from "ava";
 
-import { DbusClient, MediaSession, PlaybackStatus } from "../index.js";
+import { DbusClient, LoopStatus, MediaSession, PlaybackStatus } from "../index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -207,7 +207,7 @@ serial(
     session.setEventHandler(async (_err, event) => {
       if (event.type === "SetShuffle") {
         await sleep(30);
-        await session.setPlaybackMode("Playlist", event.shuffle);
+        await session.setPlaybackMode(LoopStatus.Playlist, event.shuffle);
       } else if (event.type === "SetLoopStatus") {
         await sleep(30);
         await session.setPlaybackMode(event.loopStatus, false);
@@ -257,7 +257,7 @@ serial("publishes in-app mode changes together and suppresses unchanged signals"
     }
   );
   try {
-    await session.setPlaybackMode("Playlist", true);
+    await session.setPlaybackMode(LoopStatus.Playlist, true);
     // The Get round trip also lets the queued signal reach the JS handler.
     t.is(await getProperty(destination, "Shuffle"), "true");
     await sleep(30);
@@ -271,7 +271,7 @@ serial("publishes in-app mode changes together and suppresses unchanged signals"
         [],
       ],
     ]);
-    await session.setPlaybackMode("Playlist", true);
+    await session.setPlaybackMode(LoopStatus.Playlist, true);
     await sleep(30);
     t.is(changes.length, 1);
   } finally {
