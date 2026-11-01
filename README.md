@@ -122,7 +122,6 @@ Open Orpheus 在首次启动时如果检测到资源缺失，会自动从网易�
 
 - [Wayland 窗口规则配置文档](./docs/WM_RULES.md)
 - [D-Bus 服务文档](./docs/DBUS_SERVICES.md)
-- [MPRIS 播放方式](./docs/MPRIS.md)
 - [日志配置文档](./docs/LOGGING.md)
 
 ## 免责声明

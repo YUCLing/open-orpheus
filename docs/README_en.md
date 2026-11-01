@@ -119,7 +119,6 @@ If the automatic download fails, you can manually copy both folders from your of
 ## Usage documentation
 
 - [D-Bus services](./DBUS_SERVICES_en.md)
-- [MPRIS playback modes](./MPRIS_en.md)
 - [Logging configuration](./LOGGING.md)
 
 ## Disclaimer
