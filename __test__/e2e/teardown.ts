@@ -7,6 +7,7 @@ export default async function () {
   }
   [
     "TEST_PACKAGED_DIR",
+    "OPEN_ORPHEUS_CUSTOM_TEMP_DIR",
     "OPEN_ORPHEUS_CUSTOM_DATA_DIR",
     "OPEN_ORPHEUS_IGNORE_SINGLE_INSTANCE",
   ].forEach((v) => {

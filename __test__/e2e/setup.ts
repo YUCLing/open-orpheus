@@ -8,6 +8,7 @@ export default async function () {
   const testTemp = (process.env["TEST_PACKAGED_DIR"] = await mkdtemp(
     join(tmpdir(), "open-orpheus-e2e")
   ));
+  const tempDir = join(testTemp, "temp");
   const dataDir = join(testTemp, "data");
 
   await mkdir(dataDir, { recursive: true });
@@ -29,5 +30,6 @@ export default async function () {
   }
 
   process.env["OPEN_ORPHEUS_IGNORE_SINGLE_INSTANCE"] = "1";
+  process.env["OPEN_ORPHEUS_CUSTOM_TEMP_DIR"] = tempDir;
   process.env["OPEN_ORPHEUS_CUSTOM_DATA_DIR"] = dataDir;
 }
