@@ -44,6 +44,11 @@ pub struct LayerShellOptions {
     pub namespace: String,
     /// Defaults to the top layer.
     pub layer: Option<LayerShellLayer>,
+    /// The `Display.id` of the output to create the layer surface on.
+    ///
+    /// Electron's `Display.id` is the Wayland registry global name, so it can
+    /// be passed through unchanged. Omit it to let the compositor choose.
+    pub output: Option<u32>,
     pub anchor_top: Option<bool>,
     pub anchor_bottom: Option<bool>,
     pub anchor_left: Option<bool>,
@@ -398,6 +403,27 @@ pub fn is_layer_shell_available() -> bool {
     #[cfg(not(target_os = "linux"))]
     {
         false
+    }
+}
+
+/// The compositor's unique name for the output Electron reports as a `Display.id`.
+///
+/// This is the `wl_output.name` event (for example `DP-1`), looked up across the
+/// live Wayland connections. `null` when none of them knows the display, the
+/// client has not bound it yet, or the compositor is too old to send a name.
+///
+/// Only for Wayland on Linux; everywhere else it is `null`.
+#[napi]
+pub fn get_unique_display_id(display_id: u32) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::output_name(display_id)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = display_id;
+        None
     }
 }
 

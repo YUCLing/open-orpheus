@@ -9,6 +9,7 @@ test("module can load", async (t) => {
     t.is(typeof window.captureNextWindowFirstCursorEnter, "function");
     t.is(typeof window.captureWindowNextPointerAxis, "function");
     t.is(typeof window.drainWindowCallbacks, "function");
+    t.is(typeof window.getUniqueDisplayId, "function");
     t.is(typeof window.isWindowWaylandPopup, "function");
     t.is(typeof window.setWindowLayerShell, "function");
     t.is(typeof window.setWindowPopupPolicy, "function");

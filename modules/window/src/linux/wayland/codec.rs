@@ -12,6 +12,9 @@ pub(crate) enum Iface {
     WlSeat,
     WlPointer,
     WlTouch,
+    /// A `wl_output` the client bound. Kept so a layer surface can name the
+    /// output the application asked for.
+    WlOutput,
     WlSurface,
     XdgWmBase,
     XdgPositioner,
@@ -80,6 +83,10 @@ pub(crate) const EVT_POPUP_DONE: u16 = 1;
 // wl_registry events
 pub(crate) const EVT_GLOBAL: u16 = 0;
 pub(crate) const EVT_GLOBAL_REMOVE: u16 = 1;
+
+// wl_output events
+/// `wl_output.name` (v4): the compositor's name for the output, e.g. `DP-1`.
+pub(crate) const EVT_OUTPUT_NAME: u16 = 4;
 
 // xdg_toplevel events
 pub(crate) const EVT_TOPLEVEL_CONFIGURE: u16 = 0;

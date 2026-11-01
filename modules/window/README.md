@@ -34,6 +34,7 @@ everything it does:
 | ----------------------------------------------------------- | ---------------------------------- | ---------------------------- |
 | `WaylandConn::surface_ids`                                  | `wl_surface` → managed id          | the surface is destroyed     |
 | `WaylandConn::surface_roles`                                | `wl_surface` → `SurfaceRole`       | the surface is destroyed     |
+| `WaylandConn::outputs`                                      | `Display.id` → `wl_output` objects | the global is withdrawn      |
 | `WaylandConn::layer_windows`, `wl_to_layer`, `xdg_to_layer` | the per-show role objects          | the role object is destroyed |
 | `WaylandConn::pending_role`                                 | the open role transaction          | it is decided                |
 | `WINDOW_ROLES`                                              | managed id → the role it asked for | consumed, or cleared         |
@@ -69,6 +70,26 @@ that say nothing about size or anchors cover the output (all four anchors, size
 chosen by the compositor). An axis given a size of `0` must anchor both opposite
 edges there, so combinations that cannot be sent are refused rather than allowed
 to raise a protocol error.
+
+### Outputs
+
+Chromium builds its display cache from `wl_registry.global` and `global_remove`,
+and the global `name` is the `Display.id` Electron reports. The proxy mirrors
+those globals in `WaylandConn::outputs`, keyed by that same number, records the
+`wl_output` objects the client binds for each one, and keeps the name each object
+reports through `wl_output.name` (v4). The mapping is per connection because
+global names belong to one `wl_display`.
+
+A layer surface takes its output when its role is created, so a policy can name
+one with `output: Display.id` and the role creation resolves it to the
+`wl_output` object the compositor expects. If the client has not bound that
+display, the null output is sent and the compositor chooses, exactly as when no
+output was requested. `getUniqueDisplayId(displayId)` answers the reverse
+question for the application: it returns the compositor's name (`DP-1`, say) for
+a `Display.id`, or `null` when no live connection knows it, the client has not
+bound the display, or the compositor is too old to send the event. A withdrawn
+global removes the entry and its bindings; a new global reusing the name starts
+without them.
 
 ### The role transaction
 

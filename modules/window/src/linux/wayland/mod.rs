@@ -3,6 +3,7 @@ mod filter;
 mod handlers;
 mod inject;
 mod layer_shell;
+mod outputs;
 mod state;
 
 #[cfg(test)]
@@ -25,6 +26,11 @@ pub(super) fn is_wayland() -> bool {
 
 pub(super) fn is_layer_shell_available() -> bool {
     state::is_layer_shell_available()
+}
+
+/// The compositor's name for an output, by the `Display.id` naming it.
+pub(super) fn output_name(display_id: u32) -> Option<String> {
+    state::output_name(display_id)
 }
 
 /// Register (or replace) the layer-shell policy for a managed window.

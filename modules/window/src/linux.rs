@@ -78,6 +78,15 @@ pub fn is_layer_shell_available() -> bool {
     wayland::is_layer_shell_available()
 }
 
+/// The compositor's name for the output Electron reports as a `Display.id`.
+pub fn output_name(display_id: u32) -> Option<String> {
+    if disable_display_server_hooks() {
+        return None;
+    }
+
+    wayland::output_name(display_id)
+}
+
 /// Register the layer-shell policy for a managed window.
 ///
 /// Keyed by the id the application names the window with, so it can be set
@@ -151,6 +160,7 @@ fn to_wayland_options(options: &crate::LayerShellOptions) -> wayland::LayerShell
             Some(crate::LayerShellLayer::Overlay) => wayland::LAYER_OVERLAY,
             None => wayland::LAYER_TOP,
         },
+        output: options.output,
         anchor,
         width: options.width.unwrap_or(0),
         height: options.height.unwrap_or(0),

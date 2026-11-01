@@ -151,6 +151,10 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
         };
     }
 
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlOutput) {
+        return objects::on_output_event(conn, msg);
+    }
+
     if conn.layer_windows.contains_key(&msg.object_id) {
         return shadow::on_layer_event(conn, msg);
     }
@@ -172,7 +176,8 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
 #[cfg(test)]
 mod tests {
     use super::super::codec::{
-        BTN_PRESSED, EVT_BUTTON, EVT_ENTER, EVT_LEAVE, EVT_TOUCH_DOWN, decorate_title,
+        BTN_PRESSED, EVT_BUTTON, EVT_ENTER, EVT_GLOBAL, EVT_LEAVE, EVT_OUTPUT_NAME, EVT_TOUCH_DOWN,
+        REQ_BIND, decorate_title,
     };
     use super::super::state::{WaylandConn, init_state};
     use super::super::test_support::{message, serial, wl_string, word};
@@ -241,6 +246,40 @@ mod tests {
         // Unknown interfaces are forwarded without being tagged.
         dispatch_request(FD, &mut conn, &bind_message(9, "wl_shm", 5), &mut fx);
         assert!(!conn.ifaces.contains_key(&5));
+    }
+
+    #[test]
+    fn an_output_bind_resolves_the_global_name_to_its_object() {
+        let mut conn = WaylandConn::new();
+        let mut fx = Effects::default();
+        conn.ifaces.insert(9, Iface::WlRegistry);
+
+        // wl_registry.global(name, interface, version); the name is the
+        // `Display.id` Electron reports.
+        let mut global = word(77);
+        global.extend_from_slice(&wl_string("wl_output"));
+        global.extend_from_slice(&word(4));
+        dispatch_event(&mut conn, &message(9, EVT_GLOBAL, &global), &mut fx);
+        assert!(conn.outputs.contains_key(&77));
+
+        // wl_registry.bind(name, interface, version, new_id)
+        let mut bind = word(77);
+        bind.extend_from_slice(&wl_string("wl_output"));
+        bind.extend_from_slice(&word(4));
+        bind.extend_from_slice(&word(500));
+        dispatch_request(FD, &mut conn, &message(9, REQ_BIND, &bind), &mut fx);
+
+        assert_eq!(conn.ifaces.get(&500), Some(&Iface::WlOutput));
+        assert_eq!(super::super::outputs::object_for(&conn, 77), Some(500));
+
+        // wl_output.name("DP-1") arrives on the bound object and is filed
+        // against the display it was bound for.
+        dispatch_event(
+            &mut conn,
+            &message(500, EVT_OUTPUT_NAME, &wl_string("DP-1")),
+            &mut fx,
+        );
+        assert_eq!(conn.outputs[&77].name.as_deref(), Some("DP-1"));
     }
 
     #[test]
