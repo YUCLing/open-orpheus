@@ -782,4 +782,5 @@ module.exports.DbusClient = nativeBinding.DbusClient
 module.exports.DbusSubscription = nativeBinding.DbusSubscription
 module.exports.LyricsService = nativeBinding.LyricsService
 module.exports.MediaSession = nativeBinding.MediaSession
+module.exports.LoopStatus = nativeBinding.LoopStatus
 module.exports.PlaybackStatus = nativeBinding.PlaybackStatus

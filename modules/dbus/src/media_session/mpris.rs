@@ -12,7 +12,7 @@ use zbus::{
     Connection, DeserializeDict, ObjectPath, OwnedObjectPath, SerializeDict, Type, Variant,
 };
 
-use crate::media_session::{lock, EventDispatcher, MediaSessionEvents, PlaybackStatus};
+use crate::media_session::{lock, EventDispatcher, LoopStatus, MediaSessionEvents, PlaybackStatus};
 
 const NO_TRACK_OBJECT_PATH: &str = "/org/mpris/MediaPlayer2/TrackList/NoTrack";
 
@@ -42,6 +42,8 @@ pub struct PlaybackState {
 /// in-flight command that is waiting for the very JS call trying to take it.
 pub struct PlayerState {
     pub volume: f64,
+    pub loop_status: LoopStatus,
+    pub shuffle: bool,
     pub playback_state: Option<PlaybackState>,
     /// When `playback_state.position` was sampled. MPRIS `Position` is
     /// interpolated from this anchor so clients polling between the 1 Hz
@@ -54,6 +56,8 @@ impl PlayerState {
     pub fn new() -> Self {
         Self {
             volume: 1.0,
+            loop_status: LoopStatus::None,
+            shuffle: false,
             playback_state: None,
             playback_updated_at: Instant::now(),
             metadata: None,
@@ -373,9 +377,16 @@ impl PlayerInterface {
         .to_string()
     }
 
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     async fn loop_status(&self) -> String {
-        "Playlist".to_string()
+        lock(&self.state).loop_status.as_str().to_string()
+    }
+
+    #[zbus(property)]
+    async fn set_loop_status(&self, loop_status: String) -> Result<(), Error> {
+        let loop_status = LoopStatus::parse(&loop_status)?;
+        self.dispatch(MediaSessionEvents::SetLoopStatus { loop_status })
+            .await
     }
 
     #[zbus(property)]
@@ -387,10 +398,15 @@ impl PlayerInterface {
             .unwrap_or(1.0)
     }
 
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     async fn shuffle(&self) -> bool {
-        // TODO: We aren't able to get it from NCM
-        false
+        lock(&self.state).shuffle
+    }
+
+    #[zbus(property)]
+    async fn set_shuffle(&self, shuffle: bool) -> Result<(), Error> {
+        self.dispatch(MediaSessionEvents::SetShuffle { shuffle })
+            .await
     }
 
     #[zbus(property)]
@@ -565,6 +581,61 @@ pub async fn update_volume(
     emit_volume_changed(iface_ref.signal_emitter(), volume).await
 }
 
+impl LoopStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::Track => "Track",
+            Self::Playlist => "Playlist",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, Error> {
+        match value {
+            "None" => Ok(Self::None),
+            "Track" => Ok(Self::Track),
+            "Playlist" => Ok(Self::Playlist),
+            _ => Err(Error::InvalidArgs(format!("Invalid LoopStatus: {value}"))),
+        }
+    }
+}
+
+/// Publish the renderer-confirmed mode as one diff, since the native player
+/// can change both properties together (e.g. single-track repeat exits shuffle).
+pub async fn update_playback_mode(
+    conn: &Connection,
+    state: &Arc<StdMutex<PlayerState>>,
+    loop_status: LoopStatus,
+    shuffle: bool,
+) -> Result<(), String> {
+    let iface_ref = player_interface(conn).await?;
+    let mut changed = HashMap::new();
+    {
+        let mut state = lock(state);
+        if state.loop_status != loop_status {
+            state.loop_status = loop_status;
+            changed.insert("LoopStatus", Variant::from(loop_status.as_str()));
+        }
+        if state.shuffle != shuffle {
+            state.shuffle = shuffle;
+            changed.insert("Shuffle", Variant::from(shuffle));
+        }
+    }
+    if changed.is_empty() {
+        return Ok(());
+    }
+    // Like Volume, updates must not acquire the interface write lock while a
+    // Properties.Set request is waiting for the JS handler's confirmation.
+    zbus::fdo::Properties::properties_changed(
+        iface_ref.signal_emitter(),
+        InterfaceName::from_static_str_unchecked("org.mpris.MediaPlayer2.Player"),
+        changed,
+        Cow::Borrowed(&[]),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Replace the playback state and emit the signals its diff implies.
 pub async fn update_playback_state(
     conn: &Connection,
@@ -670,6 +741,8 @@ mod tests {
     fn player_state(playback: PlaybackState, elapsed: Duration) -> PlayerState {
         PlayerState {
             volume: 1.0,
+            loop_status: LoopStatus::None,
+            shuffle: false,
             playback_state: Some(playback),
             playback_updated_at: Instant::now() - elapsed,
             metadata: None,

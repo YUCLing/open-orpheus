@@ -1,11 +1,18 @@
 import Emittery from "emittery";
 
-import { MediaSession, PlaybackStatus as DbusPlaybackStatus } from "@open-orpheus/dbus";
+import {
+  LoopStatus as DbusLoopStatus,
+  MediaSession,
+  PlaybackStatus as DbusPlaybackStatus,
+} from "@open-orpheus/dbus";
 
 import type { MprisMetadata } from "@open-orpheus/dbus";
-import { client } from "../../request";
+import type { PlaybackMode } from "@shared/types/playback-mode";
 import { imageSize, toError } from "@shared/util";
+
+import { client } from "../../request";
 import { artworkFileExists, artworkFileUrl, cacheArtwork, remoteArtExt } from "../artwork";
+import { mprisPlaybackMode } from "../modes";
 import { PlaybackStatus, TrackInfo } from "../types";
 import { MediaSessionAdapter, PlayerCommandEvents } from "./MediaSessionAdapter";
 
@@ -41,6 +48,7 @@ export default class MprisAdapter
    * some other (concurrent or in-app) change must not be mistaken for it.
    */
   private volumeApplied: { volume: number; write: Promise<unknown> } | null = null;
+  private modeApplied: Promise<void> | null = null;
 
   constructor() {
     super();
@@ -91,6 +99,14 @@ export default class MprisAdapter
           if (applied?.volume === event.volume) await applied.write;
           break;
         }
+        case "SetShuffle":
+          await this.emit("shuffle", event.shuffle);
+          await this.modeApplied;
+          break;
+        case "SetLoopStatus":
+          await this.emit("loopStatus", event.loopStatus);
+          await this.modeApplied;
+          break;
       }
     });
   }
@@ -146,6 +162,24 @@ export default class MprisAdapter
       volume,
       write: this.mediaSession.setVolume(volume) as Promise<unknown>,
     };
+  }
+
+  onPlaybackMode(mode: PlaybackMode): void {
+    const { loopStatus, shuffle } = mprisPlaybackMode(mode);
+    const nativeLoopStatus = {
+      None: DbusLoopStatus.None,
+      Track: DbusLoopStatus.Track,
+      Playlist: DbusLoopStatus.Playlist,
+    }[loopStatus];
+    // Preserve renderer order even when native tasks run on multiple workers.
+    this.modeApplied = (this.modeApplied ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => this.mediaSession.setPlaybackMode(nativeLoopStatus, shuffle));
+    // A later Properties.Set also awaits this promise, while in-app changes
+    // have no caller to observe a native publishing failure.
+    void this.modeApplied.catch((err) => {
+      LOGGER.warn({ err: toError(err) }, "Failed to publish MPRIS playback mode");
+    });
   }
 
   dispose(): void {

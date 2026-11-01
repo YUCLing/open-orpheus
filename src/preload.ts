@@ -9,6 +9,7 @@ import "./preload/channel";
 import { fireNativeCall } from "./preload/channel";
 
 import "./preload/calls/index";
+import "./preload/playbackMode";
 
 async function getSCFonts(): Promise<string[]> {
   const fonts = (await ipcRenderer.invoke("fonts.getSCFonts")) as string[];
