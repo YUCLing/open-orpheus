@@ -32,11 +32,11 @@ import showPackgeDownloadWindow from "./main/windows/package-download";
 import { mainWindow } from "./main/window";
 import registerAsProtocolClient from "./main/protocol";
 import { parseLocalFile, parseWebCommand, raceArgument } from "./main/arguments";
-import { toError } from "./util";
+import { toError } from "@shared/util";
 import { installLifecycle, setStartupTask } from "./main/lifecycle";
 import { checkEnvFlagPresent } from "./main/util/env";
 import { isFileNotFound } from "./main/util/fs";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 
 import type WebPack from "./main/packs/WebPack";
 import type { ProxyConfiguration } from "./main/request";

@@ -8,10 +8,10 @@ import decoderProcessPath from "../../workers/av3a-decoder?worker&url";
 import type {
   Av3aProcessMainToService,
   Av3aProcessServiceToMain,
-} from "../../bridge/contracts/av3a-process";
+} from "@shared/contracts/av3a-process";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
 import { registerShutdownTask } from "../lifecycle";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 /**
  * Main-process side of the AV3A decode utility process.

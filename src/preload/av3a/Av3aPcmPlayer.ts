@@ -1,7 +1,7 @@
 import { av3aBridge } from "./bridge";
 import { av3aChannel } from "./channel";
 import type { AudioPlayInfo } from "../Player";
-import type { Av3aTrackInfo } from "../../bridge/contracts/av3a-api";
+import type { Av3aTrackInfo } from "@shared/contracts/av3a-api";
 
 /**
  * Renders the AV3A decode stream inside the player window's AudioContext.

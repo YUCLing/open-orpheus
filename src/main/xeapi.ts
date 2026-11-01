@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { escape } from "node:querystring";
 
-import { toError } from "../util";
+import { toError } from "@shared/util";
 import { aegisPublicKey } from "./folders";
 
 const STATIC_KEY_BASE64 = "hw7WBGc5HWCZzhBM50P3pDvtn/RzxDy+FW+wygIErn4=";

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LyricsStore } from "$sharedTypes/lyrics";
+import type { LyricsStore } from "@shared/types/lyrics";
 import DbusLyricsService, {
   toDbusLyricsDocument,
   toDbusLyricsTrack,

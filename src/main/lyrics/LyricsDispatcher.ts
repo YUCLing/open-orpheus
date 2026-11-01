@@ -1,6 +1,6 @@
 import Emittery from "emittery";
 
-import { LyricsStore } from "$sharedTypes/lyrics";
+import { LyricsStore } from "@shared/types/lyrics";
 
 export type LyricsDispatcherEvents = {
   lyricsupdate: LyricsStore | null;

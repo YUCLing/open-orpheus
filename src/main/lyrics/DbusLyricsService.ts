@@ -1,4 +1,4 @@
-import type { LyricsStore } from "$sharedTypes/lyrics";
+import type { LyricsStore } from "@shared/types/lyrics";
 import type { TrackInfo } from "../playback/types";
 
 /**

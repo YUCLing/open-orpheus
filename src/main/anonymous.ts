@@ -11,7 +11,7 @@ import { randomBytes } from "node:crypto";
 import type { NetworkFetchRequest } from "./calls/network";
 import { deserialData, encodeAnonymousId } from "./crypto";
 import { client } from "./request";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 const ANONYMOUS_REGISTER_PATH = "/api/register/anonimous";
 const ANONYMOUS_EAPI_REGISTER_PATH = "/eapi/register/anonimous";

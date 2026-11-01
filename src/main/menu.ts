@@ -24,14 +24,14 @@ import {
 } from "./menu/windows";
 import packManager from "./pack";
 import SkinPack from "./packs/SkinPack";
-import { registerIpcHandlers } from "../bridge/register";
-import type { MenuContract } from "../bridge/contracts/menu-api";
+import { registerIpcHandlers } from "./bridge/register";
+import type { MenuContract } from "@shared/contracts/menu-api";
 import { parseBtnUrl, parseElementTemplate } from "./skin/dui";
 import type { ElementTemplate } from "./skin/dui";
-import { registerInputRegionHandlers } from "../bridge/common/inputRegion";
-import type { AppMenuItem } from "$sharedTypes/menu";
+import { registerInputRegionHandlers } from "./bridge/modules/inputRegion";
+import type { AppMenuItem } from "@shared/types/menu";
 import { font } from "./gui";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 import { isLiveFocusedWindow, runMenuCallbacks, scheduleMenuTask } from "./menu/lifecycle";
 import { overlayPolicy, workaroundEnabled, WorkaroundFlags } from "./menu/workaround";
 import {

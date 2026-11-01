@@ -1,8 +1,8 @@
 import { dirname } from "node:path";
 
-import { LineMode, ShowTranslate, TextAlignType } from "$sharedTypes/desktop-lyrics";
-import { LyricsStore } from "$sharedTypes/lyrics";
-import { MiniPlayerLikeMark, MiniPlayerTogetherStatus } from "$sharedTypes/mini-player";
+import { LineMode, ShowTranslate, TextAlignType } from "@shared/types/desktop-lyrics";
+import { LyricsStore } from "@shared/types/lyrics";
+import { MiniPlayerLikeMark, MiniPlayerTogetherStatus } from "@shared/types/mini-player";
 import { mkdir, writeFile } from "node:fs/promises";
 import { registerCallHandler } from "../calls";
 import { storage as storageDir } from "../folders";

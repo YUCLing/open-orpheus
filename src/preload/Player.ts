@@ -4,7 +4,7 @@ import AudioEffectManager from "./AudioEffectManager";
 import { Av3aPlaybackBackend } from "./backends/Av3aPlaybackBackend";
 import { MediaPlaybackBackend } from "./backends/MediaPlaybackBackend";
 import { isAv3aLocalFile } from "./av3a/detect";
-import { toError, volumeToGain } from "../util";
+import { toError, volumeToGain } from "@shared/util";
 import type { PlaybackBackend, PlaybackEventName } from "./PlaybackBackend";
 
 export enum AudioPlayerState {

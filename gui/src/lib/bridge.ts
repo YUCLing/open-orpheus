@@ -7,7 +7,7 @@
  * paths from property access, giving full autocomplete.
  *
  * Usage:
- *   import type { ManageContract } from "$bridge/contracts/manage-api";
+ *   import type { ManageContract } from "@shared/contracts/manage-api";
  *   const api = getBridge<ManageContract>("manage");
  *   api.cache.getStats();           // → _call("cache.getStats")
  *   api.events.lyricsUpdate(cb);    // → _on("lyricsUpdate", cb)

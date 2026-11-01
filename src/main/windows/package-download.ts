@@ -3,9 +3,9 @@ import path from "node:path";
 import type { BrowserWindowConstructorOptions } from "electron";
 
 import packManager from "../pack";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 import { ManagedWindow } from "../window";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 const packageDownloadWindowOptions = {
   width: 1000,

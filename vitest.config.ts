@@ -1,12 +1,10 @@
-import { fileURLToPath } from "node:url";
-
 import { configDefaults, defineConfig } from "vitest/config";
+
+import { createAliases } from "./scripts/tsconfigAliases.js";
 
 export default defineConfig({
   resolve: {
-    alias: {
-      $sharedTypes: fileURLToPath(new URL("./types", import.meta.url)),
-    },
+    alias: createAliases(),
   },
   test: {
     // Keep unit tests from importing the real Electron package, which may
@@ -17,6 +15,8 @@ export default defineConfig({
       include: ["src/**/*.ts", "packaging/**/*.ts"],
       exclude: [
         "src/{preload,worklets}/**/*.ts",
+        // Type-only declarations
+        "src/shared/types/**/*.ts",
         // Constants
         "packaging/resources/metadata.ts",
         "packaging/common/toolchain.ts",

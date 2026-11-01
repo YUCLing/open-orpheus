@@ -184,11 +184,11 @@ function columnSuffix(index: number): string {
  * to the logger module's directory with the file extension stripped, e.g.
  * `cache.ts` -> "cache", `audio/OnlineStreamer.ts` -> "audio/OnlineStreamer".
  *
- * Modules outside that directory (the main entry `src/main.ts`, bridge and
+ * Modules outside that directory (the main entry `src/main.ts`, preload and
  * window modules, ...) would otherwise start with `../`. Use the nearest
  * ancestor directory that contains both the module and the logger, so those
  * modules get a stable name instead, e.g. `src/main.ts` -> "main" and
- * `src/bridge/preload.ts` -> "bridge/preload".
+ * `src/preload/bridge.ts` -> "preload/bridge".
  */
 function toChildName(id: string, baseDir: string): string {
   let base = baseDir;

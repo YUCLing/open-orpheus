@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
 
-  import type { Lyrics } from "$sharedTypes/lyrics";
+  import type { Lyrics } from "@shared/types/lyrics";
 
   let {
     time,

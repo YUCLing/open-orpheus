@@ -10,7 +10,7 @@
 
   import IconButton from "$lib/components/IconButton.svelte";
 
-  import type { MiniPlayerContract } from "$bridge/contracts/mini-player-api";
+  import type { MiniPlayerContract } from "@shared/contracts/mini-player-api";
   import type {
     MiniPlayerLikeMark,
     MiniPlayerPlayInfo,
@@ -18,8 +18,8 @@
     MiniPlayerListData,
     MiniPlayerStyle,
     MiniPlayerTogetherStatus,
-  } from "$sharedTypes/mini-player";
-  import type { Lyrics } from "$sharedTypes/lyrics";
+  } from "@shared/types/mini-player";
+  import type { Lyrics } from "@shared/types/lyrics";
   import { lyricsBridgeEmitter, getLyrics } from "$lib/lyrics";
   import LyricsComponent from "./Lyrics.svelte";
   import { setFont } from "$lib/font";

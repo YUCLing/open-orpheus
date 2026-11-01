@@ -2,14 +2,14 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Dialog from "$lib/components/ui/dialog";
 
-  import type { UpdateInfo } from "$sharedTypes/update";
+  import type { UpdateInfo } from "@shared/types/update";
   import UpdateIcon from "@lucide/svelte/icons/circle-fading-arrow-up";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 
   import Logo from "../../../assets/icon.svg";
 
   import { getBridge } from "$lib/bridge";
-  import type { ManageContract } from "$bridge/contracts/manage-api";
+  import type { ManageContract } from "@shared/contracts/manage-api";
 
   const api = getBridge<ManageContract>("manage");
 

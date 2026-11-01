@@ -1,6 +1,6 @@
 import { registerIpcHandlers } from "../register";
-import { LyricsContract } from "../contracts/lyrics-api";
-import { lyricsDispatcher } from "../../main/lyrics";
+import { LyricsContract } from "@shared/contracts/lyrics-api";
+import { lyricsDispatcher } from "../../lyrics";
 
 export function registerLyricsHandlers(wnd: Electron.BrowserWindow) {
   registerIpcHandlers<LyricsContract>(wnd.webContents, "lyrics", {

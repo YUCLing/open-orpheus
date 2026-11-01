@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MenuContract } from "../../src/bridge/contracts/menu-api";
-import type { registerIpcHandlers } from "../../src/bridge/register";
+import type { MenuContract } from "@shared/contracts/menu-api";
+import type { registerIpcHandlers } from "@main/bridge/register";
 import { installLoggerStub } from "../helpers/globals";
 import type { IpcMainInvokeEvent } from "electron";
 
@@ -145,12 +145,12 @@ vi.mock("../../src/main/menu/workaround", () => ({
   WorkaroundFlags: { OverlayNoFullscreen: 1 },
   workaroundEnabled: () => mocks.noFullscreen,
 }));
-vi.mock("../../src/bridge/register", () => ({
+vi.mock("@main/bridge/register", () => ({
   registerIpcHandlers: (contents: object, _name: string, handlers: MenuHandlers) => {
     mocks.ipc.set(contents, handlers);
   },
 }));
-vi.mock("../../src/bridge/common/inputRegion", () => ({ registerInputRegionHandlers: vi.fn() }));
+vi.mock("@main/bridge/modules/inputRegion", () => ({ registerInputRegionHandlers: vi.fn() }));
 vi.mock("../../src/main/pack", () => ({ default: {} }));
 vi.mock("../../src/main/skin/dui", () => ({ parseBtnUrl: vi.fn(), parseElementTemplate: vi.fn() }));
 vi.mock("../../src/main/gui", () => ({ font: "Sans" }));

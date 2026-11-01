@@ -3,8 +3,8 @@ import { ipcRenderer } from "electron";
 import type {
   Av3aChannelRendererToService,
   Av3aChannelServiceToRenderer,
-} from "../../bridge/contracts/av3a-process";
-import type { Av3aTrackInfo } from "../../bridge/contracts/av3a-api";
+} from "@shared/contracts/av3a-process";
+import type { Av3aTrackInfo } from "@shared/contracts/av3a-api";
 
 /**
  * Renderer end of the direct channel to the AV3A decode utility process.

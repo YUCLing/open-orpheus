@@ -8,7 +8,7 @@ import { deserialData } from "../crypto";
 import { client } from "../request";
 import interceptAnonymousRequest from "../anonymous";
 import { AegisEncryptState, XeapiAegis, type AegisInitConfig } from "../xeapi";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 let globalFailCount = 0;
 let globalSucCount = 0;

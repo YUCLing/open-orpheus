@@ -1,7 +1,7 @@
 import { ipcRenderer } from "electron";
 import { fireNativeCall } from "./channel";
 import Player, { AudioPlayerState } from "./Player";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 export const PLAYING_EVENTS = ["play", "playing"] as const;
 export const HALTED_EVENTS = ["pause", "stalled", "ended", "error"] as const;

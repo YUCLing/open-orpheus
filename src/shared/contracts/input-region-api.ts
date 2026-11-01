@@ -1,4 +1,4 @@
-import type { InputRegion } from "$sharedTypes/input-region";
+import type { InputRegion } from "@shared/types/input-region";
 
 export type { InputRegion };
 

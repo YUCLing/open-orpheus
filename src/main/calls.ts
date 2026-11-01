@@ -1,6 +1,6 @@
 import type { IpcMainInvokeEvent } from "electron";
 
-import CallDispatcher, { CallbackHandlerFunction, HandlerFunction } from "../CallDispatcher";
+import CallDispatcher, { CallbackHandlerFunction, HandlerFunction } from "@shared/CallDispatcher";
 
 export const dispatcher = new CallDispatcher();
 

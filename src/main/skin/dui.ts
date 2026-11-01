@@ -1,7 +1,7 @@
 import { DOMParser, type Element } from "@xmldom/xmldom";
 
-import type { BtnImages, BtnState, ElementTemplate, LayoutNode } from "$sharedTypes/dui";
-import { toError } from "../../util";
+import type { BtnImages, BtnState, ElementTemplate, LayoutNode } from "@shared/types/dui";
+import { toError } from "@shared/util";
 
 export type { ElementTemplate, LayoutNode };
 

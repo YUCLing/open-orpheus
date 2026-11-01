@@ -3,12 +3,12 @@
   import { createAttachmentKey } from "svelte/attachments";
 
   import LyricsComponent from "$lib/components/Lyrics.svelte";
-  import type { DesktopLyricsPlayInfo, LyricsStyle } from "$sharedTypes/desktop-lyrics";
-  import type { Lyrics, LyricsStore } from "$sharedTypes/lyrics";
+  import type { DesktopLyricsPlayInfo, LyricsStyle } from "@shared/types/desktop-lyrics";
+  import type { Lyrics, LyricsStore } from "@shared/types/lyrics";
   import IconButton from "$lib/components/IconButton.svelte";
   import { cn } from "$lib/utils";
   import { getBridge } from "$lib/bridge";
-  import type { DesktopLyricsContract } from "$bridge/contracts/desktop-lyrics-api";
+  import type { DesktopLyricsContract } from "@shared/contracts/desktop-lyrics-api";
   import { inputRegionAttachment } from "$lib/inputRegion";
   import { lyricsBridgeEmitter, getLyrics, getSlogan, getPlayState, getTime } from "$lib/lyrics";
   import * as settings from "$lib/settings";

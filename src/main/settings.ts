@@ -13,7 +13,7 @@ import Emittery from "emittery";
 import { Keyv, KeyvHooks } from "keyv";
 import { KeyvSqlite } from "@keyv/sqlite";
 
-import { SettingsEvents } from "$sharedTypes/settings";
+import { SettingsEvents } from "@shared/types/settings";
 import createKeyvSqliteDriver from "./database/KeyvSqliteDriver";
 import { nativeDb } from "./database";
 import { registerShutdownTask } from "./lifecycle";

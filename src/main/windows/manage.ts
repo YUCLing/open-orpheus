@@ -10,14 +10,14 @@ import WebPack from "../packs/WebPack";
 import { wasm as wasmDir } from "../folders";
 import { httpCacheStorage, lyricCacheManager, playCacheManager } from "../cache";
 import { checkUpdate } from "../update";
-import { registerIpcHandlers } from "../../bridge/register";
-import type { ManageContract } from "../../bridge/contracts/manage-api";
+import { registerIpcHandlers } from "../bridge/register";
+import type { ManageContract } from "@shared/contracts/manage-api";
 import registerAsProtocolClient, {
   getProtocolClientName,
   isProtocolClient,
   unregisterAsProtocolClient,
 } from "../protocol";
-import { registerSettingsHandlers } from "../../bridge/common/settings";
+import { registerSettingsHandlers } from "../bridge/modules/settings";
 import { font } from "../gui";
 import { BasicManagedWindow, ManagedWindow } from "../window";
 

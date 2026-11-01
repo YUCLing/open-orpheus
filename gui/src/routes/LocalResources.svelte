@@ -5,7 +5,7 @@
 
   import { Button } from "$lib/components/ui/button";
   import { getBridge } from "$lib/bridge";
-  import type { ManageContract } from "$bridge/contracts/manage-api";
+  import type { ManageContract } from "@shared/contracts/manage-api";
 
   const api = getBridge<ManageContract>("manage");
 

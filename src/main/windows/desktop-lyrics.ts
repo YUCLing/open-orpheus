@@ -11,18 +11,18 @@ import {
   LyricsStyle,
   ShowTranslate,
   TextAlignType,
-} from "$sharedTypes/desktop-lyrics";
+} from "@shared/types/desktop-lyrics";
 
 import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
-import { registerIpcHandlers } from "../../bridge/register";
-import { toError } from "../../util";
+import { registerIpcHandlers } from "../bridge/register";
+import { toError } from "@shared/util";
 import type {
   DesktopLyricsContract,
   DesktopLyricsPreviewContract,
-} from "../../bridge/contracts/desktop-lyrics-api";
-import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
-import { registerLyricsHandlers } from "../../bridge/common/lyrics";
-import { registerSettingsHandlers } from "../../bridge/common/settings";
+} from "@shared/contracts/desktop-lyrics-api";
+import { registerInputRegionHandlers } from "../bridge/modules/inputRegion";
+import { registerLyricsHandlers } from "../bridge/modules/lyrics";
+import { registerSettingsHandlers } from "../bridge/modules/settings";
 import { events as settingsEvents, kv as settings } from "../settings";
 
 export const lyricsStyle: LyricsStyle = {

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { DownloadPackageProgress } from "../main/pack";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 
 let downloadReason = PackageDownloadReason.NotFound;
 
