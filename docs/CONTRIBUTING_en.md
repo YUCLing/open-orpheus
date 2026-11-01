@@ -165,6 +165,8 @@ Note that the core goal of this project is **interoperability**. Features intend
 
 Automated tests currently cover part of the project (`pnpm test`, with a coverage report via `pnpm coverage`). At this stage Codecov feedback is for reference only and is not enforced — but adding test cases for your changes is always appreciated!
 
+End-to-end tests drive the real application through Playwright (`pnpm e2e`) and run on Linux under Xvfb in CI. Build the native modules first (`pnpm build:modules`); since they launch the real app, the first run also downloads the web pack from NetEase's CDN.
+
 ### Code Style
 
 - TypeScript / JavaScript: The main codebase is linted with [Oxlint](https://oxc.rs) and formatted with [Oxfmt](https://oxc.rs) (config: `.oxlintrc.json`, `.oxfmtrc.json`), while the SvelteKit code under `gui/` is linted with ESLint (config: `gui/eslint.config.js`). Make sure there are no lint errors before submitting (`pnpm lint`), and that your code is formatted (`pnpm format`).

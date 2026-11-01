@@ -165,6 +165,8 @@ Issue 是反馈 Bug、提出功能建议或讨论项目方向的主要渠道。�
 
 本项目已为部分模块启用自动化测试（`pnpm test`，覆盖率报告见 `pnpm coverage`）。当前阶段 Codecov 的反馈仅供参考，不作硬性要求；不过如果你能为自己的改动补充测试用例，那自然是再好不过了！
 
+端到端测试由 Playwright 驱动真实的应用（`pnpm e2e`），在 CI 中于 Linux 的 Xvfb 环境下运行。运行前需要先构建原生模块（`pnpm build:modules`）；由于它会启动真实应用，首次运行还会从网易 CDN 下载 Web 资源包。
+
 ### 代码风格
 
 - TypeScript / JavaScript：主体代码由 [Oxlint](https://oxc.rs) 检查、[Oxfmt](https://oxc.rs) 格式化（配置见 `.oxlintrc.json`、`.oxfmtrc.json`），`gui/` 下的 SvelteKit 代码由 ESLint 检查（配置见 `gui/eslint.config.js`）。提交前请确保没有 lint 错误（`pnpm lint`），并且确保代码已格式化（`pnpm format`）。

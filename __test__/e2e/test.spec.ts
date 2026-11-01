@@ -11,15 +11,30 @@ import {
 
 const dataDir = process.env["OPEN_ORPHEUS_CUSTOM_DATA_DIR"]!;
 
+// Chromium switches for the app under test. CI passes `--no-sandbox
+// --disable-gpu`: Actions runners cannot set up Chromium's sandbox, and Xvfb
+// has no GPU.
+const extraElectronArgs = (process.env["OPEN_ORPHEUS_E2E_ELECTRON_ARGS"] ?? "")
+  .split(/\s+/)
+  .filter(Boolean);
+
+function launchApp() {
+  return electron.launch({ args: [".", ...extraElectronArgs] });
+}
+
+// The web pack download pulls the ~160 MB installer from NetEase's CDN and
+// unpacks it with 7z-wasm in-process, which takes minutes on a CI runner.
+const DOWNLOAD_TIMEOUT = 15 * 60_000;
+
 test("package download", async () => {
   test.skip(existsSync(join(dataDir, "package")));
-  test.slow();
-  const electronApp = await electron.launch({ args: ["."] });
+  test.setTimeout(DOWNLOAD_TIMEOUT);
+  const electronApp = await launchApp();
   const window = await electronApp.firstWindow();
-  expect(await window.getByText("缺少包文件").isVisible());
+  await expect(window.getByText("缺少包文件")).toBeVisible();
   await window.getByRole("button", { name: "下载" }).click();
-  expect(await window.getByText("正在下载").isVisible());
-  await window.waitForEvent("close", { timeout: 120_000 });
+  await expect(window.getByText("正在下载")).toBeVisible();
+  await window.waitForEvent("close", { timeout: DOWNLOAD_TIMEOUT });
   // close app
   await electronApp.close();
 });
@@ -29,7 +44,7 @@ test.describe("ncm app", () => {
   let mainWindow: Page;
 
   test.beforeAll(async () => {
-    electronApp = await electron.launch({ args: ["."] });
+    electronApp = await launchApp();
   });
 
   test.afterAll(async () => {

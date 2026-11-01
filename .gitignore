@@ -93,6 +93,7 @@ typings/
 
 # Playwright Test
 test-results
+playwright-report
 
 # Vite
 .vite/

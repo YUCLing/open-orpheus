@@ -76,6 +76,89 @@ jobs:
           flags: node
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # Linux only: Electron needs an X server, which the runner provides through
+  # Xvfb. The suite drives the real app — including downloading the web pack
+  # from NetEase's CDN — so it builds the native modules the app loads at
+  # runtime and then runs Playwright against the Vite build. Native module
+  # changes are exercised through the app as well, hence the `rust` filter.
+  test-e2e:
+    name: Playwright E2E
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.node == 'true' || needs.changes.outputs.rust == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Resolve pinned Rust version
+        id: toolchain
+        uses: ./.github/actions/toolchain
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ steps.toolchain.outputs.rust }}
+          target: wasm32-unknown-unknown
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install wasm-bindgen-cli
+        shell: bash
+        run: |
+          version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          cargo install "wasm-bindgen-cli@$version"
+
+      # Electron is Chromium, so Playwright can resolve the shared libraries it
+      # links against (and Xvfb) to the runner's distro package names.
+      - name: Install Electron runtime dependencies
+        run: sudo env "PATH=$PATH" pnpm exec playwright install-deps chromium
+
+      - name: Build native modules
+        run: pnpm build:modules
+
+      - name: Run E2E tests
+        env:
+          # The runner cannot set up Chromium's sandbox (its SUID helper is not
+          # setuid, and unprivileged user namespaces are restricted) and Xvfb
+          # has no GPU, so the tests launch Electron with these extra switches.
+          OPEN_ORPHEUS_E2E_ELECTRON_ARGS: --no-sandbox --disable-gpu
+          PLAYWRIGHT_JUNIT_OUTPUT_DIR: test-results
+          PLAYWRIGHT_JUNIT_OUTPUT_NAME: junit.xml
+        run: >-
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24"
+          pnpm e2e --reporter=github,junit,html
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          report_type: test_results
+          files: test-results/junit.xml
+          flags: e2e
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+
   # Linux only: the Rust unit tests cover platform-independent logic plus the
   # cfg(target_os = "linux") protocol codecs, which the macOS/Windows clippy
   # runs never compile. nextest runs them under llvm-cov, so a single pass

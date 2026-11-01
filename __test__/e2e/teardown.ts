@@ -5,7 +5,11 @@ export default async function () {
   if (testTemp) {
     await rm(testTemp, { recursive: true, force: true });
   }
-  ["TEST_PACKAGED_DIR", "OPEN_ORPHEUS_CUSTOM_DATA_DIR", "OPEN_ORPHEUS_IGNORE_SINGLE_INSTANCE"].forEach((v) => {
+  [
+    "TEST_PACKAGED_DIR",
+    "OPEN_ORPHEUS_CUSTOM_DATA_DIR",
+    "OPEN_ORPHEUS_IGNORE_SINGLE_INSTANCE",
+  ].forEach((v) => {
     delete process.env[v];
   });
 }
