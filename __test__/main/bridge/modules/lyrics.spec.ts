@@ -12,7 +12,7 @@ const hoisted = vi.hoisted(() => ({
   unlisteners: new Map<string, ReturnType<typeof vi.fn>>(),
 }));
 
-vi.mock("../../../src/main/lyrics", () => ({
+vi.mock("@main/lyrics", () => ({
   lyricsDispatcher: {
     get lyrics() {
       return hoisted.state.lyrics;
@@ -38,7 +38,7 @@ vi.mock("../../../src/main/lyrics", () => ({
   },
 }));
 
-import { registerLyricsHandlers } from "../../../src/bridge/common/lyrics";
+import { registerLyricsHandlers } from "@main/bridge/modules/lyrics";
 
 /** Dispatcher events and the renderer channels they are forwarded to. */
 const FORWARDING = [

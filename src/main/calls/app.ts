@@ -7,7 +7,7 @@ import { registerCallHandler, registerCallbackHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { fileExists } from "../util/fs";
 import { pngFromIco } from "../util/image";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import packManager from "../pack";
 import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";

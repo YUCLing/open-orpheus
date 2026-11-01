@@ -1,6 +1,6 @@
 import os from "node:os";
 
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { registerShutdownTask } from "../lifecycle";
 import { lyricsDispatcher } from "../lyrics";
 import { playbackController } from "../mediaSession";

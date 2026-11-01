@@ -1,15 +1,14 @@
 import adapter from "@sveltejs/adapter-static";
 import type { Config } from "@sveltejs/kit";
 
+import { createAliases } from "../scripts/tsconfigAliases.ts";
+
 const config: Config = {
   kit: {
     adapter: adapter({
       pages: "../.vite/build/gui",
     }),
-    alias: {
-      $bridge: "../src/bridge",
-      $sharedTypes: "../types",
-    },
+    alias: createAliases(),
   },
   vitePlugin: {
     dynamicCompileOptions: ({ filename }: { filename: string }) =>

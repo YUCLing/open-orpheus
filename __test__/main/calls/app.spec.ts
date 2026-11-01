@@ -2,7 +2,7 @@ import { normalize } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type CallDispatcher from "../../../src/CallDispatcher";
+import type CallDispatcher from "@shared/CallDispatcher";
 
 import { installLoggerStub } from "../../helpers/globals";
 

@@ -1,7 +1,7 @@
 import { ipcRenderer } from "electron";
 
 import type { AudioPlayInfo } from "../Player";
-import type { Av3aContract } from "../../bridge/contracts/av3a-api";
+import type { Av3aContract } from "@shared/contracts/av3a-api";
 
 /**
  * Typed client for the main-process `av3a` bridge (the player window).

@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 import Emittery from "emittery";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 async function getDesktopAudioStream() {
   // Since getDisplayMedia() requires a video track, if this option is set to false the promise will reject with a TypeError.

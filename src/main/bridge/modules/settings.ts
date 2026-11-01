@@ -1,6 +1,6 @@
 import { registerIpcHandlers } from "../register";
-import { SettingsContract } from "../contracts/settings-api";
-import { kv, events } from "../../main/settings";
+import { SettingsContract } from "@shared/contracts/settings-api";
+import { kv, events } from "../../settings";
 
 export function registerSettingsHandlers(wnd: Electron.BrowserWindow) {
   registerIpcHandlers<SettingsContract>(wnd.webContents, "settings", {

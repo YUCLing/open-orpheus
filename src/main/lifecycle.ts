@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import Emittery from "emittery";
 
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 export type StartupTask =
   | {

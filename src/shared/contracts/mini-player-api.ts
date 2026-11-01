@@ -7,7 +7,7 @@ import type {
   MiniPlayerShowVolumeRequest,
   MiniPlayerLikeMark,
   MiniPlayerTogetherStatus,
-} from "$sharedTypes/mini-player";
+} from "@shared/types/mini-player";
 
 export interface MiniPlayerContract {
   events: {

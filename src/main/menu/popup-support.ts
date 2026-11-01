@@ -5,7 +5,7 @@ import {
   supportsNativeWaylandPopup,
 } from "@open-orpheus/window";
 
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { events, LifecycleState, state } from "../lifecycle";
 import { runMenuCallbacks } from "./lifecycle";
 import {

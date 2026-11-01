@@ -4,7 +4,7 @@ import { MediaSession, PlaybackStatus as DbusPlaybackStatus } from "@open-orpheu
 
 import type { MprisMetadata } from "@open-orpheus/dbus";
 import { client } from "../../request";
-import { imageSize, toError } from "../../../util";
+import { imageSize, toError } from "@shared/util";
 import { artworkFileExists, artworkFileUrl, cacheArtwork, remoteArtExt } from "../artwork";
 import { PlaybackStatus, TrackInfo } from "../types";
 import { MediaSessionAdapter, PlayerCommandEvents } from "./MediaSessionAdapter";

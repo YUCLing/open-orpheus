@@ -1,8 +1,6 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { defineConfig } from "vite";
 
+import { createAliases } from "./scripts/tsconfigAliases.js";
 import PinoWorkerPlugin from "./plugins/PinoWorkerPlugin.js";
 import NoS3Plugin from "./plugins/NoS3Plugin.js";
 import LoggerPlugin from "./plugins/LoggerPlugin.js";
@@ -12,9 +10,7 @@ import ForceESPlugin from "./plugins/ForceESPlugin.js";
 export default defineConfig({
   base: "",
   resolve: {
-    alias: {
-      $sharedTypes: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "types"),
-    },
+    alias: createAliases(),
   },
   build: {
     sourcemap: process.env.INLINE_SOURCEMAP ? "inline" : false,

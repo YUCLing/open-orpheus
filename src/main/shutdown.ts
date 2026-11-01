@@ -2,7 +2,7 @@ import type { DbusClient } from "@open-orpheus/dbus";
 import os from "node:os";
 
 import { registerShutdownFinalizer, registerShutdownTask } from "./lifecycle";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 export enum ScheduleShutdownStatus {
   /** The requested state is now in effect. */

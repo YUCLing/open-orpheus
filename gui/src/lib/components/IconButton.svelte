@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HTMLButtonAttributes } from "svelte/elements";
-  import type { BtnImages } from "$sharedTypes/dui";
+  import type { BtnImages } from "@shared/types/dui";
 
   let {
     element = $bindable(),

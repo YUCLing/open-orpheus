@@ -8,11 +8,11 @@ import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
 import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
-import { registerIpcHandlers } from "../../bridge/register";
-import { toError } from "../../util";
-import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
-import type { BtnImages, BtnState } from "../../../types/dui";
-import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
+import { registerIpcHandlers } from "../bridge/register";
+import { toError } from "@shared/util";
+import { MiniPlayerContract } from "@shared/contracts/mini-player-api";
+import type { BtnImages, BtnState } from "@shared/types/dui";
+import { registerInputRegionHandlers } from "../bridge/modules/inputRegion";
 import packManager from "../pack";
 import type SkinPack from "../packs/SkinPack";
 import { extractColor } from "../skin/color";
@@ -25,8 +25,8 @@ import type {
   MiniPlayerFullState,
   MiniPlayerStyle,
   MiniPlayerTogetherStatus,
-} from "$sharedTypes/mini-player";
-import { registerLyricsHandlers } from "../../bridge/common/lyrics";
+} from "@shared/types/mini-player";
+import { registerLyricsHandlers } from "../bridge/modules/lyrics";
 import { font } from "../gui";
 import { events as settingsEvents, kv as settings } from "../settings";
 

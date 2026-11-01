@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dbToGain, imageSize, toError } from "../src/util";
+import { dbToGain, imageSize, toError } from "@shared/util";
 
 describe("toError", () => {
   it("returns the same instance for an Error", () => {

@@ -1,4 +1,4 @@
-import type { BtnImages } from "$bridge/contracts/menu-api";
+import type { BtnImages } from "@shared/contracts/menu-api";
 
 export interface MenuItemBtn {
   id: string;
@@ -21,4 +21,4 @@ export interface MenuItem {
   btns?: MenuItemBtn[];
 }
 
-export type { BtnState, BtnImages, ElementTemplate, LayoutNode } from "$bridge/contracts/menu-api";
+export type { BtnState, BtnImages, ElementTemplate, LayoutNode } from "@shared/contracts/menu-api";

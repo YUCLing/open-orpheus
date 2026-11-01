@@ -8,7 +8,7 @@ import { DesktopEnvironment, getDesktopEnvironment } from "@open-orpheus/window"
 import { ManagedWindow, setMainWindow } from "../window";
 import { window as miniPlayerWindow } from "./mini-player";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 function getWindowState(wnd: BrowserWindow): "minimize" | "maximize" | "restore" {
   return wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore";

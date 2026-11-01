@@ -38,6 +38,7 @@ open-orpheus/
 │   ├── main.ts             # App entry point, single-instance lock, protocol registration
 │   ├── preload.ts          # Renderer bridge entry
 │   ├── main/               # Main process logic (window, IPC, networking, cache...)
+│   │   ├── bridge/         # Bridge main-process side (IPC registration & window modules)
 │   │   ├── calls/          # IPC command handlers (winhelper, app, etc.)
 │   │   ├── packs/          # WebPack / SkinPack loaders
 │   │   ├── menu.ts         # Context menu management (Electron BrowserWindow)
@@ -45,9 +46,12 @@ open-orpheus/
 │   │   ├── window.ts       # BrowserWindow management
 │   │   └── ...             # Networking, crypto, download, cache, tray, etc.
 │   ├── preload/            # Preload-exposed APIs (channel bridge)
+│   │   ├── bridge.ts       # Typed bridge exposure (exposeApi)
 │   │   └── ...             # Playback control, music recognition, IM bridge, etc.
-│   ├── bridge/             # Typed RPC framework (contracts / preload exposure / renderer Proxy / main registration)
-│   │   └── ...
+│   ├── shared/             # Code shared across processes (contracts, types, utilities)
+│   │   ├── contracts/      # Bridge contracts (*-api.ts)
+│   │   ├── types/          # Cross-process shared types
+│   │   └── ...             # CallDispatcher, common utilities
 │   └── worklets/           # AudioWorklet processors
 ├── gui/                    # Svelte frontend (settings, desktop lyrics, context menus, etc.)
 │   └── src/
@@ -108,11 +112,11 @@ flowchart TB
 
 - **Main Process** (`src/main/`) is the control center: manages BrowserWindow lifecycle, registers the `orpheus://` protocol, handles network requests, and dispatches IPC calls.
 - **Main Window Preload** (`src/preload.ts`) exposes `window.channel`, exclusively for the NCM Orpheus web app, using a CallDispatcher-based command dispatch pattern.
-- **Bridge Framework** (`src/bridge/`) is the typed RPC layer between the main process and GUI windows, with four cooperating layers:
-  1. **Contract Layer** (`contracts/*-api.ts`) — TypeScript interfaces defining each window's full API surface (method signatures, event signatures, sync values), shared between main and renderer for type safety.
-  2. **Preload Side** (`preload.ts` → `exposeApi(prefix, syncValues)`) — exposes raw `_call(channel, ...args)` and `_on(event, callback)` primitives via `contextBridge`; each window's preload (`src/windows/*.ts`) calls it as needed.
+- **Bridge Framework** (contracts in `src/shared/contracts/`, main side in `src/main/bridge/`, preload exposure in `src/preload/bridge.ts`) is the typed RPC layer between the main process and GUI windows, with four cooperating layers:
+  1. **Contract Layer** (`src/shared/contracts/*-api.ts`) — TypeScript interfaces defining each window's full API surface (method signatures, event signatures, sync values), shared between main and renderer for type safety.
+  2. **Preload Side** (`src/preload/bridge.ts` → `exposeApi(prefix, syncValues)`) — exposes raw `_call(channel, ...args)` and `_on(event, callback)` primitives via `contextBridge`; each window's preload (`src/windows/*.ts`) calls it as needed.
   3. **Renderer Side** (`gui/src/lib/bridge.ts` → `getBridge<T>(name)`) — uses a Proxy to map property access to channel paths: `api.cache.getStats()` → `_call("cache.getStats")`, `api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`, providing full type inference and IDE autocompletion.
-  4. **Main Side** (`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`) — walks the handler object tree, automatically registering `ipc.handle()` for each leaf function; the `events` subtree is excluded (push-from-main only).
+  4. **Main Side** (`src/main/bridge/register.ts` → `registerIpcHandlers(wc, prefix, handlers)`) — walks the handler object tree, automatically registering `ipc.handle()` for each leaf function; the `events` subtree is excluded (push-from-main only).
 - **GUI** (`gui/`) is a Svelte SPA responsible for settings, desktop lyrics, context menus, mini player, and all auxiliary UI, loaded via the `gui://` protocol. Menus are rendered as transparent frameless BrowserWindows (using a fullscreen overlay approach on Wayland due to protocol limitations).
 - **Native Modules** (`modules/`) provide low-level capabilities to the Electron main process via napi-rs: SQLite database (with Chinese pinyin collation), cross-platform window utilities (deep Linux integration for Wayland/X11 protocol interception, input region control, window dragging, cursor capture), system font enumeration, AV3A audio decoding, and per-platform system integrations (`dbus/` generic D-Bus client + MPRIS + lyrics service, `nowplaying/`, `sys-win32/` Windows media session and scheduled power-off); `audio-effect/` is compiled to WebAssembly and consumed by the AudioWorklet in `src/worklets/`.
 
@@ -174,12 +178,6 @@ You will need Node and Rust to work with this project (Node v24 and Rust 1.99 ar
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli
-```
-
-On Linux, napi-rs builds the native modules in `-x` mode through `cargo-zigbuild`, so you also need `cargo-zigbuild` and [zig](https://ziglang.org/download/) (CI and the packaging scripts use zig 0.16.0):
-
-```sh
-cargo install cargo-zigbuild
 ```
 
 For the root project, everything works just like any other Electron Forge project, but Open Orpheus has some native modules of its own, which require a few extra setup steps.

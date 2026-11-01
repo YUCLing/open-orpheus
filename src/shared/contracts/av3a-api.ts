@@ -1,4 +1,4 @@
-import type { AudioPlayInfo } from "../../preload/Player";
+import type { AudioPlayInfo } from "@preload/Player";
 
 /** Track metadata reported once the AV3A track has been indexed (`moov`). */
 export interface Av3aTrackInfo {

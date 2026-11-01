@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import type { MenuSkin } from "$sharedTypes/menu";
+  import type { MenuSkin } from "@shared/types/menu";
   import type { MenuItem, MenuItemBtn } from "./types";
-  import type { ElementTemplate } from "$bridge/contracts/menu-api";
+  import type { ElementTemplate } from "@shared/contracts/menu-api";
   import { loadTemplates } from "./template";
   import MenuPanel from "./MenuPanel.svelte";
   import { getBridge } from "$lib/bridge";
-  import type { MenuContract } from "$bridge/contracts/menu-api";
+  import type { MenuContract } from "@shared/contracts/menu-api";
   import { inputRegionAttachment } from "$lib/inputRegion";
   import { setFont } from "$lib/font";
 

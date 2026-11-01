@@ -6,8 +6,8 @@ import { vi } from "vitest";
  * Production code gets `LOGGER` from `plugins/LoggerPlugin.ts`, but Vitest runs
  * the untransformed sources, so the global does not exist unless a spec stubs
  * it. Installing it once here keeps specs that exercise a logging code path
- * (including bridge/preload helpers) from throwing `ReferenceError: LOGGER is
- * not defined`, without every spec having to remember the stub. Specs that
+ * (including the preload bridge helpers) from throwing `ReferenceError: LOGGER
+ * is not defined`, without every spec having to remember the stub. Specs that
  * assert on specific log calls still install their own stub with
  * `installLoggerStub()`, which replaces this one.
  *

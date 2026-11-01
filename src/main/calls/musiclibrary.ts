@@ -11,7 +11,7 @@ import { registerCallHandler } from "../calls";
 import { fileExists, isFileNotFound } from "../util/fs";
 import { isMusicFile } from "../util/musicFile";
 import { normalizePath } from "../util/path";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { commentToID3Metadata } from "../id3";
 
 type MusicLibraries = "<mymusic>" | "<download>" | "<windowsmedia>" | "<itunes>" | string;

@@ -1,4 +1,4 @@
-import type { AppMenuItem } from "$sharedTypes/menu";
+import type { AppMenuItem } from "@shared/types/menu";
 
 export type MenuClickHandler = (menuId: string | null) => void;
 

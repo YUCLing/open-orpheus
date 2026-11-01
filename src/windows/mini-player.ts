@@ -1,4 +1,4 @@
-import { exposeApi } from "../bridge/preload";
+import { exposeApi } from "../preload/bridge";
 
 exposeApi("miniPlayer");
 exposeApi("inputRegion", {

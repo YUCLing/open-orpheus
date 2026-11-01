@@ -1,6 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -340,7 +339,7 @@ describe("window ownership", () => {
   });
 
   it("constructs every BrowserWindow inside the wrapper", async () => {
-    const src = fileURLToPath(new URL("../../src", import.meta.url));
+    const src = join(import.meta.dirname, "../../src");
     const offenders: string[] = [];
 
     for (const file of await collectSourceFiles(src)) {
@@ -358,7 +357,7 @@ describe("window ownership", () => {
     // `settings.events` only exists after `settings.initialize()`, and these
     // modules are imported before that runs. Subscribing at module scope would
     // throw on startup, so registration has to happen from the startup path.
-    const src = fileURLToPath(new URL("../../src", import.meta.url));
+    const src = join(import.meta.dirname, "../../src");
     const offenders: string[] = [];
 
     for (const name of ["mini-player.ts", "desktop-lyrics.ts"]) {

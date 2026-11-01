@@ -14,7 +14,7 @@ import { selectBestMusicPic } from "./util/musicPicture";
 import { normalizePath, sanitizeRelativePath } from "./util/path";
 import { data as dataDir, storage as storageDir, wasm } from "./folders";
 import { client } from "./request";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 /**
  * Names each cache write's temporary file apart from every other one.

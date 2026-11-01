@@ -1,7 +1,7 @@
 import { getScFonts } from "@open-orpheus/ui";
 
 import { events as lifecycleEvents } from "./lifecycle";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 lifecycleEvents.on("mainwindowcreated", (e) => {
   const mainWindow = e.data;

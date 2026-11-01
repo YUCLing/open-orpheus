@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 
-import { AppMenuItem } from "$sharedTypes/menu";
+import { AppMenuItem } from "@shared/types/menu";
 import { registerCallHandler } from "../calls";
 import { isAppUrl } from "../util/url";
 import DesktopPetWindow from "../windows/desktop-pet";

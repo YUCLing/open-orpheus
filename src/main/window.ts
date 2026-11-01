@@ -27,7 +27,7 @@ import {
   registerShutdownFinalizer,
   state as lifecycleState,
 } from "./lifecycle";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
 const managedBrowserWindows = new Set<BrowserWindow>();
