@@ -1,10 +1,11 @@
 import { join } from "node:path";
 
-import { screen } from "electron";
+import { Display, screen } from "electron";
 import {
   DesktopEnvironment,
   getDesktopEnvironment,
   LayerShellLayer,
+  LayerShellOptions,
   setWindowAsBackground,
 } from "@open-orpheus/window";
 
@@ -12,24 +13,26 @@ import { ManagedWindow } from "../window";
 import { isAppUrl } from "../util/url";
 
 export default class MusicDesktopWindow extends ManagedWindow {
+  private layerShellOptions: LayerShellOptions = {
+    namespace: "Open Orpheus Music Desktop",
+    layer: LayerShellLayer.Background,
+    anchorBottom: true,
+    anchorLeft: true,
+    anchorRight: true,
+    anchorTop: true,
+    marginBottom: 0,
+    marginLeft: 0,
+    marginRight: 0,
+    marginTop: 0,
+    exclusiveZone: -1,
+  };
+
   constructor(url: string) {
     super();
     // A surface's role is decided when the window's first role object is
     // created, which can happen inside `createBrowserWindow`, so the policy has
     // to be registered before the window exists.
-    this.setLayerShell({
-      namespace: "Open Orpheus Music Desktop",
-      layer: LayerShellLayer.Background,
-      anchorBottom: true,
-      anchorLeft: true,
-      anchorRight: true,
-      anchorTop: true,
-      marginBottom: 0,
-      marginLeft: 0,
-      marginRight: 0,
-      marginTop: 0,
-      exclusiveZone: -1,
-    });
+    this.setLayerShell(this.layerShellOptions);
     const wnd = this.createBrowserWindow({
       title: "Open Orpheus Music Desktop",
       frame: false,
@@ -74,5 +77,12 @@ export default class MusicDesktopWindow extends ManagedWindow {
         throw e;
       }
     }
+  }
+
+  setDisplay(display: Display) {
+    LOGGER.info({ id: display.id, label: display.label }, "Setting music desktop display");
+    // TODO: Support for non-Wayland environments
+    this.layerShellOptions.output = display.id;
+    this.setLayerShell(this.layerShellOptions);
   }
 }
