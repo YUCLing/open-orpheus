@@ -45,6 +45,10 @@ pub(crate) fn bound(conn: &mut WaylandConn, name: u32, object_id: u32) {
 }
 
 /// Forget a `wl_output` object the client destroyed.
+///
+/// Called when `wl_output.release` is forwarded, before the compositor answers
+/// with `delete_id`: the id cannot be named in between, and a layer surface
+/// created there would otherwise point at a destroyed object.
 pub(crate) fn destroyed(conn: &mut WaylandConn, object_id: u32) {
     for output in conn.outputs.values_mut() {
         output.objects.retain(|id| *id != object_id);

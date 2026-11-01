@@ -346,6 +346,15 @@ pub(crate) fn on_pointer_release(conn: &mut WaylandConn, msg: &WlMessage) -> Act
     Action::Forward
 }
 
+pub(crate) fn on_output_release(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    // There is no event to wait for before the object stops being nameable:
+    // `release` is a destructor, so the id is meaningless from the moment the
+    // request is forwarded. Drop the mapping now, not at `delete_id`, or a
+    // layer surface created in between would name a destroyed output.
+    conn.purge(msg.object_id);
+    Action::Forward
+}
+
 pub(crate) fn on_touch_release(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
     conn.purge(msg.object_id);
     Action::Forward

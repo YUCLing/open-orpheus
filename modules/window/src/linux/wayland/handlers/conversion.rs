@@ -159,7 +159,7 @@ mod tests {
     use super::super::super::codec::{
         EVT_GLOBAL, EVT_GLOBAL_REMOVE, REQ_BIND, REQ_GET_LAYER_SURFACE, REQ_LAYER_SET_ANCHOR,
         REQ_LAYER_SET_EXCLUSIVE_ZONE, REQ_LAYER_SET_KEYBOARD_INTERACTIVITY, REQ_LAYER_SET_MARGIN,
-        REQ_LAYER_SET_SIZE,
+        REQ_LAYER_SET_SIZE, WL_OUTPUT_RELEASE,
     };
     use super::super::super::layer_shell::{LAYER_OVERLAY, LayerShellOptions};
     use super::super::super::outputs;
@@ -167,6 +167,7 @@ mod tests {
     use super::super::super::test_support::{
         Registered, connected, fixture, header, message, options, u32_at, wl_string, word,
     };
+    use super::super::dispatch_request;
     use super::*;
 
     #[test]
@@ -345,6 +346,40 @@ mod tests {
                 .expect("the conversion is sendable");
 
         assert_eq!(u32_at(&messages[1], 16), 0, "the null output");
+    }
+
+    #[test]
+    fn a_released_output_is_not_used_before_its_delete_id_arrives() {
+        let (_guard, mut conn) = fixture();
+        outputs::advertised(&mut conn, 77);
+        outputs::bound(&mut conn, 77, 60);
+        conn.ifaces.insert(60, Iface::WlOutput);
+
+        // `release` is a destructor: the object is gone as soon as the request
+        // is sent. No `delete_id` has arrived yet, and the layer surface must
+        // still not name the released object.
+        let action = dispatch_request(
+            42,
+            &mut conn,
+            &message(60, WL_OUTPUT_RELEASE, &[]),
+            &mut Effects::default(),
+        );
+        assert!(matches!(action, Action::Forward));
+        assert_eq!(outputs::object_for(&conn, 77), None);
+
+        let requested = LayerShellOptions {
+            output: Some(77),
+            ..options()
+        };
+        let messages =
+            convert_to_layer_surface(&mut conn, 20, 10, 30, requested, &mut Effects::default())
+                .expect("the conversion is sendable");
+
+        assert_eq!(
+            u32_at(&messages[1], 16),
+            0,
+            "the released object is never named"
+        );
     }
 
     #[test]

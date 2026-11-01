@@ -18,7 +18,7 @@ use super::codec::{
     EVT_DELETE_ID, EVT_GLOBAL, EVT_GLOBAL_REMOVE, Iface, REQ_BIND, REQ_COMMIT, REQ_CREATE_SURFACE,
     REQ_DESTROY, REQ_GET_POINTER, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_TOPLEVEL_DECORATION,
     REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE, REQ_SET_WINDOW_GEOMETRY,
-    WL_POINTER_RELEASE, WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
+    WL_OUTPUT_RELEASE, WL_POINTER_RELEASE, WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
 };
 use super::inject;
 use super::state::WaylandConn;
@@ -128,6 +128,10 @@ fn dispatch_request_inner(
         }
         (Iface::WlPointer, WL_POINTER_RELEASE) => objects::on_pointer_release(conn, msg),
         (Iface::WlTouch, WL_TOUCH_RELEASE) => objects::on_touch_release(conn, msg),
+        // The object dies when this request is sent, not when the compositor
+        // answers with `delete_id`; a layer surface created in between must not
+        // name it.
+        (Iface::WlOutput, WL_OUTPUT_RELEASE) => objects::on_output_release(conn, msg),
         _ => Action::Forward,
     }
 }

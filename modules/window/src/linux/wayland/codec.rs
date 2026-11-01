@@ -65,6 +65,8 @@ pub(crate) const REQ_SET_INPUT_REGION: u16 = 5;
 pub(crate) const REQ_COMMIT: u16 = 6;
 pub(crate) const WL_POINTER_RELEASE: u16 = 1;
 pub(crate) const WL_SEAT_RELEASE: u16 = 3;
+/// `wl_output.release` (v3): the object is gone as soon as this is sent.
+pub(crate) const WL_OUTPUT_RELEASE: u16 = 0;
 pub(crate) const REQ_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_DESTROY: u16 = 0;
 pub(crate) const REQ_REGION_ADD: u16 = 1;
