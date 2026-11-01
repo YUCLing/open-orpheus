@@ -124,6 +124,33 @@ describe("MprisAdapter", () => {
     ]);
   });
 
+  it("publishes overlapping renderer changes in order", async () => {
+    const adapter = new MprisAdapter();
+    let finishFirst!: () => void;
+    hoisted.publishMode.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        })
+    );
+    adapter.onPlaybackMode("playRandom");
+    adapter.onPlaybackMode("playOrder");
+    await vi.waitFor(() => expect(hoisted.modes).toHaveLength(1));
+    expect(hoisted.modes).toEqual([{ loopStatus: "Playlist", shuffle: true }]);
+    finishFirst();
+    await vi.waitFor(() => expect(hoisted.modes).toHaveLength(2));
+    expect(hoisted.modes.at(-1)).toEqual({ loopStatus: "None", shuffle: false });
+  });
+
+  it("continues publishing after a native write fails", async () => {
+    const adapter = new MprisAdapter();
+    hoisted.publishMode.mockRejectedValueOnce(new Error("native write failed"));
+    adapter.onPlaybackMode("playRandom");
+    adapter.onPlaybackMode("playOneCycle");
+    await vi.waitFor(() => expect(hoisted.modes).toHaveLength(2));
+    expect(hoisted.modes.at(-1)).toEqual({ loopStatus: "Track", shuffle: false });
+  });
+
   it("replies after both renderer confirmation and native mode publication", async () => {
     const adapter = new MprisAdapter();
     let finishPublish!: () => void;

@@ -171,7 +171,10 @@ export default class MprisAdapter
       Track: DbusLoopStatus.Track,
       Playlist: DbusLoopStatus.Playlist,
     }[loopStatus];
-    this.modeApplied = this.mediaSession.setPlaybackMode(nativeLoopStatus, shuffle);
+    // Preserve renderer order even when native tasks run on multiple workers.
+    this.modeApplied = (this.modeApplied ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => this.mediaSession.setPlaybackMode(nativeLoopStatus, shuffle));
     // A later Properties.Set also awaits this promise, while in-app changes
     // have no caller to observe a native publishing failure.
     void this.modeApplied.catch((err) => {
