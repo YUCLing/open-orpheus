@@ -2,10 +2,21 @@ import { resolve } from "node:path";
 
 import { app } from "electron";
 
-export const downloadTemp = resolve(app.getPath("temp"), "open-orpheus-download-temp");
-export const streamerTemp = resolve(app.getPath("temp"), "open-orpheus-streamer-temp");
+export const tempDir =
+  "OPEN_ORPHEUS_CUSTOM_TEMP_DIR" in process.env
+    ? resolve(process.env.OPEN_ORPHEUS_CUSTOM_TEMP_DIR!)
+    : resolve(app.getPath("temp"), "open-orpheus-temp");
 
-export const data = resolve(app.isPackaged ? app.getPath("userData") : "data");
+export const downloadTemp = resolve(tempDir, "download");
+export const streamerTemp = resolve(tempDir, "streamer");
+
+export const data = resolve(
+  "OPEN_ORPHEUS_CUSTOM_DATA_DIR" in process.env
+    ? process.env.OPEN_ORPHEUS_CUSTOM_DATA_DIR!
+    : app.isPackaged
+      ? app.getPath("userData")
+      : "data"
+);
 
 export const log = resolve(data, "logs");
 export const pack = resolve(data, "package");

@@ -41,10 +41,12 @@ const config: ForgeConfig = {
       unpack: "**/*.{so*,dylib,dll}",
     },
 
-    // Deploy our modules as published version, so source code of modules will not be bundled
-    // into the final packaged app.
     beforeCopy: [
       async () => {
+        // Blocker if we want to run Vite build only
+        if ("FORGE_BUILD_ONLY" in process.env) throw new Error("FORGE_BUILD_ONLY");
+        // Deploy our modules as published version, so source code of modules will not be bundled
+        // into the final packaged app.
         await new Promise<void>((resolve, reject) => {
           const proc = fork("scripts/deploy-deps.ts");
           proc.on("error", reject);

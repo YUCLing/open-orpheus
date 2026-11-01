@@ -91,6 +91,10 @@ typings/
 # Webpack
 .webpack/
 
+# Playwright Test
+test-results
+playwright-report
+
 # Vite
 .vite/
 

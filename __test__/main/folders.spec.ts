@@ -45,8 +45,9 @@ import {
 
 describe("folders", () => {
   it("derives the temp directories from the OS temp path", () => {
-    expect(downloadTemp).toBe(join(temp, "open-orpheus-download-temp"));
-    expect(streamerTemp).toBe(join(temp, "open-orpheus-streamer-temp"));
+    const tempDir = join(temp, "open-orpheus-temp");
+    expect(downloadTemp).toBe(join(tempDir, "download"));
+    expect(streamerTemp).toBe(join(tempDir, "streamer"));
   });
 
   it("uses the repository data directory while unpackaged", () => {

@@ -54,6 +54,7 @@ jobs:
               - "eslint.config.ts"
               - ".prettierignore"
               - ".prettierrc"
+              - "playwright.config.ts"
               - "tsconfig.json"
               - "vitest.config.ts"
               - "forge.config.ts"

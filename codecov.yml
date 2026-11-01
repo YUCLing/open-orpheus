@@ -11,8 +11,9 @@ coverage:
         threshold: 0%
         informational: true
 
-# Each language uploads under its own flag, and the two test jobs are gated on
-# path filters, so a PR touching only one language uploads only one flag.
+# Each language uploads under its own flag, and the two coverage jobs are gated
+# on path filters, so a PR touching only one language uploads only one flag. The
+# E2E job reports test results only, under its own `e2e` flag.
 # Carryforward keeps the missing flag's coverage from the base commit instead of
 # comparing against a report that never covered those files (default: false).
 flag_management:
