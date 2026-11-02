@@ -21,6 +21,7 @@ export async function getCookies(url: string) {
 
 export async function removeCookie(url: string, name: string) {
   await cookies.remove(url, name);
+  LOGGER.debug({ url, name }, "Removed cookie");
 }
 
 export async function setCookie(url: string, setCookieValue: cookie.SetCookie) {
@@ -68,4 +69,6 @@ export default async function initializeCookies() {
       });
     })
   );
+
+  LOGGER.debug({ count: Object.keys(initialCookies).length }, "Initialized initial cookies");
 }

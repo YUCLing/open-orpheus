@@ -8,6 +8,7 @@ import { deserialData } from "../crypto";
 import { client } from "../request";
 import interceptAnonymousRequest from "../anonymous";
 import { AegisEncryptState, XeapiAegis, type AegisInitConfig } from "../xeapi";
+import { toError } from "@shared/util";
 
 let globalFailCount = 0;
 let globalSucCount = 0;
@@ -38,6 +39,7 @@ registerCallHandler<[NetworkFetchRequest], [NetworkFetchResponse]>(
   "network.fetch",
   async (_, request): Promise<[NetworkFetchResponse]> => {
     const retryCount = request.retryCount ?? 1;
+    LOGGER.debug({ method: request.method, retryCount }, "Network request started");
 
     try {
       const anonymousRes = await interceptAnonymousRequest(request);
@@ -97,6 +99,13 @@ registerCallHandler<[NetworkFetchRequest], [NetworkFetchResponse]>(
         : responseBody.toString();
 
       globalSucCount++;
+      LOGGER.debug(
+        {
+          status: response.statusCode,
+          retryTimes: retryCount - response.retryCount - 1,
+        },
+        "Network request finished"
+      );
 
       return [
         {
@@ -116,6 +125,7 @@ registerCallHandler<[NetworkFetchRequest], [NetworkFetchResponse]>(
         error instanceof RequestError && error.request
           ? retryCount - error.request.retryCount - 1
           : 0;
+      LOGGER.debug({ method: request.method, retryTimes }, "Network request failed");
 
       return [
         {
@@ -185,7 +195,8 @@ registerCallHandler<[{ body?: string }], [{ encryptedBody: string }]>(
     const body = request?.body ?? "";
     try {
       return [{ encryptedBody: aegis.encrypt(body) }];
-    } catch {
+    } catch (error) {
+      LOGGER.warn({ err: toError(error) }, "Aegis encryption failed, sending plain body");
       return [{ encryptedBody: body }];
     }
   }

@@ -1,6 +1,7 @@
 import os from "node:os";
+import { isPlaybackMode } from "@shared/playbackMode";
 
-import { toError } from "../util";
+import { toError } from "@shared/util";
 import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
 import { resolveCoverUrl } from "./playback/artwork";
 import PlaybackController from "./playback/PlaybackController";
@@ -20,6 +21,9 @@ export interface Metadata {
   artist: string;
   album: string;
 }
+
+/** Unique play ID for current track play session. */
+export let playId: string | null = null;
 
 /** Single source of truth for playback state (see playback/PlaybackController). */
 export const playbackController = new PlaybackController();
@@ -89,6 +93,8 @@ export async function createMediaSession(): Promise<void> {
       LOGGER.warn("Media session is not available on this platform.");
   }
 
+  LOGGER.info({ platform: os.platform() }, "Media session initialized");
+
   // OS media-session commands → renderer.
   new PlayerCommandRouter(adapter, playbackController);
 
@@ -96,12 +102,19 @@ export async function createMediaSession(): Promise<void> {
   playbackController.on("trackchanged", ({ data }) => adapter.onTrack(data));
   playbackController.on("coverchanged", ({ data }) => adapter.onArtwork(data));
   playbackController.on("statuschanged", ({ data }) => adapter.onStatus(data));
+  playbackController.on("advancingchange", ({ data }) => adapter.onAdvancing(data));
   playbackController.on("positionchanged", ({ data }) =>
     adapter.onPosition(data.position, data.seeked)
   );
   playbackController.on("durationchanged", ({ data }) => adapter.onDuration(data));
   playbackController.on("ratechanged", ({ data }) => adapter.onRate(data));
   playbackController.on("volumechanged", ({ data }) => adapter.onVolume(data));
+  playbackController.on("modechanged", ({ data }) => adapter.onPlaybackMode?.(data));
+  // The renderer may have reported its initial mode while the platform adapter
+  // was still loading.
+  if (playbackController.snapshot.playbackMode !== null) {
+    adapter.onPlaybackMode?.(playbackController.snapshot.playbackMode);
+  }
 
   registerShutdownTask({ name: "media-session", run: disposeMediaSession });
 }
@@ -148,14 +161,21 @@ export const mediaSession = {
    */
   async setCover(rawUrl: string | null): Promise<void> {
     const id = currentId;
-    if (id === null) return; // no track known yet
+    if (id === null) {
+      LOGGER.debug("Ignored album art without a current track");
+      return; // no track known yet
+    }
     const resolved = await resolveCoverUrl(rawUrl, id);
     if (id !== currentId) return; // a different playId arrived while resolving
+    LOGGER.debug({ trackId: id, hasArt: resolved !== "" }, "Resolved album artwork");
     playbackController.applyCover(resolved);
   },
 };
 
 lifecycleEvents.on("mainwindowcreated", ({ data: mainWindow }) => {
+  mainWindow.webContents.ipc.on("player.playidupdate", (e, id) => {
+    playId = id;
+  });
   mainWindow.webContents.ipc.on("player.timeupdate", (e, time) => {
     playbackController.applyPosition(time);
   });
@@ -178,5 +198,8 @@ lifecycleEvents.on("mainwindowcreated", ({ data: mainWindow }) => {
 
   mainWindow.webContents.ipc.on("player.volumechange", (e, volume) => {
     playbackController.applyVolume(volume);
+  });
+  mainWindow.webContents.ipc.on("player.playbackmodechange", (e, mode) => {
+    if (isPlaybackMode(mode)) playbackController.applyPlaybackMode(mode);
   });
 });

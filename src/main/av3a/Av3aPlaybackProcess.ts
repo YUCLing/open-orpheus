@@ -8,10 +8,10 @@ import decoderProcessPath from "../../workers/av3a-decoder?worker&url";
 import type {
   Av3aProcessMainToService,
   Av3aProcessServiceToMain,
-} from "../../bridge/contracts/av3a-process";
+} from "@shared/contracts/av3a-process";
 import type { Av3aM4aSource } from "./Av3aM4aSession";
 import { registerShutdownTask } from "../lifecycle";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 /**
  * Main-process side of the AV3A decode utility process.
@@ -140,6 +140,7 @@ export class Av3aPlaybackProcess {
     );
 
     this.lastFrontier = source.prefixEnd();
+    LOGGER.info({ pid: child.pid }, "AV3A decode process started");
     this.frontierTimer = setInterval(() => {
       this.pushFrontier();
     }, 150);
@@ -154,6 +155,7 @@ export class Av3aPlaybackProcess {
     this.closeRendererPort();
 
     if (child) {
+      LOGGER.debug({ pid: child.pid }, "Stopping AV3A decode process");
       // The service holds the temp file open; terminate it so the file can be
       // deleted by the caller afterwards.
       child.removeAllListeners("message");
@@ -220,6 +222,7 @@ export class Av3aPlaybackProcess {
     this.closeRendererPort();
     liveProcesses.delete(this);
     if (unexpected) {
+      LOGGER.error({ code }, "AV3A decode process exited unexpectedly");
       this.options.sendEvent("error", `AV3A decode process exited unexpectedly (code ${code})`);
     }
   }

@@ -1,6 +1,7 @@
 import { DOMParser, type Element } from "@xmldom/xmldom";
 
-import type { BtnImages, BtnState, ElementTemplate, LayoutNode } from "$sharedTypes/dui";
+import type { BtnImages, BtnState, ElementTemplate, LayoutNode } from "@shared/types/dui";
+import { toError } from "@shared/util";
 
 export type { ElementTemplate, LayoutNode };
 
@@ -59,15 +60,22 @@ export function parseElementTemplate(xml: string): ElementTemplate | null {
     // Malformed templates are rejected by returning `null` below, so there is
     // no point in also letting xmldom print the parse failure to stderr.
     doc = new DOMParser({ onError: () => {} }).parseFromString(xml, "text/xml");
-  } catch {
+  } catch (error) {
+    LOGGER.warn({ err: toError(error) }, "Failed to parse menu element template");
     return null;
   }
 
   const menuEl = doc.getElementsByTagName("MenuElement")[0];
-  if (!menuEl) return null;
+  if (!menuEl) {
+    LOGGER.warn("Menu element template is missing MenuElement");
+    return null;
+  }
 
   const layoutEl = menuEl.getElementsByTagName("MenuElementLayout")[0];
-  if (!layoutEl) return null;
+  if (!layoutEl) {
+    LOGGER.warn("Menu element template is missing MenuElementLayout");
+    return null;
+  }
 
   return {
     height: parseNum(menuEl, "height") ?? 30,

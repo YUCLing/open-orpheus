@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 
 import Emittery from "emittery";
 
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { client } from "../request";
 
 import ChunkTracker from "./ChunkTracker";
@@ -209,6 +209,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
     if (this._destroyed) return;
 
     this._destroyed = true;
+    LOGGER.debug({ tempFilePath: this.tempFilePath }, "Online streamer destroyed");
     this.metaAbortController.abort(new Error("OnlineStreamer destroyed"));
     this.scheduler.destroy();
 
@@ -228,11 +229,18 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
     this.mimeType = metadata.mimeType;
 
     await this.storage.setLength(this.totalLength);
+    LOGGER.info({ totalLength: this.totalLength, mimeType: this.mimeType }, "Online stream ready");
     this.scheduler.startBackground();
   }
 
   private async fetchMetadata(): Promise<SourceMetadata> {
-    const headMetadata = await this.fetchHeadMetadata().catch(() => null);
+    const headMetadata = await this.fetchHeadMetadata().catch((error: unknown) => {
+      LOGGER.debug(
+        { err: toError(error) },
+        "HEAD metadata request failed, falling back to a range probe"
+      );
+      return null;
+    });
     if (headMetadata) return headMetadata;
 
     return this.fetchRangeMetadata();
@@ -356,6 +364,7 @@ export class OnlineStreamer extends Emittery<OnlineStreamerEvents> {
 
   private emitComplete() {
     if (this._destroyed) return;
+    LOGGER.info({ totalLength: this.totalLength }, "Online stream completed");
     void this.emit("complete").catch((error: unknown) => LOGGER.error({ err: toError(error) }));
   }
 

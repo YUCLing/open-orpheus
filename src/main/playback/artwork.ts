@@ -5,9 +5,9 @@ import { pathToFileURL } from "node:url";
 import mime from "mime";
 import { MusicFile } from "music-tag-native";
 
-import { imageSize } from "../../util";
+import { imageSize, toError } from "@shared/util";
 import { cache } from "../folders";
-import { selectBestMusicPic } from "../util";
+import { selectBestMusicPic } from "../util/musicPicture";
 
 /**
  * Album-art handling shared by the media-session integrations (MPRIS / SMTC /
@@ -73,6 +73,7 @@ export async function cacheArtwork(id: string, data: Uint8Array, ext: string): P
   const path = artworkCachePath(id, ext);
   try {
     await stat(path);
+    LOGGER.debug({ trackId: id }, "Album art cache hit");
     return artworkFileUrl(id, ext);
   } catch {
     /* not cached yet */
@@ -80,6 +81,7 @@ export async function cacheArtwork(id: string, data: Uint8Array, ext: string): P
   await mkdir(ART_CACHE_DIR, { recursive: true });
   await writeFile(path, data);
   await pruneArtCache();
+  LOGGER.debug({ trackId: id, bytes: data.byteLength, ext }, "Album art cached");
   return artworkFileUrl(id, ext);
 }
 
@@ -102,7 +104,8 @@ async function pruneArtCache(): Promise<void> {
     files.sort((a, b) => a.mtimeMs - b.mtimeMs);
     const stale = files.slice(0, Math.max(0, files.length - MAX_ART_CACHE));
     await Promise.all(stale.map((f) => unlink(join(ART_CACHE_DIR, f.name))));
-  } catch {
+  } catch (error) {
+    LOGGER.warn({ err: toError(error) }, "Failed to prune the album art cache");
     // Ignore pruning failures — the cache just grows until next time.
   }
 }

@@ -1,7 +1,7 @@
 import { av3aBridge } from "./bridge";
 import { av3aChannel } from "./channel";
 import type { AudioPlayInfo } from "../Player";
-import type { Av3aTrackInfo } from "../../bridge/contracts/av3a-api";
+import type { Av3aTrackInfo } from "@shared/contracts/av3a-api";
 
 /**
  * Renders the AV3A decode stream inside the player window's AudioContext.
@@ -98,6 +98,10 @@ export class Av3aPcmPlayer {
     };
     node.connect(destination);
     this.node = node;
+    LOGGER.debug(
+      { sampleRate: this.outputRate, state: this.ctx.state },
+      "AV3A player worklet attached"
+    );
   }
 
   async start(playInfo: AudioPlayInfo): Promise<void> {
@@ -128,6 +132,7 @@ export class Av3aPcmPlayer {
 
     try {
       await av3aBridge.start(playInfo);
+      LOGGER.debug({ songId: playInfo.songId }, "AV3A decode session started");
     } catch (error) {
       if (token !== this.startToken) return;
       this.active = false;
@@ -150,6 +155,7 @@ export class Av3aPcmPlayer {
     } catch {
       // Ignore: the session may already have ended.
     }
+    LOGGER.debug("AV3A playback session stopped");
   }
 
   async play(): Promise<void> {
@@ -256,6 +262,10 @@ export class Av3aPcmPlayer {
     }
     if (!this.resampler) {
       this.resampler = new StereoResampler(this.sourceRate, this.outputRate);
+      LOGGER.debug(
+        { sourceRate: this.sourceRate, outputRate: this.outputRate },
+        "AV3A resampler initialized"
+      );
     }
     this.resampler.setStep((this.playbackRate * this.sourceRate) / this.outputRate);
   }
@@ -275,6 +285,14 @@ export class Av3aPcmPlayer {
       this.sourceRate = info.sampleRate || this.sourceRate;
       this.durationSeconds = info.durationSeconds;
       this.updateResamplerStep();
+      LOGGER.debug(
+        {
+          sampleRate: info.sampleRate,
+          channels: info.channels,
+          durationSeconds: info.durationSeconds,
+        },
+        "AV3A track opened"
+      );
       this.events.onOpened?.(info);
     });
 

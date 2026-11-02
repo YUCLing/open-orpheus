@@ -6,7 +6,8 @@ import { app, BrowserWindow, Notification, powerSaveBlocker, screen, shell } fro
 
 import { getSystemFonts } from "@open-orpheus/ui";
 
-import { fileExists, normalizePath, sanitizeRelativePath } from "../util";
+import { fileExists } from "../util/fs";
+import { normalizePath, sanitizeRelativePath } from "../util/path";
 import { registerCallHandler } from "../calls";
 import { getADDeviceId, getDeviceId } from "../device";
 import {
@@ -71,8 +72,35 @@ registerCallHandler<[string], [unknown]>("os.getSystemInfo", (event_, kind) => {
         },
       },
     ];
+  } else if (kind === "allMonitor") {
+    const primary = screen.getPrimaryDisplay();
+    return [
+      screen.getAllDisplays().map((v) => ({
+        id: v.id,
+        name: v.label,
+        width: v.bounds.width,
+        height: v.bounds.height,
+        primary: v.id === primary.id,
+      })),
+    ];
   }
   return [undefined];
+});
+
+registerCallHandler<
+  [],
+  {
+    deviceId: string;
+    name: string;
+    isPrimary: boolean;
+  }[]
+>("os.getAllDisplayInfo", () => {
+  const primary = screen.getPrimaryDisplay();
+  return screen.getAllDisplays().map((v) => ({
+    deviceId: String(v.id),
+    name: v.label,
+    isPrimary: v.id === primary.id,
+  }));
 });
 
 registerCallHandler<string[], [string, string[]]>(
@@ -125,6 +153,7 @@ registerCallHandler<
   ],
   void
 >("os.setPowerRequests", (event, { enable, preventSystemSleep, preventDisplaySleep }) => {
+  LOGGER.debug({ enable, preventSystemSleep, preventDisplaySleep }, "Power save requests updated");
   if (enable) {
     setPowerRequest("prevent-app-suspension", preventSystemSleep);
     setPowerRequest("prevent-display-sleep", preventDisplaySleep);
@@ -184,11 +213,13 @@ async function applyExitWindowSystem(seconds: number, shouldShutdown: boolean) {
   clearAutoExit();
   if (isNaN(seconds) || !isFinite(seconds) || seconds <= 0) {
     // Disable auto exit
+    LOGGER.debug("System auto exit disabled");
     await disableScheduledShutdown();
     return;
   }
   const ms = seconds * 1000;
   const targetTimestamp = Date.now() + ms;
+  LOGGER.info({ seconds, shouldShutdown }, "System auto exit scheduled");
   if (shouldShutdown) {
     const result = await setScheduledShutdown(new Date(targetTimestamp));
     if (result !== ScheduleShutdownStatus.Ok && result !== ScheduleShutdownStatus.AlreadySet) {
@@ -211,6 +242,7 @@ async function applyExitWindowSystem(seconds: number, shouldShutdown: boolean) {
     await disableScheduledShutdown();
   }
   const timeout = setTimeout(() => {
+    LOGGER.info({ shouldShutdown }, "Auto exit countdown elapsed, quitting");
     autoExitState = null;
     // Only a countdown that is meant to shut the machine down may keep the
     // system schedule. An app-only countdown must stay cancellable, so an
@@ -259,4 +291,9 @@ registerCallHandler<[string], [string]>("os.getDiskSpace", async (event, path) =
       free: statResult.bfree * statResult.bsize,
     }),
   ];
+});
+
+registerCallHandler<[], [number]>("os.queryUserNotificationState", () => {
+  // TODO: Find out what's this
+  return [5];
 });

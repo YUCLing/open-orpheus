@@ -7,7 +7,7 @@ import {
 import { registerCallHandler } from "../calls";
 import { registerShutdownTask } from "../lifecycle";
 import MusicDesktopWindow from "../windows/music-desktop";
-import { isAppUrl } from "../util";
+import { isAppUrl } from "../util/url";
 
 export let musicDesktopWindow: MusicDesktopWindow | null = null;
 
@@ -62,6 +62,7 @@ registerCallHandler<
     musicDesktopWindow.releaseNativeState();
   }
   musicDesktopWindow = new MusicDesktopWindow(params.url);
+  LOGGER.info({ visible: params.visible }, "Music desktop window created");
   if (params.visible) void musicDesktopWindow.show();
 });
 
@@ -75,12 +76,14 @@ registerCallHandler<
   void
 >("desktop.show", (event, params) => {
   if (!musicDesktopWindow) return;
+  LOGGER.debug({ visible: params.visible }, "Music desktop window visibility changed");
   if (params.visible) void musicDesktopWindow.show();
   else void musicDesktopWindow.hide();
 });
 
 registerCallHandler<[], void>("desktop.destroy", () => {
   if (!musicDesktopWindow) return;
+  LOGGER.info("Music desktop window destroyed");
   musicDesktopWindow.destroy();
   musicDesktopWindow.releaseNativeState();
   musicDesktopWindow = null;

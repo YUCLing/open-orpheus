@@ -1,3 +1,5 @@
+import { basename, join, resolve } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // memfs-backed, see `__mocks__/fs/promises.cts`.
@@ -6,9 +8,18 @@ vi.mock("music-tag-native", () => ({
   MusicFile: { load: vi.fn() },
   MetaPicture: class {},
 }));
+const hoisted = vi.hoisted(() => {
+  const path = process.getBuiltinModule("node:path");
+  const os = process.getBuiltinModule("node:os");
+  const testRoot = path.resolve(os.tmpdir(), "open-orpheus-test");
+  return {
+    getPath: (name: string) => path.join(testRoot, name),
+  };
+});
+
 vi.mock("electron", () => ({
   app: {
-    getPath: vi.fn((name: string) => `/tmp/open-orpheus-test/${name}`),
+    getPath: hoisted.getPath,
     isPackaged: false,
   },
 }));
@@ -61,8 +72,8 @@ describe("remoteArtExt", () => {
 
 describe("artwork paths", () => {
   it("places the artwork inside the thumbnail cache directory", () => {
-    expect(artworkCachePath("123", ".jpg")).toBe(`${ART_CACHE_DIR}/123.jpg`);
-    expect(ART_CACHE_DIR.endsWith("/thumbnails")).toBe(true);
+    expect(artworkCachePath("123", ".jpg")).toBe(join(ART_CACHE_DIR, "123.jpg"));
+    expect(basename(ART_CACHE_DIR)).toBe("thumbnails");
   });
 
   it("exposes a file:// URL", () => {
@@ -141,9 +152,9 @@ describe("resolveEmbeddedArtwork", () => {
       pictures: [picture()],
     } as never);
 
-    const url = await resolveEmbeddedArtwork(orpheusCoverUrl("/music/song.flac"), "42");
+    const url = await resolveEmbeddedArtwork(orpheusCoverUrl(resolve("music", "song.flac")), "42");
 
-    expect(MusicFile.load).toHaveBeenCalledWith("/music/song.flac");
+    expect(MusicFile.load).toHaveBeenCalledWith(resolve("music", "song.flac"));
     expect(url).toBe(artworkFileUrl("42", ".png"));
     expect((await vol.promises.readFile(artworkCachePath("42", ".png"))).length).toBe(4);
   });
@@ -153,7 +164,7 @@ describe("resolveEmbeddedArtwork", () => {
       pictures: [picture({ mimeType: undefined })],
     } as never);
 
-    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "43")).resolves.toBe(
+    await expect(resolveEmbeddedArtwork(orpheusCoverUrl(resolve("a.mp3")), "43")).resolves.toBe(
       artworkFileUrl("43", ".jpg")
     );
   });
@@ -176,16 +187,22 @@ describe("resolveEmbeddedArtwork", () => {
 
   it("returns null when the file has no picture", async () => {
     vi.mocked(MusicFile.load).mockResolvedValue({ pictures: null } as never);
-    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "45")).resolves.toBeNull();
+    await expect(
+      resolveEmbeddedArtwork(orpheusCoverUrl(resolve("a.mp3")), "45")
+    ).resolves.toBeNull();
 
     vi.mocked(MusicFile.load).mockResolvedValue({ pictures: [] } as never);
-    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/a.mp3"), "45")).resolves.toBeNull();
+    await expect(
+      resolveEmbeddedArtwork(orpheusCoverUrl(resolve("a.mp3")), "45")
+    ).resolves.toBeNull();
   });
 
   it("returns null when the file cannot be read", async () => {
     vi.mocked(MusicFile.load).mockRejectedValue(new Error("boom"));
 
-    await expect(resolveEmbeddedArtwork(orpheusCoverUrl("/missing.mp3"), "46")).resolves.toBeNull();
+    await expect(
+      resolveEmbeddedArtwork(orpheusCoverUrl(resolve("missing.mp3")), "46")
+    ).resolves.toBeNull();
   });
 });
 
@@ -212,12 +229,12 @@ describe("resolveCoverUrl", () => {
       pictures: [picture()],
     } as never);
 
-    await expect(resolveCoverUrl(orpheusCoverUrl("/music/song.flac"), "47")).resolves.toBe(
-      artworkFileUrl("47", ".png")
-    );
+    await expect(
+      resolveCoverUrl(orpheusCoverUrl(resolve("music", "song.flac")), "47")
+    ).resolves.toBe(artworkFileUrl("47", ".png"));
   });
 
   it("returns an empty string when extraction fails", async () => {
-    await expect(resolveCoverUrl(orpheusCoverUrl("/missing.mp3"), "48")).resolves.toBe("");
+    await expect(resolveCoverUrl(orpheusCoverUrl(resolve("missing.mp3")), "48")).resolves.toBe("");
   });
 });

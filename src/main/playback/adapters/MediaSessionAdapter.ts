@@ -1,4 +1,5 @@
 import Emittery from "emittery";
+import type { LoopStatus, PlaybackMode } from "@shared/types/playback-mode";
 
 import { PlaybackStatus, TrackInfo } from "../types";
 
@@ -15,6 +16,8 @@ export type PlayerCommandEvents = {
   setPosition: number;
   /** Volume, 0..1. */
   volume: number;
+  shuffle: boolean;
+  loopStatus: LoopStatus;
   raise: undefined;
   quit: undefined;
 };
@@ -32,12 +35,19 @@ export interface MediaSessionAdapter extends Emittery<PlayerCommandEvents> {
   /** Album art for the current song. */
   onArtwork(artUrl: string | null): void;
   onStatus(status: PlaybackStatus): void;
+  /**
+   * Whether playback progress is currently advancing. `status` stays
+   * `Playing` during a buffering stall, so MPRIS uses this separately to
+   * freeze/resume its interpolated position clock.
+   */
+  onAdvancing(advancing: boolean): void;
   /** Seconds. `seeked` is true when the position changed discontinuously. */
   onPosition(position: number, seeked: boolean): void;
   /** Seconds, or null when unknown. */
   onDuration(duration: number | null): void;
   onRate(rate: number): void;
   onVolume(volume: number): void;
+  onPlaybackMode?(mode: PlaybackMode): void;
   dispose(): void;
 }
 
@@ -46,6 +56,7 @@ export class NoopAdapter extends Emittery<PlayerCommandEvents> implements MediaS
   onTrack(): void {}
   onArtwork(): void {}
   onStatus(): void {}
+  onAdvancing(): void {}
   onPosition(): void {}
   onDuration(): void {}
   onRate(): void {}

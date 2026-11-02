@@ -53,6 +53,14 @@ const exists = (path: string) =>
 
 const read = (path: string) => readFile(path, "utf-8");
 
+/**
+ * Windows only permits real symlinks with Developer Mode or an elevated
+ * process, and `readlink` reports the host's backslash/absolute form rather
+ * than the POSIX target these assertions describe. The deploy script itself is
+ * still exercised on Windows by the directory/absent-marker cases.
+ */
+const windowsLinks = process.platform === "win32";
+
 /** A workspace link, as `pnpm install` creates it. */
 async function makeLink(name: string, target: string) {
   await mkdir(dirname(live(name)), { recursive: true });
@@ -66,7 +74,7 @@ async function makeDeployment(name: string, contents = "deployed") {
 }
 
 describe("captureDependency", () => {
-  it("moves a workspace link into the snapshot, target intact", async () => {
+  it.skipIf(windowsLinks)("moves a workspace link into the snapshot, target intact", async () => {
     await makeLink("@scope/pkg", "../pkg-source");
 
     const entry = await captureDependency(dirs, "@scope/pkg");
@@ -95,7 +103,7 @@ describe("captureDependency", () => {
     expect(await exists(payload("@open-orpheus/dbus"))).toBe(false);
   });
 
-  it("keeps the captured state when the deploy is repeated", async () => {
+  it.skipIf(windowsLinks)("keeps the captured state when the deploy is repeated", async () => {
     await makeLink("pkg", "../pkg-source");
     await captureDependency(dirs, "pkg");
     // A previous deploy extracted over the link; the snapshot still holds the original.
@@ -133,22 +141,25 @@ describe("captureDependency", () => {
 });
 
 describe("readSnapshotEntries", () => {
-  it("reads payloads and absent markers, and skips a legacy index", async () => {
-    await makeLink("pkg", "../pkg-source");
-    await captureDependency(dirs, "pkg");
-    await captureDependency(dirs, "@open-orpheus/dbus");
-    await writeFile(join(dirs.snapshotDir, "index.json"), "{}");
+  it.skipIf(windowsLinks)(
+    "reads payloads and absent markers, and skips a legacy index",
+    async () => {
+      await makeLink("pkg", "../pkg-source");
+      await captureDependency(dirs, "pkg");
+      await captureDependency(dirs, "@open-orpheus/dbus");
+      await writeFile(join(dirs.snapshotDir, "index.json"), "{}");
 
-    const entries = await readSnapshotEntries(dirs);
+      const entries = await readSnapshotEntries(dirs);
 
-    expect(entries).toContainEqual({ path: "pkg", kind: "symlink", target: "../pkg-source" });
-    expect(entries).toContainEqual({ path: "@open-orpheus/dbus", kind: "absent" });
-    expect(entries.map((entry) => entry.path)).not.toContain("index.json");
-  });
+      expect(entries).toContainEqual({ path: "pkg", kind: "symlink", target: "../pkg-source" });
+      expect(entries).toContainEqual({ path: "@open-orpheus/dbus", kind: "absent" });
+      expect(entries.map((entry) => entry.path)).not.toContain("index.json");
+    }
+  );
 });
 
 describe("restoreDependencies", () => {
-  it("puts a captured link back and removes the snapshot", async () => {
+  it.skipIf(windowsLinks)("puts a captured link back and removes the snapshot", async () => {
     await makeLink("pkg", "../pkg-source");
     await captureDependency(dirs, "pkg");
     await makeDeployment("pkg");
@@ -169,7 +180,7 @@ describe("restoreDependencies", () => {
     expect(await exists(dirs.snapshotDir)).toBe(false);
   });
 
-  it("leaves a link that was installed after the snapshot alone", async () => {
+  it.skipIf(windowsLinks)("leaves a link that was installed after the snapshot alone", async () => {
     await makeLink("pkg", "../pkg-source");
     await captureDependency(dirs, "pkg");
     await rm(live("pkg"), { recursive: true, force: true });
@@ -190,17 +201,20 @@ describe("restoreDependencies", () => {
     }
   });
 
-  it("survives a restore that was interrupted after moving a payload back", async () => {
-    await makeLink("pkg", "../pkg-source");
-    await captureDependency(dirs, "pkg");
-    // Simulate the interruption: the payload is already back, so the snapshot holds nothing for it.
-    await rename(payload("pkg"), live("pkg"));
+  it.skipIf(windowsLinks)(
+    "survives a restore that was interrupted after moving a payload back",
+    async () => {
+      await makeLink("pkg", "../pkg-source");
+      await captureDependency(dirs, "pkg");
+      // Simulate the interruption: the payload is already back, so the snapshot holds nothing for it.
+      await rename(payload("pkg"), live("pkg"));
 
-    expect(await restoreDependencies(dirs)).toBe(0);
+      expect(await restoreDependencies(dirs)).toBe(0);
 
-    expect(await readlink(live("pkg"))).toBe("../pkg-source");
-    expect(await exists(dirs.snapshotDir)).toBe(false);
-  });
+      expect(await readlink(live("pkg"))).toBe("../pkg-source");
+      expect(await exists(dirs.snapshotDir)).toBe(false);
+    }
+  );
 
   it("is idempotent", async () => {
     await captureDependency(dirs, "@open-orpheus/dbus");
@@ -214,25 +228,28 @@ describe("restoreDependencies", () => {
 });
 
 describe("deployTarball", () => {
-  it("extracts a packed module over the path it captured, and restores it", async () => {
-    const staging = join(root, "_staging", "package");
-    await mkdir(staging, { recursive: true });
-    await writeFile(
-      join(staging, "package.json"),
-      JSON.stringify({ name: "pkg", version: "1.0.0" })
-    );
-    await writeFile(join(staging, "index.js"), "module.exports = 1;");
-    const tarball = join(root, "pkg-1.0.0.tgz");
-    await createTar({ gzip: true, file: tarball, cwd: join(root, "_staging") }, ["package"]);
-    await makeLink("pkg", "../pkg-source");
+  it.skipIf(windowsLinks)(
+    "extracts a packed module over the path it captured, and restores it",
+    async () => {
+      const staging = join(root, "_staging", "package");
+      await mkdir(staging, { recursive: true });
+      await writeFile(
+        join(staging, "package.json"),
+        JSON.stringify({ name: "pkg", version: "1.0.0" })
+      );
+      await writeFile(join(staging, "index.js"), "module.exports = 1;");
+      const tarball = join(root, "pkg-1.0.0.tgz");
+      await createTar({ gzip: true, file: tarball, cwd: join(root, "_staging") }, ["package"]);
+      await makeLink("pkg", "../pkg-source");
 
-    await deployTarball(dirs, tarball);
+      await deployTarball(dirs, tarball);
 
-    await expect(read(join(live("pkg"), "index.js"))).resolves.toBe("module.exports = 1;");
-    // The link that was replaced is still the pre-deploy state.
-    expect(await readlink(payload("pkg"))).toBe("../pkg-source");
+      await expect(read(join(live("pkg"), "index.js"))).resolves.toBe("module.exports = 1;");
+      // The link that was replaced is still the pre-deploy state.
+      expect(await readlink(payload("pkg"))).toBe("../pkg-source");
 
-    expect(await restoreDependencies(dirs)).toBe(0);
-    expect(await readlink(live("pkg"))).toBe("../pkg-source");
-  });
+      expect(await restoreDependencies(dirs)).toBe(0);
+      expect(await readlink(live("pkg"))).toBe("../pkg-source");
+    }
+  );
 });

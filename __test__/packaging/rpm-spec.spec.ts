@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { vol } from "memfs";
 
 import { createSpecFile, generateSpec, type SpecOptions } from "../../packaging/rpm/spec";
+import { RUST_VERSION } from "../../packaging/common/toolchain";
 
 const base: SpecOptions = {
   name: "open-orpheus",
@@ -19,8 +20,7 @@ const base: SpecOptions = {
   homepage: "https://github.com/YUCLing/open-orpheus",
   nodeVersion: "24",
   wasmBindgen: "0.2.100",
-  cargoZigbuild: "0.23.4",
-  zig: "0.16.0",
+  rust: RUST_VERSION,
   changelog: "* Mon Sep 15 2025 A <a@b.c> - 0.17.1-1\n- Release 0.17.1",
 };
 
@@ -62,12 +62,12 @@ describe("generateSpec", () => {
     const spec = await generateSpec(base);
 
     expect(spec).toContain("sh.rustup.rs");
+    expect(spec).toContain(`--default-toolchain ${RUST_VERSION}`);
     expect(spec).toContain('cargo install "wasm-bindgen-cli@0.2.100"');
     expect(spec).toContain("nvm install 24");
-    expect(spec).toContain(
-      "releases/download/v0.23.4/cargo-zigbuild-${BUILD_ARCH}-unknown-linux-gnu.tar.xz"
-    );
-    expect(spec).toContain("ziglang.org/download/0.16.0/");
+    // The old cargo-zigbuild/zig cross toolchain is no longer provisioned.
+    expect(spec).not.toContain("cargo-zigbuild");
+    expect(spec).not.toContain("ziglang.org");
     expect(spec).toContain("pnpm install --frozen-lockfile");
     expect(spec).toContain("pnpm run build:modules");
     expect(spec).toContain("pnpm run package");
@@ -104,7 +104,7 @@ describe("generateSpec", () => {
     expect(await generateSpec(base)).not.toContain("Source1:");
   });
 
-  it("sanitises the build flags Copr and zig cc reject", async () => {
+  it("sanitises the build flags Copr and the cross-compilation toolchain reject", async () => {
     const spec = await generateSpec(base);
 
     expect(spec).toContain("strip_flags()");

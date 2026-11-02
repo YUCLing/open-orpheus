@@ -12,5 +12,6 @@ registerCallHandler<[], [{ enabled: boolean }]>("os.isSystemDarkThemeEnabled", (
 });
 
 registerCallHandler<[], void>("os.isOnLine", () => {
+  LOGGER.debug({ online: navigator.onLine }, "Reported network online state");
   fireNativeCall("os.onisonline", navigator.onLine);
 });

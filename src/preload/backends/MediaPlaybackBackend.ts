@@ -39,9 +39,12 @@ export class MediaPlaybackBackend implements PlaybackBackend {
     element.addEventListener("error", (event) => this.sink("error", event));
     // A real "canplay" is the media element's readiness signal.
     element.addEventListener("canplay", () => this.sink("load"));
+
+    LOGGER.debug("Media playback backend initialized");
   }
 
   load(): Promise<void> {
+    LOGGER.debug("Media playback source reset for load");
     this.element.src = `audio://audio?t=${Date.now()}`;
     this.element.load();
     return Promise.resolve();

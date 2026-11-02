@@ -1,8 +1,6 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { defineConfig } from "vite";
 
+import { createAliases } from "./scripts/tsconfigAliases.js";
 import PinoWorkerPlugin from "./plugins/PinoWorkerPlugin.js";
 import NoS3Plugin from "./plugins/NoS3Plugin.js";
 import LoggerPlugin from "./plugins/LoggerPlugin.js";
@@ -12,9 +10,7 @@ import ForceESPlugin from "./plugins/ForceESPlugin.js";
 export default defineConfig({
   base: "",
   resolve: {
-    alias: {
-      $sharedTypes: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "types"),
-    },
+    alias: createAliases(),
   },
   build: {
     sourcemap: process.env.INLINE_SOURCEMAP ? "inline" : false,
@@ -45,5 +41,5 @@ export default defineConfig({
   },
   // unzipper has a dependency on @aws-sdk/client-s3, which is not needed in
   // our context and causes build issues. This plugin mocks it out.
-  plugins: [NoS3Plugin(), ForceESPlugin(), PinoWorkerPlugin(), LoggerPlugin()],
+  plugins: [NoS3Plugin(), ForceESPlugin(), LoggerPlugin(), PinoWorkerPlugin()],
 });

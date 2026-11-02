@@ -1,6 +1,6 @@
 import type { Attachment } from "svelte/attachments";
 
-import type { InputRegionContract } from "$bridge/contracts/input-region-api";
+import type { InputRegionContract } from "@shared/contracts/input-region-api";
 
 import { getBridge } from "./bridge";
 

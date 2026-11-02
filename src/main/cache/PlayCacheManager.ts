@@ -82,6 +82,7 @@ export default class PlayCacheManager {
           // Corrupted or missing meta — skip
         }
       }
+      LOGGER.debug({ tracks: this.trackIndex.size }, "Play cache index built");
     } catch {
       // Directory doesn't exist yet — that's fine
     }
@@ -143,16 +144,22 @@ export default class PlayCacheManager {
   ): Promise<{ meta: CacheTrackMeta; audioPath: string } | null> {
     await this.ready();
     const meta = this.trackIndex.get(songId);
-    if (!meta) return null;
+    if (!meta) {
+      LOGGER.debug({ songId }, "Play cache miss");
+      return null;
+    }
 
     const audioPath = resolve(this.cachePath, songId, "audio");
     try {
       await access(audioPath);
     } catch {
       // Audio file missing or unreadable — remove from index
+      LOGGER.debug({ songId }, "Play cache miss");
       this.trackIndex.delete(songId);
       return null;
     }
+
+    LOGGER.debug({ songId }, "Play cache hit");
 
     // Update access time
     meta.lastAccessTime = Math.floor(Date.now() / 1000);
@@ -202,6 +209,7 @@ export default class PlayCacheManager {
     await this.writeMeta(songId, meta);
 
     this.trackIndex.set(songId, meta);
+    LOGGER.info({ songId, bytes: info.fileSize }, "Play cache track written");
 
     // Notify frontend
     this.notifyPlayCacheUpdate(meta, 1);
@@ -219,6 +227,8 @@ export default class PlayCacheManager {
     const currentGB = await this.getCachedSizeGB();
 
     if (currentGB <= limitGB) return;
+
+    LOGGER.debug({ currentGB, limitGB }, "Evicting play cache tracks");
 
     // Target 80% of the limit
     const targetGB = limitGB * 0.8;

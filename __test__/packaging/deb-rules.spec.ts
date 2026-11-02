@@ -8,11 +8,11 @@ import { readFile } from "node:fs/promises";
 import { vol } from "memfs";
 
 import { createRulesFile, generateRules, type RulesOptions } from "../../packaging/deb/rules";
+import { RUST_VERSION } from "../../packaging/common/toolchain";
 
 const base: RulesOptions = {
   name: "open-orpheus",
-  cargoZigbuild: "0.23.4",
-  zig: "0.16.0",
+  rust: RUST_VERSION,
 };
 
 describe("generateRules", () => {
@@ -28,15 +28,13 @@ describe("generateRules", () => {
     expect(rules).toContain("pnpm run package");
   });
 
-  it("interpolates the toolchain versions", async () => {
+  it("pins the Rust toolchain version", async () => {
     const rules = await generateRules(base);
 
-    // `$$` is Makefile escaping for a shell variable expansion.
-    expect(rules).toContain(
-      "releases/download/v0.23.4/cargo-zigbuild-$${BUILD_ARCH}-unknown-linux-gnu.tar.xz"
-    );
-    expect(rules).toContain("ziglang.org/download/0.16.0/");
-    expect(rules).toContain("install -Dm755");
+    expect(rules).toContain(`--default-toolchain ${RUST_VERSION}`);
+    // The old cargo-zigbuild/zig cross toolchain is no longer provisioned.
+    expect(rules).not.toContain("cargo-zigbuild");
+    expect(rules).not.toContain("ziglang.org");
   });
 
   it("interpolates the package name into the scaffolder call", async () => {

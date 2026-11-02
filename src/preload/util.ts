@@ -1,1 +1,2 @@
-export const isMain = process.argv.includes("--preload-channel=main");
+export const channel =
+  process.argv.find((v) => v.startsWith("--preload-channel="))?.substring(18) ?? null;

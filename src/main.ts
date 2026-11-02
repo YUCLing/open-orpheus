@@ -32,10 +32,11 @@ import showPackgeDownloadWindow from "./main/windows/package-download";
 import { mainWindow } from "./main/window";
 import registerAsProtocolClient from "./main/protocol";
 import { parseLocalFile, parseWebCommand, raceArgument } from "./main/arguments";
-import { toError } from "./util";
+import { toError } from "@shared/util";
 import { installLifecycle, setStartupTask } from "./main/lifecycle";
-import { checkEnvFlagPresent, isFileNotFound } from "./main/util";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { checkEnvFlagPresent } from "./main/util/env";
+import { isFileNotFound } from "./main/util/fs";
+import { PackageDownloadReason } from "@shared/types/package-download";
 
 import type WebPack from "./main/packs/WebPack";
 import type { ProxyConfiguration } from "./main/request";
@@ -46,7 +47,7 @@ if (started) {
 }
 
 // Enforce single instance
-if (!app.requestSingleInstanceLock()) {
+if (!("OPEN_ORPHEUS_IGNORE_SINGLE_INSTANCE" in process.env) && !app.requestSingleInstanceLock()) {
   app.quit();
 }
 
@@ -109,6 +110,8 @@ if (app.isPackaged && !checkEnvFlagPresent("ENABLE_ELECTRON_MENUS"))
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
   try {
+    LOGGER.info({ version: app.getVersion(), packaged: app.isPackaged }, "Application ready");
+
     // Make sure data directory exists
     await mkdir(path.join(dataDir), { recursive: true });
 
@@ -189,6 +192,15 @@ app.on("ready", async () => {
       // We have a usable web pack that matches versions.commit
       if (downloadReason === null) break;
 
+      LOGGER.debug(
+        {
+          expectedCommit: versions.commit,
+          offeredCommit: offeredWebPackCommit,
+          reason: downloadReason,
+        },
+        "Checked the web pack"
+      );
+
       // Show the download window. It resolves when the download completes and
       // rejects if the user cancels or the download fails.
       let cancelled = false;
@@ -206,6 +218,11 @@ app.on("ready", async () => {
       // Remember this commit so we don't offer the download again on the next
       // launch, whether the user downloaded, cancelled, or the download failed.
       offeredWebPackCommit = versions.commit;
+
+      if (!cancelled) {
+        LOGGER.info({ reason: downloadReason }, "Web pack download completed");
+      }
+
       await writeFile(lastWebpackHashPath, offeredWebPackCommit).catch((e) => {
         logger.warn(
           { name: "loader", err: toError(e) },
@@ -229,9 +246,16 @@ app.on("ready", async () => {
           );
         }
         if (noUsablePack) {
+          LOGGER.fatal({ reason: downloadReason, failed }, "No usable web pack, exiting");
           app.exit(1);
           return;
         }
+
+        LOGGER.warn(
+          { reason: downloadReason, failed },
+          "Web pack download did not complete, continuing with the installed pack"
+        );
+
         if (shouldRedownload) {
           // Cancelled or failed the forced redownload — drop the flag and use
           // the pack that is already on disk.
@@ -271,6 +295,8 @@ app.on("ready", async () => {
       });
     });
 
+    LOGGER.debug("Enabled window.channel injection for default-session frames");
+
     // Initialize schemes and get registrars
     const [registerOrpheusScheme, registerAudioScheme] = await Promise.all([
       import("./main/orpheus").then((m) => m.default),
@@ -284,10 +310,27 @@ app.on("ready", async () => {
     // Register for Open Orpheus session
     registerOrpheusScheme(openOrpheusSession.protocol);
 
+    LOGGER.info({ schemes: ["orpheus", "audio"] }, "Protocol schemes registered");
+
     await import("./main/database").then(async (m) => {
       await m.initializeDatabases();
       await import("./main/settings").then((m) => m.initialize());
     });
+
+    LOGGER.info("Databases and settings initialized");
+
+    // Publish lyrics on D-Bus. Linux-only and fire-and-forget: the native
+    // module is loaded lazily, and startup must not wait for the session bus.
+    if (os.platform() === "linux") {
+      void import("./main/lyrics/dbus")
+        .then((m) => m.createDbusLyricsService())
+        .catch((err) =>
+          logger.warn(
+            { name: "dbus-lyrics", err: toError(err) },
+            "Failed to start the D-Bus lyrics service"
+          )
+        );
+    }
 
     await Promise.all([
       // Install the tray icon
@@ -395,16 +438,23 @@ app.on("ready", async () => {
       }),
     ]);
 
+    LOGGER.info("Startup services initialized");
+
     // Create main window
     await (await import("./main/windows/main")).default();
+
+    LOGGER.info("Main window created");
 
     // TODO: Maybe only do this on first launch?
     // Register as orpheus:// clent
     registerAsProtocolClient();
 
     // Run a update check
-    void import("./main/update").then((m) => m.checkUpdate());
+    void import("./main/update")
+      .then((m) => m.checkUpdate())
+      .catch((err) => LOGGER.warn({ err: toError(err) }, "Failed to check for updates"));
   } catch (error) {
+    LOGGER.fatal({ err: toError(error) }, "Failed to initialize the application");
     if (error) {
       dialog.showErrorBox(
         "Initialization Failed",
@@ -418,6 +468,7 @@ app.on("ready", async () => {
 
 app.on("open-file", (e, path) => {
   e.preventDefault();
+  LOGGER.debug({ file: path }, "Received an open-file request");
   setStartupTask({
     type: "openFile",
     file: path,
@@ -429,6 +480,7 @@ app.on("open-file", (e, path) => {
 app.on("open-url", (e, url) => {
   if (!url.startsWith("orpheus://")) return;
   e.preventDefault();
+  LOGGER.debug({ url: url.split("?")[0] }, "Received an open-url request");
   setStartupTask({
     type: "openUrl",
     url,
@@ -446,6 +498,7 @@ app.on("second-instance", async (event, argv) => {
     if (localFile) return [2, localFile];
     return null;
   }, argv);
+  LOGGER.debug({ command: cmd?.[0] ?? null }, "Handled a second-instance launch");
   if (cmd) {
     mainWindow.webContents.send("channel.call", "ipc.onipcmessagerecived", ...cmd);
     return;

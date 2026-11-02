@@ -8,10 +8,11 @@ import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
 import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
-import { registerIpcHandlers } from "../../bridge/register";
-import { MiniPlayerContract } from "../../bridge/contracts/mini-player-api";
-import type { BtnImages, BtnState } from "../../../types/dui";
-import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
+import { registerIpcHandlers } from "../bridge/register";
+import { toError } from "@shared/util";
+import { MiniPlayerContract } from "@shared/contracts/mini-player-api";
+import type { BtnImages, BtnState } from "@shared/types/dui";
+import { registerInputRegionHandlers } from "../bridge/modules/inputRegion";
 import packManager from "../pack";
 import type SkinPack from "../packs/SkinPack";
 import { extractColor } from "../skin/color";
@@ -24,8 +25,8 @@ import type {
   MiniPlayerFullState,
   MiniPlayerStyle,
   MiniPlayerTogetherStatus,
-} from "$sharedTypes/mini-player";
-import { registerLyricsHandlers } from "../../bridge/common/lyrics";
+} from "@shared/types/mini-player";
+import { registerLyricsHandlers } from "../bridge/modules/lyrics";
 import { font } from "../gui";
 import { events as settingsEvents, kv as settings } from "../settings";
 
@@ -392,6 +393,7 @@ export function showVolume(volume: number, muted: boolean) {
 
 export function updateStyle(newStyle: MiniPlayerStyle | null) {
   style = newStyle ?? defaultStyle;
+  LOGGER.debug({ custom: newStyle !== null }, "Applied mini player style");
   sendToMiniPlayer("styleUpdate", newStyle);
 }
 
@@ -432,7 +434,13 @@ const miniPlayerWindowOptions = {
 } satisfies BrowserWindowConstructorOptions;
 
 function setupMiniPlayerWindow(wnd: BrowserWindow): BrowserWindow {
-  void wnd.loadURL(guiUrl("/mini-player"));
+  LOGGER.debug(
+    { windowId: ManagedWindow.fromBrowserWindow(wnd)?.id },
+    "Loading mini player window"
+  );
+  void wnd.loadURL(guiUrl("/mini-player")).catch((error) => {
+    LOGGER.error({ err: toError(error) }, "Failed to load mini player window");
+  });
 
   registerIpcHandlers<MiniPlayerContract>(wnd.webContents, "miniPlayer", {
     requestFullUpdate: async () => getFullState(),
@@ -463,6 +471,7 @@ class MiniPlayerWindow extends ManagedWindow {
     this.setData("name", "mini_player");
     this.requestCloseApproval(notifyMiniPlayerClose);
     setupMiniPlayerWindow(this.createBrowserWindow(miniPlayerWindowOptions));
+    LOGGER.info({ windowId: this.id }, "Mini player window created");
   }
 }
 
@@ -474,7 +483,9 @@ class MiniPlayerOnDemandWindow extends OnDemandWindow {
   }
 
   createWindow(): BrowserWindow {
-    return setupMiniPlayerWindow(this.createBrowserWindow(miniPlayerWindowOptions));
+    const wnd = setupMiniPlayerWindow(this.createBrowserWindow(miniPlayerWindowOptions));
+    LOGGER.debug({ windowId: this.id }, "Mini player window created on demand");
+    return wnd;
   }
 }
 
@@ -498,11 +509,14 @@ function registerLifecycleSwitch() {
   settingsEvents.on("change", (e) => {
     if (e.data.key !== "window.lifecycle" || !window) return;
     window = switchWindowPolicy(window, () => createWindowForLifecycle(e.data.value));
+    LOGGER.info({ lifecycle: e.data.value }, "Mini player window lifecycle changed");
   });
 }
 
 export let window: ManagedWindow;
 export default async function createMiniPlayerWindow() {
-  window = createWindowForLifecycle(await settings.get("window.lifecycle"));
+  const lifecycle = await settings.get("window.lifecycle");
+  window = createWindowForLifecycle(lifecycle);
+  LOGGER.debug({ lifecycle }, "Configured mini player window lifecycle");
   registerLifecycleSwitch();
 }

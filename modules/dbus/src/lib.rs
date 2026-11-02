@@ -32,4 +32,5 @@ macro_rules! napi_deferred_task {
 pub type EventReturn = Either<Promise<()>, Undefined>;
 
 pub mod client;
+pub mod lyrics;
 pub mod media_session;

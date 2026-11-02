@@ -16,7 +16,7 @@ import {
   LyricsStyle,
   ShowTranslate,
   TextAlignType,
-} from "$sharedTypes/desktop-lyrics";
+} from "@shared/types/desktop-lyrics";
 
 import {
   guiUrl,
@@ -27,14 +27,15 @@ import {
 } from "../window";
 import type { LayerShellOptions } from "../window";
 import { LAYER_SHELL_CHOICE, whyNotALayerSurface } from "./desktop-lyrics-layer";
-import { registerIpcHandlers } from "../../bridge/register";
+import { registerIpcHandlers } from "../bridge/register";
+import { toError } from "@shared/util";
 import type {
   DesktopLyricsContract,
   DesktopLyricsPreviewContract,
-} from "../../bridge/contracts/desktop-lyrics-api";
-import { registerInputRegionHandlers } from "../../bridge/common/inputRegion";
-import { registerLyricsHandlers } from "../../bridge/common/lyrics";
-import { registerSettingsHandlers } from "../../bridge/common/settings";
+} from "@shared/contracts/desktop-lyrics-api";
+import { registerInputRegionHandlers } from "../bridge/modules/inputRegion";
+import { registerLyricsHandlers } from "../bridge/modules/lyrics";
+import { registerSettingsHandlers } from "../bridge/modules/settings";
 import { events as settingsEvents, kv as settings } from "../settings";
 
 export const lyricsStyle: LyricsStyle = {
@@ -746,7 +747,10 @@ function useLyricsLayerShell(managed: ManagedWindow): boolean {
 function setupDesktopLyricsWindow(wnd: BrowserWindow, layerShell: boolean): BrowserWindow {
   const managed = ManagedWindow.fromBrowserWindow(wnd);
   const de = getDesktopEnvironment();
-  void wnd.loadURL(guiUrl("/desktop-lyrics"));
+  LOGGER.debug({ windowId: managed?.id }, "Loading desktop lyrics window");
+  void wnd.loadURL(guiUrl("/desktop-lyrics")).catch((error) => {
+    LOGGER.error({ err: toError(error) }, "Failed to load desktop lyrics window");
+  });
 
   if (!layerShell && de !== DesktopEnvironment.Wayland) {
     // Without a layer surface the window manager places the window and tells
@@ -903,13 +907,16 @@ function registerLifecycleSwitch() {
     // the window the user is actually looking at.
     abandonPendingMove?.();
     window = switchWindowPolicy(window, () => createWindowForLifecycle(e.data.value));
+    LOGGER.info({ lifecycle: e.data.value }, "Desktop lyrics window lifecycle changed");
   });
 }
 
 export let window: ManagedWindow;
 export default async function createDesktopLyricsWindow() {
   await loadLyricsGeometry();
-  window = createWindowForLifecycle(await settings.get("window.lifecycle"));
+  const lifecycle = await settings.get("window.lifecycle");
+  window = createWindowForLifecycle(lifecycle);
+  LOGGER.info({ lifecycle }, "Desktop lyrics window created");
   registerLifecycleSwitch();
 }
 

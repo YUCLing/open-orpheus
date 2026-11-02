@@ -21,6 +21,7 @@ export default class NowPlayingAdapter
   constructor() {
     super();
     this.mediaSession = new MediaSession();
+    LOGGER.info("Now Playing media session ready");
 
     this.mediaSession.setEventHandler((err, event) => {
       switch (event.type) {
@@ -44,6 +45,7 @@ export default class NowPlayingAdapter
           break;
         case "SetRate":
           // OS-initiated rate change needs a renderer command; ignored in v1.
+          LOGGER.debug({ rate: event.rate }, "Ignored an OS-initiated playback rate change");
           break;
       }
     });
@@ -64,6 +66,10 @@ export default class NowPlayingAdapter
   onStatus(status: PlaybackStatus): void {
     this.mediaSession.setPlaybackState(status);
     this.pushMetadata();
+  }
+
+  onAdvancing(): void {
+    // The system extrapolates from `elapsed` and `rate`.
   }
 
   onPosition(position: number): void {

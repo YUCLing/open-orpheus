@@ -39,8 +39,21 @@ export function canAnchorNativeWaylandPopup(wnd: BrowserWindow): boolean {
   const managed = ManagedWindow.fromBrowserWindow(wnd);
   if (!managed) return false;
   const pressedAgeMs = windowLastPressAgeMs(managed.id) ?? Number.POSITIVE_INFINITY;
-  if (pressedAgeMs <= POPUP_ANCHOR_GRACE_MS) return true;
-  return isLiveFocusedWindow(wnd) && isWindowPointerInside(managed.id);
+  if (pressedAgeMs <= POPUP_ANCHOR_GRACE_MS) {
+    LOGGER.debug(
+      { windowId: managed.id, pressedAgeMs, anchorable: true },
+      "Checked native Wayland popup anchor"
+    );
+    return true;
+  }
+  const focused = isLiveFocusedWindow(wnd);
+  const pointerInside = isWindowPointerInside(managed.id);
+  const anchorable = focused && pointerInside;
+  LOGGER.debug(
+    { windowId: managed.id, pressedAgeMs, focused, pointerInside, anchorable },
+    "Checked native Wayland popup anchor"
+  );
+  return anchorable;
 }
 
 export async function waitForWaylandPopup(windowId: string, isCancelled: () => boolean) {
@@ -75,7 +88,7 @@ export function registerNativeWaylandPopup(
   shadowInset = NATIVE_MENU_SHADOW_INSET
 ): boolean {
   try {
-    return setWindowPopupPolicy(
+    const registered = setWindowPopupPolicy(
       targetWindowId,
       parentWindowId,
       width,
@@ -84,6 +97,13 @@ export function registerNativeWaylandPopup(
       anchor?.y,
       shadowInset
     );
+    if (registered) {
+      LOGGER.debug(
+        { parentWindowId, targetWindowId, width, height, hasAnchor: anchor !== undefined },
+        "Registered native Wayland popup"
+      );
+    }
+    return registered;
   } catch {
     return false;
   }

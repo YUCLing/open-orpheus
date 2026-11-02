@@ -1,6 +1,6 @@
 import { inflateRaw } from "node:zlib";
 
-import { Ncae, NcaeHeader, NcaeType } from "$sharedTypes/ncae";
+import { Ncae, NcaeHeader, NcaeType } from "@shared/types/ncae";
 
 // #region Binary layout
 
@@ -149,6 +149,8 @@ function rawInflate(data: Uint8Array): Promise<Buffer> {
  *          type-1 files or a `Buffer` of RIFF/WAVE data for type-2 files.
  */
 export async function decodeNcae(buf: Buffer): Promise<Ncae> {
+  LOGGER.debug({ size: buf.length }, "Decoding NCAE buffer");
+
   if (buf.length < HEADER_SIZE) {
     throw new Error(`NCAE buffer too short: ${buf.length} bytes (need at least ${HEADER_SIZE})`);
   }
@@ -163,6 +165,7 @@ export async function decodeNcae(buf: Buffer): Promise<Ncae> {
   const extCount = arr[OFF_EXT_COUNT];
 
   validateSize(arr.length, extCount, payloadSize);
+  LOGGER.debug({ type, payloadSize, extCount }, "NCAE header parsed");
 
   // --- Stage 2: XOR-decrypt the header extension → RC4 key -----------------
   const keyStart = OFF_EXT_DATA;
@@ -187,6 +190,7 @@ export async function decodeNcae(buf: Buffer): Promise<Ncae> {
   if (type === NcaeType.Wav) {
     return { header, payload: decompressed };
   }
+  LOGGER.warn({ type }, "Unsupported NCAE type");
   throw new Error(`Unknown NCAE type: ${type}`);
 }
 

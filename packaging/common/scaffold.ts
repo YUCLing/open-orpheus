@@ -1,7 +1,7 @@
 import { basename, dirname, extname, join } from "node:path";
 import { cp, mkdir } from "node:fs/promises";
 
-import _ from "lodash";
+import { toMerged } from "es-toolkit";
 
 import { type Icons, writeIcons } from "./icons.ts";
 import { createSymlink } from "./util.ts";
@@ -37,62 +37,48 @@ export async function writeScaffold(root: string, options: ScaffoldOptions) {
       : undefined);
   if (!appName) throw new Error("Cannot infer app name.");
 
-  // Normalize the `symlink: true` sentinel to its default path before merging,
-  // otherwise `_.merge` would overwrite the computed default back to `true`.
-  const effective: ScaffoldOptions = {
-    ...options,
-    paths: options.paths && {
-      ...options.paths,
-      symlink: options.paths.symlink === true ? `/usr/bin/${options.id}` : options.paths.symlink,
-    },
-  };
-
-  const opts = _.merge(
+  // Merge the caller's path overrides over the computed defaults. `toMerged`
+  // skips `undefined` source values, so omitting `paths` (or any key in it)
+  // leaves the corresponding defaults intact. `symlink: true` is a sentinel
+  // for the default executable location.
+  const paths = toMerged(
     {
-      paths: {
-        app: `/usr/lib/${options.id}/`,
-        icons:
-          options.input?.icons && options.input?.desktop
-            ? {
-                appName: basename(options.input.desktop, extname(options.input.desktop)),
-                path: "/usr/share/icons/hicolor/",
-              }
-            : undefined,
-        desktop: options.input?.desktop ? `/usr/share/applications/${appName}.desktop` : undefined,
-      },
+      app: `/usr/lib/${options.id}/`,
+      icons:
+        options.input?.icons && options.input?.desktop
+          ? {
+              appName: basename(options.input.desktop, extname(options.input.desktop)),
+              path: "/usr/share/icons/hicolor/",
+            }
+          : undefined,
+      desktop: options.input?.desktop ? `/usr/share/applications/${appName}.desktop` : undefined,
     },
-    effective
-  ) as ScaffoldOptions;
-
-  // `paths` is always present after the merge (we seeded it), and the
-  // `symlink` sentinel was normalized to a real path, so narrow the type.
-  const paths = opts.paths as {
-    app?: string;
-    icons?: { appName: string; path: string };
-    desktop?: string;
-    symlink?: string;
-  };
+    {
+      ...options.paths,
+      symlink: options.paths?.symlink === true ? `/usr/bin/${options.id}` : options.paths?.symlink,
+    }
+  );
 
   // 1. App directory
-  if (opts.input?.app && paths.app) {
-    await cp(opts.input.app, join(root, paths.app), { recursive: true });
+  if (options.input?.app && paths.app) {
+    await cp(options.input.app, join(root, paths.app), { recursive: true });
   }
 
   // 2. Icons
-  if (opts.input?.icons && paths.icons) {
-    await writeIcons(join(root, paths.icons.path), paths.icons.appName, opts.input.icons);
+  if (options.input?.icons && paths.icons) {
+    await writeIcons(join(root, paths.icons.path), paths.icons.appName, options.input.icons);
   }
 
   // 3. Desktop file
-  if (opts.input?.desktop && paths.desktop) {
+  if (options.input?.desktop && paths.desktop) {
     const dest = join(root, paths.desktop);
     await mkdir(dirname(dest), { recursive: true });
-    await cp(opts.input.desktop, dest);
+    await cp(options.input.desktop, dest);
   }
 
   // 4. Binary symlink
   if (paths.symlink) {
-    if (!opts.executable) throw new Error("Cannot create symlink: `executable` is required.");
-    await createSymlink(join(root, paths.app ?? "", opts.executable), join(root, paths.symlink));
+    if (!options.executable) throw new Error("Cannot create symlink: `executable` is required.");
+    await createSymlink(join(root, paths.app ?? "", options.executable), join(root, paths.symlink));
   }
 }

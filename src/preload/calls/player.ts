@@ -1,7 +1,8 @@
 import { registerCallHandler } from "../calls";
 
 // TODO: Link mediaSession
-registerCallHandler<[boolean], void>("player.setSMTCEnable", () => {
+registerCallHandler<[boolean], void>("player.setSMTCEnable", (enabled) => {
+  LOGGER.warn({ enabled }, "SMTC integration is not implemented");
   return;
 });
 

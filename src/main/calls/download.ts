@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { registerCallHandler } from "../calls";
 import startDownload, { type DownloadTask } from "../download";
 import { data as dataDir, downloadTemp } from "../folders";
-import { normalizePath, sanitizeRelativePath } from "../util";
+import { normalizePath, sanitizeRelativePath } from "../util/path";
 
 type DownloadStartRequest = {
   ext_header: string;
@@ -66,6 +66,7 @@ registerCallHandler<[DownloadStartRequest], void>(
       md5,
       size,
     });
+    LOGGER.debug({ id, size, type }, "Download started");
 
     task.on("progress", (e) => {
       event.sender.send("channel.call", "download.onprocess", id, {
@@ -92,6 +93,7 @@ registerCallHandler<[DownloadStartRequest], void>(
         await rm(destPath);
       }
 
+      LOGGER.info({ id, type }, "Download completed");
       event.sender.send("channel.call", "download.onprocess", id, {
         down: e.data.downloaded,
         islast: true,
@@ -142,5 +144,6 @@ registerCallHandler<[string], void>("download.cancel", async (event, id: string)
   if (task) {
     await task.cancel();
     downloadTasks.delete(id);
+    LOGGER.info({ id }, "Download cancelled");
   }
 });

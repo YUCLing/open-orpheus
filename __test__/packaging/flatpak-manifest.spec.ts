@@ -1,3 +1,5 @@
+import { join, resolve } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // memfs-backed, see `__mocks__/fs/promises.cts`.
@@ -18,6 +20,10 @@ import {
   writeManifest,
   type ManifestContext,
 } from "../../packaging/flatpak/manifest";
+
+const OUT = resolve("out");
+const MANIFEST_DIR = join(OUT, "make", "flatpak-builder");
+const MANIFEST_NAME = "io.github.yucling.open-orpheus.yaml";
 
 const ctx: ManifestContext = {
   appId: "io.github.yucling.open-orpheus",
@@ -213,30 +219,30 @@ describe("writeManifest", () => {
   it("writes <app-id>.yaml and returns its path", async () => {
     const manifest = baseManifest(ctx, appModule);
 
-    const path = await writeManifest("/out/make/flatpak-builder", manifest);
+    const path = await writeManifest(MANIFEST_DIR, manifest);
 
-    expect(path).toBe("/out/make/flatpak-builder/io.github.yucling.open-orpheus.yaml");
+    expect(path).toBe(join(MANIFEST_DIR, MANIFEST_NAME));
     expect(vol.existsSync(path)).toBe(true);
   });
 
   it("round-trips the manifest through YAML", async () => {
     const manifest = baseManifest(ctx, appModule);
 
-    const path = await writeManifest("/out", manifest);
+    const path = await writeManifest(OUT, manifest);
     const parsed = yaml.parse(await readFile(path, "utf-8"));
 
     expect(parsed).toEqual(manifest);
   });
 
   it("creates missing directories and overwrites previous output", async () => {
-    vol.mkdirSync("/out", { recursive: true });
-    await writeManifest("/out", baseManifest(ctx, appModule));
+    vol.mkdirSync(OUT, { recursive: true });
+    await writeManifest(OUT, baseManifest(ctx, appModule));
 
     const second = baseManifest({ ...ctx, branch: "beta" }, appModule);
-    await writeManifest("/out", second);
+    await writeManifest(OUT, second);
 
-    const parsed = yaml.parse(await readFile("/out/io.github.yucling.open-orpheus.yaml", "utf-8"));
+    const parsed = yaml.parse(await readFile(join(OUT, MANIFEST_NAME), "utf-8"));
     expect(parsed.branch).toBe("beta");
-    expect(vol.readdirSync("/out")).toEqual(["io.github.yucling.open-orpheus.yaml"]);
+    expect(vol.readdirSync(OUT)).toEqual(["io.github.yucling.open-orpheus.yaml"]);
   });
 });

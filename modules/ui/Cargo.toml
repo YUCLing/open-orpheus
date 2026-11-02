@@ -15,5 +15,13 @@ font-kit = { git = "https://github.com/YUCLing/font-kit.git", rev = "bf5afc70b5a
   "source-fontconfig-dlopen",
 ] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Compile FreeType + libpng from the crate's vendored sources instead of
+# probing the host for freetype2.
+freetype-sys = { version = "0.23", features = ["bundled"] }
+
+# freetype-sys links -lz; build zlib from source too, not the host's zlib.
+libz-sys = { version = "1.1", features = ["static"] }
+
 [build-dependencies]
 napi-build = "2"

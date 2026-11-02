@@ -8,7 +8,7 @@ import { createProjectTarball } from "../common/archive.ts";
 import { readPackageJson } from "../common/package-json.ts";
 import { createPrebuiltBundle } from "../common/prebuilt.ts";
 import { runStreaming } from "../common/process.ts";
-import { CARGO_ZIGBUILD_VERSION, ZIG_VERSION } from "../common/toolchain.ts";
+import { RUST_VERSION } from "../common/toolchain.ts";
 import { cleanOutDir } from "../common/util.ts";
 import { metadata } from "../resources/metadata.ts";
 import { createControlFile, resolveControlOptions, type ControlOptions } from "./control.ts";
@@ -92,8 +92,7 @@ async function stageSource(
   await rm(resolve(srcDir, "debian", "rules.ejs"));
   await createRulesFile(resolve(srcDir, "debian", "rules"), {
     name,
-    cargoZigbuild: CARGO_ZIGBUILD_VERSION,
-    zig: ZIG_VERSION,
+    rust: RUST_VERSION,
     installTools: options.installTools,
     prebuilt: !!options.prebuilt,
   });

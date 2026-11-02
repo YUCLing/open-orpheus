@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
 import Emittery from "emittery";
+import { merge } from "es-toolkit";
 
 import {
   decorateWindowTitle,
@@ -31,6 +32,7 @@ import {
   registerShutdownFinalizer,
   state as lifecycleState,
 } from "./lifecycle";
+import { toError } from "@shared/util";
 
 const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
 const managedBrowserWindows = new Set<BrowserWindow>();
@@ -290,7 +292,8 @@ export abstract class ManagedWindow<
    * or carry someone else's; it is taken, prevented, and written back by this
    * module instead. Attached only where the title is decorated.
    */
-  private readonly _pageTitleListener = (event: { preventDefault(): void }, title: string) => {
+  private readonly _pageTitleListener = (event: Electron.Event, title: string) => {
+    if (event.defaultPrevented) return; // Someone already handled this.
     event.preventDefault();
     if (title === this.decoratedTitle()) return;
     this.setTitle(title);
@@ -372,6 +375,16 @@ export abstract class ManagedWindow<
     wnd.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith("http://") || url.startsWith("https://")) {
         void shell.openExternal(url);
+        LOGGER.debug({ windowId: this.id }, "Opened external link in the default browser");
+      } else {
+        const separator = url.indexOf(":");
+        LOGGER.warn(
+          {
+            windowId: this.id,
+            scheme: separator > 0 ? url.slice(0, separator) : "unknown",
+          },
+          "Blocked window open request with an unsupported scheme"
+        );
       }
       return { action: "deny" };
     });
@@ -429,15 +442,22 @@ export abstract class ManagedWindow<
     if (title !== undefined) this._title = title;
     let wnd: BrowserWindow;
     try {
-      wnd = new BrowserWindow({ ...rest, title: this.decoratedTitle() });
+      wnd = new BrowserWindow(
+        merge(merge({}, rest), {
+          title: this.decoratedTitle(),
+          webPreferences: { disableWakeLocks: true },
+        })
+      );
     } catch (error) {
       // The policy may have been registered before the window existed; a window
       // that was never created must not leave one behind.
       if (this.isWayland()) setWindowLayerShell(this.id, null);
+      LOGGER.error({ err: toError(error), windowId: this.id }, "Failed to create managed window");
       throw error;
     }
     this.window = wnd;
     this.applyTitle();
+    LOGGER.debug({ windowId: this.id }, "Managed window created");
     return wnd;
   }
 
@@ -536,7 +556,15 @@ export abstract class ManagedWindow<
 
   /** Load a renderer route, using the dev server when one is configured. */
   protected loadGuiRoute(route = "/"): void {
-    void this.liveWindow()?.loadURL(guiUrl(route));
+    const wnd = this.liveWindow();
+    if (!wnd) return;
+    LOGGER.debug({ windowId: this.id, route }, "Loading window route");
+    void wnd.loadURL(guiUrl(route)).catch((error) => {
+      LOGGER.error(
+        { err: toError(error), windowId: this.id, route },
+        "Failed to load window route"
+      );
+    });
   }
 
   protected hideMenuBar(): void {
@@ -575,6 +603,7 @@ export abstract class ManagedWindow<
     if (this._window !== wnd) return;
     browserManagedWindowMap.delete(wnd);
     this.window = null;
+    LOGGER.debug({ windowId: this.id }, "Managed window closed");
   }
 
   /**
@@ -700,11 +729,17 @@ export abstract class ManagedWindow<
   show(): void | Promise<void> {
     // The native layer applies the window's registered policy when its surface
     // takes a role, so this stays a plain forward.
-    this.liveWindow()?.show();
+    const wnd = this.liveWindow();
+    if (!wnd) return;
+    LOGGER.debug({ windowId: this.id }, "Managed window shown");
+    wnd.show();
   }
 
   hide(): void | Promise<void> {
-    this.liveWindow()?.hide();
+    const wnd = this.liveWindow();
+    if (!wnd) return;
+    LOGGER.debug({ windowId: this.id }, "Managed window hidden");
+    wnd.hide();
   }
 
   /** Dismiss the bound window, bypassing the close policy. */
@@ -842,6 +877,7 @@ export abstract class OnDemandWindow<T extends WindowData = WindowData> extends 
     const existing = this.liveWindow();
     if (existing) {
       // The last window is still alive
+      LOGGER.debug({ windowId: this.id }, "Revealed existing on-demand window");
       existing.show();
       return;
     }
@@ -859,6 +895,7 @@ export abstract class OnDemandWindow<T extends WindowData = WindowData> extends 
       wnd.once("closed", closedHandler);
       wnd.once("ready-to-show", () => {
         wnd.off("closed", closedHandler);
+        LOGGER.debug({ windowId: this.id }, "On-demand window ready to show");
         wnd.show();
         resolve();
       });
@@ -869,6 +906,7 @@ export abstract class OnDemandWindow<T extends WindowData = WindowData> extends 
     if (this.windowState) this.windowState.alive = false;
     this.liveWindow()?.close();
     this.window = null;
+    LOGGER.debug({ windowId: this.id }, "Dismissed on-demand window");
   }
 
   abstract createWindow(state: OnDemandWindowState): BrowserWindow;
@@ -899,6 +937,10 @@ export function switchWindowPolicy(
   const wasVisible = current?.wantsToBeVisible() ?? false;
   current?.destroy();
   const next = create();
+  LOGGER.debug(
+    { previousWindowId: current?.id, windowId: next.id, wasVisible },
+    "Switched window lifecycle policy"
+  );
   current?.transferStateTo(next);
   // After the state has moved: the replacement may have been created already.
   if (bounds && next.window) {

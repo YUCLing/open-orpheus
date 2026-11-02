@@ -16,8 +16,8 @@ use napi_derive::napi;
 use serde_json::{json, Value as Json};
 use smol::stream::StreamExt;
 use zbus::message::{Body, Message, Type};
-use zbus::zvariant::{OwnedStructure, Signature};
-use zbus::{Connection, MatchRule, MessageStream};
+use zbus::names::{BusName, InterfaceName, MemberName};
+use zbus::{Connection, MatchRule, MessageStream, ObjectPath, OwnedStructure, Signature};
 
 /// The interface every D-Bus object exposes for properties.
 const PROPERTIES_INTERFACE: &str = "org.freedesktop.DBus.Properties";
@@ -511,26 +511,31 @@ fn signal_from_message(message: &Message) -> std::result::Result<DbusSignal, Str
 fn build_match_rule(matches: &DbusSignalMatch) -> std::result::Result<MatchRule<'_>, String> {
     let mut builder = MatchRule::builder().msg_type(Type::Signal);
 
+    // zbus 6 defers conversion errors in the builder to `build()`, which no
+    // longer names the offending field. Parse each field up front so the JS
+    // side keeps the specific error it reports.
     if let Some(sender) = &matches.sender {
-        builder = builder
-            .sender(sender.as_str())
+        let sender = BusName::try_from(sender.as_str())
             .map_err(|e| format!("invalid signal sender {sender:?}: {e}"))?;
+        builder = builder.sender(sender);
     }
     if let Some(path) = &matches.path {
-        builder = builder
-            .path(path.as_str())
+        let path = ObjectPath::try_from(path.as_str())
             .map_err(|e| format!("invalid signal path {path:?}: {e}"))?;
+        builder = builder.path(path);
     }
     if let Some(interface_name) = &matches.interface_name {
-        builder = builder
-            .interface(interface_name.as_str())
+        let interface_name = InterfaceName::try_from(interface_name.as_str())
             .map_err(|e| format!("invalid signal interface {interface_name:?}: {e}"))?;
+        builder = builder.interface(interface_name);
     }
     if let Some(member) = &matches.member {
-        builder = builder
-            .member(member.as_str())
+        let member = MemberName::try_from(member.as_str())
             .map_err(|e| format!("invalid signal member {member:?}: {e}"))?;
+        builder = builder.member(member);
     }
 
-    Ok(builder.build())
+    builder
+        .build()
+        .map_err(|e| format!("invalid signal match: {e}"))
 }

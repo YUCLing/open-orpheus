@@ -1,7 +1,7 @@
 import { ipcRenderer } from "electron";
 import { fireNativeCall } from "./channel";
 import Player, { AudioPlayerState } from "./Player";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 export const PLAYING_EVENTS = ["play", "playing"] as const;
 export const HALTED_EVENTS = ["pause", "stalled", "ended", "error"] as const;
@@ -10,6 +10,7 @@ export const player = new Player();
 
 void ipcRenderer.invoke("audio.getDevice").then((deviceId) => {
   if (deviceId && typeof deviceId === "string") {
+    LOGGER.debug({ deviceId }, "Initial audio output device selected");
     player.setSinkId(deviceId).catch((e) => {
       LOGGER.error({ err: toError(e) }, `Failed to set audio output device`);
     });
@@ -33,6 +34,10 @@ player.on("playinfoupdate", async (event) => {
     "audio.updatePlayInfo",
     event.data,
     player.isAv3aActive ? "av3a" : "media"
+  );
+  LOGGER.debug(
+    { songId: event.data.songId, backend: player.isAv3aActive ? "av3a" : "media" },
+    "Playback info updated with active backend"
   );
 });
 
@@ -89,14 +94,16 @@ player.on("error", async ({ data }) => {
       });
       if (player.currentId !== id) return; // Check if the current audio has changed
       if (res.status === 403) {
+        LOGGER.info({ songId: playInfo.songId }, "Song URL expired, refresh requested");
         fireNativeCall("audioplayer.onrequestrefreshsongurl", playInfo);
       } else {
         // Not because of the expired link
         throw new Error("Audio playback failed");
       }
     }
-  } catch {
+  } catch (err) {
     if (player.currentId !== id) return; // Check if the current audio has changed
+    LOGGER.error({ err: toError(err) }, "Playback failed");
     fireNativeCall("audioplayer.onEnd", id, {
       activeCode: 6,
       code: 2,

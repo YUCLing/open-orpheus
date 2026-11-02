@@ -7,13 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Logger } from "pino";
 
 /**
- * One entry of the transport target list: which pino target the module chose
- * and with which options.
+ * One entry of the transport target list: which pino target the module chose,
+ * at which level, and with which options.
  */
-type TransportTarget = { target: string; options?: Record<string, unknown> };
+type TransportTarget = {
+  target: string;
+  level?: string;
+  options?: Record<string, unknown>;
+};
 
 const hoisted = vi.hoisted(() => ({
   transportTargets: [] as TransportTarget[],
+  loggerOptions: [] as Array<{ level?: string }>,
   flushSync: vi.fn(),
   log: vi.fn(),
 }));
@@ -33,16 +38,18 @@ vi.mock("pino", () => {
     child: vi.fn(() => logger),
   } as unknown as Logger;
 
+  const pino = vi.fn((options: { level?: string }) => {
+    hoisted.loggerOptions.push(options);
+    return logger;
+  });
+
   return {
-    default: Object.assign(
-      vi.fn(() => logger),
-      {
-        transport: vi.fn((options: { targets: TransportTarget[] }) => {
-          hoisted.transportTargets.push(...options.targets);
-          return { flushSync: hoisted.flushSync, addListener: vi.fn() };
-        }),
-      }
-    ),
+    default: Object.assign(pino, {
+      transport: vi.fn((options: { targets: TransportTarget[] }) => {
+        hoisted.transportTargets.push(...options.targets);
+        return { flushSync: hoisted.flushSync, addListener: vi.fn() };
+      }),
+    }),
   };
 });
 
@@ -68,75 +75,242 @@ function setStdoutIsTty(value: boolean | undefined): void {
   else Object.defineProperty(process.stdout, "isTTY", { configurable: true, value });
 }
 
+const LOG_ENV_VARS = [
+  "OPEN_ORPHEUS_LOG_LEVEL",
+  "OPEN_ORPHEUS_LOG_LEVEL_CONSOLE",
+  "OPEN_ORPHEUS_LOG_LEVEL_FILE",
+  "OPEN_ORPHEUS_LOG_FORMAT",
+] as const;
+
+function clearLoggerEnv(): void {
+  for (const name of LOG_ENV_VARS) delete process.env[name];
+  // Removed in favor of OPEN_ORPHEUS_LOG_FORMAT; make sure a stray value in
+  // the environment cannot affect the tests.
+  delete process.env.OPEN_ORPHEUS_FORCE_PRETTY;
+}
+
 /**
  * Point the module at a fresh log directory and import it, returning the
- * targets it handed to `pino.transport`.
+ * targets it handed to `pino.transport` and the options it handed to pino.
  */
-async function importLogger(): Promise<TransportTarget[]> {
+async function importLogger(): Promise<{
+  targets: TransportTarget[];
+  options: { level?: string } | undefined;
+}> {
   hoisted.transportTargets.length = 0;
+  hoisted.loggerOptions.length = 0;
+  hoisted.log.mockClear();
   // Each import must start from a clean module registry: the target list is
   // built once, at import time.
   vi.resetModules();
   await import("../../src/main/logger");
-  return hoisted.transportTargets;
+  return {
+    targets: [...hoisted.transportTargets],
+    options: hoisted.loggerOptions.at(-1),
+  };
 }
 
 beforeEach(() => {
   logDir = mkdtempSync(join(tmpdir(), "open-orpheus-logger-"));
   setStdoutIsTty(undefined);
-  delete process.env.OPEN_ORPHEUS_FORCE_PRETTY;
+  clearLoggerEnv();
 });
 
 afterEach(() => {
   setStdoutIsTty(originalIsTty);
-  delete process.env.OPEN_ORPHEUS_FORCE_PRETTY;
+  clearLoggerEnv();
   rmSync(logDir, { recursive: true, force: true });
 });
 
 describe("log transport", () => {
-  it("sends output to stdout when stdout is not a TTY", async () => {
-    const targets = await importLogger();
+  it("writes JSON to the file and stdout by default", async () => {
+    const { targets, options } = await importLogger();
 
-    // The rotating file sink is always present; the second target is what
-    // decides where the user actually sees the logs.
+    expect(options).toEqual({ level: "info" });
     expect(targets).toHaveLength(2);
-    expect(targets[0]).toMatchObject({ target: "pino/file" });
-    expect(targets[1]).toEqual({ target: "pino/file", options: { destination: 1 } });
+    expect(targets[0]).toMatchObject({
+      target: "pino/file",
+      level: "info",
+      options: {
+        destination: join(logDir, "latest.ndjson"),
+        mkdir: true,
+      },
+    });
+    expect(targets[1]).toEqual({
+      target: "pino/file",
+      level: "info",
+      options: { destination: 1 },
+    });
   });
 
   it("prettifies when stdout is a TTY", async () => {
     setStdoutIsTty(true);
 
-    const targets = await importLogger();
+    const { targets } = await importLogger();
 
     expect(targets).toHaveLength(2);
-    expect(targets[1].target).toBe("pino-pretty");
+    expect(targets[1]).toMatchObject({
+      target: "pino-pretty",
+      level: "info",
+      options: {},
+    });
     // Pretty output goes to stdout implicitly, so the module must not also
     // open stdout as a raw file destination.
     expect(targets.some((t) => t.options?.destination === 1)).toBe(false);
   });
 
-  it("prettifies when OPEN_ORPHEUS_FORCE_PRETTY=1", async () => {
+  it("prettifies when OPEN_ORPHEUS_LOG_FORMAT=pretty", async () => {
+    process.env.OPEN_ORPHEUS_LOG_FORMAT = "pretty";
+
+    const { targets } = await importLogger();
+
+    expect(targets[1].target).toBe("pino-pretty");
+  });
+
+  it("forces JSON when OPEN_ORPHEUS_LOG_FORMAT=json even on a TTY", async () => {
+    setStdoutIsTty(true);
+    process.env.OPEN_ORPHEUS_LOG_FORMAT = "json";
+
+    const { targets } = await importLogger();
+
+    expect(targets[1]).toEqual({
+      target: "pino/file",
+      level: "info",
+      options: { destination: 1 },
+    });
+  });
+
+  it("ignores invalid formats and warns", async () => {
+    process.env.OPEN_ORPHEUS_LOG_FORMAT = "yaml";
+
+    const { targets } = await importLogger();
+
+    expect(targets[1].target).toBe("pino/file");
+    expect(hoisted.log).toHaveBeenCalledWith(
+      {
+        variable: "OPEN_ORPHEUS_LOG_FORMAT",
+        value: "yaml",
+        fallback: "auto",
+      },
+      "Invalid logger configuration value"
+    );
+  });
+
+  it("ignores the removed OPEN_ORPHEUS_FORCE_PRETTY variable", async () => {
     process.env.OPEN_ORPHEUS_FORCE_PRETTY = "1";
 
-    const targets = await importLogger();
+    const { targets } = await importLogger();
 
-    expect(targets[1].target).toBe("pino-pretty");
+    expect(targets[1]).toEqual({
+      target: "pino/file",
+      level: "info",
+      options: { destination: 1 },
+    });
+  });
+});
+
+describe("log levels", () => {
+  it("applies OPEN_ORPHEUS_LOG_LEVEL to every sink", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "debug";
+
+    const { targets, options } = await importLogger();
+
+    expect(options).toEqual({ level: "debug" });
+    expect(targets.map((target) => target.level)).toEqual(["debug", "debug"]);
   });
 
-  it("prettifies when OPEN_ORPHEUS_FORCE_PRETTY=true", async () => {
-    process.env.OPEN_ORPHEUS_FORCE_PRETTY = "true";
+  it("lets the console and file levels override the global default", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "info";
+    process.env.OPEN_ORPHEUS_LOG_LEVEL_CONSOLE = "warn";
+    process.env.OPEN_ORPHEUS_LOG_LEVEL_FILE = "debug";
 
-    const targets = await importLogger();
+    const { targets, options } = await importLogger();
 
-    expect(targets[1].target).toBe("pino-pretty");
+    // The base logger must allow the most verbose sink, then each target
+    // filters its own records.
+    expect(options).toEqual({ level: "debug" });
+    expect(targets[0]).toMatchObject({ target: "pino/file", level: "debug" });
+    expect(targets[1]).toMatchObject({ target: "pino/file", level: "warn" });
   });
 
-  it("ignores other OPEN_ORPHEUS_FORCE_PRETTY values", async () => {
-    process.env.OPEN_ORPHEUS_FORCE_PRETTY = "yes";
+  it("allows a sink level to re-enable a globally silent sink", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "silent";
+    process.env.OPEN_ORPHEUS_LOG_LEVEL_FILE = "debug";
 
-    const targets = await importLogger();
+    const { targets, options } = await importLogger();
 
-    expect(targets[1]).toEqual({ target: "pino/file", options: { destination: 1 } });
+    expect(options).toEqual({ level: "debug" });
+    expect(targets).toHaveLength(1);
+    expect(targets[0]).toMatchObject({ target: "pino/file", level: "debug" });
+  });
+
+  it("disables the console sink with a silent console level", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "debug";
+    process.env.OPEN_ORPHEUS_LOG_LEVEL_CONSOLE = "silent";
+
+    const { targets, options } = await importLogger();
+
+    expect(options).toEqual({ level: "debug" });
+    expect(targets).toHaveLength(1);
+    expect(targets[0]).toMatchObject({ target: "pino/file", level: "debug" });
+  });
+
+  it("disables the file sink with a silent file level", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "debug";
+    process.env.OPEN_ORPHEUS_LOG_LEVEL_FILE = "silent";
+
+    const { targets, options } = await importLogger();
+
+    expect(options).toEqual({ level: "debug" });
+    expect(targets).toHaveLength(1);
+    expect(targets[0]).toEqual({
+      target: "pino/file",
+      level: "debug",
+      options: { destination: 1 },
+    });
+  });
+
+  it("disables all sinks when every level is silent", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "silent";
+
+    const { targets, options } = await importLogger();
+
+    expect(options).toEqual({ level: "silent" });
+    expect(targets).toHaveLength(0);
+  });
+
+  it("falls back to info and warns for an invalid global level", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "verbose";
+
+    const { targets, options } = await importLogger();
+
+    expect(options).toEqual({ level: "info" });
+    expect(targets.map((target) => target.level)).toEqual(["info", "info"]);
+    expect(hoisted.log).toHaveBeenCalledWith(
+      {
+        variable: "OPEN_ORPHEUS_LOG_LEVEL",
+        value: "verbose",
+        fallback: "info",
+      },
+      "Invalid logger configuration value"
+    );
+  });
+
+  it("falls back to the global level for an invalid sink level", async () => {
+    process.env.OPEN_ORPHEUS_LOG_LEVEL = "debug";
+    process.env.OPEN_ORPHEUS_LOG_LEVEL_CONSOLE = "loud";
+
+    const { targets, options } = await importLogger();
+
+    expect(options).toEqual({ level: "debug" });
+    expect(targets.map((target) => target.level)).toEqual(["debug", "debug"]);
+    expect(hoisted.log).toHaveBeenCalledWith(
+      {
+        variable: "OPEN_ORPHEUS_LOG_LEVEL_CONSOLE",
+        value: "loud",
+        fallback: "debug",
+      },
+      "Invalid logger configuration value"
+    );
   });
 });

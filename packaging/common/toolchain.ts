@@ -1,20 +1,14 @@
 /**
- * Pinned versions of the build-time toolchains the packagers install.
+ * Pinned version of the build-time Rust toolchain the packagers and CI install.
  *
- * The Flatpak sandbox vendors these versions as offline sources (prebuilt
- * binaries), while the deb/rpm source packages download the very same versions
- * at build time — so both must agree.
+ * This is the single source of truth: the Flatpak sandbox vendors the toolchain
+ * as an offline source, the deb/rpm source packages install the same version at
+ * build time, and CI resolves it from here — so every consumer agrees.
  *
  * `wasm-bindgen` (Cargo.toml), Node (package.json `engines`) and pnpm
  * (`packageManager`) are deliberately absent: they are derived from the project
  * so they always track what it actually builds with.
  */
 
-/** Rust toolchain installed into the Flatpak sandbox. */
-export const RUST_VERSION = "1.96.0";
-
-/** `cargo-zigbuild` — napi-rs shells out to it for cross builds. */
-export const CARGO_ZIGBUILD_VERSION = "0.23.4";
-
-/** Zig, required by `cargo-zigbuild` as the linker/driver. */
-export const ZIG_VERSION = "0.16.0";
+/** Rust toolchain installed by the packagers and CI. */
+export const RUST_VERSION = "1.99.1";

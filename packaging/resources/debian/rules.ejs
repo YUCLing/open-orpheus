@@ -15,29 +15,16 @@ override_dh_auto_build:
 <% } else { %>
 	set -e
 <% if (installTools !== false) { %>
-	# Install the build toolchain (rust/node/pnpm) in a temp HOME.
+	# Install the build toolchain (rust/node/pnpm) in a temp HOME. The Rust
+	# toolchain version comes from packaging/common/toolchain.ts.
 	export HOME="$$(mktemp -d)"
 	export CARGO_HOME="$$HOME/.cargo"
 	export RUSTUP_HOME="$$HOME/.rustup"
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain <%- rust %>
 	. "$$HOME/.cargo/env"
 	rustup target add wasm32-unknown-unknown
 	WASM_BINDGEN="$$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $$3); print $$3; exit }' Cargo.toml)"
 	cargo install "wasm-bindgen-cli@$${WASM_BINDGEN}"
-	# Install cargo-zigbuild and zig (napi-rs shells out to them for cross
-	# builds). Zig is kept in its extraction layout next to its std lib and only
-	# symlinked onto PATH, because zig resolves its lib directory relative to its
-	# own executable.
-	BUILD_ARCH="$$(uname -m)"
-	curl --proto '=https' --tlsv1.2 -sSfL \
-	  "https://github.com/rust-cross/cargo-zigbuild/releases/download/v<%- cargoZigbuild %>/cargo-zigbuild-$${BUILD_ARCH}-unknown-linux-gnu.tar.xz" \
-	  | tar xJ -C "$$HOME"
-	install -Dm755 "$$HOME/cargo-zigbuild-$${BUILD_ARCH}-unknown-linux-gnu/cargo-zigbuild" \
-	  "$$CARGO_HOME/bin/cargo-zigbuild"
-	curl --proto '=https' --tlsv1.2 -sSfL \
-	  "https://ziglang.org/download/<%- zig %>/zig-$${BUILD_ARCH}-linux-<%- zig %>.tar.xz" \
-	  | tar xJ -C "$$HOME"
-	ln -sf "$$HOME/zig-$${BUILD_ARCH}-linux-<%- zig %>/zig" "$$CARGO_HOME/bin/zig"
 	export NVM_DIR="$$HOME/.nvm"
 	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
 	. "$$HOME/.nvm/nvm.sh"

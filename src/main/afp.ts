@@ -216,7 +216,10 @@ function filterByF227Shape(peaks: Peak[], matrix: Float32Array[]): Peak[] {
 function extractPeaks(matrix: Float32Array[], cfg = DEFAULT_EXTRACT_CONFIG): Peak[] {
   const bandBins = matrix.length;
   const frameCount = matrix[0]?.length ?? 0;
-  if (frameCount < MIN_FRAMES) return [];
+  if (frameCount < MIN_FRAMES) {
+    LOGGER.warn({ frameCount, minimum: MIN_FRAMES }, "Not enough audio frames for fingerprint");
+    return [];
+  }
 
   let peaks: Peak[] = [];
   for (let f = 0; f < bandBins; f++) {
@@ -298,9 +301,11 @@ function encryptRawFingerprint(raw: Buffer): string {
 
 export function GenerateFP(samples: Float32Array): string {
   const duration = samples.length / SAMPLE_RATE;
+  LOGGER.debug({ sampleCount: samples.length, duration }, "Generating audio fingerprint");
   const power = stftPower(samples);
   const matrix = buildFeatureMatrix(power);
   const peaks = extractPeaks(matrix);
+  LOGGER.debug({ peaks: peaks.length, duration }, "Audio fingerprint peaks extracted");
   return encryptRawFingerprint(buildRawFingerprint(duration, peaks));
 }
 

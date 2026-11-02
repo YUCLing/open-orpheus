@@ -5,7 +5,7 @@ import {
   supportsNativeWaylandPopup,
 } from "@open-orpheus/window";
 
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { events, LifecycleState, state } from "../lifecycle";
 import { runMenuCallbacks } from "./lifecycle";
 import {
@@ -30,8 +30,13 @@ export async function initializeWaylandPopupSupport(parent: BrowserWindow): Prom
   }
   if (parent.isDestroyed() || state === LifecycleState.Quitting) return false;
   try {
-    if (getDesktopEnvironment() !== DesktopEnvironment.Wayland || !supportsNativeWaylandPopup()) {
+    const desktopEnvironment = getDesktopEnvironment();
+    if (desktopEnvironment !== DesktopEnvironment.Wayland || !supportsNativeWaylandPopup()) {
       nativePopupSupported = false;
+      LOGGER.debug(
+        { desktopEnvironment },
+        "Native Wayland popups unavailable; menus will use the overlay"
+      );
       return false;
     }
   } catch (error) {
@@ -43,6 +48,11 @@ export async function initializeWaylandPopupSupport(parent: BrowserWindow): Prom
       // Missing role data, timeouts and cancellation do not prove incompatibility.
       if (result !== null && nativePopupSupported === undefined) {
         nativePopupSupported = result;
+        if (result) {
+          LOGGER.debug("Native Wayland popup support confirmed");
+        }
+      } else if (result === null) {
+        LOGGER.trace("Wayland popup support probe was inconclusive");
       }
       return nativePopupSupported ?? false;
     })

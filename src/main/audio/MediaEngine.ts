@@ -7,8 +7,8 @@ import mime from "mime";
 import type { AudioPlayInfo } from "../../preload/Player";
 import { mainWindow } from "../window";
 import { playCacheManager } from "../cache";
-import { normalizePath } from "../util";
-import { toError } from "../../util";
+import { normalizePath } from "../util/path";
+import { toError } from "@shared/util";
 import { OnlineStreamer } from "./OnlineStreamer";
 
 enum MediaType {
@@ -79,6 +79,10 @@ export class MediaEngine {
     if (playInfo.type === 0) {
       // Local File Play
       playInfo.path = normalizePath(playInfo.path);
+      LOGGER.info(
+        { songId: playInfo.songId, path: playInfo.path },
+        "Local media playback activated"
+      );
       this.state = { type: MediaType.Local, playInfo, path: playInfo.path };
       return;
     }
@@ -86,6 +90,7 @@ export class MediaEngine {
 
     // URL Play
     const songId = playInfo.songId;
+    LOGGER.info({ songId, bitrate: playInfo.bitrate }, "Online media playback activated");
     const streamer = new OnlineStreamer(playInfo.musicurl);
 
     streamer.on("progress", (e) => {
@@ -105,6 +110,9 @@ export class MediaEngine {
             playInfoStr: playInfo.playInfoStr,
             volumeGain: 0,
             fileSize: buf.length,
+          })
+          .then(() => {
+            LOGGER.info({ songId, bytes: buf.length }, "Streamed track cached");
           })
           .catch((err) => {
             LOGGER.error({ err: toError(err) }, `Failed to cache track`);
@@ -128,6 +136,12 @@ export class MediaEngine {
   async stop(): Promise<void> {
     const current = this.state;
     this.state = null;
+    if (current) {
+      LOGGER.debug(
+        { source: current.type === MediaType.URL ? "url" : "local" },
+        "Media engine stopped"
+      );
+    }
     if (current?.type === MediaType.URL) {
       this.destroyInBackground(current.streamer);
     }

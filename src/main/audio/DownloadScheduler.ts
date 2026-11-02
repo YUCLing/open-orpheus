@@ -1,4 +1,4 @@
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 import { client } from "../request";
 
 import type ChunkTracker from "./ChunkTracker";
@@ -80,6 +80,7 @@ export default class DownloadScheduler {
   startBackground() {
     if (this.backgroundStarted) return;
     this.backgroundStarted = true;
+    LOGGER.debug({ totalLength: this.getTotalLength() }, "Background download started");
     this.runBackground().catch((error: unknown) => {
       if (this.destroyed || this.backgroundController.signal.aborted) return;
       this.onError(toError(error));
@@ -214,6 +215,7 @@ export default class DownloadScheduler {
 
         if (isFatalBackgroundError(normalizedError)) return;
 
+        LOGGER.debug({ retryDelayMs: this.backgroundRetryDelay }, "Retrying background download");
         await delay(this.backgroundRetryDelay, this.backgroundController.signal);
         this.backgroundRetryDelay = Math.min(
           this.backgroundRetryDelay * 2,

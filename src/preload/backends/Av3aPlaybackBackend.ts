@@ -71,6 +71,7 @@ export class Av3aPlaybackBackend implements PlaybackBackend {
     if (!this.attached) {
       await this.player.attach(this.effectInput);
       this.attached = true;
+      LOGGER.debug("AV3A worklet attached");
     }
     const opened = new Promise<void>((resolve) => {
       this.openResolve = resolve;
@@ -83,9 +84,13 @@ export class Av3aPlaybackBackend implements PlaybackBackend {
           setTimeout(() => reject(new Error("AV3A open timed out")), 15_000);
         }),
       ]);
-    } catch {
+    } catch (err) {
       this.openResolve = null;
-      // Failures surface through onError -> sink("error").
+      // Failures surface through onError -> sink("error"); only the open
+      // timeout has no such path, so it is reported here.
+      if (err instanceof Error && err.message === "AV3A open timed out") {
+        LOGGER.warn({ songId: playInfo.songId }, "AV3A playback open timed out");
+      }
     }
   }
 

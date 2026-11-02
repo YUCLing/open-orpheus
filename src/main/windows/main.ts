@@ -8,7 +8,7 @@ import { DesktopEnvironment, getDesktopEnvironment } from "@open-orpheus/window"
 import { ManagedWindow, setMainWindow } from "../window";
 import { window as miniPlayerWindow } from "./mini-player";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 function getWindowState(wnd: BrowserWindow): "minimize" | "maximize" | "restore" {
   return wnd.isMinimized() ? "minimize" : wnd.isMaximized() ? "maximize" : "restore";
@@ -89,6 +89,7 @@ function setupMainWindow(mainWindow: BrowserWindow) {
   });
 
   mainWindow.on("show", () => {
+    LOGGER.debug("Main window shown");
     // Make sure mini player doesn't show together with main window
     void miniPlayerWindow.hide();
   });
@@ -107,7 +108,11 @@ function setupMainWindow(mainWindow: BrowserWindow) {
   setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);
 
   // Load App URL
-  void mainWindow.loadURL("orpheus://orpheus/pub/app.html");
+  LOGGER.debug("Loading main window");
+  void mainWindow.loadURL("orpheus://orpheus/pub/app.html").then(
+    () => LOGGER.info("Main window loaded"),
+    (error) => LOGGER.error({ err: toError(error) }, "Failed to load main window")
+  );
 
   setMainWindow(mainWindow);
 }
@@ -118,6 +123,7 @@ class MainWindow extends ManagedWindow {
     // Closing the main window asks the app to shut down; quitting closes it.
     this.requestCloseApproval(() => this.send("channel.call", "winhelper.onclose"));
     setupMainWindow(this.createBrowserWindow(mainWindowOptions));
+    LOGGER.info({ windowId: this.id }, "Main window created");
   }
 }
 

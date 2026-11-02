@@ -1,12 +1,25 @@
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
+
+const hoisted = vi.hoisted(() => {
+  const path = process.getBuiltinModule("node:path");
+  const os = process.getBuiltinModule("node:os");
+  const testRoot = path.resolve(os.tmpdir(), "open-orpheus-test");
+  return {
+    testRoot,
+    getPath: (name: string) => path.join(testRoot, name),
+  };
+});
+
+/** Host-native stand-in for the paths Electron would report. */
+const temp = join(hoisted.testRoot, "temp");
 
 // `folders.ts` only reads Electron's paths, so no fs mock is needed here.
 vi.mock("electron", () => ({
   app: {
     isPackaged: false,
-    getPath: vi.fn((name: string) => `/tmp/open-orpheus-test/${name}`),
+    getPath: hoisted.getPath,
   },
   BrowserWindow: vi.fn(),
   screen: { getDisplayMatching: vi.fn() },
@@ -32,8 +45,9 @@ import {
 
 describe("folders", () => {
   it("derives the temp directories from the OS temp path", () => {
-    expect(downloadTemp).toBe(join("/tmp/open-orpheus-test/temp", "open-orpheus-download-temp"));
-    expect(streamerTemp).toBe(join("/tmp/open-orpheus-test/temp", "open-orpheus-streamer-temp"));
+    const tempDir = join(temp, "open-orpheus-temp");
+    expect(downloadTemp).toBe(join(tempDir, "download"));
+    expect(streamerTemp).toBe(join(tempDir, "streamer"));
   });
 
   it("uses the repository data directory while unpackaged", () => {
@@ -42,7 +56,7 @@ describe("folders", () => {
 
   it("derives the data sub-directories", () => {
     for (const sub of [log, pack, userdata, storage, wasm, defaultCache]) {
-      expect(sub.startsWith(data + "/")).toBe(true);
+      expect(sub.startsWith(data + sep)).toBe(true);
     }
     expect(log).toBe(join(data, "logs"));
     expect(pack).toBe(join(data, "package"));
@@ -63,11 +77,14 @@ describe("folders", () => {
   });
 
   it("switches the cache and download paths", () => {
-    setCachePath("/mnt/media/cache");
-    setDownloadPath("/mnt/media/downloads");
+    const cachePath = resolve("mnt", "media", "cache");
+    const downloadPath = resolve("mnt", "media", "downloads");
 
-    expect(cache).toBe("/mnt/media/cache");
-    expect(download).toBe("/mnt/media/downloads");
+    setCachePath(cachePath);
+    setDownloadPath(downloadPath);
+
+    expect(cache).toBe(cachePath);
+    expect(download).toBe(downloadPath);
 
     setCachePath(defaultCache);
     setDownloadPath("");

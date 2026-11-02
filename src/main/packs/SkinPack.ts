@@ -128,6 +128,7 @@ export default class SkinPack extends Pack {
 
   async readPack(verify = true): Promise<void> {
     const { sigSize, zipOffset } = await parseHeader(this.path);
+    LOGGER.debug({ file: this.path, sigSize, zipOffset }, "Skin pack header parsed");
 
     if (verify) {
       const fh = await open(this.path, "r");
@@ -137,6 +138,7 @@ export default class SkinPack extends Pack {
 
         if (!(await verifySignature(sig, () => createReadStream(this.path, { start: zipOffset }))))
           throw new Error("Skin pack signature verification failed");
+        LOGGER.debug({ file: this.path }, "Skin pack signature verified");
       } finally {
         await fh.close();
       }

@@ -5,14 +5,14 @@ import { Protocol } from "electron";
 import mime from "mime";
 
 import type { AudioPlayInfo } from "../preload/Player";
-import { sanitizeRelativePath } from "./util";
+import { sanitizeRelativePath } from "./util/path";
 import { data as dataDir, pack as packageDir } from "./folders";
 import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
 import { kv as settings } from "./settings";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 import { decodeNcae } from "./ncae";
-import { registerIpcHandlers } from "../bridge/register";
-import type { Av3aContract } from "../bridge/contracts/av3a-api";
+import { registerIpcHandlers } from "./bridge/register";
+import type { Av3aContract } from "@shared/contracts/av3a-api";
 import { MediaEngine } from "./audio/MediaEngine";
 import { Av3aEngine } from "./av3a/Av3aEngine";
 import { isAv3aFile } from "./av3a/detect";
@@ -109,6 +109,10 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
             },
           });
         } catch (err) {
+          LOGGER.warn(
+            { err: toError(err), path: requestUrl.pathname },
+            "Failed to read audio resource"
+          );
           return new Response(toError(err).message, { status: 500 });
         }
       }
@@ -120,6 +124,7 @@ export default function registerAudioStreamerScheme(protocol: Protocol) {
 lifecycleEvents.on("mainwindowcreated", (e) => {
   const mainWindow = e.data;
   mainWindow.webContents.ipc.handle("audio.setDevice", async (e, deviceId) => {
+    LOGGER.info({ deviceId }, "Audio output device changed");
     return settings.set("audio.currentDevice", deviceId);
   });
 
@@ -171,7 +176,17 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
       // (Av3aEngine) and started by the renderer through the `av3a` bridge once
       // its worklet + channel are ready, so nothing is registered here — the
       // <audio> element is never pointed at an AV3A stream.
-      if (engine === "av3a") return;
+      if (engine === "av3a") {
+        LOGGER.debug(
+          { songId: playInfo.songId, source: playInfo.type === 4 ? "url" : "local" },
+          "Routing playback to the AV3A engine"
+        );
+        return;
+      }
+      LOGGER.debug(
+        { songId: playInfo.songId, source: playInfo.type === 4 ? "url" : "local" },
+        "Routing playback to the media engine"
+      );
       await mediaEngine.activate(playInfo);
     }
   );

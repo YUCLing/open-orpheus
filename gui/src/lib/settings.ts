@@ -1,7 +1,7 @@
 import Emittery from "emittery";
 
-import type { SettingsEvents } from "$sharedTypes/settings";
-import type { SettingsContract } from "$bridge/contracts/settings-api";
+import type { SettingsEvents } from "@shared/types/settings";
+import type { SettingsContract } from "@shared/contracts/settings-api";
 
 import { getBridge } from "./bridge";
 

@@ -1,4 +1,4 @@
-import type { LyricLine, LyricWord, Lyrics } from "$sharedTypes/lyrics";
+import type { LyricLine, LyricWord, Lyrics } from "@shared/types/lyrics";
 
 /**
  * Parse a timestamp tag like `[mm:ss.xx]` or `[mm:ss:xx]` into milliseconds.
@@ -64,6 +64,8 @@ export function parseLrc(lrc: string): Lyrics {
 
   // Sort by timestamp
   entries.sort((a, b) => a.time - b.time);
+
+  LOGGER.debug({ lines: entries.length }, "Parsed LRC lyrics");
 
   // Convert to LyricLine[], inferring end_time from the next line
   return entries.map((entry, i) => {
@@ -141,6 +143,8 @@ export function parseYrc(yrc: string): Lyrics {
       });
     }
   }
+
+  LOGGER.debug({ lines: lines.length }, "Parsed YRC lyrics");
 
   return lines;
 }

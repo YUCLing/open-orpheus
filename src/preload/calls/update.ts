@@ -8,6 +8,7 @@ registerCallHandler<[string], [string, string]>("update.getVersion", (module) =>
   } else if (module === "native") {
     return [NATIVE_VERSION, "64"];
   }
+  LOGGER.warn({ module }, "Unsupported update module");
   return ["", "64"];
 });
 

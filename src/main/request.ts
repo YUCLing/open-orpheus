@@ -74,6 +74,9 @@ export async function getProxyAgent(config?: ProxyConfiguration): Promise<Agents
       };
     }
   }
+
+  LOGGER.warn({ type: config.Type }, "Unknown proxy type, falling back to a direct connection");
+  return undefined;
 }
 
 export let client: Got = got.extend({
@@ -99,9 +102,12 @@ export function setProxy(agents: Agents | undefined) {
   client = client.extend({
     agent: agents,
   });
+  LOGGER.debug({ configured: agents !== undefined }, "Applied proxy configuration to HTTP client");
 }
 
 export function setupRequestInterceptors() {
+  LOGGER.debug("Installing request interceptors on the default session");
+
   session.defaultSession.webRequest.onBeforeSendHeaders(async (details, callback) => {
     const url = new URL(details.url);
 

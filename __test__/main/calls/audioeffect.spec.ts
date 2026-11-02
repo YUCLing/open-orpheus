@@ -8,7 +8,7 @@ vi.mock("../../../src/main/audio", () => ({
   default: vi.fn(),
 }));
 
-import { NcaeType } from "$sharedTypes/ncae";
+import { NcaeType } from "@shared/types/ncae";
 
 import { dispatcher } from "../../../src/main/calls";
 import { installLoggerStub } from "../../helpers/globals";

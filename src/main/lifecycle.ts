@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import Emittery from "emittery";
 
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 export type StartupTask =
   | {
@@ -71,6 +71,7 @@ export function setLifecycleState<K extends LifecycleState>(
       : [eventData: StateEventData[K]]
     : []
 ): void {
+  LOGGER.debug({ state: LifecycleState[lifecycleState] }, "Lifecycle state changed");
   state = lifecycleState;
   const event = STATE_EVENT_MAP[lifecycleState as keyof typeof STATE_EVENT_MAP];
   if (!event) return;
@@ -211,6 +212,8 @@ async function runShutdownTasks(): Promise<void> {
   const startedAt = Date.now();
   const queue = [...shutdownTasks].reverse();
 
+  LOGGER.info({ tasks: queue.length }, "Running shutdown tasks");
+
   for (let index = 0; index < queue.length; index++) {
     const task = queue[index];
 
@@ -345,10 +348,12 @@ export function installLifecycle(options: LifecycleOptions = {}): void {
     if (shutdownState !== "idle") {
       // A second signal, or a signal while cleanup is already running: the
       // user is asking twice, so stop waiting for the tasks.
+      LOGGER.warn({ signal }, "Received another shutdown signal, exiting immediately");
       exitNow(code);
       return;
     }
 
+    LOGGER.info({ signal }, "Received shutdown signal");
     shutdownState = "running";
     setLifecycleState(LifecycleState.Quitting);
     void runShutdownTasks()

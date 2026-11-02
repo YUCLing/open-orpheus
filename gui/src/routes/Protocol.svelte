@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ManageContract } from "$bridge/contracts/manage-api";
+  import type { ManageContract } from "@shared/contracts/manage-api";
   import { getBridge } from "$lib/bridge";
   import { Button } from "$lib/components/ui/button";
 

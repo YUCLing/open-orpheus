@@ -1,7 +1,7 @@
 import { ipcRenderer } from "electron";
 
 import type { AudioPlayInfo } from "../Player";
-import type { Av3aContract } from "../../bridge/contracts/av3a-api";
+import type { Av3aContract } from "@shared/contracts/av3a-api";
 
 /**
  * Typed client for the main-process `av3a` bridge (the player window).
@@ -15,6 +15,7 @@ import type { Av3aContract } from "../../bridge/contracts/av3a-api";
  */
 export const av3aBridge = {
   start(playInfo: AudioPlayInfo): Promise<void> {
+    LOGGER.debug({ songId: playInfo.songId }, "AV3A decode start requested");
     return ipcRenderer.invoke("av3a.start", playInfo) as Promise<void>;
   },
   stop(): Promise<void> {

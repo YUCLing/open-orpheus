@@ -70,6 +70,7 @@ export default class LyricCacheManager {
     const cached = this.entries.get(key);
     if (cached?.content !== undefined) {
       cached.mtime = Date.now();
+      LOGGER.debug({ songId }, "Lyric cache hit");
       return cached.content;
     }
 
@@ -85,8 +86,10 @@ export default class LyricCacheManager {
         this.entries.set(key, { mtime: Date.now(), size, content });
         this.totalSizeBytes += size;
       }
+      LOGGER.debug({ songId, bytes: size }, "Lyric cache hit");
       return content;
     } catch {
+      LOGGER.debug({ songId }, "Lyric cache miss");
       if (cached) {
         this.totalSizeBytes -= cached.size;
         this.entries.delete(key);
@@ -141,6 +144,10 @@ export default class LyricCacheManager {
     if (this.evictionPromise) return this.evictionPromise;
 
     this.evictionPromise = (async () => {
+      LOGGER.debug(
+        { totalBytes: this.totalSizeBytes, maxSizeBytes: this.maxSizeBytes },
+        "Evicting lyric cache entries"
+      );
       while (this.totalSizeBytes > this.maxSizeBytes) {
         const sortedEntries = [...this.entries.entries()]
           .map(([name, { mtime, size }]) => ({ name, mtime, size }))

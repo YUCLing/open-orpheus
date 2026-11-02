@@ -17,7 +17,7 @@ Source1:        %{name}-%{version}-prebuilt.tar.gz
 
 AutoReqProv:    no
 Requires:       (nss or mozilla-nss), gtk3
-BuildRequires:  gcc, gcc-c++, make, git, curl, freetype-devel
+BuildRequires:  gcc, gcc-c++, make, git, curl
 
 %description
 <%- description %>
@@ -37,28 +37,13 @@ tar xzf %{_sourcedir}/%{name}-%{version}-prebuilt.tar.gz -C %{_builddir}/%{name}
 # Use a writable HOME for toolchain installs
 export HOME="$(mktemp -d)"
 
-# Install Rust toolchain for native modules
+# Install the Rust toolchain pinned in packaging/common/toolchain.ts
 export CARGO_HOME="$HOME/.cargo"
 export RUSTUP_HOME="$HOME/.rustup"
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain <%- rust %>
 . "$HOME/.cargo/env"
 rustup target add wasm32-unknown-unknown
 cargo install "wasm-bindgen-cli@<%- wasmBindgen %>"
-
-# Install cargo-zigbuild and zig (napi-rs shells out to them for cross builds).
-# The Rust binary links against the build host's glibc; Zig is kept in its
-# extraction layout next to its std lib and only symlinked onto PATH, because
-# zig resolves its lib directory relative to its own executable.
-BUILD_ARCH="$(uname -m)"
-curl --proto '=https' --tlsv1.2 -sSfL \
-  "https://github.com/rust-cross/cargo-zigbuild/releases/download/v<%- cargoZigbuild %>/cargo-zigbuild-${BUILD_ARCH}-unknown-linux-gnu.tar.xz" \
-  | tar xJ -C "$HOME"
-install -Dm755 "$HOME/cargo-zigbuild-${BUILD_ARCH}-unknown-linux-gnu/cargo-zigbuild" \
-  "$CARGO_HOME/bin/cargo-zigbuild"
-curl --proto '=https' --tlsv1.2 -sSfL \
-  "https://ziglang.org/download/<%- zig %>/zig-${BUILD_ARCH}-linux-<%- zig %>.tar.xz" \
-  | tar xJ -C "$HOME"
-ln -sf "$HOME/zig-${BUILD_ARCH}-linux-<%- zig %>/zig" "$CARGO_HOME/bin/zig"
 
 # Install nvm and Node.js
 export NVM_DIR="$HOME/.nvm"
@@ -78,7 +63,7 @@ pnpm install --frozen-lockfile
 ORIGINAL_RUSTFLAGS="$RUSTFLAGS"
 export RUSTFLAGS="$(printf '%s' "$RUSTFLAGS" | sed 's|-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes||g')"
 
-# Strip CFLAGS/CXXFLAGS that zig cc / zig c++ cannot understand.
+# Strip CFLAGS/CXXFLAGS that the cross-compilation toolchain cannot understand.
 # Remove -flto=auto, -ffat-lto-objects, -fno-omit-frame-pointer,
 # and -mno-omit-leaf-frame-pointer.
 strip_flags() {

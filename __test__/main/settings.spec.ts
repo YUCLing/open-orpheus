@@ -32,6 +32,11 @@ vi.mock("keyv", () => {
   };
 });
 
+// `settings` registers a shutdown task; the real lifecycle module imports
+// Electron, which is unnecessary here (and downloads the binary outside it).
+vi.mock("../../src/main/lifecycle", () => ({
+  registerShutdownTask: vi.fn(),
+}));
 vi.mock("../../src/main/database", () => ({ nativeDb: {} }));
 vi.mock("../../src/main/database/KeyvSqliteDriver", () => ({
   default: vi.fn(() => ({})),

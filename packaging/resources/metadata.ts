@@ -77,6 +77,7 @@ export const metadata: Metadata = {
       "--socket=pulseaudio",
       "--share=network",
       "--talk-name=org.kde.StatusNotifierWatcher",
+      "--own-name=io.github.yucling.OpenOrpheus",
     ],
   },
 };

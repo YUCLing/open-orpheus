@@ -15,7 +15,7 @@ import Emittery from "emittery";
 import { Keyv, KeyvHooks } from "keyv";
 import { KeyvSqlite } from "@keyv/sqlite";
 
-import { SettingsEvents } from "$sharedTypes/settings";
+import { SettingsEvents } from "@shared/types/settings";
 import createKeyvSqliteDriver from "./database/KeyvSqliteDriver";
 import { nativeDb } from "./database";
 import { registerShutdownTask } from "./lifecycle";
@@ -34,6 +34,8 @@ registerShutdownTask({
 });
 
 export function initialize() {
+  LOGGER.debug({ entries: Object.keys(KV_ENTRIES).length }, "Initializing the settings store");
+
   kv = new Keyv({
     namespace: "settings",
     store: new KeyvSqlite({
@@ -62,6 +64,7 @@ export function initialize() {
 
   events = new Emittery();
   kv.onHook(KeyvHooks.BEFORE_SET, ({ key, value }) => {
+    LOGGER.debug({ key }, "Setting updated");
     void events.emit("change", { key, value });
   });
   kv.onHook(KeyvHooks.AFTER_DELETE, ({ key }) => {

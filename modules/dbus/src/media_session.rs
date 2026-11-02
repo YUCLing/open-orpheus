@@ -23,6 +23,14 @@ pub enum PlaybackStatus {
     Stopped,
 }
 
+#[napi(string_enum)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum LoopStatus {
+    None,
+    Track,
+    Playlist,
+}
+
 #[allow(dead_code)]
 struct Playlist {}
 
@@ -37,6 +45,8 @@ pub enum MediaSessionEvents {
     Seek { delta: i64 },
     SetPosition { position: i64 },
     SetVolume { volume: f64 },
+    SetLoopStatus { loop_status: LoopStatus },
+    SetShuffle { shuffle: bool },
 }
 
 type EventHandler = Arc<ThreadsafeFunction<MediaSessionEvents, EventReturn>>;
@@ -158,6 +168,20 @@ impl MediaSession {
         let state = self.state.clone();
         napi_deferred_task!(env, async {
             mpris::update_volume(&conn, &state, volume).await
+        })
+    }
+
+    #[napi(ts_return_type = "Promise<void>")]
+    pub fn set_playback_mode<'a>(
+        &'a self,
+        env: &'a Env,
+        loop_status: LoopStatus,
+        shuffle: bool,
+    ) -> Result<Object<'a>> {
+        let conn = self.conn.clone();
+        let state = self.state.clone();
+        napi_deferred_task!(env, async {
+            mpris::update_playback_mode(&conn, &state, loop_status, shuffle).await
         })
     }
 

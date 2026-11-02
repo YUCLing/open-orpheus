@@ -3,9 +3,19 @@ import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
 import { fireNativeCall } from "../channel";
 import { AudioPlayInfo } from "../Player";
-import { toError } from "../../util";
+import { toError } from "@shared/util";
 
 registerCallHandler<[string, AudioPlayInfo], void>("audioplayer.load", async (id, playInfo) => {
+  LOGGER.debug(
+    {
+      playId: playInfo.playId,
+      songId: playInfo.songId,
+      type: playInfo.type,
+      quality: playInfo.songQuality,
+    },
+    "Audio load requested"
+  );
+  ipcRenderer.send("player.playidupdate", playInfo.playId);
   await player.load(playInfo);
 });
 
@@ -19,11 +29,13 @@ registerCallHandler<[AudioPlayInfo], void>(
 
 registerCallHandler<[string], void>("audioplayer.play", async (id) => {
   if (player.currentId !== id) return;
+  LOGGER.debug({ id }, "Audio playback requested");
   await player.play();
 });
 
 registerCallHandler<[string, string], void>("audioplayer.pause", (id) => {
   if (player.currentId !== id) return;
+  LOGGER.debug({ id }, "Audio pause requested");
   player.pause();
 });
 
@@ -151,6 +163,7 @@ registerCallHandler<[string, { device: AudioDeviceInit; type: string }], void>(
   "audioplayer.init",
   async (kind, { device }) => {
     if (kind === "device") {
+      LOGGER.debug({ deviceId: device.deviceId }, "Audio output device requested");
       await Promise.allSettled([
         ipcRenderer.invoke("audio.setDevice", device.deviceId),
         player.setSinkId(device.deviceId),

@@ -73,6 +73,7 @@ registerCallHandler<[SetCookie], [boolean]>("browser.setCookie", async (_, cooki
       maxAge: cookie["max-age"],
       sameSite: cookie.samesite,
     });
+    LOGGER.debug({ name: cookie.Name, domain: cookie.Domain }, "Cookie set");
   } catch (error) {
     LOGGER.error({ cookie: cookie.Name, err: error }, "Failed to set cookie: %s");
     return [false];
@@ -86,5 +87,6 @@ registerCallHandler<[string, string], [number]>("browser.removeCookie", async (_
     return [0];
   }
   await removeCookie(url, name);
+  LOGGER.debug({ name }, "Cookie removed");
   return [1];
 });

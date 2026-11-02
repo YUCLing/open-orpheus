@@ -99,6 +99,8 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
 
   async start() {
     try {
+      LOGGER.info({ dest: this.path }, "Download started");
+
       // Ensure the directory exists
       await fs.mkdir(dirname(this.path), { recursive: true });
 
@@ -173,10 +175,12 @@ export class DownloadTask extends Emittery<DownloadTaskEvents> {
   }
 
   pause() {
+    LOGGER.debug({ dest: this.path }, "Download paused");
     this.request?.pause();
   }
 
   resume() {
+    LOGGER.debug({ dest: this.path }, "Download resumed");
     this.lastTime = performance.now();
     // Use actual transferred bytes instead of 0 to prevent a massive instantSpeed spike
     this.lastBytes = this.request?.downloadProgress?.transferred || 0;

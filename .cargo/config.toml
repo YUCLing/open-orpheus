@@ -1,0 +1,23 @@
+# The `napi build --use-napi-cross` builds link with the crosstool-NG
+# toolchain from `@napi-rs/cross-toolchain`, whose GNU ld is 2.36.1.
+#
+# That ld mis-handles the `R_X86_64_GOTPCRELX` relaxation for
+# `pushq sym@GOTPCREL(%rip)`. Once `sym` is bound locally -- which is the case
+# for every symbol in a cdylib, because rustc hides them behind a version
+# script -- ld rewrites that push into a direct `call sym`, keeping the
+# instruction length with a redundant `0x67` prefix.
+#
+# SQLite hits this in `sqlite3_overload_function()`: it pushes the address of
+# `sqlite3_free` as the `xDestroy` argument of `sqlite3_create_function_v2()`.
+# With the push turned into a call, that stack argument is never written, so
+# the callee, its epilogue and the surrounding frame all run one word off:
+# saved registers are restored from the wrong slots (r14 ends up holding the
+# return address), `ret` jumps into a data page, and any nested allocation can
+# reach PartitionAlloc with a stack misaligned by 8 -- which faults on the
+# `movdqa` in `PartitionRoot::Alloc`. The process dies with SIGSEGV shortly
+# after `new Database(...)` starts opening the DB.
+#
+# `--no-relax` keeps the GOT load intact. The host linker (LLD) accepts the
+# flag too, so this is safe for ordinary native builds as well.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,--no-relax"]

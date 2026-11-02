@@ -21,10 +21,14 @@ registerCallHandler<
   ],
   void
 >("update.startUpdate", (event) => {
+  LOGGER.warn("In-app update is not supported");
   // Let update window show first before the dialog (if update is triggered manually)
   setTimeout(async () => {
     const wnd = BrowserWindow.fromWebContents(event.sender);
-    if (!wnd) throw new Error("Main window's dead?");
+    if (!wnd) {
+      LOGGER.error("Failed to show update dialog: main window is unavailable");
+      throw new Error("Main window's dead?");
+    }
     await dialog.showMessageBox(wnd, {
       title: "Open Orpheus",
       message:

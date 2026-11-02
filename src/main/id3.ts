@@ -50,6 +50,7 @@ export function commentToID3Json(comment: string | null): string | null {
     if (!json) return null;
     return json;
   } catch {
+    LOGGER.warn("Failed to decrypt ID3 comment");
     return null;
   }
 }
@@ -67,6 +68,7 @@ export function commentToID3Metadata(comment: string | null): ID3MusicMetadata |
     if (!json.startsWith("music:")) return null;
     return JSON.parse(json.substring("music:".length));
   } catch {
+    LOGGER.warn("Failed to parse ID3 metadata JSON");
     return null;
   }
 }

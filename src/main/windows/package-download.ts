@@ -3,8 +3,9 @@ import path from "node:path";
 import type { BrowserWindowConstructorOptions } from "electron";
 
 import packManager from "../pack";
-import { PackageDownloadReason } from "$sharedTypes/package-download";
+import { PackageDownloadReason } from "@shared/types/package-download";
 import { ManagedWindow } from "../window";
+import { toError } from "@shared/util";
 
 const packageDownloadWindowOptions = {
   width: 1000,
@@ -19,8 +20,11 @@ const packageDownloadWindowOptions = {
 } satisfies BrowserWindowConstructorOptions;
 
 class PackageDownloadWindow extends ManagedWindow {
+  private readonly downloadReason: PackageDownloadReason;
+
   constructor(downloadReason: PackageDownloadReason) {
     super();
+    this.downloadReason = downloadReason;
     this.createBrowserWindow({
       ...packageDownloadWindowOptions,
       webPreferences: {
@@ -39,15 +43,42 @@ class PackageDownloadWindow extends ManagedWindow {
   show(): Promise<void> {
     const wnd = this.window;
     if (!wnd) {
+      LOGGER.error(
+        { downloadReason: PackageDownloadReason[this.downloadReason] },
+        "Package download window was not created"
+      );
       return Promise.reject(new Error("Package download window was not created"));
     }
 
+    const reasonName = PackageDownloadReason[this.downloadReason];
+    const noUsablePack =
+      this.downloadReason === PackageDownloadReason.NotFound ||
+      this.downloadReason === PackageDownloadReason.LoadFailed;
+
     return new Promise<void>((resolve, reject) => {
       let downloadSuccess = false;
+      let downloadFailed = false;
+      let lastProgressStep: string | undefined;
       wnd.webContents.ipc.on("download-package", () => {
+        LOGGER.info({ downloadReason: reasonName }, "Package download started");
         packManager
           .downloadPackage((progress) => {
             wnd.webContents.send("download-package-progress", progress);
+            if (progress.step !== lastProgressStep) {
+              lastProgressStep = progress.step;
+              if (progress.step === "completed") {
+                LOGGER.info({ downloadReason: reasonName }, "Package download completed");
+              } else {
+                LOGGER.debug(
+                  {
+                    step: progress.step,
+                    downloadedBytes: progress.downloadedBytes,
+                    totalBytes: progress.totalBytes,
+                  },
+                  "Package download progressed"
+                );
+              }
+            }
             if (progress.step === "completed") {
               downloadSuccess = true;
               resolve();
@@ -55,14 +86,33 @@ class PackageDownloadWindow extends ManagedWindow {
             }
           })
           .catch((e) => {
+            downloadFailed = true;
+            if (noUsablePack) {
+              LOGGER.fatal(
+                { err: toError(e), downloadReason: reasonName },
+                "No usable web pack and package download failed; exiting"
+              );
+            } else {
+              LOGGER.error(
+                { err: toError(e), downloadReason: reasonName },
+                "Failed to download package"
+              );
+            }
             reject(e);
             wnd.close();
           });
       });
       wnd.on("closed", () => {
-        if (!downloadSuccess) {
-          reject("CANCEL");
+        if (downloadSuccess || downloadFailed) return;
+        if (noUsablePack) {
+          LOGGER.fatal(
+            { downloadReason: reasonName },
+            "No usable web pack and package download was cancelled; exiting"
+          );
+        } else {
+          LOGGER.info({ downloadReason: reasonName }, "Package download cancelled");
         }
+        reject("CANCEL");
       });
     });
   }
@@ -71,5 +121,9 @@ class PackageDownloadWindow extends ManagedWindow {
 export default function showPackgeDownloadWindow(
   downloadReason = PackageDownloadReason.LoadFailed
 ): Promise<void> {
+  LOGGER.info(
+    { downloadReason: PackageDownloadReason[downloadReason] },
+    "Showing package download window"
+  );
   return new PackageDownloadWindow(downloadReason).show();
 }

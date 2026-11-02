@@ -29,6 +29,15 @@ interface ModuleInfo {
   os?: string[];
 }
 
+/** A module build whose script has been resolved and is ready to spawn. */
+interface BuildTask {
+  module: ModuleInfo;
+  /** Script name passed to `pnpm run`. */
+  script: string;
+  /** The command that script expands to, inspected to classify the build. */
+  command: string;
+}
+
 async function readModuleInfos(modulesDir: string, moduleNames: string[]): Promise<ModuleInfo[]> {
   return (
     await Promise.all(
@@ -62,14 +71,38 @@ async function readModuleInfos(modulesDir: string, moduleNames: string[]): Promi
  *
  * Modules may declare platform-specific variants of a script by appending
  * `:${process.platform}` — e.g. `build:linux` next to `build`. The variant wins
- * when present, so a module can opt into tooling that only exists on some
- * platforms (napi's `-x` needs cargo-zigbuild + zig, which we only provision on
- * Linux) while every other platform keeps the plain script.
+ * when present, so a module can opt into napi's prebuilt cross toolchain on
+ * Linux (`--use-napi-cross`) while every other platform keeps the plain script.
  *
  * Returns undefined when neither the variant nor the bare script exists.
  */
 function resolvePlatformScript(scripts: Record<string, string>, base: string): string | undefined {
   return [`${base}:${process.platform}`, base].find((name) => scripts[name]);
+}
+
+/**
+ * Matches the napi-rs CLI as a command word, including a path to it
+ * (`./node_modules/.bin/napi`) and the Windows shims, but not other
+ * `napi-`-prefixed words such as `napi-derive`.
+ */
+const NAPI_COMMAND = /(?:^|[\\/])napi(?:\.cmd|\.exe)?$/;
+
+/**
+ * Detects whether a build script actually shells out to the napi-rs CLI.
+ *
+ * `napi build --use-napi-cross` unpacks the shared cross toolchain into
+ * `~/.napi-rs/cross-toolchain/<version>/<triple>` before it starts compiling.
+ * Every module in a layer shares that cache, so two of them running at the same
+ * time extract into the same directory and one of them dies with
+ * "failed to unpack ...". Those builds are therefore run one at a time.
+ */
+function invokesNapi(script: string): boolean {
+  return script.split(/&&|\|\||[;|]/).some((segment) =>
+    segment
+      .trim()
+      .split(/\s+/)
+      .some((token) => NAPI_COMMAND.test(token))
+  );
 }
 
 function computeLayers(modules: ModuleInfo[]): ModuleInfo[][] {
@@ -132,31 +165,52 @@ async function buildModules() {
   const skipIfNoScript = process.env.SKIP_IF_NO_SCRIPT;
 
   for (const layer of layers) {
-    await Promise.all(
-      layer.map(async (mod) => {
-        if (!isPlatformCompatible(mod.os, process.platform)) {
-          console.log(
-            `Skipping module: ${mod.dirName} (${mod.packageName}) - os field [${mod.os?.join(", ") ?? ""}] does not include current platform "${process.platform}"`
-          );
-          return;
-        }
-        const baseScript = preferScript || "build";
-        const script = resolvePlatformScript(mod.scripts, baseScript);
-        if (!script && skipIfNoScript) {
-          console.log(
-            `Skipping module: ${mod.dirName} (${mod.packageName}) - script "${baseScript}" not found`
-          );
-          return;
-        }
-        const scriptToRun = script ?? "build";
-        console.log(`Building module: ${mod.dirName} (${mod.packageName}) [${scriptToRun}]`);
-        const result = await runBuildCommand(mod.path, scriptToRun);
-        if (result.status !== 0) {
-          console.error(`Failed to build module: ${mod.dirName}`);
-          process.exit(1);
-        }
-      })
-    );
+    const tasks: BuildTask[] = [];
+    for (const mod of layer) {
+      if (!isPlatformCompatible(mod.os, process.platform)) {
+        console.log(
+          `Skipping module: ${mod.dirName} (${mod.packageName}) - os field [${mod.os?.join(", ") ?? ""}] does not include current platform "${process.platform}"`
+        );
+        continue;
+      }
+      const baseScript = preferScript || "build";
+      const script = resolvePlatformScript(mod.scripts, baseScript);
+      if (!script && skipIfNoScript) {
+        console.log(
+          `Skipping module: ${mod.dirName} (${mod.packageName}) - script "${baseScript}" not found`
+        );
+        continue;
+      }
+      const scriptToRun = script ?? "build";
+      tasks.push({ module: mod, script: scriptToRun, command: mod.scripts[scriptToRun] ?? "" });
+    }
+
+    // napi builds contend for the cross-toolchain cache, so they are drained
+    // one after another; the remaining builds still run concurrently, and in
+    // parallel with the serialized napi queue.
+    const napiTasks: BuildTask[] = [];
+    const otherTasks: BuildTask[] = [];
+    for (const task of tasks) {
+      if (invokesNapi(task.command)) napiTasks.push(task);
+      else otherTasks.push(task);
+    }
+
+    await Promise.all([Promise.all(otherTasks.map(runBuildTask)), runSequentially(napiTasks)]);
+  }
+}
+
+async function runBuildTask({ module: mod, script }: BuildTask): Promise<void> {
+  console.log(`Building module: ${mod.dirName} (${mod.packageName}) [${script}]`);
+  const result = await runBuildCommand(mod.path, script);
+  if (result.status !== 0) {
+    console.error(`Failed to build module: ${mod.dirName}`);
+    process.exit(1);
+  }
+}
+
+async function runSequentially(tasks: BuildTask[]): Promise<void> {
+  for (const task of tasks) {
+    await runBuildTask(task);
   }
 }
 

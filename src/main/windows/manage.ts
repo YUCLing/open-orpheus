@@ -10,14 +10,14 @@ import WebPack from "../packs/WebPack";
 import { wasm as wasmDir } from "../folders";
 import { httpCacheStorage, lyricCacheManager, playCacheManager } from "../cache";
 import { checkUpdate } from "../update";
-import { registerIpcHandlers } from "../../bridge/register";
-import type { ManageContract } from "../../bridge/contracts/manage-api";
+import { registerIpcHandlers } from "../bridge/register";
+import type { ManageContract } from "@shared/contracts/manage-api";
 import registerAsProtocolClient, {
   getProtocolClientName,
   isProtocolClient,
   unregisterAsProtocolClient,
 } from "../protocol";
-import { registerSettingsHandlers } from "../../bridge/common/settings";
+import { registerSettingsHandlers } from "../bridge/modules/settings";
 import { font } from "../gui";
 import { BasicManagedWindow, ManagedWindow } from "../window";
 
@@ -39,6 +39,7 @@ class ManageWindow extends ManagedWindow {
     super();
     this.on("unbind", () => {
       if (manageWndInstance === this) manageWndInstance = null;
+      LOGGER.debug({ windowId: this.id }, "Manage window closed");
     });
 
     const manageWnd = this.createBrowserWindow(manageWindowOptions);
@@ -166,12 +167,14 @@ class ManageWindow extends ManagedWindow {
       },
     });
     registerSettingsHandlers(manageWnd);
+    LOGGER.info({ windowId: this.id }, "Manage window created");
   }
 }
 
 export default function showManageWindow() {
   const existing = manageWndInstance?.window;
   if (existing) {
+    LOGGER.debug({ windowId: manageWndInstance?.id }, "Focused existing manage window");
     existing.focus();
     return;
   }

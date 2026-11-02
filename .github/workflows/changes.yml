@@ -44,6 +44,7 @@ jobs:
         with:
           filters: |
             node:
+              - ".github/actions/toolchain/**"
               - ".github/workflows/changes.yml"
               - ".github/workflows/lint.yml"
               - ".github/workflows/test.yml"
@@ -53,6 +54,7 @@ jobs:
               - "eslint.config.ts"
               - ".prettierignore"
               - ".prettierrc"
+              - "playwright.config.ts"
               - "tsconfig.json"
               - "vitest.config.ts"
               - "forge.config.ts"
@@ -60,7 +62,6 @@ jobs:
               - "vite*.config.ts"
               - "gui/**"
               - "src/**"
-              - "types/**"
               - "__test__/**"
               - "__mocks__/**"
               - "modules/**/*.ts"
@@ -72,15 +73,18 @@ jobs:
               - "scripts/**/*.ts"
               - "patches/**"
             rust:
+              - ".github/actions/toolchain/**"
               - ".github/workflows/changes.yml"
               - ".github/workflows/lint.yml"
               - ".github/workflows/test.yml"
               - ".config/nextest.toml"
+              - "packaging/common/toolchain.ts"
               - "Cargo.toml"
               - "Cargo.lock"
               - "modules/**/Cargo.toml"
               - "modules/**/*.rs"
             build:
+              - ".github/actions/toolchain/**"
               - ".github/workflows/changes.yml"
               - ".github/workflows/ci.yml"
               - ".github/workflows/build.yml"
@@ -95,7 +99,6 @@ jobs:
               - "tsconfig.json"
               - "src/**"
               - "gui/**"
-              - "types/**"
               - "modules/**"
               - "scripts/**"
               - "packaging/**"

@@ -3,8 +3,8 @@ import { ipcRenderer } from "electron";
 import type {
   Av3aChannelRendererToService,
   Av3aChannelServiceToRenderer,
-} from "../../bridge/contracts/av3a-process";
-import type { Av3aTrackInfo } from "../../bridge/contracts/av3a-api";
+} from "@shared/contracts/av3a-process";
+import type { Av3aTrackInfo } from "@shared/contracts/av3a-api";
 
 /**
  * Renderer end of the direct channel to the AV3A decode utility process.
@@ -56,6 +56,7 @@ function onMessage(data: unknown): void {
 ipcRenderer.on("av3a.channel", (event) => {
   const next = (event.ports[0] as MessagePort | undefined) ?? null;
   if (port && port !== next) {
+    LOGGER.debug("AV3A decode channel replaced");
     port.onmessage = null;
     try {
       port.close();
@@ -65,6 +66,7 @@ ipcRenderer.on("av3a.channel", (event) => {
   }
   port = next;
   if (port) {
+    LOGGER.debug("AV3A decode channel connected");
     port.onmessage = (messageEvent: MessageEvent) => {
       onMessage(messageEvent.data);
     };

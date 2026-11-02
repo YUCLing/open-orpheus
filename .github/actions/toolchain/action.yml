@@ -1,0 +1,24 @@
+name: Resolve pinned Rust version
+description: Read the Rust toolchain version declared in packaging/common/toolchain.ts.
+
+outputs:
+  rust:
+    description: Rust toolchain version
+    value: ${{ steps.read.outputs.rust }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read packaging/common/toolchain.ts
+      id: read
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        file="packaging/common/toolchain.ts"
+        version=$(sed -n 's/.*RUST_VERSION = "\([^"]*\)".*/\1/p' "$file")
+        if [ -z "$version" ]; then
+          echo "::error::Cannot read RUST_VERSION from ${file}" >&2
+          exit 1
+        fi
+        echo "rust=$version" >> "$GITHUB_OUTPUT"

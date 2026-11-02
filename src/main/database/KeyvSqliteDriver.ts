@@ -33,5 +33,6 @@ export default function createKeyvSqliteDriver(db: Database): DatabaseSqliteDriv
       };
     },
   };
+  LOGGER.debug("Created the custom Keyv SQLite driver");
   return driver;
 }

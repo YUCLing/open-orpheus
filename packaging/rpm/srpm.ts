@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { createProjectTarball } from "../common/archive.ts";
 import { readPackageJson } from "../common/package-json.ts";
 import { createPrebuiltBundle } from "../common/prebuilt.ts";
-import { CARGO_ZIGBUILD_VERSION, ZIG_VERSION } from "../common/toolchain.ts";
+import { RUST_VERSION } from "../common/toolchain.ts";
 import { cleanOutDir } from "../common/util.ts";
 import { metadata } from "../resources/metadata.ts";
 import { createSpecFile } from "./spec.ts";
@@ -114,8 +114,7 @@ export async function buildSrpm(options: BuildSrpmOptions = {}): Promise<string[
     homepage: metadata.homepage,
     nodeVersion,
     wasmBindgen,
-    cargoZigbuild: CARGO_ZIGBUILD_VERSION,
-    zig: ZIG_VERSION,
+    rust: RUST_VERSION,
     changelog,
     installTools: options.installTools,
     prebuilt: !!options.prebuilt,

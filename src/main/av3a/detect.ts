@@ -26,7 +26,9 @@ const MAX_MOOV_BYTES = 64 * 1024 * 1024;
  * callers re-sniff per load and the cost is negligible.
  */
 export async function isAv3aFile(path: string): Promise<boolean> {
-  return sniff(path);
+  const detected = await sniff(path);
+  LOGGER.debug({ path, av3a: detected }, "Sniffed local file for an AV3A track");
+  return detected;
 }
 
 async function sniff(path: string): Promise<boolean> {

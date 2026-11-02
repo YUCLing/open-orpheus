@@ -53,10 +53,12 @@ export class PackManager extends Emittery<PackManagerEvents> {
 
   async loadWebPack() {
     const webPackPath = await chooseWebPackFile();
+    LOGGER.debug({ path: webPackPath }, "Selected web pack file");
     const WebPack = await import("./packs/WebPack").then((m) => m.default);
     const wp = new WebPack(webPackPath);
     await wp.readPack();
     this.packs.set("web", wp);
+    LOGGER.info({ file: webPackPath, entries: wp.fileList.length }, "Web pack loaded");
     void this.emit("webpackloaded", { name: "web", pack: wp });
   }
 
@@ -83,6 +85,7 @@ export class PackManager extends Emittery<PackManagerEvents> {
 
     await loadOne("skin", name);
     await loadOne("skin2", name2);
+    LOGGER.info({ packs: [name, name2] }, "Skin packs loaded");
   }
 
   getPack<T extends Pack>(pack: string): T {
@@ -102,6 +105,7 @@ export class PackManager extends Emittery<PackManagerEvents> {
   }
 
   async downloadPackage(onProgress?: (progress: DownloadPackageProgress) => void) {
+    LOGGER.debug("Downloading web pack");
     onProgress?.({
       step: "downloading",
       downloadedBytes: 0,
@@ -140,6 +144,7 @@ export class PackManager extends Emittery<PackManagerEvents> {
       chunks.map((chunk) => Buffer.from(chunk)),
       downloadedBytes
     );
+    LOGGER.info({ bytes: downloadedBytes, totalBytes }, "Web pack downloaded");
 
     const stdoutBytes: number[] = [];
     const sevenZip = await import("7z-wasm").then((m) =>
@@ -171,6 +176,9 @@ export class PackManager extends Emittery<PackManagerEvents> {
     const filesToExtract = fileList.filter(
       (v) => v.startsWith("resource/") || v.startsWith("package/")
     );
+    if (filesToExtract.length === 0) {
+      LOGGER.warn({ entries: fileList.length }, "Web pack archive contained no package files");
+    }
 
     sevenZip.callMain(["x", "installer.exe", ...filesToExtract]);
 
@@ -202,6 +210,7 @@ export class PackManager extends Emittery<PackManagerEvents> {
     }
 
     onProgress?.({ step: "completed", progress: 1 });
+    LOGGER.info({ files: filesToExtract.length }, "Web pack installed");
   }
 }
 

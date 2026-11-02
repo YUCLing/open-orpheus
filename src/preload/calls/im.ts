@@ -22,7 +22,9 @@ registerCallHandler<
       });
     }
     await im.connect();
+    LOGGER.info("Connected to IM");
     await im.joinRoom(params.chat_roomid);
+    LOGGER.info({ roomId: params.chat_roomid }, "Joined IM chatroom");
     fireNativeCall("im.onEnter", { code: 200 });
   })();
 });
@@ -31,4 +33,5 @@ registerCallHandler<[], void>("im.leave", async () => {
   if (!im) return;
   await im.leaveRoom();
   await im.disconnect();
+  LOGGER.info("Left IM chatroom");
 });

@@ -58,6 +58,7 @@ export default class YunxinIM extends EventTarget {
         syncSessionUnread: false,
         logLevel: "warn",
         onconnect(data) {
+          LOGGER.info("NIM connected");
           resolve(data);
         },
         ondisconnect(data) {
@@ -88,6 +89,7 @@ export default class YunxinIM extends EventTarget {
           if (err) {
             reject(err);
           } else {
+            LOGGER.info("NIM connection destroyed");
             resolve(data);
           }
         },
@@ -128,6 +130,7 @@ export default class YunxinIM extends EventTarget {
         chatroomNick: "listen_together_user",
         logLevel: "warn",
         onconnect(data) {
+          LOGGER.info({ roomId }, "Chatroom joined");
           resolve(data);
         },
         ondisconnect(data) {
@@ -159,6 +162,7 @@ export default class YunxinIM extends EventTarget {
           if (err) {
             reject(err);
           } else {
+            LOGGER.info("Chatroom left");
             resolve(data);
           }
         },

@@ -8,8 +8,10 @@ import { MusicFile } from "music-tag-native";
 
 import { musicLibraryDb } from "../database";
 import { registerCallHandler } from "../calls";
-import { fileExists, isFileNotFound, isMusicFile, normalizePath } from "../util";
-import { toError } from "../../util";
+import { fileExists, isFileNotFound } from "../util/fs";
+import { isMusicFile } from "../util/musicFile";
+import { normalizePath } from "../util/path";
+import { toError } from "@shared/util";
 import { commentToID3Metadata } from "../id3";
 
 type MusicLibraries = "<mymusic>" | "<download>" | "<windowsmedia>" | "<itunes>" | string;
@@ -215,6 +217,7 @@ registerCallHandler<[MusicLibraries], void>("musiclibrary.observeLibrary", (even
       LOGGER.error({ err }, "Library observer encountered error");
     });
     libWatchers.set(lib, watcher);
+    LOGGER.debug({ library: lib }, "Music library observer started");
   } catch (err) {
     if (!isFileNotFound(err))
       LOGGER.error({ library: lib, err: toError(err) }, "Cannot monitor music library");
@@ -244,6 +247,7 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
           return;
         }
         const db = musicLibraryDb;
+        LOGGER.info({ library }, "Music library scan started");
 
         const existingResult = await db.exec(
           "SELECT file, filesize, timestamp FROM track WHERE dir = ?",
@@ -310,6 +314,7 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
           await db.exec("DELETE FROM track WHERE file = ?", [staleFile]);
         }
 
+        LOGGER.info({ library, processed, stale: existingMap.size }, "Music library scan finished");
         event.sender.send("channel.call", "musiclibrary.onaddend", {
           dirs: [libPath],
           library,
@@ -339,6 +344,7 @@ registerCallHandler<[string], [boolean]>("musiclibrary.removeLibrary", (event, l
     } catch (err) {
       LOGGER.error({ library, err: toError(err) }, "Failed to delete tracks from library");
     }
+    LOGGER.info({ library }, "Music library removed");
     event.sender.send("channel.call", "musiclibrary.onremovelibrary", library);
   })();
   return [true];

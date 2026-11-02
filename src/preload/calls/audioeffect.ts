@@ -1,10 +1,10 @@
 import { ipcRenderer } from "electron";
 
-import { Ncae, NcaeType } from "$sharedTypes/ncae";
+import { Ncae, NcaeType } from "@shared/types/ncae";
 
 import { player } from "../audioplayer";
 import { registerCallHandler } from "../calls";
-import { dbToGain, toError } from "../../util";
+import { dbToGain, toError } from "@shared/util";
 
 type EqualizerData = {
   /** 10-band graphic equalizer. */
@@ -305,6 +305,7 @@ registerCallHandler<
     applyEqualizer(null);
     player.audioEffectManager.clearConvolutionIR();
     player.audioEffectManager.setEnabled(false);
+    LOGGER.info({ path }, "Audio effect disabled");
     return;
   }
   let eqData = null;
@@ -332,10 +333,15 @@ registerCallHandler<
     } else {
       player.audioEffectManager.clearConvolutionIR();
     }
+    LOGGER.info(
+      { path, hasEqualizer: Boolean(eqData), hasConvolutionIR: Boolean(wavIr) },
+      "Audio effect applied"
+    );
   } else {
     applyEqualizer(null);
     player.audioEffectManager.clearConvolutionIR();
     player.audioEffectManager.setEnabled(false);
+    LOGGER.warn({ path }, "Audio effect enabled without effect data");
   }
 });
 
@@ -348,6 +354,7 @@ registerCallHandler<[boolean], void>("audioeffect.setLoudnessON", (enabled) => {
   } else {
     player.replayGain.gain.value = 1;
   }
+  LOGGER.debug({ enabled, gainDb: loudnessGainDb }, "Loudness gain toggled");
 });
 
 registerCallHandler<[{ gain: number }], void>("audioeffect.setLoudnessParams", (params) => {

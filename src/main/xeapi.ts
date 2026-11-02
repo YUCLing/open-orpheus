@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { escape } from "node:querystring";
 
-import { toError } from "../util";
+import { toError } from "@shared/util";
 import { aegisPublicKey } from "./folders";
 
 const STATIC_KEY_BASE64 = "hw7WBGc5HWCZzhBM50P3pDvtn/RzxDy+FW+wygIErn4=";
@@ -97,6 +97,10 @@ export class XeapiAegis {
       this.publicKey ? "cached_public_key" : "missing_public_key"
     );
     this.requestPublicKey("active");
+    LOGGER.debug(
+      { cachedPublicKey: Boolean(this.publicKey), intervalMinute: this.dynamicKeyIntervalMinute },
+      "Aegis initialized"
+    );
     return { errorCode: 0 };
   }
 
@@ -182,6 +186,10 @@ export class XeapiAegis {
     this.publicKeyUpdateFailCount = 0;
     this.saveCachedPublicKey(plaintext);
     this.updateState(AegisEncryptState.Normal, "public_key_updated");
+    LOGGER.info(
+      { version: nextPublicKey.version, nextUpdateTime: nextPublicKey.nextUpdateTime },
+      "Aegis public key updated"
+    );
     return true;
   }
 
@@ -201,6 +209,7 @@ export class XeapiAegis {
   private updateState(state: AegisEncryptState, reason: string) {
     if (this.state === state && reason !== "public_key_updated") return;
     this.state = state;
+    LOGGER.debug({ state, reason }, "Aegis encrypt state changed");
     this.callbacks?.onEncryptStateChange(state, reason);
   }
 
@@ -225,6 +234,10 @@ export class XeapiAegis {
 
   private recordPublicKeyUpdateFailure(reason: string) {
     this.publicKeyUpdateFailCount++;
+    LOGGER.warn(
+      { reason, failures: this.publicKeyUpdateFailCount },
+      "Aegis public key update failed"
+    );
     if (!this.publicKey) {
       this.updateState(AegisEncryptState.LocalFallback, reason);
       return;
@@ -297,6 +310,7 @@ export class XeapiAegis {
         this.publicKey = publicKey;
       }
     } catch {
+      LOGGER.debug({ path: this.publicKeyCachePath }, "Aegis public key cache unavailable");
       this.publicKey = null;
     }
   }

@@ -17,6 +17,7 @@ export default class StorageManager {
 
   async open() {
     await this.getFileHandle();
+    LOGGER.debug({ path: this.filePath }, "Audio storage opened");
   }
 
   async setLength(length: number) {
@@ -106,6 +107,7 @@ export default class StorageManager {
   async delete() {
     await this.close();
     await rm(this.filePath, { force: true });
+    LOGGER.debug({ path: this.filePath }, "Audio storage deleted");
   }
 
   private async getFileHandle() {

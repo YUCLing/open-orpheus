@@ -25,7 +25,10 @@ ipcMain.handle("channel.call", (event, command: string, ...params: unknown[]) =>
       )
       .then((result: unknown | false) => {
         if (result === false) {
+          LOGGER.warn({ command }, "No handler registered for channel command");
           resolve(false); // No handler found for the command
+        } else {
+          LOGGER.trace({ command }, "Channel command handled");
         }
       });
   });

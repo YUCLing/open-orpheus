@@ -1,4 +1,4 @@
-import CallDispatcher from "../CallDispatcher";
+import CallDispatcher from "@shared/CallDispatcher";
 
 export const dispatcher = new CallDispatcher();
 

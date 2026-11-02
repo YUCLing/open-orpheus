@@ -1,0 +1,55 @@
+diff --git a/index.js b/index.js
+index 41d3ad0d75e3cd57ebc4fe5e368172f7c49e1c70..b26eb213e282f644e373cacf678e2d2bebb7979c 100644
+--- a/index.js
++++ b/index.js
+@@ -140,24 +140,32 @@ module.exports.download = function download(arch, triple) {
+   if (!downloadPackage) {
+     throw new Error(`Unsupported arch: ${arch} triple: ${triple}`)
+   }
+-  debug(`Downloading ${downloadPackage}@${version} via npm pack ...`)
+-  execSync(`npm pack ${downloadPackage}@${version}`, {
+-    stdio: 'inherit',
+-    cwd: __dirname,
+-    env: process.env,
+-  })
+-  const tgzFile = `${downloadPackage.replace(
+-    '@napi-rs/',
+-    'napi-rs-'
+-  )}-${version}.tgz`
+-  const tar = unzipSync(readFileSync(join(__dirname, tgzFile)))
+-  const archive = new Archive(tar)
+-  const dest = join(__dirname, 'toolchain', arch, triple)
+-  mkdirSync(dest, { recursive: true })
+-  debug(`Unpacking ${tgzFile} ...`)
+-  archive.unpack(dest)
+-  rmSync(join(__dirname, tgzFile))
+-  const xzFile = join(dest, 'package', `${alias[triple] ?? triple}.tar.xz`)
++  
++  let xzFile;
++
++  const existingPackage = module.exports[arch][triple];
++  if (!existingPackage) {
++    debug(`Downloading ${downloadPackage}@${version} via npm pack ...`)
++    execSync(`npm pack ${downloadPackage}@${version}`, {
++      stdio: 'inherit',
++      cwd: __dirname,
++      env: process.env,
++    })
++    const tgzFile = `${downloadPackage.replace(
++      '@napi-rs/',
++      'napi-rs-'
++    )}-${version}.tgz`
++    const tar = unzipSync(readFileSync(join(__dirname, tgzFile)))
++    const archive = new Archive(tar)
++    const dest = join(__dirname, 'toolchain', arch, triple)
++    mkdirSync(dest, { recursive: true })
++    debug(`Unpacking ${tgzFile} ...`)
++    archive.unpack(dest)
++    rmSync(join(__dirname, tgzFile))
++    xzFile = join(dest, 'package', `${alias[triple] ?? triple}.tar.xz`)
++  } else {
++    xzFile = existingPackage;
++  }
+   debug(`Decompressing ${xzFile} ...`)
+   const decompressed = decompressSync(readFileSync(xzFile))
+   debug(`Reading Archive ${xzFile} ...`)

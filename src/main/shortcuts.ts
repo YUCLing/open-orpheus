@@ -115,22 +115,26 @@ export function registerGlobalShortcut(
   const result = vkCodesToElectronAccelerator(keys.map(Number));
   if (!result.accelerator) {
     LOGGER.error(
-      { keys, unsupportedVkCodes: result.unsupportedVkCodes },
-      "Failed to register hotkey %s, no valid trigger key found",
-      name
+      { name, keys, unsupportedVkCodes: result.unsupportedVkCodes },
+      "Failed to register global shortcut with no valid trigger key"
     );
     return false;
   }
   if (result.unsupportedVkCodes.length > 0) {
     LOGGER.warn(
-      { keys, unsupportedVkCodes: result.unsupportedVkCodes },
-      "Unsupported VK codes found when registering %s",
-      name
+      { name, keys, unsupportedVkCodes: result.unsupportedVkCodes },
+      "Unsupported VK codes in global shortcut"
     );
   }
   const success = globalShortcut.register(result.accelerator, callback);
   if (success) {
     registeredShortcuts.set(name, result.accelerator);
+    LOGGER.info({ name, accelerator: result.accelerator }, "Global shortcut registered");
+  } else {
+    LOGGER.warn(
+      { name, accelerator: result.accelerator },
+      "Failed to register global shortcut; the accelerator may be in use or unsupported"
+    );
   }
   return success;
 }
@@ -138,9 +142,10 @@ export function registerGlobalShortcut(
 export function unregisterGlobalShortcut(name: string): void {
   const accelerator = registeredShortcuts.get(name);
   if (!accelerator) {
-    LOGGER.error("Failed to unregister hotkey %s", name);
+    LOGGER.error({ name }, "Cannot unregister a global shortcut that is not registered");
     return;
   }
   globalShortcut.unregister(accelerator);
   registeredShortcuts.delete(name);
+  LOGGER.debug({ name, accelerator }, "Global shortcut unregistered");
 }

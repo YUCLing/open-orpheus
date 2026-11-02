@@ -3,7 +3,7 @@
 //!
 //! Outgoing arguments are described by the call's D-Bus signature string (the
 //! caller knows what it is calling); incoming values are self-describing —
-//! `zvariant::Value` carries its own type — so decoding needs no signature.
+//! `zbus::Variant` carries its own type — so decoding needs no signature.
 //! `serde_json::Value` is the JS-facing representation throughout: napi
 //! converts it to and from arbitrary JS values.
 //!
@@ -35,11 +35,11 @@
 //! including every wall-clock timestamp in microseconds — are unaffected.
 
 use serde_json::{Map, Number, Value as Json};
-use zbus::zvariant::{Array, Dict, ObjectPath, Signature, Structure, StructureBuilder, Value};
+use zbus::{Array, Dict, ObjectPath, Signature, Structure, Variant};
 
 /// Split a D-Bus signature into the signatures of its top-level arguments.
 ///
-/// `zvariant::Signature::from_str` deliberately flattens a top-level structure
+/// `zbus::Signature::from_str` deliberately flattens a top-level structure
 /// onto the same value as the concatenation of its fields (`"(is)"` and `"is"`
 /// parse identically), which would make a single struct argument
 /// indistinguishable from two arguments. Splitting the string itself keeps the
@@ -103,7 +103,7 @@ pub fn encode_args(signature: &str, body: &[Json]) -> Result<Option<Structure<'s
         return Ok(None);
     }
 
-    let mut structure = StructureBuilder::new();
+    let mut structure = Structure::builder();
     for (index, (arg_signature, value)) in args.iter().zip(body).enumerate() {
         let argument = Signature::try_from(*arg_signature)
             .map_err(|e| format!("invalid D-Bus signature {arg_signature:?}: {e}"))?;
@@ -117,26 +117,26 @@ pub fn encode_args(signature: &str, body: &[Json]) -> Result<Option<Structure<'s
 }
 
 /// Convert a decoded D-Bus value to its JS representation.
-pub fn value_to_json(value: &Value<'_>) -> Result<Json, String> {
+pub fn value_to_json(value: &Variant<'_>) -> Result<Json, String> {
     Ok(match value {
-        Value::U8(v) => Json::Number(Number::from(*v)),
-        Value::Bool(v) => Json::Bool(*v),
-        Value::I16(v) => Json::Number(Number::from(*v)),
-        Value::U16(v) => Json::Number(Number::from(*v)),
-        Value::I32(v) => Json::Number(Number::from(*v)),
-        Value::U32(v) => Json::Number(Number::from(*v)),
-        Value::I64(v) => Json::Number(Number::from(*v)),
-        Value::U64(v) => Json::Number(Number::from(*v)),
-        Value::F64(v) => match Number::from_f64(*v) {
+        Variant::U8(v) => Json::Number(Number::from(*v)),
+        Variant::Bool(v) => Json::Bool(*v),
+        Variant::I16(v) => Json::Number(Number::from(*v)),
+        Variant::U16(v) => Json::Number(Number::from(*v)),
+        Variant::I32(v) => Json::Number(Number::from(*v)),
+        Variant::U32(v) => Json::Number(Number::from(*v)),
+        Variant::I64(v) => Json::Number(Number::from(*v)),
+        Variant::U64(v) => Json::Number(Number::from(*v)),
+        Variant::F64(v) => match Number::from_f64(*v) {
             Some(number) => Json::Number(number),
             None => return Err(format!("cannot represent the float {v} in JS")),
         },
-        Value::Str(v) => Json::String(v.as_str().to_owned()),
-        Value::Signature(v) => Json::String(v.to_string()),
-        Value::ObjectPath(v) => Json::String(v.as_str().to_owned()),
+        Variant::Str(v) => Json::String(v.as_str().to_owned()),
+        Variant::Signature(v) => Json::String(v.to_string()),
+        Variant::ObjectPath(v) => Json::String(v.as_str().to_owned()),
         // A variant is the only value that has to describe itself: every other
         // type's shape is implied by the signature it was decoded with.
-        Value::Value(inner) => {
+        Variant::Variant(inner) => {
             let mut variant = Map::new();
             variant.insert(
                 "signature".to_string(),
@@ -145,14 +145,14 @@ pub fn value_to_json(value: &Value<'_>) -> Result<Json, String> {
             variant.insert("value".to_string(), value_to_json(inner)?);
             Json::Object(variant)
         }
-        Value::Array(array) => Json::Array(
+        Variant::Array(array) => Json::Array(
             array
                 .iter()
                 .map(value_to_json)
                 .collect::<Result<Vec<_>, _>>()?,
         ),
-        Value::Dict(dict) => dict_to_json(dict)?,
-        Value::Structure(structure) => Json::Array(
+        Variant::Dict(dict) => dict_to_json(dict)?,
+        Variant::Structure(structure) => Json::Array(
             structure
                 .fields()
                 .iter()
@@ -163,9 +163,9 @@ pub fn value_to_json(value: &Value<'_>) -> Result<Json, String> {
         // carries one as `ProcessFD`). They cannot cross the napi boundary, so
         // they are dropped rather than failing the whole reply.
         #[cfg(unix)]
-        Value::Fd(_) => Json::Null,
-        // Only reachable when a dependency enables zvariant's `gvariant`
-        // feature, which adds the `Maybe` variant this crate cannot represent.
+        Variant::Fd(_) => Json::Null,
+        // Not reachable with the value types zbus 6 exposes, but kept so a
+        // future value type cannot break decoding.
         #[allow(unreachable_patterns)]
         _ => {
             return Err(format!(
@@ -186,12 +186,12 @@ fn dict_to_json(dict: &Dict<'_, '_>) -> Result<Json, String> {
         let mut object = Map::new();
         for (key, value) in dict.iter() {
             // `o` and `g` keys are admitted by `dict_has_string_keys` too, but
-            // decode to their own variants rather than `Value::Str`; all three
+            // decode to their own variants rather than `Variant::Str`; all three
             // have an unambiguous string form to use as the JS object key.
             let key = match key {
-                Value::Str(key) => key.as_str().to_owned(),
-                Value::ObjectPath(key) => key.as_str().to_owned(),
-                Value::Signature(key) => key.to_string(),
+                Variant::Str(key) => key.as_str().to_owned(),
+                Variant::ObjectPath(key) => key.as_str().to_owned(),
+                Variant::Signature(key) => key.to_string(),
                 _ => return Err("dictionary key is not a string".to_string()),
             };
             object.insert(key, value_to_json(value)?);
@@ -229,39 +229,43 @@ fn json_to_value(
     signature: &Signature,
     json: &Json,
     index: usize,
-) -> Result<Value<'static>, String> {
+) -> Result<Variant<'static>, String> {
     Ok(match signature {
-        Signature::U8 => Value::from(range_u64(json, signature, index, u8::MAX as u64)? as u8),
+        Signature::U8 => Variant::from(range_u64(json, signature, index, u8::MAX as u64)? as u8),
         Signature::Bool => match json.as_bool() {
-            Some(value) => Value::Bool(value),
+            Some(value) => Variant::Bool(value),
             None => return Err(type_error(signature, index)),
         },
         Signature::I16 => {
-            Value::from(range_i64(json, signature, index, i16::MIN as i64, i16::MAX as i64)? as i16)
+            Variant::from(
+                range_i64(json, signature, index, i16::MIN as i64, i16::MAX as i64)? as i16,
+            )
         }
-        Signature::U16 => Value::from(range_u64(json, signature, index, u16::MAX as u64)? as u16),
+        Signature::U16 => Variant::from(range_u64(json, signature, index, u16::MAX as u64)? as u16),
         Signature::I32 => {
-            Value::from(range_i64(json, signature, index, i32::MIN as i64, i32::MAX as i64)? as i32)
+            Variant::from(
+                range_i64(json, signature, index, i32::MIN as i64, i32::MAX as i64)? as i32,
+            )
         }
-        Signature::U32 => Value::from(range_u64(json, signature, index, u32::MAX as u64)? as u32),
-        Signature::I64 => Value::I64(expect_i64(json, signature, index)?),
-        Signature::U64 => Value::U64(expect_u64(json, signature, index)?),
+        Signature::U32 => Variant::from(range_u64(json, signature, index, u32::MAX as u64)? as u32),
+        Signature::I64 => Variant::I64(expect_i64(json, signature, index)?),
+        Signature::U64 => Variant::U64(expect_u64(json, signature, index)?),
         Signature::F64 => match json.as_f64() {
-            Some(value) => Value::F64(value),
+            Some(value) => Variant::F64(value),
             None => return Err(type_error(signature, index)),
         },
-        Signature::Str => Value::from(expect_string(json, signature, index)?.to_owned()),
-        Signature::Signature => Value::Signature(
+        Signature::Str => Variant::from(expect_string(json, signature, index)?.to_owned()),
+        Signature::Signature => Variant::Signature(
             Signature::try_from(expect_string(json, signature, index)?)
                 .map_err(|e| format!("argument {index}: invalid signature: {e}"))?,
         ),
-        Signature::ObjectPath => Value::from(
+        Signature::ObjectPath => Variant::from(
             ObjectPath::try_from(expect_string(json, signature, index)?.to_owned())
                 .map_err(|e| format!("argument {index}: invalid object path: {e}"))?,
         ),
         Signature::Variant => {
             let (inner_signature, inner) = expect_variant(json, index)?;
-            Value::Value(Box::new(json_to_value(&inner_signature, inner, index)?))
+            Variant::Variant(Box::new(json_to_value(&inner_signature, inner, index)?))
         }
         Signature::Array(element) => {
             let elements = json
@@ -273,7 +277,7 @@ fn json_to_value(
                     .append(json_to_value(element, item, index)?)
                     .map_err(|e| format!("argument {index}: {e}"))?;
             }
-            Value::Array(array)
+            Variant::Array(array)
         }
         Signature::Dict { key, value } => {
             let mut dict = Dict::new(key, value);
@@ -311,7 +315,7 @@ fn json_to_value(
                     "argument {index}: expected a dictionary ({signature})"
                 ));
             }
-            Value::Dict(dict)
+            Variant::Dict(dict)
         }
         Signature::Structure(fields) => {
             let values = json
@@ -324,11 +328,11 @@ fn json_to_value(
                     values.len()
                 ));
             }
-            let mut structure = StructureBuilder::new();
+            let mut structure = Structure::builder();
             for (field, value) in fields.iter().zip(values) {
                 structure = structure.append_field(json_to_value(field, value, index)?);
             }
-            Value::Structure(
+            Variant::Structure(
                 structure
                     .build()
                     .map_err(|e| format!("argument {index}: {e}"))?,
@@ -339,8 +343,8 @@ fn json_to_value(
                 "argument {index}: an empty signature cannot carry a value"
             ))
         }
-        // File descriptors have no JS representation, and `Maybe` only exists
-        // when a dependency enables zvariant's `gvariant` feature.
+        // File descriptors have no JS representation, and any value type this
+        // module does not know is rejected rather than silently dropped.
         #[allow(unreachable_patterns)]
         _ => {
             return Err(format!(
@@ -480,20 +484,20 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(structure.signature().to_string_no_parens(), "sbi");
-        assert!(matches!(structure.fields()[0], Value::Str(_)));
-        assert!(matches!(structure.fields()[1], Value::Bool(true)));
-        assert!(matches!(structure.fields()[2], Value::I32(-3)));
+        assert!(matches!(structure.fields()[0], Variant::Str(_)));
+        assert!(matches!(structure.fields()[1], Variant::Bool(true)));
+        assert!(matches!(structure.fields()[2], Variant::I32(-3)));
     }
 
     #[test]
     fn encodes_64_bit_integers_beyond_the_safe_range() {
         let value = 9_007_199_254_740_993_i64;
         let structure = encode_args("x", &[json!(value)]).unwrap().unwrap();
-        assert!(matches!(structure.fields()[0], Value::I64(v) if v == value));
+        assert!(matches!(structure.fields()[0], Variant::I64(v) if v == value));
 
         let value = u64::MAX;
         let structure = encode_args("t", &[json!(value)]).unwrap().unwrap();
-        assert!(matches!(structure.fields()[0], Value::U64(v) if v == value));
+        assert!(matches!(structure.fields()[0], Variant::U64(v) if v == value));
     }
 
     #[test]
@@ -532,17 +536,19 @@ mod tests {
         let structure = encode_args("x", &[json!(-9_223_372_036_854_775_808.0_f64)])
             .unwrap()
             .unwrap();
-        assert!(matches!(structure.fields()[0], Value::I64(i64::MIN)));
+        assert!(matches!(structure.fields()[0], Variant::I64(i64::MIN)));
 
         let structure = encode_args("x", &[json!(9_223_372_036_854_774_784.0_f64)])
             .unwrap()
             .unwrap();
-        assert!(matches!(structure.fields()[0], Value::I64(v) if v == 9_223_372_036_854_774_784));
+        assert!(matches!(structure.fields()[0], Variant::I64(v) if v == 9_223_372_036_854_774_784));
 
         let structure = encode_args("t", &[json!(18_446_744_073_709_549_568.0_f64)])
             .unwrap()
             .unwrap();
-        assert!(matches!(structure.fields()[0], Value::U64(v) if v == 18_446_744_073_709_549_568));
+        assert!(
+            matches!(structure.fields()[0], Variant::U64(v) if v == 18_446_744_073_709_549_568)
+        );
     }
 
     #[test]
@@ -550,7 +556,7 @@ mod tests {
         let structure = encode_args("(is)", &[json!([7, "x"])]).unwrap().unwrap();
         assert_eq!(structure.signature().to_string_no_parens(), "(is)");
         assert_eq!(structure.fields().len(), 1);
-        assert!(matches!(&structure.fields()[0], Value::Structure(_)));
+        assert!(matches!(&structure.fields()[0], Variant::Structure(_)));
 
         let structure = encode_args("is", &[json!(7), json!("x")]).unwrap().unwrap();
         assert_eq!(structure.signature().to_string_no_parens(), "is");
@@ -565,12 +571,14 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        let Value::Dict(dict) = &structure.fields()[0] else {
+        let Variant::Dict(dict) = &structure.fields()[0] else {
             panic!("expected a dictionary, got {:?}", structure.fields()[0]);
         };
         assert!(dict_has_string_keys(dict));
         let (_, value) = dict.iter().next().unwrap();
-        assert!(matches!(value, Value::Value(inner) if inner.value_signature() == &Signature::I64));
+        assert!(
+            matches!(value, Variant::Variant(inner) if inner.value_signature() == &Signature::I64)
+        );
     }
 
     #[test]
@@ -578,7 +586,7 @@ mod tests {
         let structure = encode_args("a{iv}", &[json!([[1, { "signature": "s", "value": "x" }]])])
             .unwrap()
             .unwrap();
-        let Value::Dict(dict) = &structure.fields()[0] else {
+        let Variant::Dict(dict) = &structure.fields()[0] else {
             panic!("expected a dictionary");
         };
         assert!(!dict_has_string_keys(dict));
@@ -615,22 +623,22 @@ mod tests {
         // Real replies may carry a handle (e.g. `GetConnectionCredentials`
         // includes `ProcessFD`); it has no JS representation.
         let file = std::fs::File::open("/dev/null").unwrap();
-        let fd = zbus::zvariant::Fd::from(std::os::fd::OwnedFd::from(file));
-        assert_eq!(value_to_json(&Value::Fd(fd)).unwrap(), Json::Null);
+        let fd = zbus::Fd::from(std::os::fd::OwnedFd::from(file));
+        assert_eq!(value_to_json(&Variant::Fd(fd)).unwrap(), Json::Null);
     }
 
     #[test]
     fn decodes_basic_types() {
-        assert_eq!(value_to_json(&Value::from(7u8)).unwrap(), json!(7));
-        assert_eq!(value_to_json(&Value::Bool(true)).unwrap(), json!(true));
-        assert_eq!(value_to_json(&Value::from(-3i64)).unwrap(), json!(-3));
-        assert_eq!(value_to_json(&Value::from(1.5f64)).unwrap(), json!(1.5));
-        assert_eq!(value_to_json(&Value::from("hi")).unwrap(), json!("hi"));
+        assert_eq!(value_to_json(&Variant::from(7u8)).unwrap(), json!(7));
+        assert_eq!(value_to_json(&Variant::Bool(true)).unwrap(), json!(true));
+        assert_eq!(value_to_json(&Variant::from(-3i64)).unwrap(), json!(-3));
+        assert_eq!(value_to_json(&Variant::from(1.5f64)).unwrap(), json!(1.5));
+        assert_eq!(value_to_json(&Variant::from("hi")).unwrap(), json!("hi"));
     }
 
     #[test]
     fn decodes_variants_self_describingly() {
-        let value = Value::Value(Box::new(Value::from("hi")));
+        let value = Variant::Variant(Box::new(Variant::from("hi")));
         assert_eq!(
             value_to_json(&value).unwrap(),
             json!({ "signature": "s", "value": "hi" })
@@ -641,19 +649,20 @@ mod tests {
     fn decodes_dicts() {
         let mut dict = Dict::new(&Signature::Str, &Signature::Variant);
         dict.append(
-            Value::from("track"),
-            Value::Value(Box::new(Value::from("hello"))),
+            Variant::from("track"),
+            Variant::Variant(Box::new(Variant::from("hello"))),
         )
         .unwrap();
         assert_eq!(
-            value_to_json(&Value::Dict(dict)).unwrap(),
+            value_to_json(&Variant::Dict(dict)).unwrap(),
             json!({ "track": { "signature": "s", "value": "hello" } })
         );
 
         let mut dict = Dict::new(&Signature::I32, &Signature::Str);
-        dict.append(Value::from(1i32), Value::from("one")).unwrap();
+        dict.append(Variant::from(1i32), Variant::from("one"))
+            .unwrap();
         assert_eq!(
-            value_to_json(&Value::Dict(dict)).unwrap(),
+            value_to_json(&Variant::Dict(dict)).unwrap(),
             json!([[1, "one"]])
         );
     }
@@ -661,43 +670,43 @@ mod tests {
     #[test]
     fn decodes_object_path_and_signature_keyed_dicts_as_objects() {
         // `o` and `g` keys are string-like, so they decode as JS objects, but
-        // the keys arrive as their own value variants rather than `Value::Str`.
+        // the keys arrive as their own value variants rather than `Variant::Str`.
         let mut dict = Dict::new(&Signature::ObjectPath, &Signature::Str);
         dict.append(
-            Value::ObjectPath(ObjectPath::try_from("/a").unwrap()),
-            Value::from("x"),
+            Variant::ObjectPath(ObjectPath::try_from("/a").unwrap()),
+            Variant::from("x"),
         )
         .unwrap();
         assert_eq!(
-            value_to_json(&Value::Dict(dict)).unwrap(),
+            value_to_json(&Variant::Dict(dict)).unwrap(),
             json!({ "/a": "x" })
         );
 
         let mut dict = Dict::new(&Signature::Signature, &Signature::Str);
         dict.append(
-            Value::Signature(Signature::try_from("s").unwrap()),
-            Value::from("x"),
+            Variant::Signature(Signature::try_from("s").unwrap()),
+            Variant::from("x"),
         )
         .unwrap();
         assert_eq!(
-            value_to_json(&Value::Dict(dict)).unwrap(),
+            value_to_json(&Variant::Dict(dict)).unwrap(),
             json!({ "s": "x" })
         );
     }
 
     #[test]
     fn decodes_structs_and_arrays() {
-        let mut structure = StructureBuilder::new();
-        structure = structure.append_field(Value::from(1i32));
-        structure = structure.append_field(Value::from("x"));
+        let mut structure = Structure::builder();
+        structure = structure.append_field(Variant::from(1i32));
+        structure = structure.append_field(Variant::from("x"));
         assert_eq!(
-            value_to_json(&Value::Structure(structure.build().unwrap())).unwrap(),
+            value_to_json(&Variant::Structure(structure.build().unwrap())).unwrap(),
             json!([1, "x"])
         );
 
         let mut array = Array::new(&Signature::Str);
-        array.append(Value::from("a")).unwrap();
-        assert_eq!(value_to_json(&Value::Array(array)).unwrap(), json!(["a"]));
+        array.append(Variant::from("a")).unwrap();
+        assert_eq!(value_to_json(&Variant::Array(array)).unwrap(), json!(["a"]));
     }
 
     #[test]

@@ -10,6 +10,7 @@ import type { Av3aM4aSource } from "./Av3aM4aSession";
  */
 export async function localAv3aSource(path: string): Promise<Av3aM4aSource> {
   const { size } = await stat(path);
+  LOGGER.debug({ path, totalLength: size }, "Using local AV3A source");
   return {
     path,
     totalLength: size,

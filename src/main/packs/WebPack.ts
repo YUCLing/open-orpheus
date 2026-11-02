@@ -71,6 +71,9 @@ export default class WebPack extends Pack {
     if (verify && !(await verifySignature(this.path))) {
       throw new Error("Web pack signature verification failed");
     }
+    if (verify) {
+      LOGGER.debug({ file: this.path }, "Web pack signature verified");
+    }
     const zipper = await unzipper.Open.custom(createSource(this.path));
     for (const file of zipper.files) {
       if (file.type === "File") {
@@ -90,6 +93,8 @@ export default class WebPack extends Pack {
 
   async getCommitHash(): Promise<string> {
     const file = await this.readFile("/pub/COMMITHASH");
-    return file.toString("utf-8").trim();
+    const commit = file.toString("utf-8").trim();
+    LOGGER.debug({ commit }, "Web pack commit hash read");
+    return commit;
   }
 }

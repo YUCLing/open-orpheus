@@ -68,17 +68,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Resolve pinned Rust version
+        id: toolchain
+        uses: ./.github/actions/toolchain
+
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: ${{ vars.RUST_VERSION || 'stable' }}
+          toolchain: ${{ steps.toolchain.outputs.rust }}
           components: clippy,rustfmt
-
-      - name: Install system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libfreetype-dev
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings

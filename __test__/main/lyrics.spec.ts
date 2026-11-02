@@ -44,4 +44,40 @@ describe("lyrics dispatcher wiring", () => {
     // The dispatcher forwards the same value on to its own subscribers.
     expect(seen).toEqual([12.5]);
   });
+
+  it("clears lyrics and slogan when the track changes", async () => {
+    lyricsDispatcher.lyrics = {
+      regular: [
+        {
+          start_time: 0,
+          end_time: 1_000,
+          words: [{ text: "old song", start_time: 0, duration: 1_000 }],
+        },
+      ],
+    };
+    await flush();
+
+    await emit("trackchanged", { id: "next" });
+    await flush();
+    expect(lyricsDispatcher.lyrics).toBeNull();
+    expect(lyricsDispatcher.slogan).toBeNull();
+
+    lyricsDispatcher.slogan = "old slogan";
+    await flush();
+
+    await emit("trackchanged", { id: "next-again" });
+    await flush();
+    expect(lyricsDispatcher.slogan).toBeNull();
+  });
+
+  it("does not notify when a track change finds no lyrics to clear", async () => {
+    const listener = vi.fn();
+    const off = lyricsDispatcher.on("lyricsupdate", listener);
+
+    await emit("trackchanged", { id: "nothing-to-clear" });
+    await flush();
+
+    expect(listener).not.toHaveBeenCalled();
+    off();
+  });
 });

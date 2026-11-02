@@ -2,9 +2,8 @@ import { normalize } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The arguments module only needs `fileExists` and `isMusicFile` from
-// `util.ts`; the rest of that module pulls in Electron and native image
-// helpers, so the two seams are faked here instead.
+// The arguments module only needs `fileExists` and `isMusicFile`; both are
+// faked here so the tests do not touch the filesystem or the mime database.
 const hoisted = vi.hoisted(() => ({
   fileExists: vi.fn<(path: string) => Promise<boolean>>(),
   // Replaced with a real matcher in `beforeEach`.
@@ -12,8 +11,11 @@ const hoisted = vi.hoisted(() => ({
   electronApp: { isPackaged: false },
 }));
 
-vi.mock("../../src/main/util", () => ({
+vi.mock("../../src/main/util/fs", () => ({
   fileExists: hoisted.fileExists,
+}));
+
+vi.mock("../../src/main/util/musicFile", () => ({
   isMusicFile: hoisted.isMusicFile,
 }));
 

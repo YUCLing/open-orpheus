@@ -38,7 +38,7 @@
   },
   "scripts": {
     "build": "napi build --platform --release",
-    "build:linux": "napi build --platform --release -x",
+    "build:linux": "napi build --platform --release --use-napi-cross",
     "build:debug": "napi build --platform",
     "test": "ava",
     "version": "napi version"

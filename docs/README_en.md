@@ -116,6 +116,11 @@ The entire `package` and `resource` folders are required.
 
 If the automatic download fails, you can manually copy both folders from your official NetEase Cloud Music installation (e.g. `C:\path\to\your\installation\CloudMusic\package`) into the data directory above. **Note: `package` is a subfolder of the data directory's `package` folder, meaning the final structure should be `package/package/`!**
 
+## Usage documentation
+
+- [D-Bus services](./DBUS_SERVICES_en.md)
+- [Logging configuration](./LOGGING.md)
+
 ## Disclaimer
 
 Open Orpheus is an independent open-source project aimed at **interoperability**. It is not affiliated with, authorized by, or endorsed by NetEase in any way.

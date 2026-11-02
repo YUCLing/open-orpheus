@@ -134,6 +134,7 @@ export function createMenuWindow(
   menuWindow?.window?.destroy();
   menuWindow?.releaseNativeState();
   menuWindow = new MenuWindow(width, height);
+  LOGGER.debug({ width, height }, "Menu window created");
   return unwrap(menuWindow);
 }
 
@@ -141,23 +142,31 @@ export function createSubmenuWindow(
   width = menuWindowOptions.width,
   height = menuWindowOptions.height
 ): BrowserWindow {
-  return new SubmenuWindow(width, height).browserWindow;
+  const wnd = new SubmenuWindow(width, height).browserWindow;
+  LOGGER.debug({ width, height }, "Menu submenu window created");
+  return wnd;
 }
 
 export function createOverlayWindow(): BrowserWindow {
   overlayWindow?.window?.destroy();
   overlayWindow?.releaseNativeState();
   overlayWindow = new OverlayWindow();
+  LOGGER.debug(
+    { fullscreen: !workaroundEnabled(WorkaroundFlags.OverlayNoFullscreen) },
+    "Menu overlay window created"
+  );
   return unwrap(overlayWindow);
 }
 
 export function destroyMenuWindow() {
+  if (menuWindow) LOGGER.debug("Menu window destroyed");
   menuWindow?.window?.destroy();
   menuWindow?.releaseNativeState();
   menuWindow = null;
 }
 
 export function destroyOverlayWindow() {
+  if (overlayWindow) LOGGER.debug("Menu overlay window destroyed");
   overlayWindow?.window?.destroy();
   overlayWindow?.releaseNativeState();
   overlayWindow = null;

@@ -14,3 +14,8 @@ playbackController.on("playbackratechange", ({ data }) => {
 playbackController.on("advancingchange", ({ data }) => {
   lyricsDispatcher.playState = data;
 });
+playbackController.on("trackchanged", () => {
+  LOGGER.debug("Cleared lyrics for track change");
+  if (lyricsDispatcher.lyrics !== null) lyricsDispatcher.lyrics = null;
+  if (lyricsDispatcher.slogan !== null) lyricsDispatcher.slogan = null;
+});

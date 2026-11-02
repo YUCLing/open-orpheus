@@ -14,7 +14,10 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "$sharedTypes/*": ["./types/*"]
+      "@main/*": ["./src/main/*"],
+      "@preload/*": ["./src/preload/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@/*": ["./src/*"]
     }
   },
   "include": [
@@ -22,7 +25,6 @@
     "forge.env.d.ts",
     "packaging/**/*.ts",
     "scripts/*.ts",
-    "types/*.ts",
     "plugins/*.ts",
     "__test__/**/*.ts"
   ],

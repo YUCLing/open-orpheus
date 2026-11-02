@@ -1,11 +1,18 @@
 import Emittery from "emittery";
 
-import { MediaSession, PlaybackStatus as DbusPlaybackStatus } from "@open-orpheus/dbus";
+import {
+  LoopStatus as DbusLoopStatus,
+  MediaSession,
+  PlaybackStatus as DbusPlaybackStatus,
+} from "@open-orpheus/dbus";
 
 import type { MprisMetadata } from "@open-orpheus/dbus";
+import type { PlaybackMode } from "@shared/types/playback-mode";
+import { imageSize, toError } from "@shared/util";
+
 import { client } from "../../request";
-import { imageSize } from "../../../util";
 import { artworkFileExists, artworkFileUrl, cacheArtwork, remoteArtExt } from "../artwork";
+import { mprisPlaybackMode } from "../modes";
 import { PlaybackStatus, TrackInfo } from "../types";
 import { MediaSessionAdapter, PlayerCommandEvents } from "./MediaSessionAdapter";
 
@@ -29,12 +36,19 @@ export default class MprisAdapter
   private duration: number | null = null;
   private rate = 1;
   /**
+   * Whether the position clock is running. Kept separate from `status`
+   * because a buffering stall keeps MPRIS `PlaybackStatus` as `Playing`
+   * while the position must stand still.
+   */
+  private advancing = true;
+  /**
    * The most recent MPRIS volume write, keyed by the value it was for. The
    * native write is asynchronous, so `SetVolume` awaits the write for *its*
    * value once the renderer has confirmed that value — a write triggered by
    * some other (concurrent or in-app) change must not be mistaken for it.
    */
   private volumeApplied: { volume: number; write: Promise<unknown> } | null = null;
+  private modeApplied: Promise<void> | null = null;
 
   constructor() {
     super();
@@ -85,6 +99,14 @@ export default class MprisAdapter
           if (applied?.volume === event.volume) await applied.write;
           break;
         }
+        case "SetShuffle":
+          await this.emit("shuffle", event.shuffle);
+          await this.modeApplied;
+          break;
+        case "SetLoopStatus":
+          await this.emit("loopStatus", event.loopStatus);
+          await this.modeApplied;
+          break;
       }
     });
   }
@@ -92,6 +114,9 @@ export default class MprisAdapter
   onTrack(track: TrackInfo | null): void {
     this.metadata = track;
     this.artUrl = null; // album art for a new song arrives separately (onArtwork)
+    // A new track starts at zero; keeping the previous song's position would
+    // report it until the next throttled update.
+    this.position = track ? 0 : null;
     if (!track) {
       void this.mediaSession.setMetadata(null);
       return;
@@ -101,12 +126,22 @@ export default class MprisAdapter
 
   onStatus(status: PlaybackStatus): void {
     this.status = status;
+    this.advancing = status === PlaybackStatus.Playing;
+    this.pushPlaybackState();
+  }
+
+  onAdvancing(advancing: boolean): void {
+    if (this.advancing === advancing) return;
+    this.advancing = advancing;
     this.pushPlaybackState();
   }
 
   onPosition(position: number, seeked: boolean): void {
     this.position = position;
-    this.pushPlaybackState();
+    // A seek while playing is a discontinuity, not a pause: the `seeking`
+    // event may have frozen the clock without a following `playing` event.
+    if (seeked && this.status === PlaybackStatus.Playing) this.advancing = true;
+    this.pushPlaybackState(seeked);
     if (seeked) {
       void this.mediaSession.sendSeeked(position * TIME_RATIO);
     }
@@ -127,6 +162,24 @@ export default class MprisAdapter
       volume,
       write: this.mediaSession.setVolume(volume) as Promise<unknown>,
     };
+  }
+
+  onPlaybackMode(mode: PlaybackMode): void {
+    const { loopStatus, shuffle } = mprisPlaybackMode(mode);
+    const nativeLoopStatus = {
+      None: DbusLoopStatus.None,
+      Track: DbusLoopStatus.Track,
+      Playlist: DbusLoopStatus.Playlist,
+    }[loopStatus];
+    // Preserve renderer order even when native tasks run on multiple workers.
+    this.modeApplied = (this.modeApplied ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => this.mediaSession.setPlaybackMode(nativeLoopStatus, shuffle));
+    // A later Properties.Set also awaits this promise, while in-app changes
+    // have no caller to observe a native publishing failure.
+    void this.modeApplied.catch((err) => {
+      LOGGER.warn({ err: toError(err) }, "Failed to publish MPRIS playback mode");
+    });
   }
 
   dispose(): void {
@@ -179,6 +232,7 @@ export default class MprisAdapter
     const ext = remoteArtExt(downloadUrl);
     // Reuse the cached file if the art for this song was already downloaded.
     if (await artworkFileExists(id, ext)) {
+      LOGGER.debug({ trackId: id }, "Album art cache hit");
       return artworkFileUrl(id, ext);
     }
     try {
@@ -186,18 +240,24 @@ export default class MprisAdapter
         responseType: "buffer",
       });
       return await cacheArtwork(id, response.body, ext);
-    } catch {
+    } catch (error) {
+      LOGGER.warn(
+        { err: toError(error), trackId: id },
+        "Failed to download album art, using the remote URL"
+      );
       // Download failed; keep the (resized) remote URL so artwork still works.
       return downloadUrl;
     }
   }
 
-  private pushPlaybackState(): void {
+  private pushPlaybackState(seeked = false): void {
     if (this.position === null) return;
     void this.mediaSession.updatePlaybackState({
       status: toDbusStatus(this.status),
       position: this.position * TIME_RATIO,
       speed: this.rate,
+      advancing: this.advancing,
+      seeked,
     });
   }
 }

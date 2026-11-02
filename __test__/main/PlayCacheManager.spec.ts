@@ -10,12 +10,13 @@ vi.mock("../../src/main/window", () => ({
 }));
 
 import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
 import { vol } from "memfs";
 
 import PlayCacheManager, { type CacheTrackMeta } from "../../src/main/cache/PlayCacheManager";
 
-const CACHE_PATH = "/cache/play";
+const CACHE_PATH = resolve("cache", "play");
 const MiB = 1024 * 1024;
 
 function manager() {
@@ -70,9 +71,9 @@ describe("PlayCacheManager index", () => {
 
   it("indexes the cache directories found on disk", async () => {
     vol.fromJSON({
-      [`${CACHE_PATH}/123/meta.json`]: JSON.stringify(meta("123")),
-      [`${CACHE_PATH}/456/meta.json`]: JSON.stringify(meta("456", 2 * MiB)),
-      [`${CACHE_PATH}/loose.txt`]: "not a directory",
+      [join(CACHE_PATH, "123", "meta.json")]: JSON.stringify(meta("123")),
+      [join(CACHE_PATH, "456", "meta.json")]: JSON.stringify(meta("456", 2 * MiB)),
+      [join(CACHE_PATH, "loose.txt")]: "not a directory",
     });
 
     const tracks = await manager().queryCacheTracks();
@@ -82,9 +83,9 @@ describe("PlayCacheManager index", () => {
 
   it("skips corrupt metadata", async () => {
     vol.fromJSON({
-      [`${CACHE_PATH}/123/meta.json`]: JSON.stringify(meta("123")),
-      [`${CACHE_PATH}/999/meta.json`]: "{ not json",
-      [`${CACHE_PATH}/888/audio`]: "no meta at all",
+      [join(CACHE_PATH, "123", "meta.json")]: JSON.stringify(meta("123")),
+      [join(CACHE_PATH, "999", "meta.json")]: "{ not json",
+      [join(CACHE_PATH, "888", "audio")]: "no meta at all",
     });
 
     await expect(manager().queryCacheTracks()).resolves.toEqual([meta("123")]);
@@ -97,8 +98,8 @@ describe("PlayCacheManager.cacheTrack", () => {
 
     await cache.cacheTrack("123", Buffer.from("audio-bytes"), trackInfo);
 
-    await expect(readFile(`${CACHE_PATH}/123/audio`, "utf-8")).resolves.toBe("audio-bytes");
-    const stored = JSON.parse(await readFile(`${CACHE_PATH}/123/meta.json`, "utf-8"));
+    await expect(readFile(join(CACHE_PATH, "123", "audio"), "utf-8")).resolves.toBe("audio-bytes");
+    const stored = JSON.parse(await readFile(join(CACHE_PATH, "123", "meta.json"), "utf-8"));
     expect(stored).toMatchObject({
       songId: "123",
       md5: "md5",
@@ -137,7 +138,7 @@ describe("PlayCacheManager.getCachedTrack", () => {
 
     const cached = await cache.getCachedTrack("123");
 
-    expect(cached?.audioPath).toBe(`${CACHE_PATH}/123/audio`);
+    expect(cached?.audioPath).toBe(resolve(CACHE_PATH, "123", "audio"));
     expect(cached?.meta).toMatchObject({ songId: "123", md5: "md5" });
   });
 
@@ -165,7 +166,7 @@ describe("PlayCacheManager.getCachedTrack", () => {
   it("forgets a track whose audio file disappeared", async () => {
     const cache = manager();
     await cache.cacheTrack("123", Buffer.from("audio"), trackInfo);
-    vol.rmSync(`${CACHE_PATH}/123`, { recursive: true, force: true });
+    vol.rmSync(join(CACHE_PATH, "123"), { recursive: true, force: true });
 
     await expect(cache.getCachedTrack("123")).resolves.toBeNull();
     await expect(cache.queryCacheTracks()).resolves.toEqual([]);
@@ -258,7 +259,7 @@ describe("PlayCacheManager eviction", () => {
     await cache.cacheTrack("new", Buffer.from("b"), trackInfo);
 
     await expect(cache.queryCacheTracks()).resolves.toEqual([]);
-    expect(vol.existsSync(`${CACHE_PATH}/old`)).toBe(false);
+    expect(vol.existsSync(join(CACHE_PATH, "old"))).toBe(false);
     expect(notifications().filter((n) => n.playCacheUpdateType === 2)).toEqual([
       expect.objectContaining({ songId: "old" }),
       expect.objectContaining({ songId: "new" }),

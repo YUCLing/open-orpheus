@@ -33,7 +33,7 @@ import type {
   Av3aChannelServiceToRenderer as ServiceToRenderer,
   Av3aProcessMainToService as MainToService,
   Av3aProcessServiceToMain as ServiceToMain,
-} from "../bridge/contracts/av3a-process";
+} from "@shared/contracts/av3a-process";
 import { Av3aM4aSession } from "../main/av3a/Av3aM4aSession";
 import type { Av3aM4aSource } from "../main/av3a/Av3aM4aSession";
 import type {

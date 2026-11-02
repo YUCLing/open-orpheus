@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 import Emittery from "emittery";
-import { toError } from "../util";
+import { toError } from "@shared/util";
 
 async function getDesktopAudioStream() {
   // Since getDisplayMedia() requires a video track, if this option is set to false the promise will reject with a TypeError.
@@ -149,6 +149,15 @@ export default class MusicRecognizer extends Emittery<MusicRecognizerEvents> {
       }
       if (this.state !== state) return await state.done;
 
+      LOGGER.info(
+        {
+          sessionId: state.sessionId,
+          sampleRate: this.sampleRate,
+          duration: this.duration,
+          interval: this.interval,
+        },
+        "Music recognizer started"
+      );
       return await state.done;
     } catch (err) {
       if (this.state === state) {
@@ -162,6 +171,7 @@ export default class MusicRecognizer extends Emittery<MusicRecognizerEvents> {
 
   stop() {
     if (!this.state) return;
+    LOGGER.info({ sessionId: this.state.sessionId }, "Music recognizer stopped");
     this.finish(this.state);
   }
 
@@ -235,6 +245,14 @@ export default class MusicRecognizer extends Emittery<MusicRecognizerEvents> {
 
   private finish(state: RecognitionState, result: MusicRecognizeResult | null = null) {
     if (this.state !== state) return;
+    LOGGER.info(
+      {
+        sessionId: state.sessionId,
+        code: result?.code ?? null,
+        hasResult: result !== null,
+      },
+      "Music recognizer finished"
+    );
     if (result)
       void this.emit("result", result).catch((err) => {
         LOGGER.error({ err: toError(err) }, `MusicRecognizer errored when emitting the result`);

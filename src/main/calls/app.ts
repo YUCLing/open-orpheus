@@ -5,7 +5,9 @@ import { app, BrowserWindow, dialog, nativeImage, ThumbarButton, WebContents } f
 
 import { registerCallHandler, registerCallbackHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
-import { fileExists, pngFromIco } from "../util";
+import { fileExists } from "../util/fs";
+import { pngFromIco } from "../util/image";
+import { toError } from "@shared/util";
 import packManager from "../pack";
 import { kv as settings } from "../settings";
 import type { ProxyConfiguration, ProxyTypes } from "../request";
@@ -36,6 +38,7 @@ registerCallHandler<["dawn", DawnEntry[]], void>("app.statisV2", (event, type, d
 });
 
 registerCallHandler<string[], void>("app.exit", (event, action, ...params) => {
+  LOGGER.info({ action }, "Application exit requested");
   let args = process.argv.slice(1); // Skip the first argument which is the executable path
 
   const moverunIdx = args.indexOf("--moverun");
@@ -121,6 +124,7 @@ registerCallHandler<[string, string], [string]>(
 registerCallHandler<[string, string, string], void>(
   "app.setLocalConfig",
   async (event, item, subItem, value) => {
+    LOGGER.debug({ item, subItem }, "Local config update requested");
     switch (item) {
       case "Proxy":
         await settings.set("proxy", value);
@@ -496,8 +500,10 @@ registerCallHandler<[number, ProxyTypes, string, string, string, string], void>(
           agent,
           throwHttpErrors: false,
         });
+        LOGGER.debug({ taskId, ok: req.ok, status: req.statusCode }, "Proxy test finished");
         event.sender.send("channel.call", "app.ontestproxy", taskId, req.ok ? 0 : 7);
-      } catch {
+      } catch (error) {
+        LOGGER.debug({ taskId, err: toError(error) }, "Proxy test request failed");
         event.sender.send("channel.call", "app.ontestproxy", taskId, 7);
       }
     })();

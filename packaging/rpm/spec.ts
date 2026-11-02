@@ -3,6 +3,8 @@ import { writeFile } from "node:fs/promises";
 
 import ejs from "ejs";
 
+import { RUST_VERSION } from "../common/toolchain.ts";
+
 const template = resolve(import.meta.dirname, "../resources/srpm.spec.ejs");
 
 export interface SpecOptions {
@@ -15,10 +17,8 @@ export interface SpecOptions {
   homepage: string;
   nodeVersion: string;
   wasmBindgen: string;
-  /** `cargo-zigbuild` version installed alongside wasm-bindgen. */
-  cargoZigbuild: string;
-  /** Zig version required by `cargo-zigbuild`. */
-  zig: string;
+  /** Rust toolchain version installed via rustup. Defaults to `RUST_VERSION`. */
+  rust?: string;
   changelog: string;
   /** Install the build toolchain (rust/node/pnpm) inside `%build`. Defaults to true. */
   installTools?: boolean;
@@ -32,6 +32,7 @@ export async function generateSpec(options: SpecOptions) {
       template,
       {
         ...options,
+        rust: options.rust ?? RUST_VERSION,
         installTools: options.installTools ?? true,
         prebuilt: options.prebuilt ?? false,
       },

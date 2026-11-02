@@ -9,7 +9,7 @@ import {
 } from "@open-orpheus/window";
 
 import { ManagedWindow } from "../window";
-import { isAppUrl } from "../util";
+import { isAppUrl } from "../util/url";
 
 export default class MusicDesktopWindow extends ManagedWindow {
   constructor(url: string) {

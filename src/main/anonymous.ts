@@ -11,6 +11,7 @@ import { randomBytes } from "node:crypto";
 import type { NetworkFetchRequest } from "./calls/network";
 import { deserialData, encodeAnonymousId } from "./crypto";
 import { client } from "./request";
+import { toError } from "@shared/util";
 
 const ANONYMOUS_REGISTER_PATH = "/api/register/anonimous";
 const ANONYMOUS_EAPI_REGISTER_PATH = "/eapi/register/anonimous";
@@ -55,6 +56,11 @@ export default async function interceptAnonymousRequest(
   request: NetworkFetchRequest
 ): Promise<[Response | Error, number, number] | null> {
   if (!isAnonymousRegisterRequest(request.url)) return null;
+
+  LOGGER.debug(
+    { path: new URL(request.url).pathname, retryCount: request.retryCount },
+    "Intercepted anonymous register request"
+  );
 
   let sucCount = 0,
     failCount = 0;
@@ -118,6 +124,10 @@ export default async function interceptAnonymousRequest(
 
     if (parseResponseCode(res.blob) === 400) {
       // Oops, failed, run the attempts
+      LOGGER.debug(
+        { attempts: MAX_ANONYMOUS_REGISTER_ATTEMPTS },
+        "Anonymous register rejected, retrying with fresh usernames"
+      );
       let lastRes = res;
       for (let attempt = 2; attempt <= MAX_ANONYMOUS_REGISTER_ATTEMPTS; attempt++) {
         const res = await doRequest(
@@ -142,11 +152,16 @@ export default async function interceptAnonymousRequest(
         if (parseResponseCode(res.blob) === 400) continue;
         return [res, sucCount, failCount];
       }
+      LOGGER.warn(
+        { attempts: MAX_ANONYMOUS_REGISTER_ATTEMPTS, failCount },
+        "Anonymous register retries exhausted"
+      );
       return [lastRes, sucCount, failCount];
     }
 
     return [res, sucCount, failCount];
   } catch (err) {
+    LOGGER.error({ err: toError(err), failCount }, "Anonymous register request failed");
     let e: Error;
     if (err instanceof Error) {
       e = err;

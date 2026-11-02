@@ -1,5 +1,5 @@
-import { NcaeType } from "$sharedTypes/ncae";
-import { toError } from "../../util";
+import { NcaeType } from "@shared/types/ncae";
+import { toError } from "@shared/util";
 import { readEffect } from "../audio";
 import { registerCallHandler } from "../calls";
 
@@ -7,6 +7,7 @@ registerCallHandler<
   [number, { path: string; pathtype: number }],
   [{ data: string } | { errorCode: number; errorMsg: string }]
 >("audioeffect.getParams", async (event, num, pathInfo) => {
+  LOGGER.debug({ pathtype: pathInfo.pathtype }, "Audio effect params requested");
   try {
     const effect = await readEffect(pathInfo);
     if (typeof effect === "string") {

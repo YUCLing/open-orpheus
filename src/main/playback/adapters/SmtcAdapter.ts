@@ -23,6 +23,7 @@ export default class SmtcAdapter
   constructor() {
     super();
     this.mediaSession = new MediaSession();
+    LOGGER.info("SMTC media session ready");
 
     this.mediaSession.setEventHandler((err, event) => {
       switch (event.type) {
@@ -46,6 +47,7 @@ export default class SmtcAdapter
           break;
         case "SetRate":
           // OS-initiated rate change needs a renderer command; ignored in v1.
+          LOGGER.debug({ rate: event.rate }, "Ignored an OS-initiated playback rate change");
           break;
       }
     });
@@ -79,6 +81,10 @@ export default class SmtcAdapter
   onStatus(status: PlaybackStatus): void {
     this.mediaSession.setPlaybackStatus(status);
     this.pushTimeline();
+  }
+
+  onAdvancing(): void {
+    // SMTC extrapolates from the timeline; no separate clock state.
   }
 
   onPosition(position: number): void {

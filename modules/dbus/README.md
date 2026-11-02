@@ -121,3 +121,52 @@ a promise makes the reply wait for the promise to settle.
 The handler is free to call back into `MediaSession` (for example to report the
 new `volume` from `setVolume`) while a command is in flight. Property updates
 go through shared state and never wait on an in-flight command.
+
+`LoopStatus` and `Shuffle` are writable. Their setters dispatch `SetLoopStatus`
+and `SetShuffle`; the handler must apply the request to the player, then call
+`setPlaybackMode(loopStatus, shuffle)` with the confirmed state. This updates
+both properties together and emits only their changes. An invalid loop status
+or a rejected handler returns a D-Bus error and leaves the properties intact.
+In-app mode changes use the same `setPlaybackMode` method.
+
+MPRIS `Position` is extrapolated in the native service from the last reported
+position, playback rate, and the optional `advancing` flag, so clients polling
+it between the throttled updates see the current position rather than a stale
+value. `updatePlaybackState` also accepts `seeked`, which makes the supplied
+position authoritative even when playback is paused. Set `advancing: false`
+during a buffering stall to freeze the clock without changing
+`PlaybackStatus`.
+
+## Lyrics service
+
+`LyricsService` serves a read-only lyrics interface on the session bus:
+
+| Item        | Value                                   |
+| ----------- | --------------------------------------- |
+| Bus name    | `io.github.yucling.OpenOrpheus`         |
+| Object path | `/io/github/yucling/OpenOrpheus/Lyrics` |
+| Interface   | `io.github.yucling.OpenOrpheus.Lyrics`  |
+
+It publishes the current lyrics document and track metadata, plus a
+`GetLineAt(positionMs)` lookup. All times are milliseconds. The service is
+pull-based: it has no timer and does not track playback position, so clients
+use MPRIS for position/rate.
+
+```js
+import { LyricsService } from "@open-orpheus/dbus";
+
+const service = new LyricsService("io.github.yucling.OpenOrpheus");
+// Connect, register the object, and request the name off the JS thread.
+await service.start();
+await service.setTrack({ id: "1", title: "…", artist: "…", album: "…", duration: 240_000 });
+await service.setLyrics({ regular: [/* … */] }, null);
+// … later
+await service.dispose();
+```
+
+The interface is defined by runtime introspection; a checked-in XML snapshot
+and the full user-facing documentation live in the repository:
+
+- [D-Bus services (English)](../../docs/DBUS_SERVICES_en.md)
+- [D-Bus 服务（中文）](../../docs/DBUS_SERVICES.md)
+- [Introspection XML](../../docs/resources/dbus/io.github.yucling.OpenOrpheus.Lyrics.xml)

@@ -38,6 +38,7 @@ open-orpheus/
 │   ├── main.ts             # 应用入口，单实例锁，协议注册
 │   ├── preload.ts          # 渲染进程桥接入口
 │   ├── main/               # 主进程逻辑（窗口、IPC、网络、缓存……）
+│   │   ├── bridge/         # Bridge 主进程侧（IPC 注册与各窗口模块）
 │   │   ├── calls/          # IPC 命令处理器（winhelper、app 等）
 │   │   ├── packs/          # WebPack / SkinPack 加载器
 │   │   ├── menu.ts         # 右键菜单管理（Electron BrowserWindow）
@@ -45,9 +46,12 @@ open-orpheus/
 │   │   ├── window.ts       # BrowserWindow 管理
 │   │   └── ...             # 网络请求、加解密、下载、缓存、托盘等
 │   ├── preload/            # preload 暴露的 API（channel 桥接）
+│   │   ├── bridge.ts       # 类型化 Bridge 暴露（exposeApi）
 │   │   └── ...             # 播放控制、听歌识曲、云信 IM 桥接等
-│   ├── bridge/             # 类型化 RPC 框架（契约 / preload 暴露 / renderer Proxy / main 注册）
-│   │   └── ...
+│   ├── shared/             # 跨进程共享的代码（契约 / 类型 / 工具）
+│   │   ├── contracts/      # Bridge 契约（*-api.ts）
+│   │   ├── types/          # 跨进程共享类型
+│   │   └── ...             # CallDispatcher、通用工具函数
 │   └── worklets/           # AudioWorklet 处理器
 ├── gui/                    # Svelte 前端（设置页、桌面歌词、右键菜单等）
 │   └── src/
@@ -62,7 +66,7 @@ open-orpheus/
 │   ├── window/             # 跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域、光标捕获）
 │   ├── audio-effect/       # 音效处理（WebAssembly，供 AudioWorklet 使用）
 │   ├── av3a/               # AV3A（Audio Vivid）解码器
-│   ├── dbus/               # Linux D-Bus 集成（通用客户端、MPRIS 媒体会话）
+│   ├── dbus/               # Linux D-Bus 集成（通用客户端、MPRIS 媒体会话、歌词服务）
 │   ├── nowplaying/         # macOS 媒体会话（MPNowPlayingInfoCenter）
 │   ├── sys-win32/          # Windows 媒体会话（SMTC）与定时关机
 │   └── lifecycle/          # 退出回调等生命周期工具
@@ -108,13 +112,13 @@ flowchart TB
 
 - **主进程**（`src/main/`）是控制中心：管理 BrowserWindow 生命周期、注册 `orpheus://` 协议、处理网络请求、分发 IPC 调用。
 - **主窗口 Preload**（`src/preload.ts`）暴露 `window.channel`，专供 NCM Orpheus Web 应用使用，基于 CallDispatcher 的命令分发模式。
-- **Bridge 框架**（`src/bridge/`）是主进程与 GUI 窗口之间的类型化 RPC 层，分三层协作：
-  1. **契约层**（`contracts/*-api.ts`）—— TypeScript 接口，定义每个窗口的完整 API 面（方法签名、事件签名、同步值），主进程和渲染进程共享同一份类型。
-  2. **Preload 侧**（`preload.ts` → `exposeApi(prefix, syncValues)`）—— 通过 `contextBridge` 暴露原始 `_call(channel, ...args)` 和 `_on(event, callback)` 原语，各窗口 preload（`src/windows/*.ts`）按需调用。
+- **Bridge 框架**（契约在 `src/shared/contracts/`，主进程侧在 `src/main/bridge/`，preload 暴露在 `src/preload/bridge.ts`）是主进程与 GUI 窗口之间的类型化 RPC 层，分三层协作：
+  1. **契约层**（`src/shared/contracts/*-api.ts`）—— TypeScript 接口，定义每个窗口的完整 API 面（方法签名、事件签名、同步值），主进程和渲染进程共享同一份类型。
+  2. **Preload 侧**（`src/preload/bridge.ts` → `exposeApi(prefix, syncValues)`）—— 通过 `contextBridge` 暴露原始 `_call(channel, ...args)` 和 `_on(event, callback)` 原语，各窗口 preload（`src/windows/*.ts`）按需调用。
   3. **Renderer 侧**（`gui/src/lib/bridge.ts` → `getBridge<T>(name)`）—— 用 Proxy 将属性访问自动映射为 channel 路径：`api.cache.getStats()` → `_call("cache.getStats")`，`api.events.lyricsUpdate(cb)` → `_on("lyricsUpdate", cb)`，提供完整的类型推导和 IDE 自动补全。
-  4. **Main 侧**（`register.ts` → `registerIpcHandlers(wc, prefix, handlers)`）—— 遍历 handler 对象树，自动为每个叶子函数注册 `ipc.handle()`；`events` 子树被排除（纯 push-from-main）。
+  4. **Main 侧**（`src/main/bridge/register.ts` → `registerIpcHandlers(wc, prefix, handlers)`）—— 遍历 handler 对象树，自动为每个叶子函数注册 `ipc.handle()`；`events` 子树被排除（纯 push-from-main）。
 - **GUI 界面**（`gui/`）是一个 Svelte 单页应用，负责设置页、桌面歌词、右键菜单、迷你播放器等所有辅助界面，通过 `gui://` 协议加载。菜单以透明无边框 BrowserWindow 形式呈现（Wayland 下使用全屏覆盖层方案）。
-- **原生模块**（`modules/`）通过 napi-rs 为 Electron 主进程提供底层能力：SQLite 数据库（含中文拼音排序）、跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域设置、窗口拖拽、光标捕获）、系统字体枚举、AV3A 音频解码，以及各平台系统集成（`dbus/` 通用 D-Bus 客户端 + MPRIS、`nowplaying/`、`sys-win32/` Windows 媒体会话与定时关机）等；`audio-effect/` 则编译为 WebAssembly，供 `src/worklets/` 中的 AudioWorklet 使用。
+- **原生模块**（`modules/`）通过 napi-rs 为 Electron 主进程提供底层能力：SQLite 数据库（含中文拼音排序）、跨平台窗口工具（Linux 下深度集成 Wayland/X11 协议拦截、输入区域设置、窗口拖拽、光标捕获）、系统字体枚举、AV3A 音频解码，以及各平台系统集成（`dbus/` 通用 D-Bus 客户端 + MPRIS + 歌词服务、`nowplaying/`、`sys-win32/` Windows 媒体会话与定时关机）等；`audio-effect/` 则编译为 WebAssembly，供 `src/worklets/` 中的 AudioWorklet 使用。
 
 ### 关键概念
 
@@ -161,6 +165,8 @@ Issue 是反馈 Bug、提出功能建议或讨论项目方向的主要渠道。�
 
 本项目已为部分模块启用自动化测试（`pnpm test`，覆盖率报告见 `pnpm coverage`）。当前阶段 Codecov 的反馈仅供参考，不作硬性要求；不过如果你能为自己的改动补充测试用例，那自然是再好不过了！
 
+端到端测试由 Playwright 驱动真实的应用（`pnpm e2e`），在 CI 中于 Linux 的 Xvfb 环境下运行。运行前需要先构建原生模块（`pnpm build:modules`）；由于它会启动真实应用，首次运行还会从网易 CDN 下载 Web 资源包。
+
 ### 代码风格
 
 - TypeScript / JavaScript：主体代码由 [Oxlint](https://oxc.rs) 检查、[Oxfmt](https://oxc.rs) 格式化（配置见 `.oxlintrc.json`、`.oxfmtrc.json`），`gui/` 下的 SvelteKit 代码由 ESLint 检查（配置见 `gui/eslint.config.js`）。提交前请确保没有 lint 错误（`pnpm lint`），并且确保代码已格式化（`pnpm format`）。
@@ -169,17 +175,11 @@ Issue 是反馈 Bug、提出功能建议或讨论项目方向的主要渠道。�
 
 ## 开发环境搭建
 
-如果你要参与开发，需要先准备好 Node 和 Rust（推荐 Node v24、Rust 1.96）。另外，请确保已添加 WebAssembly 编译目标并安装 `wasm-bindgen-cli`：
+如果你要参与开发，需要先准备好 Node 和 Rust（推荐 Node v24、Rust 1.99）。另外，请确保已添加 WebAssembly 编译目标并安装 `wasm-bindgen-cli`：
 
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli
-```
-
-在 Linux 上，napi-rs 会以 `-x` 模式调用 `cargo-zigbuild` 构建原生模块，因此还需要安装 `cargo-zigbuild` 与 [zig](https://ziglang.org/download/)（CI 与打包脚本使用 zig 0.16.0）：
-
-```sh
-cargo install cargo-zigbuild
 ```
 
 根项目这边的工作流和普通的 Electron Forge 项目差不多，不过 Open Orpheus 自己有一些原生模块，所以还得多做几步配置。

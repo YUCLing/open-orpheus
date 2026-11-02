@@ -1,4 +1,4 @@
-import { dirname, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { default as MagicString } from "magic-string";
 import ts from "typescript";
@@ -183,10 +183,26 @@ function columnSuffix(index: number): string {
  * Derive the pino child logger `name` from the module path: the path relative
  * to the logger module's directory with the file extension stripped, e.g.
  * `cache.ts` -> "cache", `audio/OnlineStreamer.ts` -> "audio/OnlineStreamer".
+ *
+ * Modules outside that directory (the main entry `src/main.ts`, preload and
+ * window modules, ...) would otherwise start with `../`. Use the nearest
+ * ancestor directory that contains both the module and the logger, so those
+ * modules get a stable name instead, e.g. `src/main.ts` -> "main" and
+ * `src/preload/bridge.ts` -> "preload/bridge".
  */
 function toChildName(id: string, baseDir: string): string {
-  const withoutExt = relative(baseDir, id).replace(/\.(?:[cm]?[jt]sx?|d\.ts)$/, "");
-  return withoutExt.replaceAll("\\", "/");
+  let base = baseDir;
+  let relativePath = relative(base, id);
+  while (relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+    const parent = dirname(base);
+    if (parent === base) return basename(id, extname(id));
+    base = parent;
+    relativePath = relative(base, id);
+  }
+
+  const name = basename(relativePath, extname(relativePath));
+  const directory = dirname(relativePath);
+  return normalizePath(directory === "." ? name : join(directory, name));
 }
 
 interface LoggerReference {

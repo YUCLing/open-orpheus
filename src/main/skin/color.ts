@@ -3,6 +3,9 @@ import type photon from "@silvia-odwyer/photon-node";
 export async function extractColor(image: photon.PhotonImage): Promise<string> {
   const width = image.get_width();
   const height = image.get_height();
+  if (width <= 0 || height <= 0) {
+    LOGGER.warn({ width, height }, "Cannot extract a skin color from an empty image");
+  }
   const cx = Math.max(0, Math.floor(width / 2));
   const cy = Math.max(0, Math.floor(height / 2));
   const data = image.get_raw_pixels();

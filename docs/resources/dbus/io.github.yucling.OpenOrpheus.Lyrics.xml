@@ -1,0 +1,75 @@
+<node name="/io/github/yucling/OpenOrpheus/Lyrics">
+ <interface name="io.github.yucling.OpenOrpheus.Lyrics">
+   <!--
+    The current lyrics document as JSON, or `"null"` when unavailable.
+
+    The payload uses the app's `LyricsStore` schema: `regular`, optional
+    `per-word`, `translate`, and `roma` line arrays. All times are
+    milliseconds.
+    -->
+   <method name="GetLyrics">
+     <arg type="s" direction="out"/>
+   </method>
+   <!--
+    The lyric line at `position_ms`, as JSON.
+
+    Returns `"null"` before the first line. The line object contains
+    `index`, `start_time`, `end_time`, `text`, `words`, and optional
+    `translation`/`roma` text. Times are milliseconds.
+    -->
+   <method name="GetLineAt">
+     <arg name="position_ms" type="x" direction="in"/>
+     <arg type="s" direction="out"/>
+   </method>
+   <!--
+    Emitted when the lyrics document or slogan changes.
+    -->
+   <signal name="LyricsChanged">
+   </signal>
+   <!--
+    Emitted when track metadata or duration changes.
+    -->
+   <signal name="TrackChanged">
+   </signal>
+   <!--
+    The current track album.
+    -->
+   <property name="Album" type="s" access="read"/>
+   <!--
+    The current track artist.
+    -->
+   <property name="Artist" type="s" access="read"/>
+   <!--
+    Whether any primary lyric lines are available.
+    -->
+   <property name="Available" type="b" access="read"/>
+   <!--
+    The current track duration in milliseconds, or `0` when unknown.
+    -->
+   <property name="Duration" type="x" access="read"/>
+   <!--
+    Whether per-word lyrics are available.
+    -->
+   <property name="HasPerWord" type="b" access="read"/>
+   <!--
+    Whether romanization lyrics are available.
+    -->
+   <property name="HasRoma" type="b" access="read"/>
+   <!--
+    Whether translation lyrics are available.
+    -->
+   <property name="HasTranslation" type="b" access="read"/>
+   <!--
+    The current slogan, empty when none.
+    -->
+   <property name="Slogan" type="s" access="read"/>
+   <!--
+    The current track title.
+    -->
+   <property name="Title" type="s" access="read"/>
+   <!--
+    The current play id, empty when no track is known.
+    -->
+   <property name="TrackId" type="s" access="read"/>
+ </interface>
+</node>

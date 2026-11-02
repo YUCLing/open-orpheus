@@ -17,6 +17,86 @@ import pino, { LogFn } from "pino";
 
 import { log as logDir } from "./folders";
 
+const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
+
+const LOG_LEVEL_VALUES: Record<LogLevel, number> = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+  silent: Number.POSITIVE_INFINITY,
+};
+
+const LOG_FORMATS = ["auto", "json", "pretty"] as const;
+type LogFormat = (typeof LOG_FORMATS)[number];
+
+interface ConfigWarning {
+  variable: string;
+  value: string;
+  fallback: string;
+}
+
+/** Invalid logger configuration falls back to safe defaults, never to a crash. */
+const configWarnings: ConfigWarning[] = [];
+
+function envValue(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function readLevel(name: string, fallback: LogLevel): LogLevel {
+  const raw = envValue(name);
+  if (raw === undefined) return fallback;
+
+  const normalized = raw.toLowerCase();
+  if ((LOG_LEVELS as readonly string[]).includes(normalized)) return normalized as LogLevel;
+
+  configWarnings.push({ variable: name, value: raw, fallback });
+  return fallback;
+}
+
+function readFormat(): LogFormat {
+  const raw = envValue("OPEN_ORPHEUS_LOG_FORMAT");
+  if (raw === undefined) return "auto";
+
+  const normalized = raw.toLowerCase();
+  if ((LOG_FORMATS as readonly string[]).includes(normalized)) return normalized as LogFormat;
+
+  configWarnings.push({
+    variable: "OPEN_ORPHEUS_LOG_FORMAT",
+    value: raw,
+    fallback: "auto",
+  });
+  return "auto";
+}
+
+/** Return the level that enables the most records. */
+function mostVerbose(levels: LogLevel[]): LogLevel {
+  return levels.reduce((most, level) =>
+    LOG_LEVEL_VALUES[level] < LOG_LEVEL_VALUES[most] ? level : most
+  );
+}
+
+// `OPEN_ORPHEUS_LOG_LEVEL` is the default for both sinks; the sink-specific
+// variables override it, even when they are more verbose.
+const globalLevel = readLevel("OPEN_ORPHEUS_LOG_LEVEL", "info");
+const consoleLevel = readLevel("OPEN_ORPHEUS_LOG_LEVEL_CONSOLE", globalLevel);
+const fileLevel = readLevel("OPEN_ORPHEUS_LOG_LEVEL_FILE", globalLevel);
+const consoleEnabled = consoleLevel !== "silent";
+const fileEnabled = fileLevel !== "silent";
+const consoleFormat = consoleEnabled ? readFormat() : "auto";
+
+const activeLevels = [
+  ...(consoleEnabled ? [consoleLevel] : []),
+  ...(fileEnabled ? [fileLevel] : []),
+];
+// Pino filters at the logger level before the transports, so the base level
+// must be the most verbose active sink and each transport filters its own.
+const loggerLevel: LogLevel = activeLevels.length === 0 ? "silent" : mostVerbose(activeLevels);
+
 /**
  * Render a Date as a Windows-safe, human-readable filename timestamp (UTC).
  *
@@ -69,10 +149,12 @@ const latestLog = resolve(logDir, "latest.ndjson");
  * failure the roll and retention work below degrades to logging errors, and
  * the pino transport reports its own failure through the error listener.
  */
-try {
-  mkdirSync(logDir, { recursive: true });
-} catch (err) {
-  console.error(`Failed to create log directory ${logDir}:`, err);
+if (fileEnabled) {
+  try {
+    mkdirSync(logDir, { recursive: true });
+  } catch (err) {
+    console.error(`Failed to create log directory ${logDir}:`, err);
+  }
 }
 
 /**
@@ -185,7 +267,7 @@ function pruneRotatedLogs(): void {
  * Failing to rotate is housekeeping, not a startup error: pino opens the
  * existing file instead, so this run just appends to it.
  */
-if (existsSync(latestLog)) {
+if (fileEnabled && existsSync(latestLog)) {
   try {
     const lastLogStat = statSync(latestLog);
     const rollingName = `${nextArchiveName(lastLogStat.ctime)}.rolling`;
@@ -219,46 +301,41 @@ async function finishPendingRolls(): Promise<void> {
   }
 }
 
-void finishPendingRolls()
-  .then(pruneRotatedLogs)
-  .catch((err) => {
-    // finishPendingRolls logs per-entry failures itself; this only guards
-    // against unexpected errors, e.g. one raised by pruning.
-    console.error("Failed to roll previous log:", err);
-  });
+if (fileEnabled) {
+  void finishPendingRolls()
+    .then(pruneRotatedLogs)
+    .catch((err) => {
+      // finishPendingRolls logs per-entry failures itself; this only guards
+      // against unexpected errors, e.g. one raised by pruning.
+      console.error("Failed to roll previous log:", err);
+    });
+}
 
-const transport: pino.TransportSingleOptions[] = [
-  {
+const transport: pino.TransportTargetOptions[] = [];
+
+if (fileEnabled) {
+  transport.push({
     target: "pino/file",
+    level: fileLevel,
     options: {
       destination: latestLog,
       mkdir: true,
     },
-  },
-];
-
-if (
-  process.stdout.isTTY ||
-  process.env.OPEN_ORPHEUS_FORCE_PRETTY === "1" ||
-  process.env.OPEN_ORPHEUS_FORCE_PRETTY?.toLowerCase() === "true"
-)
-  transport.push({
-    target: "pino-pretty",
-    options: {},
   });
-else
-  transport.push({
-    target: "pino/file",
-    options: {
-      destination: 1,
-    },
-  });
+}
 
-const stream = pino.transport({
-  targets: transport,
-});
+if (consoleEnabled) {
+  const pretty = consoleFormat === "pretty" || (consoleFormat === "auto" && process.stdout.isTTY);
+  transport.push(
+    pretty
+      ? { target: "pino-pretty", level: consoleLevel, options: {} }
+      : { target: "pino/file", level: consoleLevel, options: { destination: 1 } }
+  );
+}
 
-stream.addListener("error", (e) => {
+const stream = transport.length > 0 ? pino.transport({ targets: transport }) : null;
+
+stream?.addListener("error", (e) => {
   try {
     console.log("Log stream error", e);
   } catch {
@@ -266,7 +343,11 @@ stream.addListener("error", (e) => {
   }
 });
 
-const logger = pino(stream);
+const logger = stream ? pino({ level: loggerLevel }, stream) : pino({ level: "silent" });
+
+for (const warning of configWarnings) {
+  logger.warn(warning, "Invalid logger configuration value");
+}
 
 /**
  * Flush records still buffered in the log transport's worker.
@@ -276,6 +357,7 @@ const logger = pino(stream);
  * the shutdown path, where there is no time left to await anything.
  */
 export function flushLogs(): void {
+  if (!stream) return;
   try {
     stream.flushSync();
   } catch (err) {

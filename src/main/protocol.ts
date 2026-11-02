@@ -6,7 +6,9 @@ export const getProtocolClientName = () => app.getApplicationNameForProtocol("or
 export function unregisterAsProtocolClient() {
   if (!isProtocolClient()) return false;
 
-  return app.removeAsDefaultProtocolClient("orpheus");
+  const removed = app.removeAsDefaultProtocolClient("orpheus");
+  if (removed) LOGGER.info("Unregistered as the default orpheus:// protocol client");
+  return removed;
 }
 
 export default function registerAsProtocolClient(force = false) {
@@ -14,5 +16,11 @@ export default function registerAsProtocolClient(force = false) {
 
   if (!force && getProtocolClientName()) return false; // Some app is, and is not Open Orpheus & no force, skipping
 
-  return app.setAsDefaultProtocolClient("orpheus");
+  const registered = app.setAsDefaultProtocolClient("orpheus");
+  if (registered) {
+    LOGGER.info("Registered as the default orpheus:// protocol client");
+  } else {
+    LOGGER.warn("Failed to register as the default orpheus:// protocol client");
+  }
+  return registered;
 }

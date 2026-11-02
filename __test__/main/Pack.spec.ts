@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import Pack from "../../src/main/packs/Pack";
@@ -21,8 +23,15 @@ class TestPack extends Pack {
   }
 }
 
+/** Host path of the pack file; unrelated to the POSIX entry names inside it. */
+const PACK_PATH = resolve("tmp", "x.pack");
+
+/**
+ * ZIP entry names are always POSIX, independent of the host filesystem, so
+ * these assertions intentionally use `/` rather than `path.sep`.
+ */
 describe("Pack.normalizePath", () => {
-  const pack = new TestPack("/tmp/x.pack");
+  const pack = new TestPack(PACK_PATH);
 
   it("prefixes a separator to relative paths", () => {
     expect(pack.normalise("a.txt")).toBe("/a.txt");
@@ -41,7 +50,7 @@ describe("Pack.normalizePath", () => {
 
 describe("Pack bookkeeping", () => {
   it("is empty and unloaded until readPack runs", async () => {
-    const pack = new TestPack("/tmp/x.pack");
+    const pack = new TestPack(PACK_PATH);
 
     expect(pack.isLoaded).toBe(false);
     expect(pack.fileList).toEqual([]);
@@ -52,7 +61,7 @@ describe("Pack bookkeeping", () => {
   });
 
   it("indexes files by their normalised path", () => {
-    const pack = new TestPack("/tmp/x.pack");
+    const pack = new TestPack(PACK_PATH);
     pack.addFile("a.txt", { name: "a" });
     pack.addFile("/dir/b.txt", { name: "b" });
 
@@ -60,8 +69,6 @@ describe("Pack bookkeeping", () => {
   });
 
   it("exposes the pack path to subclasses", async () => {
-    await expect(new TestPack("/tmp/x.pack").readFile("a.txt")).resolves.toEqual(
-      Buffer.from("a.txt")
-    );
+    await expect(new TestPack(PACK_PATH).readFile("a.txt")).resolves.toEqual(Buffer.from("a.txt"));
   });
 });

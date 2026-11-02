@@ -27,6 +27,7 @@ registerShutdownTask({
 });
 
 export default function createCacheManager() {
+  LOGGER.info({ cachePath: cache }, "Cache managers initialized");
   lyricCacheManager = new LyricCacheManager(resolve(cache, "lyrics"));
   playCacheManager = new PlayCacheManager(resolve(cache, "play"));
   httpCacheStorage = new HttpCacheStorage(

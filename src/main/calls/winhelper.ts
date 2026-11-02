@@ -2,12 +2,13 @@ import { BrowserWindow, clipboard, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
-import type { AppMenuItem } from "$sharedTypes/menu";
+import type { AppMenuItem } from "@shared/types/menu";
 import { DesktopEnvironment, dragWindow, getDesktopEnvironment } from "@open-orpheus/window";
 
 import { registerCallHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
-import { getWindowScaleFactor, pngFromIco } from "../util";
+import { pngFromIco } from "../util/image";
+import { getWindowScaleFactor } from "../util/window";
 import { BasicManagedWindow, mainWindow, ManagedWindow } from "../window";
 import AppMenu from "../menu";
 import { registerGlobalShortcut, unregisterGlobalShortcut } from "../shortcuts";
@@ -91,6 +92,7 @@ registerCallHandler<[], void>("winhelper.initMainWindow", () => {
 });
 registerCallHandler<[], void>("winhelper.finishLoadMainWindow", (event) => {
   // Window cannot be not existing at this time
+  LOGGER.info("Main window finished loading");
   setLifecycleState(LifecycleState.MainWindowLoaded, BrowserWindow.fromWebContents(event.sender)!);
 });
 
@@ -275,6 +277,11 @@ registerCallHandler<[string, string[], boolean, { id: string }], void>(
     const success = registerGlobalShortcut(name, keys, () => {
       event.sender.send("channel.call", "winhelper.onHotkey", name, isGlobal);
     });
+    if (success) {
+      LOGGER.debug({ name }, "Global hotkey registered");
+    } else {
+      LOGGER.warn({ name }, "Failed to register global hotkey, already in use");
+    }
     event.sender.send(
       "channel.call",
       "winhelper.onRegisterHotkeyResult",
@@ -301,6 +308,7 @@ registerCallHandler<[string, string[], boolean, { id: string }], void>(
       return;
     }
     unregisterGlobalShortcut(name);
+    LOGGER.debug({ name }, "Global hotkey unregistered");
     event.sender.send(
       "channel.call",
       "winhelper.onUnregisterHotkeyResult",

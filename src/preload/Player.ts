@@ -4,7 +4,7 @@ import AudioEffectManager from "./AudioEffectManager";
 import { Av3aPlaybackBackend } from "./backends/Av3aPlaybackBackend";
 import { MediaPlaybackBackend } from "./backends/MediaPlaybackBackend";
 import { isAv3aLocalFile } from "./av3a/detect";
-import { toError, volumeToGain } from "../util";
+import { toError, volumeToGain } from "@shared/util";
 import type { PlaybackBackend, PlaybackEventName } from "./PlaybackBackend";
 
 export enum AudioPlayerState {
@@ -284,9 +284,11 @@ export default class Player extends Emittery<PlayerEvents> {
           .catch((e) => {
             // Failed, debounce retry 30 times (max 30s, add 1s per attempt)
             if (attempts > 30) {
+              LOGGER.error({ err: toError(e) }, "Failed to load PCM honeypot worklet");
               reject(e);
               return;
             }
+            LOGGER.debug({ attempt: attempts }, "PCM honeypot worklet load retry");
             setTimeout(loadHoneypot, attempts * 1000);
           });
       };
@@ -294,6 +296,8 @@ export default class Player extends Emittery<PlayerEvents> {
       // Start the initial attempt
       loadHoneypot();
     });
+
+    LOGGER.info({ sampleRate: this._audioCtx.sampleRate }, "Player initialized");
   }
 
   private async ensureAudioContextState(running = true) {
@@ -330,7 +334,11 @@ export default class Player extends Emittery<PlayerEvents> {
     if (playInfo.type === 0) {
       try {
         return await isAv3aLocalFile(playInfo.path);
-      } catch {
+      } catch (err) {
+        LOGGER.warn(
+          { err: toError(err), songId: playInfo.songId },
+          "AV3A local file detection failed, using media backend"
+        );
         return false;
       }
     }
@@ -346,6 +354,7 @@ export default class Player extends Emittery<PlayerEvents> {
    * transport command issued while the switch was in flight.
    */
   async setSinkId(sinkId: string): Promise<void> {
+    LOGGER.debug({ sinkId }, "Audio output device change requested");
     // Whether playback was running when the switch started. Read now, before
     // the interruption it causes, and never written back as if the transient
     // pause were the user's intent.
@@ -388,12 +397,24 @@ export default class Player extends Emittery<PlayerEvents> {
     // A newer load started while we were sniffing; it owns playback now.
     if (isStale()) return;
 
+    LOGGER.debug(
+      { backend: isAv3a ? "av3a" : "media", songId: playInfo.songId },
+      "Playback backend selected"
+    );
     const next: PlaybackBackend = isAv3a ? this._av3a : this._media;
 
     // Switching engines: retire the old one first (stops the decode session or
     // clears a stale media-element source), then delegate to the new one.
     if (next !== this._backend) {
       const previous = this._backend;
+      LOGGER.info(
+        {
+          from: previous === this._av3a ? "av3a" : "media",
+          to: isAv3a ? "av3a" : "media",
+          songId: playInfo.songId,
+        },
+        "Playback backend switched"
+      );
       this._backend = next;
       await previous.dispose();
       // A newer load started while we disposed; it owns `_backend` now (it will

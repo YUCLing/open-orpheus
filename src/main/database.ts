@@ -51,4 +51,9 @@ export async function initializeDatabases() {
   nativeDb = new Database(pathToNativeDb);
   await nativeDb.exec("PRAGMA journal_mode = WAL;", []);
   await nativeDb.exec("PRAGMA synchronous = FULL;", []);
+
+  LOGGER.debug(
+    { webDb: pathToWebDb, musicLibrary: pathToMusicLibrary, nativeDb: pathToNativeDb },
+    "Opened databases"
+  );
 }

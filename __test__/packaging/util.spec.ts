@@ -7,7 +7,10 @@ import { vol } from "memfs";
 
 import { createSymlink } from "../../packaging/common/util";
 
-describe("createSymlink", () => {
+// POSIX symlink targets are part of the Linux package layout. Windows would
+// create reparse points with backslash targets (and needs extra privileges),
+// so this behaviour is only meaningful on POSIX hosts.
+describe.runIf(process.platform !== "win32")("createSymlink", () => {
   beforeEach(() => {
     vol.reset();
   });

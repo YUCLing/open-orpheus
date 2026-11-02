@@ -1,6 +1,6 @@
 import Emittery from "emittery";
 
-import { LyricsStore } from "$sharedTypes/lyrics";
+import { LyricsStore } from "@shared/types/lyrics";
 
 export type LyricsDispatcherEvents = {
   lyricsupdate: LyricsStore | null;
@@ -24,6 +24,7 @@ export default class LyricsDispatcher extends Emittery<LyricsDispatcherEvents> {
 
   set lyrics(value) {
     this._lyrics = value;
+    LOGGER.debug({ lines: value?.regular.length ?? 0 }, "Lyrics updated");
     if (value) this.slogan = null;
     void this.emit("lyricsupdate", value);
   }

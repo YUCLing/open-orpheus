@@ -1,7 +1,7 @@
 import { app } from "electron";
 import semver from "semver";
 
-import type { UpdateInfo } from "$sharedTypes/update";
+import type { UpdateInfo } from "@shared/types/update";
 
 let cachedUpdateInfo: UpdateInfo | null | false = false;
 
@@ -24,7 +24,12 @@ export async function checkUpdate(ignoreCache = false): Promise<UpdateInfo | nul
     throw new Error("Invalid version syntaxes.");
   }
 
-  if (!semver.gt(latest, current)) return (cachedUpdateInfo = null);
+  if (!semver.gt(latest, current)) {
+    LOGGER.debug({ current: current.version }, "No update available");
+    return (cachedUpdateInfo = null);
+  }
+
+  LOGGER.info({ current: current.version, latest: latest.version }, "Update available");
 
   return (cachedUpdateInfo = {
     version: res.tag_name,

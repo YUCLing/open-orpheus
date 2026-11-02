@@ -22,18 +22,21 @@ export function setFont(fnt: string | null) {
 async function loadSkinFileFromPack(packName: "skin" | "skin2", pathname: string) {
   const skinPack = await packManager.getOrWaitPack<SkinPack>(packName);
   try {
-    const file = await skinPack.readFile(normalize(pathname));
+    const file = await skinPack.readFile(pathname);
     return new Response(Buffer.from(file), {
       headers: {
         "Content-Type": mime.getType(extname(pathname)) || "application/octet-stream",
       },
     });
   } catch {
+    LOGGER.warn({ pack: packName, path: pathname }, "Failed to read a requested skin file");
     return Response.error();
   }
 }
 
 export default function registerGuiScheme(protocol: Protocol) {
+  LOGGER.debug({ scheme: "gui" }, "Registering the gui:// protocol handler");
+
   protocol.handle("gui", async (request) => {
     const url = new URL(request.url);
     switch (url.hostname) {
@@ -50,6 +53,10 @@ export default function registerGuiScheme(protocol: Protocol) {
 
         // Prevent path traversal outside guiDir
         if (!filePath.startsWith(guiDir)) {
+          LOGGER.warn(
+            { url: request.url },
+            "Blocked a path traversal attempt on the gui:// scheme"
+          );
           return new Response("Forbidden", { status: 403 });
         }
 
@@ -72,6 +79,7 @@ export default function registerGuiScheme(protocol: Protocol) {
           }
         }
 
+        LOGGER.debug({ url: request.url }, "Gui asset not found");
         return new Response("Not Found", { status: 404 });
       }
       default:

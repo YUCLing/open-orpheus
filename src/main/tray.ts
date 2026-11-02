@@ -72,6 +72,7 @@ export function setIcon(newIcon: NativeImage) {
   if (trayInstalled) {
     trayIcon.setImage(newIcon);
   }
+  LOGGER.debug({ installed: trayInstalled, platform: os.platform() }, "Tray icon updated");
 }
 
 export function setTooltip(newTooltip: string) {
@@ -105,9 +106,11 @@ function rightClickHandler() {
 
 export function install() {
   if (trayInstalled) {
+    LOGGER.warn("Tray icon is already installed");
     throw new Error("NCM already installed the tray icon");
   }
   if (!icon) {
+    LOGGER.error("Cannot install tray icon because no icon is available");
     throw new Error("Tray icon not initialized");
   }
   trayIcon.setImage(icon);
@@ -143,6 +146,7 @@ export function install() {
 
 export function uninstall() {
   if (!trayInstalled) {
+    LOGGER.warn("Cannot uninstall tray icon because it is not installed");
     throw new Error("Tray icon not installed");
   }
   trayIcon.setToolTip("");
@@ -155,6 +159,7 @@ export function uninstall() {
 
 /** Destroy the tray icon on shutdown. */
 export function destroyTray() {
+  LOGGER.debug("Destroying tray icon");
   trayIcon.destroy();
 }
 
