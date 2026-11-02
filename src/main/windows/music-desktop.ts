@@ -13,6 +13,7 @@ import { ManagedWindow } from "../window";
 import { isAppUrl } from "../util/url";
 
 export default class MusicDesktopWindow extends ManagedWindow {
+  private display: Display | null = null;
   private layerShellOptions: LayerShellOptions = {
     namespace: "Open Orpheus Music Desktop",
     layer: LayerShellLayer.Background,
@@ -52,36 +53,44 @@ export default class MusicDesktopWindow extends ManagedWindow {
     } else {
       LOGGER.warn({ url }, `refused to load a non-application URL into the music desktop window`);
     }
-    this.setWindowInputRegion([]);
 
+    const updateBounds = this.updateBounds.bind(this);
+    wnd.on("show", updateBounds);
+    screen.addListener("display-added", updateBounds);
+    screen.addListener("display-metrics-changed", updateBounds);
+    screen.addListener("display-removed", updateBounds);
+    wnd.addListener("closed", () => {
+      screen.removeListener("display-added", updateBounds);
+      screen.removeListener("display-metrics-changed", updateBounds);
+      screen.removeListener("display-removed", updateBounds);
+    });
+  }
+
+  private updateBounds() {
     if (
-      [DesktopEnvironment.X11, DesktopEnvironment.Windows, DesktopEnvironment.Darwin].includes(
+      !this.window ||
+      ![DesktopEnvironment.X11, DesktopEnvironment.Windows, DesktopEnvironment.Darwin].includes(
         getDesktopEnvironment()
       )
-    ) {
-      const setBounds = () => wnd.setBounds(screen.getPrimaryDisplay().bounds);
-      setBounds();
-      screen.addListener("display-added", setBounds);
-      screen.addListener("display-metrics-changed", setBounds);
-      screen.addListener("display-removed", setBounds);
-      wnd.addListener("closed", () => {
-        screen.removeListener("display-added", setBounds);
-        screen.removeListener("display-metrics-changed", setBounds);
-        screen.removeListener("display-removed", setBounds);
-      });
-      try {
-        setWindowAsBackground(wnd.getNativeWindowHandle());
-      } catch (e) {
-        // Destroy the window and rethrow, deferred so attaching won't crash.
-        setImmediate(() => this.destroy());
-        throw e;
-      }
+    )
+      return;
+
+    const display =
+      screen.getAllDisplays().find((v) => v.id === this.display?.id) ?? screen.getPrimaryDisplay();
+    this.window.setBounds(display.bounds);
+
+    try {
+      setWindowAsBackground(this.window.getNativeWindowHandle());
+    } catch (e) {
+      // Destroy the window and rethrow, deferred so attaching won't crash.
+      setImmediate(() => this.destroy());
+      throw e;
     }
   }
 
   setDisplay(display: Display) {
     LOGGER.info({ id: display.id, label: display.label }, "Setting music desktop display");
-    // TODO: Support for non-Wayland environments
+    this.display = display;
     this.layerShellOptions.output = display.id;
     this.setLayerShell(this.layerShellOptions);
   }
