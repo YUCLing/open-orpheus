@@ -25,7 +25,7 @@ vi.mock("../../src/main/logger", () => ({
   flushLogs: hoisted.flushLogs,
 }));
 
-installLoggerStub();
+const logger = installLoggerStub();
 
 import {
   events,
@@ -306,6 +306,102 @@ describe("shutdown tasks", () => {
     await quit();
 
     expect(ran).toEqual([]);
+  });
+
+  // The two tests below pin the guards in `runShutdownTasks` that the real
+  // timers cannot hit on demand. They steer `Date.now` instead, which is what
+  // decides both the remaining budget and which of the two timers is due first.
+  it("skips the rest of the queue when the wall clock passes the deadline", async () => {
+    // Synchronous work can outlive the deadline without yielding to the timer
+    // queue, so the deadline's own timer has not fired yet when the next task
+    // is considered. `remaining` is what stops the queue there.
+    const ran: string[] = [];
+    const now = vi.spyOn(Date, "now");
+    let clock = 0;
+    now.mockImplementation(() => clock);
+
+    try {
+      const lifecycle = await freshLifecycle({
+        shutdownDeadlineMs: 60,
+        taskTimeoutMs: 1000,
+      });
+
+      lifecycle.registerShutdownTask({
+        name: "late",
+        run: () => {
+          ran.push("late");
+        },
+      });
+      lifecycle.registerShutdownTask({
+        name: "stalling",
+        run: () => {
+          // Like a slow native call: the loop is blocked past the deadline, but
+          // no timers phase has run to abort the deadline signal.
+          clock = 1000;
+        },
+      });
+
+      await quit();
+
+      expect(ran).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        { tasks: ["late"] },
+        "Shutdown tasks skipped: deadline reached"
+      );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("stops the queue when a task's own timer fires just before the deadline", async () => {
+    // Here the deadline is the binding bound, so the per-task budget is the
+    // time left before it. That timer can be due before the deadline's timer,
+    // and the queue must still stop instead of starting the next task with the
+    // sliver of budget that is left.
+    const ran: string[] = [];
+    const now = vi.spyOn(Date, "now");
+    let clock = 0;
+    now.mockImplementation(() => clock);
+
+    try {
+      const lifecycle = await freshLifecycle({
+        shutdownDeadlineMs: 400,
+        taskTimeoutMs: 1000,
+      });
+
+      lifecycle.registerShutdownTask({
+        name: "late",
+        run: () => {
+          ran.push("late");
+        },
+      });
+      lifecycle.registerShutdownTask({
+        name: "hung",
+        run: () => new Promise<void>(() => {}),
+      });
+      // Runs first and shrinks the remaining budget, so `hung` is bounded by
+      // the deadline (100ms left) rather than by the 1000ms task timeout.
+      lifecycle.registerShutdownTask({
+        name: "elapse-most-of-the-deadline",
+        run: () => {
+          clock = 300;
+        },
+      });
+
+      await quit();
+
+      expect(ran).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        { task: "hung" },
+        "Shutdown task cut off by the shutdown deadline"
+      );
+      expect(logger.warn).toHaveBeenCalledWith(
+        { tasks: ["late"] },
+        "Shutdown tasks skipped: deadline reached"
+      );
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("does not leave a straggler rejection unhandled", async () => {

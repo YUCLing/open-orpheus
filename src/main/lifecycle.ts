@@ -217,7 +217,11 @@ async function runShutdownTasks(): Promise<void> {
   for (let index = 0; index < queue.length; index++) {
     const task = queue[index];
 
-    if (deadline.aborted) {
+    // Computed before starting the task: with no budget left the task would be
+    // invoked and abandoned in the same tick, which counts as running it even
+    // though it never got a chance to do anything.
+    const remaining = shutdownDeadlineMs - (Date.now() - startedAt);
+    if (deadline.aborted || remaining <= 0) {
       logSkipped(queue.slice(index));
       break;
     }
@@ -225,8 +229,13 @@ async function runShutdownTasks(): Promise<void> {
     // Never let one task run past the overall deadline. When the remaining
     // budget is the smaller term the deadline is what ends this task, and the
     // log line below says so rather than blaming the task.
-    const remaining = shutdownDeadlineMs - (Date.now() - startedAt);
     const timeoutMs = task.timeoutMs ?? defaultTaskTimeoutMs;
+    // With `budget` clamped down to `remaining`, the per-task timer and the
+    // deadline timer are due at almost the same instant and can fire in either
+    // order. Remember that the deadline is what bounds this task instead of
+    // asking `deadline.aborted` after the race: the task's own timer may have
+    // won, leaving the flag false even though the deadline is the cause.
+    const deadlineIsBinding = remaining <= timeoutMs;
     const budget = Math.max(Math.min(timeoutMs, remaining), 0);
     // Composed so the task sees either bound. The per-task signal is fresh each
     // iteration, so a task that times out does not cancel the next one.
@@ -244,7 +253,7 @@ async function runShutdownTasks(): Promise<void> {
 
       if (outcome === "done") continue;
 
-      if (deadline.aborted) {
+      if (deadlineIsBinding || deadline.aborted) {
         LOGGER.warn({ task: task.name }, `Shutdown task cut off by the shutdown deadline`);
         logSkipped(queue.slice(index + 1));
         break;
