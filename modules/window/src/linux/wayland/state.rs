@@ -45,9 +45,13 @@ pub(crate) struct OutputInfo {
     pub(crate) name: Option<String>,
     /// Its human-readable description, e.g. the monitor model.
     pub(crate) description: Option<String>,
-    /// The name its `zxdg_output_v1` gives it, when the client made one. This
-    /// is the name a toolkit builds its display label from, so it is the one an
-    /// application is most likely to hand back.
+    /// The name its `zxdg_output_v1` gives it, when the client made one.
+    ///
+    /// `zxdg_output_v1.name` is deprecated in favour of `wl_output.name`, and
+    /// the protocol keeps it only because a compositor must still send it: it
+    /// is read for a compositor too old to advertise wl_output v4, which has no
+    /// other way to name an output. It is therefore the last of
+    /// [`Self::names`], not the first.
     pub(crate) xdg_name: Option<String>,
     /// Its size in the logical coordinates a layer surface is placed in, as
     /// reported by `zxdg_output_v1`.
@@ -73,8 +77,12 @@ impl OutputInfo {
     }
 
     /// Every name this output is known by, best first.
+    ///
+    /// `wl_output.name` comes first, since it is the one the protocol points
+    /// clients at; `zxdg_output_v1.name` is deprecated and is only here for a
+    /// compositor that has no wl_output v4 to send it from.
     pub(crate) fn names(&self) -> impl Iterator<Item = &str> {
-        [&self.xdg_name, &self.name, &self.description]
+        [&self.name, &self.description, &self.xdg_name]
             .into_iter()
             .flatten()
             .map(String::as_str)
@@ -705,6 +713,30 @@ mod tests {
         // An output the client never bound is not an error: the compositor
         // picks, which is what a null output id means.
         assert_eq!(output_for_name(&conn, "DP-9"), None);
+    }
+
+    /// `zxdg_output_v1.name` is deprecated, so it is the name of last resort —
+    /// but it is still a name this output answers to, which is what an
+    /// application that recorded it under an older build hands back.
+    #[test]
+    fn a_wl_output_name_is_preferred_over_the_xdg_one() {
+        let mut conn = WaylandConn::new();
+        conn.outputs.insert(
+            7,
+            OutputInfo {
+                name: Some("DP-1".into()),
+                description: Some("Dell Inc. DELL U2720Q".into()),
+                xdg_name: Some("DP-1-old".into()),
+                ..OutputInfo::default()
+            },
+        );
+
+        assert_eq!(
+            conn.outputs.get(&7).and_then(OutputInfo::label).as_deref(),
+            Some("DP-1"),
+            "the name the protocol points at is the one reported"
+        );
+        assert_eq!(output_for_name(&conn, "DP-1-old"), Some(7), "still matches");
     }
 
     #[test]

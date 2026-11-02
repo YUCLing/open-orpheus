@@ -111,6 +111,10 @@ pub(crate) const REQ_GET_XDG_OUTPUT: u16 = 1;
 
 // zxdg_output_v1 events
 pub(crate) const EVT_XDG_OUTPUT_LOGICAL_SIZE: u16 = 1;
+/// Deprecated in favour of `wl_output.name`, which is why it is read only when
+/// that one never arrives: `wl_output` gained `name` in v4, and a compositor
+/// older than that has no other way to say how an output is called. The
+/// protocol still requires it to keep sending this event.
 pub(crate) const EVT_XDG_OUTPUT_NAME: u16 = 3;
 
 // wl_registry events
