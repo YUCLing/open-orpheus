@@ -416,6 +416,3 @@ hand-written line in either file is gone at the next build.
 The application imports these functions by name, which makes an out-of-date
 binding fail early and loudly: Electron cannot start at all, and the error is
 `Named export 'X' not found ... is a CommonJS module`. The rebuild is the fix.
-`isLayerShellNativeComplete` in `src/main/window.ts` covers the narrower case
-where the wrapper exists but the binary behind it does not, and falls back to
-ordinary windows with a message saying so.

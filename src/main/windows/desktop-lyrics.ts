@@ -20,7 +20,6 @@ import {
 
 import {
   guiUrl,
-  isLayerShellNativeComplete,
   mainWindow,
   ManagedWindow,
   OnDemandWindow,
@@ -679,10 +678,6 @@ function whyLayerShellIsUnavailable(): string | null {
   const byCompositor = whyNotALayerSurface(desktopName, process.env[LAYER_SHELL_CHOICE]);
   if (byCompositor !== null) return byCompositor;
   if (!ManagedWindow.isLayerShellAvailable()) return "the compositor has no layer shell";
-  // Without the native half of the layer-shell path the window could only be
-  // moved by the compositor, which a layer surface never is. `window.ts` logs
-  // why; here the window simply stays an ordinary one.
-  if (!isLayerShellNativeComplete) return "the native module is older";
   return null;
 }
 

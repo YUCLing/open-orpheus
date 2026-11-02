@@ -73,22 +73,6 @@ registerShutdownFinalizer({
   },
 });
 
-/**
- * Whether the loaded native module has everything the layer-shell path needs.
- *
- * The application and the native module are built separately, and a stale
- * native module does not fail loudly on its own: the policy it registers is one
- * whose geometry nothing can move, so a drag is simply ignored. Callers check
- * this and keep the window an ordinary one, where the compositor does the
- * dragging itself.
- */
-export const isLayerShellNativeComplete =
-  typeof setWindowLayerSize === "function" &&
-  typeof setWindowLayerBounds === "function" &&
-  typeof onLayerSurfaceGeometry === "function" &&
-  typeof onLayerSurfaceOutput === "function" &&
-  typeof onLayerSurfacePushed === "function";
-
 export let mainWindow: BrowserWindow | null = null;
 
 /**
@@ -210,13 +194,6 @@ void app.whenReady().then(() => {
     const wnd = managed?.window;
     if (managed && wnd) void managed.emit("layerShellRefused", wnd);
   });
-  if (!isLayerShellNativeComplete) {
-    LOGGER.error(
-      "the native window module is older than the application: layer-shell windows would ignore " +
-        "drags, so they stay ordinary windows. Rebuild it with `pnpm build:modules`."
-    );
-    return;
-  }
   onLayerSurfaceGeometry(({ windowId, x, y, width, height }) => {
     const managed = ManagedWindow.fromId(windowId);
     if (managed) void managed.emit("layerGeometry", { x, y, width, height });
@@ -503,7 +480,7 @@ export abstract class ManagedWindow<
    * instead, which is the fallback rather than the rule.
    */
   setLayerBounds(width: number, height: number): boolean {
-    if (!this.isWayland() || !isLayerShellNativeComplete) return false;
+    if (!this.isWayland()) return false;
     return setWindowLayerBounds(this.id, Math.round(width), Math.round(height));
   }
 
@@ -521,7 +498,7 @@ export abstract class ManagedWindow<
    * not a layer surface, which is also the answer everywhere but Wayland.
    */
   setLayerSize(width: number, height: number): boolean {
-    if (!this.isWayland() || !isLayerShellNativeComplete) return false;
+    if (!this.isWayland()) return false;
     return setWindowLayerSize(this.id, Math.round(width), Math.round(height));
   }
 
