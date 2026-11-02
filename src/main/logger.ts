@@ -17,6 +17,13 @@ import pino, { LogFn } from "pino";
 
 import { log as logDir } from "./folders";
 
+let isQuitting = false;
+void import("./lifecycle").then((v) =>
+  v.events.on("quitting", () => {
+    isQuitting = true;
+  })
+);
+
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
 type LogLevel = (typeof LOG_LEVELS)[number];
 
@@ -336,6 +343,8 @@ if (consoleEnabled) {
 const stream = transport.length > 0 ? pino.transport({ targets: transport }) : null;
 
 stream?.addListener("error", (e) => {
+  // Worker issues when quitting are expected. And we can do nothing about it. It's also noisy to see.
+  if (e instanceof Error && e.message.startsWith("the worker") && isQuitting) return;
   try {
     console.log("Log stream error", e);
   } catch {
