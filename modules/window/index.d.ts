@@ -164,7 +164,7 @@ export declare function onLayerShellRoleRefused(callback: (windowId: string) => 
  */
 export declare function setInputRegion(windowHandle: string | Buffer, rects?: { x: number, y: number, w: number, h: number }[] | null): boolean
 
-export declare function setWindowAsBackground(hwnd: Buffer): void
+export declare function setWindowAsBackground(hwnd: Buffer, bounds?: WindowBounds | undefined | null): void
 
 /**
  * Register (or clear) the layer-shell policy for a managed window.
@@ -225,6 +225,14 @@ export declare function transferWindowState(fromId: string, toId: string): boole
  * needs both asks both.
  */
 export declare function validateLayerShellOptions(options: LayerShellOptions): boolean
+
+/** A rectangle in physical screen pixels. */
+export interface WindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 /**
  * How long ago the most recent pointer button press landed in this window.

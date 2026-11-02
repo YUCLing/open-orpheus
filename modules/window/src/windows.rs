@@ -2,10 +2,10 @@ use napi::{Env, Error, Result, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use windows::{
     Win32::{
-        Foundation::{HWND, LPARAM, POINT, WPARAM},
+        Foundation::{HWND, LPARAM, POINT, RECT, WPARAM},
         Graphics::Gdi::{
             GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MapWindowPoints,
-            MonitorFromWindow,
+            MonitorFromRect, MonitorFromWindow,
         },
         UI::{
             Input::KeyboardAndMouse::ReleaseCapture,
@@ -40,21 +40,41 @@ pub fn drag_window(env: Env, hwnd: Buffer) -> Result<()> {
 }
 
 #[napi]
-pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
+pub fn set_window_as_background(
+    env: Env,
+    hwnd: Buffer,
+    bounds: Option<crate::WindowBounds>,
+) -> Result<()> {
     if hwnd.len() != std::mem::size_of::<isize>() {
         return env.throw("Invalid buffer size for window handle");
     }
     let hwnd = isize::from_ne_bytes(hwnd.as_ref().try_into().unwrap());
     let hwnd = HWND(hwnd as _);
 
-    // Read the target monitor back from the window rather than from the primary
-    // screen's metrics, which are only the right answer when the background
-    // happens to go on the primary monitor.
+    // Pick the monitor from the caller's target when there is one; otherwise
+    // fall back to the monitor the window is on.
+    let monitor = match bounds {
+        Some(bounds) => {
+            let rect = RECT {
+                left: bounds.x,
+                top: bounds.y,
+                right: bounds.x + bounds.width,
+                bottom: bounds.y + bounds.height,
+            };
+            let monitor = unsafe { MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST) };
+            if monitor.is_invalid() {
+                unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) }
+            } else {
+                monitor
+            }
+        }
+        None => unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) },
+    };
+
     let mut monitor_info = MONITORINFO {
         cbSize: std::mem::size_of::<MONITORINFO>() as u32,
         ..Default::default()
     };
-    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
     if !unsafe { GetMonitorInfoW(monitor, &mut monitor_info) }.as_bool() {
         return Err(Error::from_reason(
             windows::core::Error::from_thread().message(),

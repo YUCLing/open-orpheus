@@ -200,7 +200,14 @@ pub fn drag_window(env: Env, hwnd: Buffer) -> Result<()> {
 }
 
 #[napi]
-pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
+pub fn set_window_as_background(
+    env: Env,
+    hwnd: Buffer,
+    bounds: Option<crate::WindowBounds>,
+) -> Result<()> {
+    // The window stays top-level here; placement is `setBounds`' job.
+    let _ = bounds;
+
     if !x11::is_x11() {
         return env.throw("This API is supported only in X11.");
     }

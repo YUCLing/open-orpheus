@@ -14,8 +14,6 @@ import { isAppUrl } from "../util/url";
 
 export default class MusicDesktopWindow extends ManagedWindow {
   private display: Display | null = null;
-  /** Whether the native layer already attached the window (Windows). */
-  private attached = false;
   /** The display geometry last applied through `setBounds`. */
   private placed: {
     id: number;
@@ -87,11 +85,22 @@ export default class MusicDesktopWindow extends ManagedWindow {
     const display =
       screen.getAllDisplays().find((v) => v.id === this.display?.id) ?? screen.getPrimaryDisplay();
 
-    // Re-applying identical bounds is not harmless: when native placement rounds
-    // differently (1232 px vs the monitor's 1231 px at 150%), each `show`
-    // resized the window and restarted the page's decoration. Place only on an
-    // actual change.
-    if (this.needsPlacement(display, isWindows)) {
+    // Windows keeps the window parented to the WorkerW, where `setBounds` is
+    // parent-relative. Give the native side the target in physical pixels
+    // instead, so it also follows a display that was removed, re-added or
+    // rearranged after attaching.
+    let bounds: { x: number; y: number; width: number; height: number } | undefined;
+    if (isWindows) {
+      const rect = screen.dipToScreenRect(null, display.bounds);
+      bounds = {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    } else if (this.needsPlacement(display)) {
+      // Re-applying identical bounds can resize by a rounding step and restart
+      // the page's decoration, so only a real change is applied.
       wnd.setBounds(display.bounds);
       this.placed = {
         id: display.id,
@@ -101,8 +110,7 @@ export default class MusicDesktopWindow extends ManagedWindow {
     }
 
     try {
-      setWindowAsBackground(wnd.getNativeWindowHandle());
-      if (isWindows) this.attached = true;
+      setWindowAsBackground(wnd.getNativeWindowHandle(), bounds);
     } catch (e) {
       // Destroy the window and rethrow, deferred so attaching won't crash.
       setImmediate(() => this.destroy());
@@ -110,16 +118,8 @@ export default class MusicDesktopWindow extends ManagedWindow {
     }
   }
 
-  /**
-   * Whether the window still needs to be moved to `display`'s geometry.
-   *
-   * Windows can only be placed while top-level: once it is a WorkerW child,
-   * `setBounds` speaks the parent's coordinates and the native side owns the
-   * geometry. The other platforms re-apply only a target that actually changed.
-   */
-  private needsPlacement(display: Display, isWindows: boolean): boolean {
-    if (isWindows) return !this.attached;
-
+  /** Whether the window still needs to be moved to `display`'s geometry. */
+  private needsPlacement(display: Display): boolean {
     const placed = this.placed;
     return (
       placed === null ||

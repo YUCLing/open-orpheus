@@ -57,7 +57,14 @@ pub fn drag_window(env: Env, hwnd: Buffer) -> Result<()> {
 }
 
 #[napi]
-pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
+pub fn set_window_as_background(
+    env: Env,
+    hwnd: Buffer,
+    bounds: Option<crate::WindowBounds>,
+) -> Result<()> {
+    // The window stays top-level here, so its screen already says where it goes.
+    let _ = bounds;
+
     if hwnd.len() < std::mem::size_of::<usize>() {
         return env.throw("Invalid buffer size for native handle");
     }

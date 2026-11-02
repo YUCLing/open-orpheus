@@ -33,6 +33,15 @@ pub enum LayerShellLayer {
     Overlay,
 }
 
+/// A rectangle in physical screen pixels.
+#[napi(object)]
+pub struct WindowBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 /// Layer-shell state for a window the application is about to create.
 ///
 /// With an owner, applied only to that managed window; without one, applied to
