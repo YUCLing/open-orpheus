@@ -1,7 +1,7 @@
 import { ipcRenderer } from "electron";
 import SDK from "@yxim/nim-web-sdk";
 
-import type { NetworkFetchRequest, NetworkFetchResponse } from "../main/calls/network";
+import type { NetworkFetchRequest, NetworkFetchResponse } from "@main/network/types";
 
 export default class YunxinIM extends EventTarget {
   static APP_KEY = "3a6a3e48f6854dfa4e4464f3bdaec3b4";
