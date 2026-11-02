@@ -18,9 +18,10 @@ use std::sync::OnceLock;
 
 use super::codec::{
     EVT_DELETE_ID, EVT_GLOBAL, EVT_GLOBAL_REMOVE, Iface, REQ_BIND, REQ_COMMIT, REQ_CREATE_SURFACE,
-    REQ_DESTROY, REQ_GET_POINTER, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_TOPLEVEL_DECORATION,
-    REQ_GET_TOUCH, REQ_GET_XDG_OUTPUT, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE,
-    REQ_SET_WINDOW_GEOMETRY, WL_POINTER_RELEASE, WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
+    REQ_DESTROY, REQ_GET_POINTER, REQ_GET_POPUP, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL,
+    REQ_GET_TOPLEVEL_DECORATION, REQ_GET_TOUCH, REQ_GET_XDG_OUTPUT, REQ_GET_XDG_SURFACE,
+    REQ_SET_ICON, REQ_SET_PARENT, REQ_SET_TITLE, REQ_SET_WINDOW_GEOMETRY, WL_POINTER_RELEASE,
+    WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
 };
 use super::inject;
 use super::state::WaylandConn;
@@ -138,9 +139,13 @@ fn dispatch_request_inner(
         // `roles::dispatch` owns the role decision and only delegates here when
         // no window identity could change the outcome, so the id is unknown.
         (Iface::XdgSurface, REQ_GET_TOPLEVEL) => objects::on_get_toplevel(fd, conn, msg, fx, None),
+        // A popup names its parent as an argument, so the parent — not the
+        // object the request is sent on — is what may have been converted.
+        (Iface::XdgSurface, REQ_GET_POPUP) => shadow::on_get_popup(conn, msg),
         (Iface::XdgSurface, REQ_SET_WINDOW_GEOMETRY) => objects::on_popup_geometry(conn, msg),
         (Iface::WlSeat, WL_SEAT_RELEASE) => objects::on_destroy(fd, conn, msg, fx),
         (Iface::XdgWmBase, REQ_DESTROY) => objects::on_destroy(fd, conn, msg, fx),
+        (Iface::XdgToplevel, REQ_SET_PARENT) => shadow::on_set_parent(conn, msg),
         (Iface::XdgToplevel, REQ_SET_TITLE) => title::on_set_title(conn, msg, fx),
         (Iface::XdgPopupShim, REQ_SET_TITLE) => {
             let _ = title::on_set_title(conn, msg, fx);
@@ -226,7 +231,7 @@ mod tests {
         BTN_PRESSED, EVT_BUTTON, EVT_ENTER, EVT_LEAVE, EVT_TOUCH_DOWN, decorate_title,
     };
     use super::super::state::{WaylandConn, init_state};
-    use super::super::test_support::{message, serial, wl_string, word};
+    use super::super::test_support::{fixture, message, options, serial, wl_string, word};
     use super::*;
 
     const FD: RawFd = 42;
@@ -355,6 +360,38 @@ mod tests {
         assert_eq!(conn.top_to_xdg.get(&30), Some(&20));
         assert_eq!(conn.wl_to_top.get(&10), Some(&30));
         assert_eq!(fx.arm_watchers_for, vec![10], "cursor watchers arm on bind");
+    }
+
+    /// A popup names its parent as an argument, so a converted window is only
+    /// found in the request body — not in the object the request is sent on.
+    #[test]
+    fn a_popup_naming_a_converted_window_is_translated() {
+        let (_guard, mut conn) = fixture();
+        conversion::convert_to_layer_surface(
+            &mut conn,
+            20,
+            10,
+            30,
+            options(),
+            &mut Effects::default(),
+        )
+        .expect("the conversion is sendable");
+        conn.ifaces.insert(50, Iface::XdgSurface);
+
+        let mut args = word(60);
+        args.extend_from_slice(&word(20));
+        args.extend_from_slice(&word(70));
+        let action = dispatch_request(
+            FD,
+            &mut conn,
+            &message(50, REQ_GET_POPUP, &args),
+            &mut Effects::default(),
+        );
+
+        let Action::Replace(messages) = action else {
+            panic!("expected the popup to be re-parented to the layer surface");
+        };
+        assert_eq!(messages.len(), 2);
     }
 
     #[test]

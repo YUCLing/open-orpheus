@@ -75,20 +75,63 @@ pub(crate) fn on_client_xdg_surface_request(conn: &mut WaylandConn, msg: &WlMess
             };
             Action::Replace(vec![layer_shell::ack_configure(layer_id, serial)])
         }
-        REQ_GET_POPUP => {
-            let (Some(popup_id), Some(layer_id)) = (
-                msg.u32_arg(8),
-                conn.xdg_to_layer.get(&msg.object_id).copied(),
-            ) else {
-                return Action::Suppress;
-            };
-            // The layer surface has to be the popup's parent, which means
-            // creating it with a null xdg parent first.
-            let Some(rewritten) = layer_shell::strip_popup_parent(msg.raw()) else {
-                return Action::Suppress;
-            };
-            Action::Replace(vec![rewritten, layer_shell::get_popup(layer_id, popup_id)])
-        }
+        REQ_GET_POPUP => match conn.xdg_to_layer.get(&msg.object_id).copied() {
+            Some(layer_id) => layer_popup(layer_id, msg),
+            // The window keeps its layer id for as long as the surface has the
+            // role, so a missing one leaves nothing the compositor could answer
+            // for under this id.
+            None => Action::Suppress,
+        },
+        _ => Action::Forward,
+    }
+}
+
+/// `xdg_surface.get_popup` for a popup of a converted window.
+///
+/// The popup has an `xdg_surface` of its own, which the compositor knows
+/// normally; what it does not know is the parent the request names, because a
+/// converted window's `xdg_surface` id holds the callback that reserved it. The
+/// compositor refuses an argument of the wrong type with a `wl_display` protocol
+/// error, which takes the whole connection down — so the request has to be
+/// reshaped rather than passed on.
+///
+/// Layer shell parents a popup its own way, and the order is the protocol's: the
+/// popup is first created with no xdg parent at all, then handed to the layer
+/// surface, both before the client commits the popup's initial state.
+pub(crate) fn on_get_popup(conn: &WaylandConn, msg: &WlMessage) -> Action {
+    let Some(parent) = msg.u32_arg(12) else {
+        return Action::Forward;
+    };
+    match conn.xdg_to_layer.get(&parent).copied() {
+        Some(layer_id) => layer_popup(layer_id, msg),
+        None => Action::Forward,
+    }
+}
+
+/// Create `msg`'s popup with a null parent, then give it `layer_id` as parent.
+///
+/// `zwlr_layer_surface_v1.get_popup` exists from layer-shell version 2, which
+/// every compositor that has had layer shell for years is past; there is no
+/// second way to parent a popup, so an older one would have none.
+fn layer_popup(layer_id: u32, msg: &WlMessage) -> Action {
+    let (Some(popup_id), Some(rewritten)) =
+        (msg.u32_arg(8), layer_shell::strip_popup_parent(msg.raw()))
+    else {
+        return Action::Suppress;
+    };
+    Action::Replace(vec![rewritten, layer_shell::get_popup(layer_id, popup_id)])
+}
+
+/// `xdg_toplevel.set_parent` naming a converted window.
+///
+/// The argument is typed `xdg_toplevel`, and a converted window's id holds a
+/// layer surface, so the compositor answers with a protocol error that takes the
+/// connection down. Layer shell has no transient-for — nothing can be attached
+/// to a layer surface — so the relationship is dropped and the window keeps the
+/// placement it was created with.
+pub(crate) fn on_set_parent(conn: &WaylandConn, msg: &WlMessage) -> Action {
+    match msg.u32_arg(8) {
+        Some(parent) if parent != 0 && conn.layer_windows.contains_key(&parent) => Action::Suppress,
         _ => Action::Forward,
     }
 }
@@ -221,8 +264,8 @@ mod tests {
         DECORATION_CLIENT_SIDE, EVT_DECORATION_CONFIGURE, EVT_LAYER_CLOSED, EVT_LAYER_CONFIGURE,
         EVT_TOPLEVEL_CLOSE, EVT_TOPLEVEL_CONFIGURE, REQ_ACK_CONFIGURE, REQ_DECORATION_DESTROY,
         REQ_DESTROY, REQ_GET_POPUP, REQ_GET_TOPLEVEL_DECORATION, REQ_LAYER_ACK_CONFIGURE,
-        REQ_LAYER_DESTROY, REQ_LAYER_GET_POPUP, REQ_MOVE, REQ_SET_ICON, REQ_SET_TITLE,
-        REQ_SET_WINDOW_GEOMETRY, decorate_title,
+        REQ_LAYER_DESTROY, REQ_LAYER_GET_POPUP, REQ_MOVE, REQ_SET_ICON, REQ_SET_PARENT,
+        REQ_SET_TITLE, REQ_SET_WINDOW_GEOMETRY, decorate_title,
     };
     use super::super::super::test_support::{
         fixture, header, message, options, replaced, u32_at, wl_string, word,
@@ -322,6 +365,79 @@ mod tests {
         assert_eq!(u32_at(&messages[0], 16), 70, "positioner preserved");
         assert_eq!(header(&messages[1]), (30, REQ_LAYER_GET_POPUP, 12));
         assert_eq!(u32_at(&messages[1], 8), 60);
+    }
+
+    /// A tooltip or menu of a converted window arrives as a `get_popup` on the
+    /// popup's own `xdg_surface`, with the converted window named as the parent.
+    /// Forwarding it would hand the compositor an id that holds a callback, and
+    /// the protocol error that comes back kills the connection.
+    #[test]
+    fn a_popup_of_a_converted_window_is_parented_to_the_layer_surface() {
+        let (_guard, mut conn) = fixture();
+        convert(&mut conn);
+
+        let mut body = word(60);
+        body.extend_from_slice(&word(20));
+        body.extend_from_slice(&word(70));
+        let messages = replaced(on_get_popup(&conn, &message(50, REQ_GET_POPUP, &body)));
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            header(&messages[0]),
+            (50, REQ_GET_POPUP, 20),
+            "the popup's own surface"
+        );
+        assert_eq!(u32_at(&messages[0], 8), 60, "popup id preserved");
+        assert_eq!(u32_at(&messages[0], 12), 0, "xdg parent nulled");
+        assert_eq!(u32_at(&messages[0], 16), 70, "positioner preserved");
+        assert_eq!(header(&messages[1]), (30, REQ_LAYER_GET_POPUP, 12));
+        assert_eq!(u32_at(&messages[1], 8), 60);
+    }
+
+    /// Every other popup is the compositor's own business — including a popup of
+    /// a popup, whose parent is an ordinary `xdg_surface`.
+    #[test]
+    fn a_popup_of_an_ordinary_window_is_forwarded() {
+        let (_guard, mut conn) = fixture();
+        convert(&mut conn);
+
+        let mut body = word(60);
+        body.extend_from_slice(&word(21));
+        body.extend_from_slice(&word(70));
+        assert!(matches!(
+            on_get_popup(&conn, &message(50, REQ_GET_POPUP, &body)),
+            Action::Forward
+        ));
+
+        // A body too short to hold the parent names no one, so nothing about it
+        // can be translated.
+        assert!(matches!(
+            on_get_popup(&conn, &message(50, REQ_GET_POPUP, &word(60))),
+            Action::Forward
+        ));
+    }
+
+    /// A child window of a converted one names it as its transient parent, which
+    /// the compositor would refuse: the id holds a layer surface, not an
+    /// `xdg_toplevel`.
+    #[test]
+    fn set_parent_naming_a_converted_window_is_dropped() {
+        let (_guard, mut conn) = fixture();
+        convert(&mut conn);
+
+        assert!(matches!(
+            on_set_parent(&conn, &message(31, REQ_SET_PARENT, &word(30))),
+            Action::Suppress
+        ));
+        // An ordinary toplevel, and the null that unsets a parent, both go on.
+        assert!(matches!(
+            on_set_parent(&conn, &message(31, REQ_SET_PARENT, &word(32))),
+            Action::Forward
+        ));
+        assert!(matches!(
+            on_set_parent(&conn, &message(31, REQ_SET_PARENT, &word(0))),
+            Action::Forward
+        ));
     }
 
     #[test]
