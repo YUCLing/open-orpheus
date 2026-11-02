@@ -2,15 +2,18 @@ use napi::{Env, Error, Result, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use windows::{
     Win32::{
-        Foundation::{HWND, LPARAM, WPARAM},
+        Foundation::{HWND, LPARAM, POINT, WPARAM},
+        Graphics::Gdi::{
+            GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MapWindowPoints,
+            MonitorFromWindow,
+        },
         UI::{
             Input::KeyboardAndMouse::ReleaseCapture,
             WindowsAndMessaging::{
-                EnumWindows, FindWindowExW, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetSystemMetrics,
-                GetWindowLongW, HTCAPTION, HWND_BOTTOM, SC_MOVE, SM_CXSCREEN, SM_CYSCREEN,
-                SMTO_NORMAL, SWP_NOACTIVATE, SendMessageTimeoutW, SendMessageW, SetParent,
-                SetWindowLongW, SetWindowPos, WM_SYSCOMMAND, WS_CHILD, WS_EX_APPWINDOW,
-                WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_OVERLAPPEDWINDOW, WS_POPUP,
+                EnumWindows, FindWindowExW, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetWindowLongW,
+                HTCAPTION, HWND_BOTTOM, SC_MOVE, SMTO_NORMAL, SWP_NOACTIVATE, SendMessageTimeoutW,
+                SendMessageW, SetParent, SetWindowLongW, SetWindowPos, WM_SYSCOMMAND, WS_CHILD,
+                WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_OVERLAPPEDWINDOW, WS_POPUP,
             },
         },
     },
@@ -43,6 +46,21 @@ pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
     }
     let hwnd = isize::from_ne_bytes(hwnd.as_ref().try_into().unwrap());
     let hwnd = HWND(hwnd as _);
+
+    // Read the target monitor back from the window rather than from the primary
+    // screen's metrics, which are only the right answer when the background
+    // happens to go on the primary monitor.
+    let mut monitor_info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    if !unsafe { GetMonitorInfoW(monitor, &mut monitor_info) }.as_bool() {
+        return Err(Error::from_reason(
+            windows::core::Error::from_thread().message(),
+        ));
+    }
+    let screen_rect = monitor_info.rcMonitor;
 
     let progman =
         unsafe { FindWindowW(w!("Progman"), None).map_err(|x| Error::from_reason(x.message()))? };
@@ -97,17 +115,32 @@ pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
 
     unsafe { SetParent(hwnd, Some(workerw)).map_err(|x| Error::from_reason(x.message()))? };
 
-    let screen_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
-    let screen_h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+    // `rcMonitor` is in screen coordinates, but a child window is positioned in
+    // its parent's client coordinates. The WorkerW covers the whole virtual
+    // screen, yet its client origin is only (0, 0) when no monitor sits left of
+    // or above the primary one; otherwise placing the window at 0, 0 puts it on
+    // the primary monitor instead of the target. Ask Windows to map the rect
+    // through the parent instead of assuming that origin.
+    let mut corners = [
+        POINT {
+            x: screen_rect.left,
+            y: screen_rect.top,
+        },
+        POINT {
+            x: screen_rect.right,
+            y: screen_rect.bottom,
+        },
+    ];
+    unsafe { MapWindowPoints(None, Some(workerw), &mut corners) };
 
     unsafe {
         SetWindowPos(
             hwnd,
             Some(HWND_BOTTOM),
-            0,
-            0,
-            screen_w,
-            screen_h,
+            corners[0].x,
+            corners[0].y,
+            corners[1].x - corners[0].x,
+            corners[1].y - corners[0].y,
             SWP_NOACTIVATE,
         )
         .map_err(|x| Error::from_reason(x.message()))?;

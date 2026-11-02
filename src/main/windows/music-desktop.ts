@@ -14,6 +14,14 @@ import { isAppUrl } from "../util/url";
 
 export default class MusicDesktopWindow extends ManagedWindow {
   private display: Display | null = null;
+  /** Whether the native layer already attached the window (Windows). */
+  private attached = false;
+  /** The display geometry last applied through `setBounds`. */
+  private placed: {
+    id: number;
+    scaleFactor: number;
+    bounds: { x: number; y: number; width: number; height: number };
+  } | null = null;
   private layerShellOptions: LayerShellOptions = {
     namespace: "Open Orpheus Music Desktop",
     layer: LayerShellLayer.Background,
@@ -67,20 +75,34 @@ export default class MusicDesktopWindow extends ManagedWindow {
   }
 
   private updateBounds() {
+    const wnd = this.window;
+    const de = getDesktopEnvironment();
     if (
-      !this.window ||
-      ![DesktopEnvironment.X11, DesktopEnvironment.Windows, DesktopEnvironment.Darwin].includes(
-        getDesktopEnvironment()
-      )
+      !wnd ||
+      ![DesktopEnvironment.X11, DesktopEnvironment.Windows, DesktopEnvironment.Darwin].includes(de)
     )
       return;
 
+    const isWindows = de === DesktopEnvironment.Windows;
     const display =
       screen.getAllDisplays().find((v) => v.id === this.display?.id) ?? screen.getPrimaryDisplay();
-    this.window.setBounds(display.bounds);
+
+    // Re-applying identical bounds is not harmless: when native placement rounds
+    // differently (1232 px vs the monitor's 1231 px at 150%), each `show`
+    // resized the window and restarted the page's decoration. Place only on an
+    // actual change.
+    if (this.needsPlacement(display, isWindows)) {
+      wnd.setBounds(display.bounds);
+      this.placed = {
+        id: display.id,
+        scaleFactor: display.scaleFactor,
+        bounds: { ...display.bounds },
+      };
+    }
 
     try {
-      setWindowAsBackground(this.window.getNativeWindowHandle());
+      setWindowAsBackground(wnd.getNativeWindowHandle());
+      if (isWindows) this.attached = true;
     } catch (e) {
       // Destroy the window and rethrow, deferred so attaching won't crash.
       setImmediate(() => this.destroy());
@@ -88,9 +110,32 @@ export default class MusicDesktopWindow extends ManagedWindow {
     }
   }
 
+  /**
+   * Whether the window still needs to be moved to `display`'s geometry.
+   *
+   * Windows can only be placed while top-level: once it is a WorkerW child,
+   * `setBounds` speaks the parent's coordinates and the native side owns the
+   * geometry. The other platforms re-apply only a target that actually changed.
+   */
+  private needsPlacement(display: Display, isWindows: boolean): boolean {
+    if (isWindows) return !this.attached;
+
+    const placed = this.placed;
+    return (
+      placed === null ||
+      placed.id !== display.id ||
+      placed.scaleFactor !== display.scaleFactor ||
+      placed.bounds.x !== display.bounds.x ||
+      placed.bounds.y !== display.bounds.y ||
+      placed.bounds.width !== display.bounds.width ||
+      placed.bounds.height !== display.bounds.height
+    );
+  }
+
   setDisplay(display: Display) {
     LOGGER.info({ id: display.id, label: display.label }, "Setting music desktop display");
     this.display = display;
+    this.updateBounds();
     this.layerShellOptions.output = display.id;
     this.setLayerShell(this.layerShellOptions);
   }
