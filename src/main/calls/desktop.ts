@@ -8,6 +8,7 @@ import { registerCallHandler } from "../calls";
 import { registerShutdownTask } from "../lifecycle";
 import MusicDesktopWindow from "../windows/music-desktop";
 import { isAppUrl } from "../util/url";
+import { displayFromUniqueId } from "@main/util/display";
 
 export let musicDesktopWindow: MusicDesktopWindow | null = null;
 
@@ -46,7 +47,7 @@ registerCallHandler<
     {
       url: string;
       visible: boolean;
-      deviceId: "";
+      deviceId: string | "";
     },
   ],
   void
@@ -62,7 +63,14 @@ registerCallHandler<
     musicDesktopWindow.releaseNativeState();
   }
   musicDesktopWindow = new MusicDesktopWindow(params.url);
-  LOGGER.info({ visible: params.visible }, "Music desktop window created");
+  LOGGER.info(
+    { visible: params.visible, deviceId: params.deviceId },
+    "Music desktop window created"
+  );
+  const display = displayFromUniqueId(params.deviceId);
+  if (display) {
+    musicDesktopWindow.setDisplay(display);
+  }
   if (params.visible) void musicDesktopWindow.show();
 });
 
@@ -70,13 +78,20 @@ registerCallHandler<
   [
     {
       visible: boolean;
-      deviceId: null;
+      deviceId: string | null;
     },
   ],
   void
 >("desktop.show", (event, params) => {
   if (!musicDesktopWindow) return;
-  LOGGER.debug({ visible: params.visible }, "Music desktop window visibility changed");
+  LOGGER.debug(
+    { visible: params.visible, deviceId: params.deviceId },
+    "Music desktop window visibility changed"
+  );
+  const display = displayFromUniqueId(params.deviceId);
+  if (display) {
+    musicDesktopWindow.setDisplay(display);
+  }
   if (params.visible) void musicDesktopWindow.show();
   else void musicDesktopWindow.hide();
 });
