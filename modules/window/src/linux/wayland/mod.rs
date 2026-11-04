@@ -9,6 +9,7 @@ mod state;
 mod test_support;
 
 use std::os::fd::RawFd;
+use std::sync::{Arc, Mutex};
 
 use crate::linux::Rect;
 
@@ -106,6 +107,26 @@ pub(super) fn set_popup_policy(
     )
 }
 
+pub(super) fn set_layer_size(window_id: &str, width: u32, height: u32) -> bool {
+    inject::set_layer_size(window_id, width, height)
+}
+
+pub(super) fn set_layer_bounds(window_id: &str, width: u32, height: u32) -> bool {
+    state::set_layer_bounds(window_id, width, height)
+}
+
+pub(super) fn on_layer_output(cb: state::LayerOutputCb) -> bool {
+    state::on_layer_output(cb)
+}
+
+pub(super) fn on_layer_pushed(cb: state::LayerPushedCb) -> bool {
+    state::on_layer_pushed(cb)
+}
+
+pub(super) fn on_layer_geometry(cb: state::LayerGeometryCb) -> bool {
+    state::on_layer_geometry(cb)
+}
+
 pub(super) fn clear_popup_policy(target_window_id: &str) -> bool {
     state::clear_popup_policy(target_window_id)
 }
@@ -173,12 +194,16 @@ impl Protocol for WaylandProtocol {
 
     fn spawn(&self, app_fd: RawFd, _real_fd: RawFd) -> Box<dyn ConnectionHandler> {
         on_new_connection(app_fd);
-        Box::new(WaylandHandler { fd: app_fd })
+        Box::new(WaylandHandler {
+            fd: app_fd,
+            write_lock: Arc::new(Mutex::new(())),
+        })
     }
 }
 
 struct WaylandHandler {
     fd: RawFd,
+    write_lock: Arc<Mutex<()>>,
 }
 
 impl ConnectionHandler for WaylandHandler {
@@ -188,5 +213,15 @@ impl ConnectionHandler for WaylandHandler {
 
     fn on_close(&mut self) {
         state::on_close(self.fd);
+    }
+
+    /// Serializes direct server-bound writes with the proxy's own forwarding.
+    ///
+    /// Synthesised layer-shell state (an emulated drag, a size the application
+    /// asked for) bypasses the filter — the id means something else to the
+    /// client — so it is written straight to the compositor and has to be kept
+    /// from interleaving with a forwarded chunk.
+    fn write_lock(&self) -> Option<Arc<Mutex<()>>> {
+        Some(Arc::clone(&self.write_lock))
     }
 }

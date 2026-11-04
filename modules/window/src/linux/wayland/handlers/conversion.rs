@@ -15,7 +15,7 @@
 
 use super::super::codec::{Iface, WlMessage};
 use super::super::layer_shell;
-use super::super::state::{LayerWindow, SurfaceRole, WaylandConn};
+use super::super::state::{LayerGeometry, LayerWindow, OutputInfo, SurfaceRole, WaylandConn};
 use super::{Action, Effects};
 
 /// Track the interfaces the compositor advertises.
@@ -90,10 +90,36 @@ pub(crate) fn convert_to_layer_surface(
             shell_id,
         ));
     }
+    // An output the application named, or the compositor's own choice. A name
+    // the client never bound is not an error: the window is still created, just
+    // wherever the compositor puts it.
+    let output_id = options
+        .output
+        .as_deref()
+        .and_then(|wanted| {
+            let resolved = super::super::state::output_for_name(conn, wanted);
+            if resolved.is_none() {
+                let known: Vec<String> = conn
+                    .outputs
+                    .values()
+                    .flat_map(|output| output.names())
+                    .map(str::to_string)
+                    .collect();
+                super::layer_note(|| {
+                    format!(
+                        "no output named {wanted} (known: {}); the compositor chooses",
+                        known.join(", ")
+                    )
+                });
+            }
+            resolved
+        })
+        .unwrap_or(0);
     messages.push(layer_shell::get_layer_surface(
         shell_id,
         toplevel_id,
         surface_id,
+        output_id,
         options.layer,
         &options.namespace,
     ));
@@ -121,12 +147,40 @@ pub(crate) fn convert_to_layer_surface(
         options.effective_keyboard(bound_version),
     ));
 
+    // What the window was asked for, against what the screen it is going on
+    // is: a placement is margins from one output's corner, so this is the pair
+    // that decides whether it can be seen at all.
+    super::layer_note(|| {
+        format!(
+            "layer surface {toplevel_id} asked for {}x{} at ({}, {}), output {:?} of size {:?}",
+            options.width,
+            options.height,
+            options.margin_left,
+            options.margin_top,
+            options.output,
+            (output_id != 0)
+                .then(|| conn.outputs.get(&output_id).and_then(OutputInfo::size))
+                .flatten()
+        )
+    });
     conn.ifaces.insert(toplevel_id, Iface::ZwlrLayerSurface);
     conn.layer_windows.insert(
         toplevel_id,
         LayerWindow {
             wl_surface: surface_id,
             xdg_surface: xdg_surface_id,
+            geometry: LayerGeometry {
+                width: options.width,
+                height: options.height,
+                margin_left: options.margin_left,
+                margin_top: options.margin_top,
+            },
+            // Unknown until the application reports it, which it does as soon
+            // as its window is up.
+            bounds: None,
+            // Zero is the compositor's own choice, which only the surface's
+            // `enter` events can name.
+            output: (output_id != 0).then_some(output_id),
         },
     );
     conn.surface_roles

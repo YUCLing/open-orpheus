@@ -18,7 +18,8 @@ pub(crate) fn on_touch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
             if let (Some(seat_id), Some(x), Some(y)) =
                 (seat_id, msg.fixed_arg(24), msg.fixed_arg(28))
             {
-                fx.button = Some((seat_id, serial, surf_id, x, y));
+                // A touch is not a button: there is none to end a gesture by.
+                fx.button = Some((seat_id, serial, surf_id, x, y, 0));
             }
         }
     }

@@ -7,8 +7,14 @@
 //! be fixed twice. Both live here, named by what they are for, so the wire
 //! format and the fixtures are written down once.
 
-use std::os::fd::RawFd;
-use std::sync::{Mutex, MutexGuard};
+use std::{
+    io::Read,
+    os::fd::{AsRawFd, RawFd},
+    os::unix::net::UnixStream,
+    sync::{Arc, Mutex, MutexGuard},
+};
+
+use crate::linux::proxy::{SINKS, Sink};
 
 use super::codec::{Iface, WlMessage};
 use super::handlers::Action;
@@ -141,6 +147,51 @@ pub(crate) fn connected() -> WaylandConn {
     conn.xdg_to_wl.insert(20, 10);
     conn.stolen_ids.push(50);
     conn
+}
+
+/// A connection with a compositor on the other end of it.
+///
+/// Synthesised requests are written straight to the server fd of a sink, so a
+/// fixture that only registers a connection has nothing to write to and every
+/// sending call is refused rather than merely unobservable. The observer end is
+/// where those bytes can be read back.
+pub(crate) struct AttachedSink {
+    /// Holds the fd the writes go to open for as long as the fixture lives.
+    _server: UnixStream,
+    /// The far end, which is where a synthesised request shows up.
+    observer: UnixStream,
+}
+
+impl AttachedSink {
+    pub(crate) fn new(fd: RawFd) -> Self {
+        let (server, observer) = UnixStream::pair().expect("socketpair");
+        SINKS.get_or_init(Default::default).lock().unwrap().insert(
+            fd,
+            Sink {
+                real_fd: server.as_raw_fd(),
+                app_fd: fd,
+                write_lock: Some(Arc::new(Mutex::new(()))),
+            },
+        );
+        Self {
+            _server: server,
+            observer,
+        }
+    }
+
+    /// Everything written since the last read, or nothing yet.
+    pub(crate) fn written(&mut self) -> Vec<u8> {
+        self.observer.set_nonblocking(true).expect("nonblocking");
+        let mut sent = Vec::new();
+        let mut buf = [0u8; 256];
+        while let Ok(read) = self.observer.read(&mut buf) {
+            if read == 0 {
+                break;
+            }
+            sent.extend_from_slice(&buf[..read]);
+        }
+        sent
+    }
 }
 
 /// One test mutex for every module that touches the process-global state.

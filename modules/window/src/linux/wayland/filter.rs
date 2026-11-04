@@ -1,9 +1,9 @@
 use std::os::fd::RawFd;
 use std::time::Instant;
 
-use super::super::proxy::{Cmsg, Direction, Filtered};
+use super::super::proxy::{Cmsg, Direction, Filtered, sink_for};
 use super::codec;
-use super::handlers::{self, Action, Effects};
+use super::handlers::{self, Action, Effects, layer_debug_enabled};
 use super::state::*;
 
 /// Stream pipeline: reassemble bytes → decode messages → run the functionality
@@ -116,7 +116,7 @@ pub(crate) fn filter(
     }
 
     // Apply side effects after releasing the connection lock.
-    if let Some((seat_id, serial, surf_id, x, y)) = fx.button
+    if let Some((seat_id, serial, surf_id, x, y, button)) = fx.button
         && let Some(m) = LAST_BUTTON.get()
         && let Ok(mut buttons) = m.lock()
     {
@@ -129,6 +129,7 @@ pub(crate) fn filter(
                 wl_surface_id: surf_id,
                 x,
                 y,
+                button,
                 at: Instant::now(),
             },
         );
@@ -145,6 +146,25 @@ pub(crate) fn filter(
     }
     for (wl_surface_id, axis) in fx.pointer_axes {
         fire_next_pointer_axis(fd, wl_surface_id, axis);
+    }
+    // Requests an emulated gesture produced while handling an inbound event.
+    // They go straight to the compositor: the id they name is a layer surface
+    // there, but the xdg-toplevel object the client knows, whose opcodes would
+    // be read as different layer requests — `set_size` is `destroy`.
+    //
+    // Only inbound: the outbound path is what holds the write lock while it
+    // forwards, so taking it here would deadlock against itself.
+    if is_event
+        && !fx.layer_requests.is_empty()
+        && let Some(sink) = sink_for(fd)
+        && let Some(lock) = sink.write_lock.as_ref()
+        && let Ok(_guard) = lock.lock()
+    {
+        for request in &fx.layer_requests {
+            if !sink.send_to_server(request) && layer_debug_enabled() {
+                eprintln!("[proxy:layer] a synthesised request could not be sent");
+            }
+        }
     }
     for wl_surface_id in fx.destroyed_surfaces {
         clear_last_button_for_surface(fd, wl_surface_id);
@@ -307,12 +327,161 @@ mod tests {
             let guard = conns.lock().unwrap();
             check(guard.get(&self.fd()).expect("a connection is registered"))
         }
+
+        /// Change the connection state kept for this fd.
+        fn edit(&self, change: impl FnOnce(&mut WaylandConn)) {
+            let conns = CONNS.get().expect("initialised");
+            let mut guard = conns.lock().unwrap();
+            change(
+                guard
+                    .get_mut(&self.fd())
+                    .expect("a connection is registered"),
+            );
+        }
     }
 
     impl Drop for Conn {
         fn drop(&mut self) {
             self.forget();
         }
+    }
+
+    /// A 24.8 fixed-point argument, the way the compositor sends coordinates.
+    fn fixed(value: f64) -> Vec<u8> {
+        ((value * 256.0) as i32).to_ne_bytes().to_vec()
+    }
+
+    #[test]
+    fn an_emulated_drag_writes_layer_state_straight_to_the_compositor() {
+        use std::io::Read;
+
+        use super::super::layer_shell::LayerShellOptions;
+        use super::super::state::{LastButton, LastButtonState, LayerGeometry, LayerWindow};
+        use super::super::test_support::{serial, word};
+        use crate::linux::proxy::{SINKS, Sink};
+
+        const LAYER: u32 = 30;
+        const SURFACE: u32 = 10;
+        const POINTER: u32 = 40;
+        const SERIAL: u32 = 77;
+
+        let _guard = serial();
+        init_state();
+        let conn = Conn::new();
+        conn.register();
+        *LAST_BUTTON.get_or_init(Default::default).lock().unwrap() = LastButtonState::default();
+
+        // A converted window, anchored to the top and left so the proxy can
+        // move it by margins, with the pointer resting on it.
+        conn.edit(|conn| {
+            conn.ifaces.insert(POINTER, codec::Iface::WlPointer);
+            conn.ifaces.insert(LAYER, codec::Iface::ZwlrLayerSurface);
+            conn.pointer_focus.insert(POINTER, SURFACE);
+            conn.pointer_seat.insert(POINTER, 2);
+            conn.pointer_position.insert(POINTER, (100, 200));
+            conn.wl_to_layer.insert(SURFACE, LAYER);
+            conn.layer_windows.insert(
+                LAYER,
+                LayerWindow {
+                    wl_surface: SURFACE,
+                    xdg_surface: 20,
+                    geometry: LayerGeometry {
+                        width: 800,
+                        height: 225,
+                        margin_left: 40,
+                        margin_top: 60,
+                    },
+                    bounds: None,
+                    output: None,
+                },
+            );
+            conn.surface_roles.insert(
+                SURFACE,
+                SurfaceRole::Layer(LayerShellOptions {
+                    anchor: super::super::layer_shell::ANCHOR_TOP
+                        | super::super::layer_shell::ANCHOR_LEFT,
+                    ..super::super::test_support::options()
+                }),
+            );
+        });
+        let mut buttons = LAST_BUTTON.get().unwrap().lock().unwrap();
+        buttons.by_surface.insert(
+            (conn.fd(), SURFACE),
+            LastButton {
+                fd: conn.fd(),
+                seat_id: 2,
+                serial: SERIAL,
+                wl_surface_id: SURFACE,
+                x: 100,
+                y: 200,
+                button: 0x110,
+                at: Instant::now(),
+            },
+        );
+        drop(buttons);
+
+        // The server side of the injected connection, read back by this test.
+        let (server, mut observer) = UnixStream::pair().expect("socketpair");
+        SINKS.get_or_init(Default::default).lock().unwrap().insert(
+            conn.fd(),
+            Sink {
+                real_fd: server.as_raw_fd(),
+                app_fd: conn.fd(),
+                write_lock: Some(std::sync::Arc::new(std::sync::Mutex::new(()))),
+            },
+        );
+
+        // The application asks to drag the window: the proxy replays it.
+        let asked = message_bytes(LAYER, codec::REQ_MOVE, &[word(2), word(SERIAL)].concat());
+        assert!(
+            conn.take(Direction::Outbound, &asked).data.is_empty(),
+            "the request names a layer surface and must not be forwarded"
+        );
+
+        // The pointer moves 20 across and 10 down; the window follows it.
+        let motion = message_bytes(
+            POINTER,
+            codec::EVT_MOTION,
+            &[word(0), fixed(120.0), fixed(210.0)].concat(),
+        );
+        let forwarded = conn.take(Direction::Inbound, &motion);
+        // Nothing is added to the stream the client reads: the geometry the
+        // proxy wrote is already flushed at the commit it injected, and the
+        // window is kept drawing from the application side (`paintPulse`),
+        // which is what makes the compositor adopt it while the user drags.
+        assert_eq!(forwarded.data.len(), motion.len());
+
+        observer.set_nonblocking(true).expect("nonblocking");
+        let mut sent = Vec::new();
+        let mut buf = [0u8; 64];
+        while let Ok(read) = observer.read(&mut buf) {
+            if read == 0 {
+                break;
+            }
+            sent.extend_from_slice(&buf[..read]);
+        }
+        assert_eq!(
+            sent,
+            [
+                crate::linux::wayland::test_support::request(
+                    LAYER,
+                    codec::REQ_LAYER_SET_MARGIN,
+                    24,
+                    &[70, 0, 0, 60]
+                ),
+                // Followed by the commit that applies it: the window has
+                // nothing to redraw during a drag, so nothing else would.
+                crate::linux::wayland::test_support::request(SURFACE, codec::REQ_COMMIT, 8, &[]),
+            ]
+            .concat(),
+            "the margins carry the new position, sent as the layer's own request"
+        );
+        assert_eq!(
+            conn.with_conn(|c| c.layer_windows.get(&LAYER).unwrap().geometry.margin_left),
+            60
+        );
+
+        SINKS.get().unwrap().lock().unwrap().remove(&conn.fd());
     }
 
     #[test]
