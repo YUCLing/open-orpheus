@@ -83,3 +83,15 @@ jobs:
 
       - name: Check Rustfmt formatting
         run: cargo fmt --all -- --check
+
+  # Always-running gate so the ruleset has a required check even when the
+  # lint jobs above are skipped by the change filter.
+  required:
+    name: Lint required
+    needs: [changes, lint-node, lint-rust]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a required job failed or was cancelled
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
