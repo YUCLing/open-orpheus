@@ -32,3 +32,15 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       runner: ${{ matrix.runner }}
+
+  # Always-running gate so the ruleset has a required check even when the
+  # build matrix above is skipped by the change filter.
+  required:
+    name: CI required
+    needs: [changes, build]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a required job failed or was cancelled
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
