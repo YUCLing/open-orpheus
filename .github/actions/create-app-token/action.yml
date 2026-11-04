@@ -1,0 +1,73 @@
+name: Create app token
+description: >-
+  Create a GitHub App installation token and configure git to commit as the
+  app's bot user. Run after a checkout; for push jobs, re-checkout with the
+  token output afterwards.
+
+inputs:
+  client-id:
+    description: GitHub App client ID
+    required: true
+  private-key:
+    description: GitHub App private key
+    required: true
+  contents:
+    description: Contents permission (read/write, empty to omit)
+    required: false
+    default: write
+  discussions:
+    description: Discussions permission (read/write, empty to omit)
+    required: false
+    default: ""
+  actions:
+    description: Actions permission (read/write, empty to omit)
+    required: false
+    default: ""
+
+outputs:
+  token:
+    description: Installation access token
+    value: ${{ steps.app-token.outputs.token }}
+  slug:
+    description: App slug
+    value: ${{ steps.app-token.outputs.app-slug }}
+  user-name:
+    description: Bot user name
+    value: "${{ steps.app-token.outputs.app-slug }}[bot]"
+  user-email:
+    description: Bot user email
+    value: "${{ steps.bot.outputs.id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+runs:
+  using: composite
+  steps:
+    - name: Create installation token
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        client-id: ${{ inputs.client-id }}
+        private-key: ${{ inputs.private-key }}
+        permission-contents: ${{ inputs.contents }}
+        permission-discussions: ${{ inputs.discussions }}
+        permission-actions: ${{ inputs.actions }}
+
+    - name: Resolve bot user ID
+      id: bot
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+      run: |
+        set -euo pipefail
+        user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq '.id')
+        echo "id=${user_id}" >> "$GITHUB_OUTPUT"
+
+    - name: Configure git identity
+      shell: bash
+      env:
+        APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        BOT_USER_ID: ${{ steps.bot.outputs.id }}
+      run: |
+        set -euo pipefail
+        git config --local user.name "${APP_SLUG}[bot]"
+        git config --local user.email "${BOT_USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
