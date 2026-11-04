@@ -4,12 +4,13 @@
 use std::os::fd::RawFd;
 
 use super::super::codec::{
-    EVT_POPUP_CONFIGURE, EVT_POPUP_DONE, Iface, REQ_CREATE_POSITIONER, REQ_DESTROY, REQ_GET_POPUP,
-    REQ_POSITIONER_SET_ANCHOR, REQ_POSITIONER_SET_ANCHOR_RECT,
+    EVT_OUTPUT_NAME, EVT_POPUP_CONFIGURE, EVT_POPUP_DONE, Iface, REQ_CREATE_POSITIONER,
+    REQ_DESTROY, REQ_GET_POPUP, REQ_POSITIONER_SET_ANCHOR, REQ_POSITIONER_SET_ANCHOR_RECT,
     REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT, REQ_POSITIONER_SET_GRAVITY, REQ_POSITIONER_SET_SIZE,
     REQ_SET_WINDOW_GEOMETRY, WlMessage,
 };
 use super::super::layer_shell::xdg_toplevel_configure;
+use super::super::outputs;
 use super::super::state::{
     LAST_BUTTON, PopupGeometry, PopupPolicy, SurfaceRole, WaylandConn, popup_policy,
     take_popup_policy,
@@ -36,12 +37,21 @@ pub(crate) fn on_bind(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
     if let Some((iface_name, after)) = msg.str_arg(12)
         && let Some(new_id) = msg.u32_arg(after + 4)
     {
+        let global_name = msg.u32_arg(8);
         let tag = match iface_name {
             "wl_compositor" => {
                 conn.compositor_id = Some(new_id);
                 Some(Iface::WlCompositor)
             }
             "wl_seat" => Some(Iface::WlSeat),
+            // The object is what a layer surface is created on; the global
+            // name is the `Display.id` the application named it by.
+            "wl_output" => {
+                if let Some(global_name) = global_name {
+                    outputs::bound(conn, global_name, new_id);
+                }
+                Some(Iface::WlOutput)
+            }
             "zxdg_decoration_manager_v1" => Some(Iface::ZxdgDecorationManager),
             "xdg_toplevel_icon_manager_v1" => Some(Iface::XdgToplevelIconManager),
             "xdg_wm_base" => {
@@ -303,6 +313,18 @@ pub(crate) fn on_popup_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action 
     }
 }
 
+pub(crate) fn on_output_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    // `wl_output.name` is the compositor's own name for the display, e.g.
+    // `DP-1`. It arrives on the object the client bound, so it is filed against
+    // that object's output rather than the registry entry.
+    if msg.opcode == EVT_OUTPUT_NAME
+        && let Some(name) = msg.str_text(8)
+    {
+        outputs::named(conn, msg.object_id, name);
+    }
+    Action::Forward
+}
+
 pub(crate) fn on_destroy(
     _fd: RawFd,
     conn: &mut WaylandConn,
@@ -320,6 +342,15 @@ pub(crate) fn on_destroy(
 }
 
 pub(crate) fn on_pointer_release(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    conn.purge(msg.object_id);
+    Action::Forward
+}
+
+pub(crate) fn on_output_release(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    // There is no event to wait for before the object stops being nameable:
+    // `release` is a destructor, so the id is meaningless from the moment the
+    // request is forwarded. Drop the mapping now, not at `delete_id`, or a
+    // layer surface created in between would name a destroyed output.
     conn.purge(msg.object_id);
     Action::Forward
 }

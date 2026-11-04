@@ -75,6 +75,17 @@ export declare function getCursorPosition(): [number, number] | null
 export declare function getDesktopEnvironment(): DesktopEnvironment
 
 /**
+ * The compositor's unique name for the output Electron reports as a `Display.id`.
+ *
+ * This is the `wl_output.name` event (for example `DP-1`), looked up across the
+ * live Wayland connections. `null` when none of them knows the display, the
+ * client has not bound it yet, or the compositor is too old to send a name.
+ *
+ * Only for Wayland on Linux; everywhere else it is `null`.
+ */
+export declare function getUniqueDisplayId(displayId: number): string | null
+
+/**
  * Whether the compositor advertises `zwlr_layer_shell_v1`.
  *
  * Only meaningful for Wayland on Linux; everywhere else it is `false`.
@@ -107,6 +118,13 @@ export interface LayerShellOptions {
   namespace: string
   /** Defaults to the top layer. */
   layer?: LayerShellLayer
+  /**
+   * The `Display.id` of the output to create the layer surface on.
+   *
+   * Electron's `Display.id` is the Wayland registry global name, so it can
+   * be passed through unchanged. Omit it to let the compositor choose.
+   */
+  output?: number
   anchorTop?: boolean
   anchorBottom?: boolean
   anchorLeft?: boolean

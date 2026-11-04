@@ -29,6 +29,20 @@ pub(crate) struct LayerWindow {
     pub(crate) xdg_surface: u32,
 }
 
+/// What the proxy remembers about one output the compositor advertised.
+///
+/// The entry is keyed by the `wl_registry` global name, which is the
+/// `Display.id` Electron exposes. A layer surface takes its output when the
+/// compositor creates its role, so the objects the client bound for the output
+/// are kept here for that decision.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Output {
+    /// The client's `wl_output` objects for this output, in bind order.
+    pub(crate) objects: Vec<u32>,
+    /// The compositor's own name for it, e.g. `DP-1` (wl_output v4).
+    pub(crate) name: Option<String>,
+}
+
 /// The role a `wl_surface` has taken for the rest of its life.
 ///
 /// A compositor assigns a surface's role once and never releases it while the
@@ -82,6 +96,9 @@ pub(crate) struct WaylandConn {
     pub(crate) stolen_ids: Vec<u32>,
     /// Interfaces the compositor advertised: global name → (interface, version).
     pub(crate) globals: HashMap<u32, (String, u32)>,
+    /// Outputs the compositor advertised, keyed by the same global name — the
+    /// `Display.id` Electron reports for the display.
+    pub(crate) outputs: HashMap<u32, Output>,
     pub(crate) registry_id: Option<u32>,
     /// The `zwlr_layer_shell_v1` global as (global name, advertised version).
     pub(crate) layer_shell_global: Option<(u32, u32)>,
@@ -148,6 +165,7 @@ impl WaylandConn {
             injected_ids: HashSet::new(),
             stolen_ids: Vec::new(),
             globals: HashMap::new(),
+            outputs: HashMap::new(),
             registry_id: None,
             layer_shell_global: None,
             layer_shell_id: None,
@@ -179,6 +197,7 @@ impl WaylandConn {
         self.injected_ids.clear();
         self.stolen_ids.clear();
         self.globals.clear();
+        self.outputs.clear();
         self.registry_id = None;
         self.layer_shell_global = None;
         // The layer shell object belongs to the client namespace, so it has to
@@ -223,6 +242,9 @@ impl WaylandConn {
             }
             Some(Iface::WlTouch) => {
                 self.touch_seat.remove(&id);
+            }
+            Some(Iface::WlOutput) => {
+                super::outputs::destroyed(self, id);
             }
             Some(Iface::WlSurface) => {
                 if let Some(layer_id) = self.wl_to_layer.remove(&id) {
@@ -363,6 +385,7 @@ mod tests {
         let mut conn = connected();
         conn.stolen_ids.push(99);
         conn.injected_ids.insert(99);
+        conn.outputs.insert(77, Output::default());
 
         conn.reset_tracking();
 
@@ -370,6 +393,34 @@ mod tests {
         assert!(conn.stolen_ids.is_empty());
         assert!(conn.injected_ids.is_empty());
         assert!(conn.top_to_xdg.is_empty());
+        assert!(conn.outputs.is_empty());
+    }
+
+    #[test]
+    fn an_output_name_is_read_from_the_live_connections() {
+        let _serial = serial();
+        init_state();
+        let fd = 92_101;
+        on_close(fd);
+
+        let mut conn = WaylandConn::new();
+        conn.outputs.insert(
+            77,
+            Output {
+                objects: vec![900],
+                name: Some("DP-1".into()),
+            },
+        );
+        conn.outputs.insert(78, Output::default());
+        CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
+
+        assert_eq!(output_name(77).as_deref(), Some("DP-1"));
+        assert_eq!(output_name(78), None, "a display without a name has none");
+        assert_eq!(output_name(79), None, "an unknown display has none");
+
+        // The name belongs to the connection it was read from.
+        on_close(fd);
+        assert_eq!(output_name(77), None);
     }
 
     #[test]
@@ -732,6 +783,20 @@ pub(crate) fn window_surface_in(
             .find(|(_, id)| id.as_str() == window_id)
             .map(|(surface, _)| (*fd, *surface))
     })
+}
+
+// ── Output names ───────────────────────────────────────────────────────────
+
+/// The compositor's name for the output an application calls `display_id`.
+///
+/// A display id is one connection's registry global name; Chromium builds its
+/// display cache from the connection it read that registry on, so the live
+/// connections are scanned for the first one that has a name for the id.
+pub(crate) fn output_name(display_id: u32) -> Option<String> {
+    let conns = CONNS.get()?.lock().ok()?;
+    conns
+        .values()
+        .find_map(|conn| conn.outputs.get(&display_id)?.name.clone())
 }
 
 // ── Window roles ───────────────────────────────────────────────────────────

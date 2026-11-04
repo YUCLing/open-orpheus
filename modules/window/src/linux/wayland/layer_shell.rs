@@ -51,6 +51,8 @@ const MAX_NAMESPACE_LEN: usize = 32;
 pub(crate) struct LayerShellOptions {
     pub(crate) namespace: String,
     pub(crate) layer: u32,
+    /// The `Display.id` of the requested output, if the application named one.
+    pub(crate) output: Option<u32>,
     pub(crate) anchor: u32,
     pub(crate) width: u32,
     pub(crate) height: u32,
@@ -67,6 +69,7 @@ impl Default for LayerShellOptions {
         Self {
             namespace: String::new(),
             layer: LAYER_TOP,
+            output: None,
             anchor: 0,
             width: 0,
             height: 0,
@@ -183,14 +186,16 @@ pub(crate) fn get_layer_surface(
     shell_id: u32,
     new_id: u32,
     surface_id: u32,
+    output_id: u32,
     layer: u32,
     namespace: &str,
 ) -> Vec<u8> {
     let mut body = Vec::new();
     push_u32(&mut body, new_id);
     push_u32(&mut body, surface_id);
-    // A null output lets the compositor pick the most recently used one.
-    push_u32(&mut body, 0);
+    // Output 0 is the null object: the compositor picks the most recently used
+    // output. A named display is resolved to its `wl_output` before this call.
+    push_u32(&mut body, output_id);
     push_u32(&mut body, layer);
     push_string(&mut body, namespace);
     message(shell_id, REQ_GET_LAYER_SURFACE, &body)
@@ -381,14 +386,18 @@ mod tests {
 
     #[test]
     fn get_layer_surface_pads_the_namespace() {
-        let bytes = get_layer_surface(9, 30, 10, LAYER_OVERLAY, "wl");
+        let bytes = get_layer_surface(9, 30, 10, 77, LAYER_OVERLAY, "wl");
         let (oid, op, size) = header(&bytes);
         assert_eq!((oid, op), (9, REQ_GET_LAYER_SURFACE));
         assert_eq!(size % 4, 0);
         assert_eq!(size, bytes.len());
         assert_eq!(u32::from_ne_bytes(bytes[8..12].try_into().unwrap()), 30);
         assert_eq!(u32::from_ne_bytes(bytes[12..16].try_into().unwrap()), 10);
-        assert_eq!(u32::from_ne_bytes(bytes[16..20].try_into().unwrap()), 0);
+        assert_eq!(
+            u32::from_ne_bytes(bytes[16..20].try_into().unwrap()),
+            77,
+            "the requested output"
+        );
         assert_eq!(
             u32::from_ne_bytes(bytes[20..24].try_into().unwrap()),
             LAYER_OVERLAY

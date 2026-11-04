@@ -790,6 +790,7 @@ module.exports.drainWindowCallbacks = nativeBinding.drainWindowCallbacks
 module.exports.forgetWindowState = nativeBinding.forgetWindowState
 module.exports.getCursorPosition = nativeBinding.getCursorPosition
 module.exports.getDesktopEnvironment = nativeBinding.getDesktopEnvironment
+module.exports.getUniqueDisplayId = nativeBinding.getUniqueDisplayId
 module.exports.isLayerShellAvailable = nativeBinding.isLayerShellAvailable
 module.exports.isWindowPointerInside = nativeBinding.isWindowPointerInside
 module.exports.isWindowWaylandPopup = nativeBinding.isWindowWaylandPopup
