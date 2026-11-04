@@ -5,8 +5,6 @@ import {
   getUniqueDisplayId,
 } from "@open-orpheus/window";
 
-// TODO: Stablized IDs for macOS
-
 export function getDisplayUniqueId(display: Display): string {
   const de = getDesktopEnvironment();
   if (de === DesktopEnvironment.X11) return String(display.id);

@@ -1,8 +1,11 @@
+use std::ptr::NonNull;
+
 use napi::{Env, Result, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use objc2::{class, msg_send, runtime::AnyObject, sel};
 use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
-use objc2_core_graphics::{CGWindowLevelForKey, CGWindowLevelKey};
+use objc2_core_foundation::{CFRetained, CFUUID, kCFAllocatorDefault};
+use objc2_core_graphics::{CGDirectDisplayID, CGWindowLevelForKey, CGWindowLevelKey};
 use objc2_foundation::NSPoint;
 
 unsafe fn create_drag_event(window: *mut AnyObject) -> *mut AnyObject {
@@ -112,6 +115,11 @@ pub fn set_window_as_background(
     Ok(())
 }
 
+#[link(name = "ColorSync", kind = "framework")]
+unsafe extern "C" {
+    fn CGDisplayCreateUUIDFromDisplayID(display_id: CGDirectDisplayID) -> *const CFUUID;
+}
+
 /// The compositor's unique name for the output Electron reports as a `Display.id`.
 ///
 /// On Linux, this is the `wl_output.name` event (for example `DP-1`), looked up
@@ -121,6 +129,10 @@ pub fn set_window_as_background(
 /// On the other platforms, this is a ID that will be consistent across sessions.
 #[napi]
 pub fn get_unique_display_id(display_id: u32) -> Option<String> {
-    let _ = display_id;
-    None
+    let uuid = unsafe { CGDisplayCreateUUIDFromDisplayID(display_id) };
+    let uuid = unsafe { NonNull::new(uuid as *mut CFUUID).map(|x| CFRetained::from_raw(x)) }?;
+
+    let cf_string = CFUUID::new_string(unsafe { kCFAllocatorDefault }, Some(&uuid))?;
+
+    Some(cf_string.to_string())
 }
