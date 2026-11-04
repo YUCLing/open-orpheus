@@ -5,17 +5,15 @@ import {
   getUniqueDisplayId,
 } from "@open-orpheus/window";
 
-// TODO: Stablized IDs for macOS and Windows
-
 export function getDisplayUniqueId(display: Display): string {
   const de = getDesktopEnvironment();
   if (de === DesktopEnvironment.X11) return String(display.id);
-  let id: string | null = null;
-  if (de === DesktopEnvironment.Wayland) {
-    id = getUniqueDisplayId(display.id);
-    if (id) return id;
+  try {
+    const id = getUniqueDisplayId(display.id);
+    return id ?? String(display.id);
+  } catch {
+    return String(display.id);
   }
-  return String(display.id);
 }
 
 export function displayFromUniqueId(id: string | null): Display | null {

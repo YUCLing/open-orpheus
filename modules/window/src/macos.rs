@@ -1,8 +1,11 @@
+use std::ptr::NonNull;
+
 use napi::{Env, Result, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use objc2::{class, msg_send, runtime::AnyObject, sel};
 use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
-use objc2_core_graphics::{CGWindowLevelForKey, CGWindowLevelKey};
+use objc2_core_foundation::{CFRetained, CFUUID, kCFAllocatorDefault};
+use objc2_core_graphics::{CGDirectDisplayID, CGWindowLevelForKey, CGWindowLevelKey};
 use objc2_foundation::NSPoint;
 
 unsafe fn create_drag_event(window: *mut AnyObject) -> *mut AnyObject {
@@ -57,7 +60,10 @@ pub fn drag_window(env: Env, hwnd: Buffer) -> Result<()> {
 }
 
 #[napi]
-pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
+pub fn set_window_as_background(env: Env, hwnd: Buffer, display_id: Option<u32>) -> Result<()> {
+    // The window stays top-level here, so its screen already says where it goes.
+    let _ = display_id;
+
     if hwnd.len() < std::mem::size_of::<usize>() {
         return env.throw("Invalid buffer size for native handle");
     }
@@ -103,4 +109,26 @@ pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[link(name = "ColorSync", kind = "framework")]
+unsafe extern "C" {
+    fn CGDisplayCreateUUIDFromDisplayID(display_id: CGDirectDisplayID) -> *const CFUUID;
+}
+
+/// The compositor's unique name for the output Electron reports as a `Display.id`.
+///
+/// On Linux, this is the `wl_output.name` event (for example `DP-1`), looked up
+/// across the live Wayland connections. `null` when none of them knows the display,
+/// the client has not bound it yet, or the compositor is too old to send a name.
+///
+/// On the other platforms, this is a ID that will be consistent across sessions.
+#[napi]
+pub fn get_unique_display_id(display_id: u32) -> Option<String> {
+    let uuid = unsafe { CGDisplayCreateUUIDFromDisplayID(display_id) };
+    let uuid = unsafe { NonNull::new(uuid as *mut CFUUID).map(|x| CFRetained::from_raw(x)) }?;
+
+    let cf_string = CFUUID::new_string(unsafe { kCFAllocatorDefault }, Some(&uuid))?;
+
+    Some(cf_string.to_string())
 }

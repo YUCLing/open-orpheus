@@ -200,7 +200,10 @@ pub fn drag_window(env: Env, hwnd: Buffer) -> Result<()> {
 }
 
 #[napi]
-pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
+pub fn set_window_as_background(env: Env, hwnd: Buffer, display_id: Option<u32>) -> Result<()> {
+    // The window stays top-level here; placement is `setBounds`' job.
+    let _ = display_id;
+
     if !x11::is_x11() {
         return env.throw("This API is supported only in X11.");
     }
@@ -220,6 +223,18 @@ pub fn set_window_as_background(env: Env, hwnd: Buffer) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// The compositor's unique name for the output Electron reports as a `Display.id`.
+///
+/// On Linux, this is the `wl_output.name` event (for example `DP-1`), looked up
+/// across the live Wayland connections. `null` when none of them knows the display,
+/// the client has not bound it yet, or the compositor is too old to send a name.
+///
+/// On the other platforms, this is a ID that will be consistent across sessions.
+#[napi]
+pub fn get_unique_display_id(display_id: u32) -> Option<String> {
+    crate::linux::output_name(display_id)
 }
 
 pub fn set_input_region(window_handle: Unknown, rects: Option<Array>) -> Result<bool> {

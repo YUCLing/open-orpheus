@@ -406,27 +406,6 @@ pub fn is_layer_shell_available() -> bool {
     }
 }
 
-/// The compositor's unique name for the output Electron reports as a `Display.id`.
-///
-/// This is the `wl_output.name` event (for example `DP-1`), looked up across the
-/// live Wayland connections. `null` when none of them knows the display, the
-/// client has not bound it yet, or the compositor is too old to send a name.
-///
-/// Only for Wayland on Linux; everywhere else it is `null`.
-#[napi]
-pub fn get_unique_display_id(display_id: u32) -> Option<String> {
-    #[cfg(target_os = "linux")]
-    {
-        crate::linux::output_name(display_id)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = display_id;
-        None
-    }
-}
-
 /// Register (or clear) the layer-shell policy for a managed window.
 ///
 /// The policy is keyed by the id the application names the window with, so it

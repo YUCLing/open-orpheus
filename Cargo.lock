@@ -1441,6 +1441,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sfhash"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c72019dd341c01ac4abd5a7065bbae73f5009f9c97677c8200521218c961c19a"
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1765,8 +1771,10 @@ dependencies = [
  "napi-derive",
  "objc2",
  "objc2-app-kit",
+ "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation",
+ "sfhash",
  "sighook",
  "windows",
 ]

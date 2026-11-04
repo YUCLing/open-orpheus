@@ -77,11 +77,11 @@ export declare function getDesktopEnvironment(): DesktopEnvironment
 /**
  * The compositor's unique name for the output Electron reports as a `Display.id`.
  *
- * This is the `wl_output.name` event (for example `DP-1`), looked up across the
- * live Wayland connections. `null` when none of them knows the display, the
- * client has not bound it yet, or the compositor is too old to send a name.
+ * On Linux, this is the `wl_output.name` event (for example `DP-1`), looked up
+ * across the live Wayland connections. `null` when none of them knows the display,
+ * the client has not bound it yet, or the compositor is too old to send a name.
  *
- * Only for Wayland on Linux; everywhere else it is `null`.
+ * On the other platforms, this is a ID that will be consistent across sessions.
  */
 export declare function getUniqueDisplayId(displayId: number): string | null
 
@@ -164,7 +164,7 @@ export declare function onLayerShellRoleRefused(callback: (windowId: string) => 
  */
 export declare function setInputRegion(windowHandle: string | Buffer, rects?: { x: number, y: number, w: number, h: number }[] | null): boolean
 
-export declare function setWindowAsBackground(hwnd: Buffer): void
+export declare function setWindowAsBackground(hwnd: Buffer, displayId?: number | undefined | null): void
 
 /**
  * Register (or clear) the layer-shell policy for a managed window.
