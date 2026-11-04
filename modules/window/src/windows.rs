@@ -1,8 +1,14 @@
 use napi::{Env, Error, Result, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use windows::{
+    Devices::Display::Core::{DisplayManager, DisplayManagerOptions},
+    Graphics::DisplayAdapterId,
     Win32::{
-        Foundation::{HWND, LPARAM, POINT, RECT, WPARAM},
+        Devices::Display::{
+            DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, GetDisplayConfigBufferSizes,
+            QDC_ONLY_ACTIVE_PATHS, QueryDisplayConfig,
+        },
+        Foundation::{ERROR_SUCCESS, HWND, LPARAM, LUID, POINT, RECT, WPARAM},
         Graphics::Gdi::{
             GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MapWindowPoints,
             MonitorFromRect, MonitorFromWindow,
@@ -189,4 +195,96 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
     }
 
     true.into() // Continue enumeration.
+}
+
+fn to_luid(id: DisplayAdapterId) -> LUID {
+    LUID {
+        LowPart: id.LowPart,
+        HighPart: id.HighPart,
+    }
+}
+
+/// The compositor's unique name for the output Electron reports as a `Display.id`.
+///
+/// On Linux, this is the `wl_output.name` event (for example `DP-1`), looked up
+/// across the live Wayland connections. `null` when none of them knows the display,
+/// the client has not bound it yet, or the compositor is too old to send a name.
+///
+/// On the other platforms, this is a ID that will be consistent across sessions.
+#[napi]
+pub fn get_unique_display_id(display_id: u32) -> Result<Option<String>> {
+    let mut path_count = 0u32;
+    let mut mode_count = 0u32;
+
+    unsafe {
+        let status = GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS, // or QDC_ALL_PATHS if you want every possible path
+            &mut path_count,
+            &mut mode_count,
+        );
+        if status != ERROR_SUCCESS {
+            return Err(Error::from_reason(
+                windows::core::Error::from_thread().message(),
+            ));
+        }
+    }
+
+    // 2. Allocate buffers of the exact size requested.
+    let mut path_array = vec![DISPLAYCONFIG_PATH_INFO::default(); path_count as usize];
+    let mut mode_array = vec![DISPLAYCONFIG_MODE_INFO::default(); mode_count as usize];
+
+    // 3. Retrieve the actual display configuration.
+    unsafe {
+        let status = QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS,
+            &mut path_count,
+            path_array.as_mut_ptr(),
+            &mut mode_count,
+            mode_array.as_mut_ptr(),
+            None,
+        );
+        if status != ERROR_SUCCESS {
+            return Err(Error::from_reason(
+                windows::core::Error::from_thread().message(),
+            ));
+        }
+    }
+
+    // 4. Iterate over every path and read the target identifier.
+    println!("Found {} active display path(s):", path_count);
+    for path in path_array.iter().take(path_count as usize) {
+        let target = &path.targetInfo;
+        let adapter_id = target.adapterId; // LUID { LowPart, HighPart }
+        let target_id = target.id; // UINT32
+
+        if sfhash::digest(
+            format!(
+                "{}/{}/{}",
+                adapter_id.LowPart, adapter_id.HighPart, target_id
+            )
+            .as_bytes(),
+        ) == display_id
+        {
+            let options = DisplayManagerOptions::default();
+            let manager =
+                DisplayManager::Create(options).map_err(|x| Error::from_reason(x.message()))?;
+            let targets = manager
+                .GetCurrentTargets()
+                .map_err(|x| Error::from_reason(x.message()))?;
+
+            let matched = targets
+                .into_iter()
+                .find(|t| {
+                    t.AdapterRelativeId().ok() == Some(target_id)
+                        && t.Adapter().and_then(|a| a.Id()).map(to_luid).ok() == Some(adapter_id)
+                })
+                .and_then(|x| x.StableMonitorId().ok());
+            return match matched {
+                Some(id) => Ok(Some(id.to_string_lossy())),
+                None => Ok(None),
+            };
+        }
+    }
+
+    Ok(None)
 }

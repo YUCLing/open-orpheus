@@ -229,6 +229,18 @@ pub fn set_window_as_background(
     Ok(())
 }
 
+/// The compositor's unique name for the output Electron reports as a `Display.id`.
+///
+/// On Linux, this is the `wl_output.name` event (for example `DP-1`), looked up
+/// across the live Wayland connections. `null` when none of them knows the display,
+/// the client has not bound it yet, or the compositor is too old to send a name.
+///
+/// On the other platforms, this is a ID that will be consistent across sessions.
+#[napi]
+pub fn get_unique_display_id(display_id: u32) -> Option<String> {
+    crate::linux::output_name(display_id)
+}
+
 pub fn set_input_region(window_handle: Unknown, rects: Option<Array>) -> Result<bool> {
     let mut parsed_rects = None;
     if let Some(arr) = rects {

@@ -77,11 +77,11 @@ export declare function getDesktopEnvironment(): DesktopEnvironment
 /**
  * The compositor's unique name for the output Electron reports as a `Display.id`.
  *
- * This is the `wl_output.name` event (for example `DP-1`), looked up across the
- * live Wayland connections. `null` when none of them knows the display, the
- * client has not bound it yet, or the compositor is too old to send a name.
+ * On Linux, this is the `wl_output.name` event (for example `DP-1`), looked up
+ * across the live Wayland connections. `null` when none of them knows the display,
+ * the client has not bound it yet, or the compositor is too old to send a name.
  *
- * Only for Wayland on Linux; everywhere else it is `null`.
+ * On the other platforms, this is a ID that will be consistent across sessions.
  */
 export declare function getUniqueDisplayId(displayId: number): string | null
 
