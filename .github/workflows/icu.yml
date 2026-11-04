@@ -14,19 +14,36 @@ jobs:
     name: Build ICU data
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
 
     env:
       OUTPUT_DAT: packaging/resources/icudtl.dat
       FILTER_FILE: packaging/resources/icu-filters.json
 
     steps:
+      # Bootstrap checkout: makes the local composite action available.
+      - name: Checkout (bootstrap)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create app token
+        id: app
+        uses: ./.github/actions/create-app-token
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          contents: write
+
+      # Re-checkout so git push authenticates as the app.
       - name: Checkout main
         uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app.outputs.token }}
 
       # A manual dispatch always rebuilds. A push rebuilds when either the
       # Electron version in package.json changes (which can move the ICU
@@ -157,13 +174,11 @@ jobs:
       - name: Commit and push
         if: steps.decide.outputs.rebuild == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$OUTPUT_DAT"
           if git diff --cached --quiet; then
             echo "$OUTPUT_DAT is unchanged; nothing to commit."
             exit 0
           fi
           electron=$(jq -r '.devDependencies.electron' package.json)
-          git commit -m "chore: rebuild icudtl.dat for Electron $electron"
+          git commit -m "chore: rebuild icudtl.dat for Electron $electron" -m "[skip ci]"
           git push origin main
