@@ -86,18 +86,12 @@ export default class MusicDesktopWindow extends ManagedWindow {
       screen.getAllDisplays().find((v) => v.id === this.display?.id) ?? screen.getPrimaryDisplay();
 
     // Windows keeps the window parented to the WorkerW, where `setBounds` is
-    // parent-relative. Give the native side the target in physical pixels
-    // instead, so it also follows a display that was removed, re-added or
-    // rearranged after attaching.
-    let bounds: { x: number; y: number; width: number; height: number } | undefined;
+    // parent-relative. Tell the native side which display to fill instead; it
+    // resolves the monitor and applies the rect, so the window follows a
+    // display that was removed, re-added or rearranged after attaching.
+    let displayId: number | undefined;
     if (isWindows) {
-      const rect = screen.dipToScreenRect(null, display.bounds);
-      bounds = {
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
+      displayId = display.id;
     } else if (this.needsPlacement(display)) {
       // Re-applying identical bounds can resize by a rounding step and restart
       // the page's decoration, so only a real change is applied.
@@ -110,7 +104,7 @@ export default class MusicDesktopWindow extends ManagedWindow {
     }
 
     try {
-      setWindowAsBackground(wnd.getNativeWindowHandle(), bounds);
+      setWindowAsBackground(wnd.getNativeWindowHandle(), displayId);
     } catch (e) {
       // Destroy the window and rethrow, deferred so attaching won't crash.
       setImmediate(() => this.destroy());
