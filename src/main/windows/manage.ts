@@ -2,12 +2,12 @@ import os from "node:os";
 import path, { resolve } from "node:path";
 import { readdir, stat, rm } from "node:fs/promises";
 
-import { app, Menu } from "electron";
+import { app, Menu, shell } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
 
 import packManager from "../pack";
 import WebPack from "../packs/WebPack";
-import { wasm as wasmDir } from "../folders";
+import { log, wasm as wasmDir } from "../folders";
 import { httpCacheStorage, lyricCacheManager, playCacheManager } from "../cache";
 import { checkUpdate } from "../update";
 import { registerIpcHandlers } from "../bridge/register";
@@ -48,6 +48,7 @@ class ManageWindow extends ManagedWindow {
     registerIpcHandlers<ManageContract>(manageWnd.webContents, "manage", {
       getFont: async () => font,
       checkUpdate: async (event, ignoreCache = false) => await checkUpdate(ignoreCache),
+      openLogFolder: async () => shell.showItemInFolder(log),
 
       pack: {
         getWebPackCommitHash: async () => {
