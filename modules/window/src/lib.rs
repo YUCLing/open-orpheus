@@ -1,8 +1,8 @@
 #![deny(clippy::all)]
 
 use napi::{
-    Env, Result, Unknown,
-    bindgen_prelude::{Array, FnArgs, Function},
+    Env, Result, Task, Unknown,
+    bindgen_prelude::{Array, AsyncTask, FnArgs, Function},
 };
 use napi_derive::napi;
 
@@ -170,44 +170,44 @@ pub fn on_layer_shell_role_refused(
     }
 }
 
-/// Listen for first CursorEnter event of the next created window.
-///
-/// Only for Wayland on Linux.
-#[napi]
-pub fn capture_next_window_first_cursor_enter(
-    #[napi(ts_arg_type = "(x: number, y: number) => void")] callback: Function<
-        FnArgs<(i32, i32)>,
-        (),
-    >,
-) -> Result<u32> {
-    #[cfg(target_os = "linux")]
-    {
-        use crate::linux::capture_next_window_first_cursor_enter as capture_next_window_first_cursor_enter_impl;
-        capture_next_window_first_cursor_enter_impl(callback)
+pub struct CaptureCursorTask {
+    window_id: String,
+    timeout_ms: u32,
+}
+
+impl Task for CaptureCursorTask {
+    type Output = Option<(i32, i32)>;
+    type JsValue = Option<Vec<i32>>;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        #[cfg(target_os = "linux")]
+        {
+            Ok(linux::capture_cursor_enter(
+                self.window_id.clone(),
+                self.timeout_ms,
+            ))
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (&self.window_id, self.timeout_ms);
+            Ok(None)
+        }
     }
 
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = callback;
-        Err(napi::Error::from_reason("Only supports Linux"))
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output.map(|(x, y)| vec![x, y]))
     }
 }
 
-/// Cancel a pending first-cursor-enter capture.
-#[napi]
-pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        linux::cancel_next_window_first_cursor_enter(token)
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = token;
-        false
-    }
+/// Capture the first pointer enter on an existing managed window surface.
+#[napi(ts_return_type = "Promise<[number, number] | null>")]
+pub fn capture_cursor_enter(window_id: String, timeout_ms: u32) -> AsyncTask<CaptureCursorTask> {
+    AsyncTask::new(CaptureCursorTask {
+        window_id,
+        timeout_ms,
+    })
 }
-
 /// Register the intent to present `target_window_id` as an xdg_popup of
 /// `parent_window_id`, with the size the renderer measured.
 ///
@@ -216,9 +216,9 @@ pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
 /// positioner needs (the parent's surface, the anchor, the object id) is
 /// resolved then. Omit the anchor to use the last pointer-button position on
 /// the parent. `shadow_inset` excludes transparent client-side shadow margins
-/// from the window geometry. Returns whether the intent was accepted; callers
-/// must still confirm the conversion and keep their overlay fallback.
+/// from the window geometry. Returns whether the intent was accepted.
 #[napi]
+#[allow(clippy::too_many_arguments)]
 pub fn set_window_popup_policy(
     target_window_id: String,
     parent_window_id: String,
@@ -227,6 +227,7 @@ pub fn set_window_popup_policy(
     anchor_x: Option<i32>,
     anchor_y: Option<i32>,
     shadow_inset: Option<i32>,
+    anchor_rect_width: Option<i32>,
 ) -> bool {
     #[cfg(target_os = "linux")]
     {
@@ -238,6 +239,7 @@ pub fn set_window_popup_policy(
             anchor_x,
             anchor_y,
             shadow_inset,
+            anchor_rect_width,
         )
     }
 
@@ -251,6 +253,7 @@ pub fn set_window_popup_policy(
             anchor_x,
             anchor_y,
             shadow_inset,
+            anchor_rect_width,
         );
         false
     }
@@ -271,12 +274,112 @@ pub fn clear_window_popup_policy(target_window_id: String) -> bool {
     }
 }
 
-/// Whether this tracked BrowserWindow was actually converted to xdg_popup.
+#[napi(object)]
+pub struct WindowPointerPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// Invoke once when a touch press lands in a managed window.
+#[napi]
+pub fn capture_window_touch(
+    window_id: String,
+    #[napi(ts_arg_type = "(x: number, y: number) => void")] callback: Function<
+        FnArgs<(i32, i32)>,
+        (),
+    >,
+) -> Result<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::capture_window_touch(window_id, callback)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window_id, callback);
+        Err(napi::Error::from_reason("Only supports Linux"))
+    }
+}
+
+#[napi]
+pub fn cancel_window_touch(token: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::cancel_window_touch(token)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = token;
+        false
+    }
+}
+
+/// Current pointer position inside a window surface, when the pointer is over it.
+#[napi]
+pub fn get_pointer_position(window_id: String) -> Option<WindowPointerPosition> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::window_pointer_position(window_id).map(|(x, y)| WindowPointerPosition { x, y })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window_id;
+        None
+    }
+}
+
+#[napi(object)]
+pub struct LatestWindowPress {
+    pub window_id: String,
+    pub x: i32,
+    pub y: i32,
+    pub touch: bool,
+    pub age_ms: u32,
+}
+
+/// Latest mouse/touch press across all tracked windows, if any.
+#[napi]
+pub fn latest_window_press() -> Option<LatestWindowPress> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::latest_window_press().map(|(window_id, x, y, touch, age_ms)| LatestWindowPress {
+            window_id,
+            x,
+            y,
+            touch,
+            age_ms,
+        })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+/// Whether the window's Wayland surface was converted to an xdg_popup.
 #[napi]
 pub fn is_window_wayland_popup(window_id: String) -> bool {
     #[cfg(target_os = "linux")]
     {
         linux::is_window_wayland_popup(window_id)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window_id;
+        false
+    }
+}
+
+/// Whether the compositor currently reports the window's toplevel as activated.
+#[napi]
+pub fn is_window_activated(window_id: String) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux::is_window_activated(window_id)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -324,6 +427,31 @@ pub fn is_window_pointer_inside(window_id: String) -> bool {
 ///
 /// Independent of the desktop name. This does not guarantee that a particular
 /// window can become a popup: arming still requires a tracked parent, anchor
+#[napi(object)]
+pub struct PopupCapability {
+    pub supported: bool,
+    pub reason: Option<String>,
+}
+
+/// Native popup capability.
+#[napi]
+pub fn get_popup_capability() -> PopupCapability {
+    #[cfg(target_os = "linux")]
+    {
+        let (supported, reason) = linux::popup_capability();
+        PopupCapability { supported, reason }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        PopupCapability {
+            supported: false,
+            reason: Some("not-wayland".to_string()),
+        }
+    }
+}
+
+/// Whether native xdg_popup conversion is available.
 /// data and a reusable object ID. Callers must retain an overlay fallback.
 #[napi]
 pub fn supports_native_wayland_popup() -> bool {

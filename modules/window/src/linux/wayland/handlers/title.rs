@@ -5,6 +5,8 @@
 //! layer's name for the window and stays attached to the surface for as long as
 //! the surface lives; the real title is the only part the compositor ever sees.
 
+use std::os::fd::RawFd;
+
 use super::super::codec::{REQ_SET_TITLE, WlMessage, parse_custom_title};
 use super::super::inject;
 use super::super::state::WaylandConn;
@@ -29,7 +31,12 @@ fn set_title(object_id: u32, title: &str) -> Vec<u8> {
     message
 }
 
-pub(crate) fn on_set_title(conn: &mut WaylandConn, msg: &WlMessage, _fx: &mut Effects) -> Action {
+pub(crate) fn on_set_title(
+    fd: Option<RawFd>,
+    conn: &mut WaylandConn,
+    msg: &WlMessage,
+    _fx: &mut Effects,
+) -> Action {
     let Some(title) = msg.str_text(8) else {
         return Action::Forward;
     };
@@ -45,6 +52,9 @@ pub(crate) fn on_set_title(conn: &mut WaylandConn, msg: &WlMessage, _fx: &mut Ef
         // The surface keeps the name for as long as it lives: a destroy in
         // between must not leave a window that cannot be reported by name.
         conn.surface_ids.insert(wl_surf, managed_id.to_string());
+        if let Some(fd) = fd {
+            super::super::state::arm_window_cursor_watchers(fd, wl_surf, managed_id);
+        }
         // The id now names this surface, so the window's recorded region has to
         // reach it. It is emitted before this surface's next commit — a
         // `set_input_region` only takes effect at a commit — and re-marking it

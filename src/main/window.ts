@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BaseWindow, BrowserWindow, shell } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
 import Emittery from "emittery";
 import { merge } from "es-toolkit";
@@ -29,9 +29,15 @@ import {
 } from "./lifecycle";
 import { toError } from "@shared/util";
 
-const browserManagedWindowMap = new WeakMap<BrowserWindow, ManagedWindow>();
+type AnyManagedWindow = ManagedWindow<any, any>;
+type BrowserManagedWindow = ManagedWindow<any, BrowserWindow>;
+type BaseWindowManaged = ManagedWindow<any, BaseWindow>;
+
+const browserManagedWindowMap = new WeakMap<BrowserWindow, BrowserManagedWindow>();
+const baseWindowManagedMap = new WeakMap<BaseWindow, BaseWindowManaged>();
 const managedBrowserWindows = new Set<BrowserWindow>();
-const managedWindows = new Set<WeakRef<ManagedWindow>>();
+const managedBaseWindows = new Set<BaseWindow>();
+const managedWindows = new Set<WeakRef<any>>();
 /**
  * Names managed windows for the native layer.
  *
@@ -40,7 +46,7 @@ const managedWindows = new Set<WeakRef<ManagedWindow>>();
  */
 let nextManagedWindowId = 1;
 const finalizationRegistry = new FinalizationRegistry<{
-  ref: WeakRef<ManagedWindow>;
+  ref: WeakRef<any>;
   id: string;
 }>((held) => {
   managedWindows.delete(held.ref);
@@ -99,13 +105,13 @@ export interface InputRegion {
   height: number;
 }
 
-export interface WindowEvents {
+export interface WindowEvents<TWindow extends BrowserWindow | BaseWindow = BrowserWindow> {
   /** Window is created or is being bound with current ManagedWindow */
-  bind: BrowserWindow;
+  bind: TWindow;
   /** Window is closed or is being unbound with current ManagedWindow */
-  unbind: BrowserWindow;
-  show: BrowserWindow;
-  hide: BrowserWindow;
+  unbind: TWindow;
+  show: TWindow;
+  hide: TWindow;
   /**
    * The compositor refused the layer-shell role for this window.
    *
@@ -115,7 +121,7 @@ export interface WindowEvents {
    * window, which is the only way to get a surface that can still take the
    * role.
    */
-  layerShellRefused: BrowserWindow;
+  layerShellRefused: TWindow;
 }
 
 export type WindowData = {
@@ -126,7 +132,7 @@ export type WindowData = {
   menu: AppMenu | undefined;
 };
 
-function shouldRespectSizeConstraints(wnd: BrowserWindow) {
+function shouldRespectSizeConstraints(wnd: BrowserWindow | BaseWindow) {
   return !wnd.isMaximized() && !wnd.isFullScreen();
 }
 
@@ -169,11 +175,12 @@ void app.whenReady().then(() => {
 
 export abstract class ManagedWindow<
   Data extends WindowData = WindowData,
-> extends Emittery<WindowEvents> {
+  TWindow extends BrowserWindow | BaseWindow = BrowserWindow,
+> extends Emittery<WindowEvents<TWindow>> {
   /** The name the native layer knows this window by. */
   readonly id = String(nextManagedWindowId++);
 
-  private _window: BrowserWindow | null = null;
+  private _window: TWindow | null = null;
   private _data: Record<string, unknown> = Object.create(null);
   private _title = "";
 
@@ -188,21 +195,31 @@ export abstract class ManagedWindow<
    * `null` releases it. Every managed window is created by
    * [`createBrowserWindow`], so a wrapper holds at most one live window.
    */
-  protected set window(value: BrowserWindow | null) {
+  protected set window(value: TWindow | null) {
     if (this._window === value) return;
     const previous = this._window;
     if (previous) {
       this.setMenu(undefined);
-      managedBrowserWindows.delete(previous);
-      browserManagedWindowMap.delete(previous);
+      if (previous instanceof BrowserWindow) {
+        managedBrowserWindows.delete(previous);
+        browserManagedWindowMap.delete(previous);
+      } else {
+        managedBaseWindows.delete(previous);
+        baseWindowManagedMap.delete(previous);
+      }
       this.detachWindowListeners(previous);
       if (this._lastOnClosedListener) previous.off("closed", this._lastOnClosedListener);
       void this.emit("unbind", previous);
     }
     this._window = value;
     if (value) {
-      managedBrowserWindows.add(value);
-      browserManagedWindowMap.set(value, this);
+      if (value instanceof BrowserWindow) {
+        managedBrowserWindows.add(value);
+        browserManagedWindowMap.set(value, this as unknown as BrowserManagedWindow);
+      } else {
+        managedBaseWindows.add(value);
+        baseWindowManagedMap.set(value, this as unknown as BaseWindowManaged);
+      }
       this._lastOnClosedListener = () => this.releaseWindow(value);
       value.on("closed", this._lastOnClosedListener);
       this.attachWindowListeners(value);
@@ -210,8 +227,12 @@ export abstract class ManagedWindow<
     }
   }
 
-  get window(): BrowserWindow | null {
+  get window(): TWindow | null {
     return this._window;
+  }
+
+  protected bindWindow(value: TWindow): void {
+    this.window = value;
   }
 
   /** The window's title. The window itself is never asked for it. */
@@ -314,7 +335,7 @@ export abstract class ManagedWindow<
    * window setter: `Emittery` delivers its events in a later microtask, which
    * is too late for wiring that must exist before the window is used.
    */
-  private attachWindowListeners(wnd: BrowserWindow) {
+  private attachWindowListeners(wnd: TWindow) {
     wnd.on("resize", this._resizeListener);
     wnd.on("maximize", this._maximizeListener);
     wnd.on("unmaximize", this._unmaximizeListener);
@@ -325,26 +346,28 @@ export abstract class ManagedWindow<
     wnd.on("close", this._closeListener);
     // Only Wayland puts the managed id in the title, so only there does the page
     // have to be kept from writing it. Elsewhere the title stays Electron's.
-    if (this.isWayland()) {
+    if (this.isWayland() && wnd instanceof BrowserWindow) {
       wnd.on("page-title-updated", this._pageTitleListener);
     }
 
-    wnd.webContents.setWindowOpenHandler(({ url }) => {
-      if (url.startsWith("http://") || url.startsWith("https://")) {
-        void shell.openExternal(url);
-        LOGGER.debug({ windowId: this.id }, "Opened external link in the default browser");
-      } else {
-        const separator = url.indexOf(":");
-        LOGGER.warn(
-          {
-            windowId: this.id,
-            scheme: separator > 0 ? url.slice(0, separator) : "unknown",
-          },
-          "Blocked window open request with an unsupported scheme"
-        );
-      }
-      return { action: "deny" };
-    });
+    if (wnd instanceof BrowserWindow) {
+      wnd.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+          void shell.openExternal(url);
+          LOGGER.debug({ windowId: this.id }, "Opened external link in the default browser");
+        } else {
+          const separator = url.indexOf(":");
+          LOGGER.warn(
+            {
+              windowId: this.id,
+              scheme: separator > 0 ? url.slice(0, separator) : "unknown",
+            },
+            "Blocked window open request with an unsupported scheme"
+          );
+        }
+        return { action: "deny" };
+      });
+    }
 
     this.applyRecordedState(wnd);
   }
@@ -356,7 +379,7 @@ export abstract class ManagedWindow<
    * is already bound: a policy switch creates its replacement eagerly, so the
    * state arrives after that window exists.
    */
-  private applyRecordedState(wnd: BrowserWindow) {
+  private applyRecordedState(wnd: TWindow) {
     let size: { x: number; y: number } | undefined;
     if ((size = this.getData("maximumSize"))) {
       this.setMaximumSize(size.x, size.y);
@@ -370,7 +393,7 @@ export abstract class ManagedWindow<
     }
   }
 
-  private detachWindowListeners(wnd: BrowserWindow) {
+  private detachWindowListeners(wnd: TWindow) {
     wnd.off("resize", this._resizeListener);
     wnd.off("maximize", this._maximizeListener);
     wnd.off("unmaximize", this._unmaximizeListener);
@@ -379,7 +402,9 @@ export abstract class ManagedWindow<
     wnd.off("show", this._showListener);
     wnd.off("hide", this._hideListener);
     wnd.off("close", this._closeListener);
-    wnd.off("page-title-updated", this._pageTitleListener);
+    if (wnd instanceof BrowserWindow) {
+      wnd.off("page-title-updated", this._pageTitleListener);
+    }
   }
 
   /**
@@ -412,7 +437,7 @@ export abstract class ManagedWindow<
       LOGGER.error({ err: toError(error), windowId: this.id }, "Failed to create managed window");
       throw error;
     }
-    this.window = wnd;
+    this.window = wnd as TWindow;
     this.applyTitle();
     LOGGER.debug({ windowId: this.id }, "Managed window created");
     return wnd;
@@ -463,7 +488,7 @@ export abstract class ManagedWindow<
   }
 
   /** The bound window, or `null` once it is gone. Never a destroyed window. */
-  protected liveWindow(): BrowserWindow | null {
+  protected liveWindow(): TWindow | null {
     const wnd = this._window;
     if (!wnd || wnd.isDestroyed()) return null;
     return wnd;
@@ -483,7 +508,7 @@ export abstract class ManagedWindow<
   /** Load a renderer route, using the dev server when one is configured. */
   protected loadGuiRoute(route = "/"): void {
     const wnd = this.liveWindow();
-    if (!wnd) return;
+    if (!(wnd instanceof BrowserWindow)) return;
     LOGGER.debug({ windowId: this.id, route }, "Loading window route");
     void wnd.loadURL(guiUrl(route)).catch((error) => {
       LOGGER.error(
@@ -494,7 +519,8 @@ export abstract class ManagedWindow<
   }
 
   protected hideMenuBar(): void {
-    this.liveWindow()?.setMenuBarVisibility(false);
+    const wnd = this.liveWindow();
+    if (wnd instanceof BrowserWindow) wnd.setMenuBarVisibility(false);
   }
 
   /**
@@ -525,9 +551,10 @@ export abstract class ManagedWindow<
   /** Called (synchronously) when the bound window reports that it was hidden. */
   protected onWindowHidden(): void {}
 
-  private releaseWindow(wnd: BrowserWindow) {
+  private releaseWindow(wnd: TWindow) {
     if (this._window !== wnd) return;
-    browserManagedWindowMap.delete(wnd);
+    if (wnd instanceof BrowserWindow) browserManagedWindowMap.delete(wnd);
+    else baseWindowManagedMap.delete(wnd);
     this.window = null;
     LOGGER.debug({ windowId: this.id }, "Managed window closed");
   }
@@ -647,7 +674,7 @@ export abstract class ManagedWindow<
 
   send(channel: string, ...args: unknown[]) {
     const wnd = this.liveWindow();
-    if (!wnd) return false;
+    if (!(wnd instanceof BrowserWindow)) return false;
     wnd.webContents.send(channel, ...args);
     return true;
   }
@@ -681,28 +708,39 @@ export abstract class ManagedWindow<
    * Event subscribers are not carried over; consumers follow the module's live
    * `window` binding instead.
    */
-  transferStateTo(target: ManagedWindow): void {
+  transferStateTo(
+    target: ManagedWindow<any, BrowserWindow> | ManagedWindow<any, BaseWindow> | ManagedWindow
+  ): void {
+    const destination = target as unknown as ManagedWindow<any, any>;
     // A popup belongs to the old surface, not to the replacement wrapper.
     this.setMenu(undefined);
-    target.setMenu(undefined);
+    destination.setMenu(undefined);
     const merged: Record<string, unknown> = Object.create(null);
-    Object.assign(merged, target._data, this._data);
-    target._data = merged;
-    target.setTitle(this._title);
+    Object.assign(merged, destination._data, this._data);
+    destination._data = merged;
+    destination.setTitle(this._title);
     this._data = Object.create(null);
     // Native state is keyed by window id, so the native layer re-keys its own:
     // the discarded id keeps nothing and the replacement owns what it held.
-    if (this.isWayland()) transferWindowState(this.id, target.id);
+    if (this.isWayland()) transferWindowState(this.id, destination.id);
     // A target that already has a window was bound before this state arrived,
     // so nothing else would apply the rest of it.
-    const wnd = target.liveWindow();
-    if (wnd) target.applyRecordedState(wnd);
+    const wnd = destination.liveWindow();
+    if (wnd) destination.applyRecordedState(wnd);
   }
 
-  static fromBrowserWindow(browserWindow: BrowserWindow) {
+  static fromBrowserWindow(browserWindow: BrowserWindow): BrowserManagedWindow | undefined {
     return browserManagedWindowMap.get(browserWindow);
   }
-  static fromId(id: string) {
+  static fromBaseWindow(baseWindow: BaseWindow): BaseWindowManaged | undefined {
+    return baseWindowManagedMap.get(baseWindow);
+  }
+  static fromWindow(window: BrowserWindow | BaseWindow): AnyManagedWindow | undefined {
+    return window instanceof BrowserWindow
+      ? (browserManagedWindowMap.get(window) as AnyManagedWindow | undefined)
+      : (baseWindowManagedMap.get(window) as AnyManagedWindow | undefined);
+  }
+  static fromId(id: string): AnyManagedWindow | undefined {
     for (const ref of managedWindows) {
       const managed = ref.deref();
       if (managed?.id === id) return managed;
@@ -747,6 +785,13 @@ export class BasicManagedWindow extends ManagedWindow {
   constructor(options: BrowserWindowConstructorOptions) {
     super();
     this.createBrowserWindow(options);
+  }
+}
+
+/** Managed `BaseWindow` host; the creator owns the `WebContentsView`. */
+export class BaseWindowManagedWindow extends ManagedWindow<WindowData, BaseWindow> {
+  attach(window: BaseWindow): void {
+    this.bindWindow(window);
   }
 }
 

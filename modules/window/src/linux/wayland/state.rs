@@ -120,6 +120,8 @@ pub(crate) struct WaylandConn {
     /// This is the application's name for the surface, and it dies with the
     /// surface itself; `state::window_surface` is the reverse lookup.
     pub(crate) surface_ids: HashMap<u32, String>,
+    /// Surfaces whose `xdg_toplevel` is in the compositor's `activated` state.
+    pub(crate) activated_surfaces: HashSet<u32>,
     pub(crate) wl_to_layer: HashMap<u32, u32>,
     pub(crate) xdg_to_layer: HashMap<u32, u32>,
     /// Messages the proxy owes the client, queued by a request handler and
@@ -172,6 +174,7 @@ impl WaylandConn {
             layer_windows: HashMap::new(),
             surface_roles: HashMap::new(),
             surface_ids: HashMap::new(),
+            activated_surfaces: HashSet::new(),
             wl_to_layer: HashMap::new(),
             xdg_to_layer: HashMap::new(),
             pending_to_client: Vec::new(),
@@ -206,6 +209,7 @@ impl WaylandConn {
         self.layer_windows.clear();
         self.surface_roles.clear();
         self.surface_ids.clear();
+        self.activated_surfaces.clear();
         self.wl_to_layer.clear();
         self.xdg_to_layer.clear();
         self.pending_to_client.clear();
@@ -253,6 +257,7 @@ impl WaylandConn {
                 // The role dies with the surface it was assigned to.
                 self.surface_roles.remove(&id);
                 self.surface_ids.remove(&id);
+                self.activated_surfaces.remove(&id);
                 self.popup_geometries
                     .retain(|xdg, _| self.xdg_to_wl.get(xdg) != Some(&id));
                 self.xdg_to_wl.retain(|_, v| *v != id);
@@ -723,9 +728,21 @@ pub(crate) struct PopupPolicy {
     pub(crate) height: i32,
     pub(crate) shadow_inset: i32,
     pub(crate) anchor: Option<(i32, i32)>,
+    /// Width of the horizontal anchor span from the parent's left edge.
+    pub(crate) anchor_rect_width: Option<i32>,
 }
 
+pub(crate) type TouchCb = Box<dyn FnOnce(i32, i32) + Send>;
+pub(crate) struct TouchWatcher {
+    pub(crate) token: u32,
+    pub(crate) callback: TouchCb,
+}
+type TouchWatcherKey = (RawFd, u32);
+static TOUCH_WATCHERS: OnceLock<Mutex<HashMap<TouchWatcherKey, Vec<TouchWatcher>>>> =
+    OnceLock::new();
+static NEXT_TOUCH_TOKEN: AtomicU32 = AtomicU32::new(1);
 pub(crate) static LAST_BUTTON: OnceLock<Mutex<LastButtonState>> = OnceLock::new();
+pub(crate) static TOUCH_PRESSES: OnceLock<Mutex<HashSet<(RawFd, u32)>>> = OnceLock::new();
 pub(crate) type PointerAxisCb = Box<dyn FnOnce(Option<u32>) + Send>;
 pub(crate) type PointerAxisWatcherKey = (RawFd, u32);
 pub(crate) struct PointerAxisWatcher {
@@ -967,9 +984,9 @@ pub(crate) struct CursorEnterWatcher {
 }
 pub(crate) type CursorEnterWatcherKey = (RawFd, u32);
 pub(crate) type CursorEnterWatcherMap = HashMap<CursorEnterWatcherKey, Vec<CursorEnterWatcher>>;
-pub(crate) static NEXT_TOPLEVEL_CURSOR_ENTER: OnceLock<Mutex<Vec<CursorEnterWatcher>>> =
-    OnceLock::new();
 pub(crate) static CURSOR_ENTER_WATCHERS: OnceLock<Mutex<CursorEnterWatcherMap>> = OnceLock::new();
+static PENDING_WINDOW_CURSOR_ENTER: OnceLock<Mutex<HashMap<String, Vec<CursorEnterWatcher>>>> =
+    OnceLock::new();
 static NEXT_CURSOR_ENTER_TOKEN: AtomicU32 = AtomicU32::new(1);
 
 fn next_unused_token(counter: &AtomicU32, mut is_used: impl FnMut(u32) -> bool) -> u32 {
@@ -983,89 +1000,105 @@ fn next_unused_token(counter: &AtomicU32, mut is_used: impl FnMut(u32) -> bool) 
 
 // ── Cursor enter watchers ─────────────────────────────────────────────────
 
-pub(crate) fn arm_first_cursor_enter_watchers(fd: RawFd, wl_surface_id: u32) {
-    let Some(pending) = NEXT_TOPLEVEL_CURSOR_ENTER.get() else {
-        return;
-    };
-    let Ok(mut pending) = pending.lock() else {
-        return;
-    };
-    if pending.is_empty() {
-        return;
-    }
-    let mut callbacks: Vec<_> = pending.drain(..).collect();
-    // Keep pending locked until transfer finishes so cancellation cannot miss
-    // a watcher between the pending and armed collections.
-    if let Some(watchers) = CURSOR_ENTER_WATCHERS.get()
-        && let Ok(mut watchers) = watchers.lock()
-    {
-        watchers
+/// Arm a first-enter watcher on a managed window's existing surface.
+pub(crate) fn watch_window_cursor_enter(window_id: &str, callback: CursorEnterCb) -> Option<u32> {
+    let surface = window_surface(window_id);
+    let watchers = CURSOR_ENTER_WATCHERS.get()?;
+    let pending = PENDING_WINDOW_CURSOR_ENTER.get_or_init(Default::default);
+    let mut pending = pending.lock().ok()?;
+
+    let token = next_unused_token(&NEXT_CURSOR_ENTER_TOKEN, |candidate| {
+        pending
+            .values()
+            .flatten()
+            .any(|watcher| watcher.token == candidate)
+            || watchers.lock().ok().is_some_and(|watchers| {
+                watchers
+                    .values()
+                    .flatten()
+                    .any(|watcher| watcher.token == candidate)
+            })
+    });
+
+    if let Some((fd, wl_surface_id)) = surface {
+        let Ok(mut armed) = watchers.lock() else {
+            return None;
+        };
+        armed
             .entry((fd, wl_surface_id))
             .or_default()
-            .append(&mut callbacks);
-        return;
+            .push(CursorEnterWatcher { token, callback });
+    } else {
+        pending
+            .entry(window_id.to_string())
+            .or_default()
+            .push(CursorEnterWatcher { token, callback });
     }
-    drop(pending);
-    for watcher in callbacks {
-        (watcher.callback)(None);
-    }
-}
-
-pub(crate) fn watch_next_toplevel_cursor_enter(callback: CursorEnterCb) -> Option<u32> {
-    let Some(pending) = NEXT_TOPLEVEL_CURSOR_ENTER.get() else {
-        callback(None);
-        return None;
-    };
-    let Ok(mut pending) = pending.lock() else {
-        callback(None);
-        return None;
-    };
-    let token = next_unused_token(&NEXT_CURSOR_ENTER_TOKEN, |candidate| {
-        pending.iter().any(|watcher| watcher.token == candidate)
-            || CURSOR_ENTER_WATCHERS
-                .get()
-                .and_then(|watchers| watchers.lock().ok())
-                .is_some_and(|watchers| {
-                    watchers
-                        .values()
-                        .flatten()
-                        .any(|watcher| watcher.token == candidate)
-                })
-    });
-    pending.push(CursorEnterWatcher { token, callback });
     Some(token)
 }
 
-pub(crate) fn cancel_cursor_enter_watcher(token: u32) -> bool {
-    let pending_watcher = NEXT_TOPLEVEL_CURSOR_ENTER.get().and_then(|pending| {
-        let mut pending = pending.lock().ok()?;
-        let index = pending.iter().position(|watcher| watcher.token == token)?;
-        Some(pending.remove(index))
-    });
-    if let Some(watcher) = pending_watcher {
-        (watcher.callback)(None);
-        return true;
-    }
+/// Attach window-scoped watchers that were registered before the title named
+/// the surface.
+pub(crate) fn arm_window_cursor_watchers(fd: RawFd, wl_surface_id: u32, window_id: &str) {
+    let Some(pending) = PENDING_WINDOW_CURSOR_ENTER.get() else {
+        return;
+    };
+    let Ok(mut pending) = pending.lock() else {
+        return;
+    };
+    let Some(mut watchers) = pending.remove(window_id) else {
+        return;
+    };
+    let Some(seen) = CURSOR_ENTER_WATCHERS.get() else {
+        for watcher in watchers {
+            (watcher.callback)(None);
+        }
+        return;
+    };
+    let Ok(mut seen) = seen.lock() else {
+        for watcher in watchers {
+            (watcher.callback)(None);
+        }
+        return;
+    };
+    seen.entry((fd, wl_surface_id))
+        .or_default()
+        .append(&mut watchers);
+}
 
-    let armed_watcher = CURSOR_ENTER_WATCHERS.get().and_then(|watchers| {
-        let mut watchers = watchers.lock().ok()?;
-        let mut removed = None;
-        watchers.retain(|_, entries| {
-            if removed.is_none()
-                && let Some(index) = entries.iter().position(|watcher| watcher.token == token)
-            {
-                removed = Some(entries.remove(index));
+/// Remove a window-scoped watcher without invoking its callback.
+pub(crate) fn cancel_window_cursor_enter(token: u32) -> bool {
+    let pending = PENDING_WINDOW_CURSOR_ENTER.get().and_then(|pending| {
+        let mut pending = pending.lock().ok()?;
+        let mut removed = false;
+        pending.retain(|_, entries| {
+            if let Some(index) = entries.iter().position(|watcher| watcher.token == token) {
+                entries.remove(index);
+                removed = true;
             }
             !entries.is_empty()
         });
-        removed
+        Some(removed)
     });
-    if let Some(watcher) = armed_watcher {
-        (watcher.callback)(None);
-        true
-    } else {
-        false
+    if pending == Some(true) {
+        return true;
     }
+
+    let Some(watchers) = CURSOR_ENTER_WATCHERS.get() else {
+        return false;
+    };
+    let Ok(mut watchers) = watchers.lock() else {
+        return false;
+    };
+    let mut removed = false;
+    watchers.retain(|_, entries| {
+        if let Some(index) = entries.iter().position(|watcher| watcher.token == token) {
+            entries.remove(index);
+            removed = true;
+        }
+        !entries.is_empty()
+    });
+    removed
 }
 
 pub(crate) fn fire_first_cursor_enter_watchers(fd: RawFd, wl_surface_id: u32, x: i32, y: i32) {
@@ -1171,6 +1204,7 @@ pub(crate) fn fire_layer_shell_refused(window_id: String) {
 /// Returns whether it was accepted; a window whose surface already took a role
 /// can never be a popup, and is refused now rather than shown as an ordinary
 /// toplevel first.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn set_popup_policy(
     target_window_id: &str,
     parent_window_id: &str,
@@ -1178,11 +1212,15 @@ pub(crate) fn set_popup_policy(
     height: i32,
     anchor: Option<(i32, i32)>,
     shadow_inset: i32,
+    anchor_rect_width: Option<i32>,
 ) -> bool {
     if width <= 0 || height <= 0 || width > MAX_POPUP_DIMENSION || height > MAX_POPUP_DIMENSION {
         return false;
     }
     if shadow_inset < 0 || shadow_inset > (width.min(height) - 1) / 2 {
+        return false;
+    }
+    if anchor_rect_width.is_some_and(|anchor_width| anchor_width <= 0) {
         return false;
     }
 
@@ -1239,6 +1277,7 @@ pub(crate) fn set_popup_policy(
             height,
             shadow_inset,
             anchor,
+            anchor_rect_width,
         }),
     );
     true
@@ -1303,6 +1342,7 @@ pub(crate) fn insert_popup_policy_for_test(
                 height,
                 shadow_inset,
                 anchor,
+                anchor_rect_width: None,
             }),
         );
 }
@@ -1345,19 +1385,112 @@ pub(crate) fn window_pointer_inside(window_id: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Latest mouse/touch press across all tracked surfaces, with its window name.
+pub(crate) fn latest_press() -> Option<(String, i32, i32, bool, u32)> {
+    let (fd, wl_surface_id) = {
+        let buttons = LAST_BUTTON.get()?.lock().ok()?;
+        buttons.latest?
+    };
+    let window_id = {
+        let conns = CONNS.get()?.lock().ok()?;
+        conns.get(&fd)?.surface_ids.get(&wl_surface_id)?.clone()
+    };
+    let buttons = LAST_BUTTON.get()?.lock().ok()?;
+    let button = buttons.by_surface.get(&(fd, wl_surface_id))?;
+    let touch = TOUCH_PRESSES
+        .get()
+        .and_then(|presses| presses.lock().ok())
+        .is_some_and(|presses| presses.contains(&(fd, wl_surface_id)));
+    let age_ms = button.at.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+    Some((window_id, button.x, button.y, touch, age_ms))
+}
+
+pub(crate) fn watch_window_touch(window_id: &str, callback: TouchCb) -> Option<u32> {
+    let (fd, wl_surface_id) = window_surface(window_id)?;
+    let watchers = TOUCH_WATCHERS.get()?;
+    let mut watchers = watchers.lock().ok()?;
+    let token = next_unused_token(&NEXT_TOUCH_TOKEN, |candidate| {
+        watchers
+            .values()
+            .flatten()
+            .any(|watcher| watcher.token == candidate)
+    });
+    watchers
+        .entry((fd, wl_surface_id))
+        .or_default()
+        .push(TouchWatcher { token, callback });
+    Some(token)
+}
+
+pub(crate) fn cancel_window_touch(token: u32) -> bool {
+    let Some(watchers) = TOUCH_WATCHERS.get() else {
+        return false;
+    };
+    let Ok(mut watchers) = watchers.lock() else {
+        return false;
+    };
+    let mut removed = false;
+    watchers.retain(|_, entries| {
+        if let Some(index) = entries.iter().position(|watcher| watcher.token == token) {
+            entries.remove(index);
+            removed = true;
+        }
+        !entries.is_empty()
+    });
+    removed
+}
+
+pub(crate) fn fire_window_touch(fd: RawFd, wl_surface_id: u32, x: i32, y: i32) {
+    let watchers = TOUCH_WATCHERS
+        .get()
+        .and_then(|watchers| watchers.lock().ok()?.remove(&(fd, wl_surface_id)));
+    if let Some(watchers) = watchers {
+        for watcher in watchers {
+            (watcher.callback)(x, y);
+        }
+    }
+}
+
+/// Current surface-local pointer position over a managed window, if focused.
+pub(crate) fn window_pointer_position(window_id: &str) -> Option<(i32, i32)> {
+    let (fd, wl_surface_id) = window_surface(window_id)?;
+    let conns = CONNS.get()?.lock().ok()?;
+    let conn = conns.get(&fd)?;
+    let pointer_id = conn
+        .pointer_focus
+        .iter()
+        .find_map(|(pointer, surface)| (*surface == wl_surface_id).then_some(*pointer))?;
+    conn.pointer_position.get(&pointer_id).copied()
+}
+
+/// Whether the window's surface currently has the converted popup role.
 pub(crate) fn window_is_popup(window_id: &str) -> bool {
     let Some((fd, wl_surface_id)) = window_surface(window_id) else {
         return false;
     };
-    let details = CONNS
+    CONNS
         .get()
         .and_then(|conns| conns.lock().ok())
         .and_then(|conns| {
             let conn = conns.get(&fd)?;
-            let top_id = conn.wl_to_top.get(&wl_surface_id)?;
-            Some((*top_id, conn.ifaces.get(top_id).copied()))
-        });
-    details.is_some_and(|(_, iface)| iface == Some(Iface::XdgPopupShim))
+            let top = conn.wl_to_top.get(&wl_surface_id)?;
+            Some(conn.ifaces.get(top) == Some(&crate::linux::wayland::codec::Iface::XdgPopupShim))
+        })
+        .unwrap_or(false)
+}
+
+pub(crate) fn window_is_activated(window_id: &str) -> bool {
+    let Some((fd, wl_surface_id)) = window_surface(window_id) else {
+        return false;
+    };
+    CONNS
+        .get()
+        .and_then(|conns| conns.lock().ok())
+        .and_then(|conns| {
+            let conn = conns.get(&fd)?;
+            Some(conn.activated_surfaces.contains(&wl_surface_id))
+        })
+        .unwrap_or(false)
 }
 
 pub(crate) fn watch_next_pointer_axis(window_id: &str, callback: PointerAxisCb) -> Option<u32> {
@@ -1455,6 +1588,16 @@ pub(crate) fn clear_runtime_state_for_fd(fd: RawFd) {
             buttons.latest = None;
         }
     }
+    if let Some(m) = TOUCH_PRESSES.get()
+        && let Ok(mut presses) = m.lock()
+    {
+        presses.retain(|(press_fd, _)| *press_fd != fd);
+    }
+    if let Some(m) = TOUCH_WATCHERS.get()
+        && let Ok(mut watchers) = m.lock()
+    {
+        watchers.retain(|(watch_fd, _), _| *watch_fd != fd);
+    }
     // A popup that never got its window is dropped with the connection it would
     // have been created on. A layer policy has no connection to go stale with.
     if let Some(roles) = WINDOW_ROLES.get()
@@ -1520,14 +1663,16 @@ pub(crate) fn is_wayland() -> bool {
 pub(crate) fn init_state() {
     CONNS.get_or_init(|| Mutex::new(HashMap::new()));
     LAST_BUTTON.get_or_init(|| Mutex::new(LastButtonState::default()));
+    TOUCH_PRESSES.get_or_init(|| Mutex::new(HashSet::new()));
+    TOUCH_WATCHERS.get_or_init(|| Mutex::new(HashMap::new()));
     WINDOW_ROLES.get_or_init(|| Mutex::new(HashMap::new()));
     NEXT_POINTER_AXIS.get_or_init(|| Mutex::new(HashMap::new()));
     RX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
     TX_BUFS.get_or_init(|| Mutex::new(HashMap::new()));
     RX_PENDING_CTRL.get_or_init(|| Mutex::new(HashMap::new()));
     TX_PENDING_CTRL.get_or_init(|| Mutex::new(HashMap::new()));
-    NEXT_TOPLEVEL_CURSOR_ENTER.get_or_init(|| Mutex::new(Vec::new()));
     CURSOR_ENTER_WATCHERS.get_or_init(|| Mutex::new(HashMap::new()));
+    PENDING_WINDOW_CURSOR_ENTER.get_or_init(|| Mutex::new(HashMap::new()));
 }
 
 pub(crate) fn clear_state() {
@@ -1541,6 +1686,16 @@ pub(crate) fn clear_state() {
     {
         buttons.by_surface.clear();
         buttons.latest = None;
+    }
+    if let Some(m) = TOUCH_PRESSES.get()
+        && let Ok(mut presses) = m.lock()
+    {
+        presses.clear();
+    }
+    if let Some(m) = TOUCH_WATCHERS.get()
+        && let Ok(mut watchers) = m.lock()
+    {
+        watchers.clear();
     }
     if let Some(m) = WINDOW_ROLES.get()
         && let Ok(mut roles) = m.lock()
@@ -1585,10 +1740,17 @@ pub(crate) fn clear_state() {
             close_pending_control(pending);
         }
     }
-    let pending_cursor_watchers = NEXT_TOPLEVEL_CURSOR_ENTER
-        .get()
-        .and_then(|pending| Some(pending.lock().ok()?.drain(..).collect::<Vec<_>>()));
-    if let Some(watchers) = pending_cursor_watchers {
+    let pending_window_cursor = PENDING_WINDOW_CURSOR_ENTER.get().and_then(|pending| {
+        Some(
+            pending
+                .lock()
+                .ok()?
+                .drain()
+                .flat_map(|(_, entries)| entries)
+                .collect::<Vec<_>>(),
+        )
+    });
+    if let Some(watchers) = pending_window_cursor {
         for watcher in watchers {
             (watcher.callback)(None);
         }
@@ -1753,7 +1915,8 @@ mod popup_tests {
             100,
             80,
             Some((4, 5)),
-            0
+            0,
+            None
         ));
         assert!(popup_policy(target_id).is_some());
 
@@ -1791,7 +1954,8 @@ mod popup_tests {
             100,
             80,
             Some((4, 5)),
-            0
+            0,
+            None
         ));
         assert!(popup_policy(target_id).is_none());
         on_close(fd);
@@ -1803,13 +1967,31 @@ mod popup_tests {
         init_state();
         // Impossible geometry is refused up front, so the caller can fall back
         // without showing anything.
-        assert!(!set_popup_policy("bad-size", "parent", 0, 80, None, 0));
-        assert!(!set_popup_policy("bad-inset", "parent", 10, 10, None, 9));
+        assert!(!set_popup_policy(
+            "bad-size", "parent", 0, 80, None, 0, None
+        ));
+        assert!(!set_popup_policy(
+            "bad-inset",
+            "parent",
+            10,
+            10,
+            None,
+            9,
+            None
+        ));
         assert!(popup_policy("bad-size").is_none());
         assert!(popup_policy("bad-inset").is_none());
 
         // An unmapped parent cannot anchor a popup.
-        assert!(!set_popup_policy("target", "not-up-yet", 100, 80, None, 0));
+        assert!(!set_popup_policy(
+            "target",
+            "not-up-yet",
+            100,
+            80,
+            None,
+            0,
+            None
+        ));
         assert!(popup_policy("target").is_none());
 
         // Once it is mapped, the intent is accepted and names its connection.
@@ -1818,7 +2000,15 @@ mod popup_tests {
         let mut conn = WaylandConn::new();
         conn.surface_ids.insert(10, "not-up-yet".into());
         CONNS.get().unwrap().lock().unwrap().insert(fd, conn);
-        assert!(set_popup_policy("target", "not-up-yet", 100, 80, None, 0));
+        assert!(set_popup_policy(
+            "target",
+            "not-up-yet",
+            100,
+            80,
+            None,
+            0,
+            None
+        ));
         let policy = popup_policy("target").expect("accepted");
         assert_eq!(policy.parent_fd, fd);
         assert_eq!(policy.anchor, None);
@@ -1847,7 +2037,8 @@ mod popup_tests {
             100,
             80,
             Some((0, 0)),
-            0
+            0,
+            None
         ));
         assert!(popup_policy("target").is_none());
         assert!(!role_decision_needed(fd));

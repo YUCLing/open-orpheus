@@ -3,7 +3,6 @@ import path from "node:path";
 
 import { BrowserWindow, screen } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
-import { DesktopEnvironment, getDesktopEnvironment } from "@open-orpheus/window";
 
 import { ManagedWindow, setMainWindow } from "../window";
 import { window as miniPlayerWindow } from "./mini-player";
@@ -92,17 +91,6 @@ function setupMainWindow(mainWindow: BrowserWindow) {
     LOGGER.debug("Main window shown");
     // Make sure mini player doesn't show together with main window
     void miniPlayerWindow.hide();
-  });
-
-  // A popup needs a live parent surface. Probe once on its first show, not
-  // before Electron has connected to the display or once per menu click.
-  mainWindow.once("show", () => {
-    if (getDesktopEnvironment() !== DesktopEnvironment.Wayland) return;
-    void import("../menu/popup-support")
-      .then(({ initializeWaylandPopupSupport }) => initializeWaylandPopupSupport(mainWindow))
-      .catch((error) => {
-        LOGGER.warn({ err: toError(error) }, "Wayland popup startup probe failed");
-      });
   });
 
   setLifecycleState(LifecycleState.MainWindowCreated, mainWindow);

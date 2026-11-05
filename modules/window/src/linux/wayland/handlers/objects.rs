@@ -4,10 +4,10 @@
 use std::os::fd::RawFd;
 
 use super::super::codec::{
-    EVT_OUTPUT_NAME, EVT_POPUP_CONFIGURE, EVT_POPUP_DONE, Iface, REQ_CREATE_POSITIONER,
-    REQ_DESTROY, REQ_GET_POPUP, REQ_POSITIONER_SET_ANCHOR, REQ_POSITIONER_SET_ANCHOR_RECT,
-    REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT, REQ_POSITIONER_SET_GRAVITY, REQ_POSITIONER_SET_SIZE,
-    REQ_SET_WINDOW_GEOMETRY, WlMessage,
+    EVT_OUTPUT_NAME, EVT_POPUP_CONFIGURE, EVT_POPUP_DONE, EVT_TOPLEVEL_CONFIGURE, Iface,
+    REQ_CREATE_POSITIONER, REQ_DESTROY, REQ_GET_POPUP, REQ_POSITIONER_SET_ANCHOR,
+    REQ_POSITIONER_SET_ANCHOR_RECT, REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT,
+    REQ_POSITIONER_SET_GRAVITY, REQ_POSITIONER_SET_SIZE, REQ_SET_WINDOW_GEOMETRY, WlMessage,
 };
 use super::super::layer_shell::xdg_toplevel_configure;
 use super::super::outputs;
@@ -19,6 +19,7 @@ use super::{Action, Effects};
 
 // xdg_positioner enums, distinct from layer-shell's anchor bitmask.
 const POSITIONER_TOP_LEFT: i32 = 5;
+const POSITIONER_TOP_RIGHT: i32 = 7;
 const POSITIONER_BOTTOM_RIGHT: i32 = 8;
 const POSITIONER_SLIDE_X: i32 = 1;
 const POSITIONER_SLIDE_Y: i32 = 2;
@@ -111,7 +112,6 @@ pub(crate) fn on_get_toplevel(
     fd: RawFd,
     conn: &mut WaylandConn,
     msg: &WlMessage,
-    fx: &mut Effects,
     window_id: Option<&str>,
 ) -> Action {
     if let Some(top_id) = msg.u32_arg(8) {
@@ -121,8 +121,7 @@ pub(crate) fn on_get_toplevel(
         // want of a parent surface or an object id.
         if let Some(id) = window_id
             && let Some(policy) = popup_policy(id)
-            && let Some(replacement) =
-                build_popup_role(fd, conn, msg.object_id, top_id, &policy, fx)
+            && let Some(replacement) = build_popup_role(fd, conn, msg.object_id, top_id, &policy)
         {
             take_popup_policy(id);
             return Action::Replace(vec![replacement]);
@@ -138,7 +137,6 @@ pub(crate) fn on_get_toplevel(
             conn.surface_roles
                 .entry(wl_id)
                 .or_insert(SurfaceRole::Toplevel { reported: false });
-            fx.arm_watchers_for.push(wl_id);
         }
     }
     Action::Forward
@@ -152,7 +150,6 @@ fn build_popup_role(
     xdg_surface_id: u32,
     top_id: u32,
     policy: &PopupPolicy,
-    fx: &mut Effects,
 ) -> Option<Vec<u8>> {
     let wm_base_id = conn.xdg_wm_base_id?;
     // The parent has to be on this connection, and a layer surface cannot be an
@@ -203,17 +200,24 @@ fn build_popup_role(
         REQ_POSITIONER_SET_SIZE,
         &[geometry.width, geometry.height],
     );
+    let (anchor_rect, anchor) = match policy.anchor_rect_width {
+        // Span from the parent's left edge to the item's right edge. Normal
+        // placement starts at the item; FLIP_X moves the anchor and gravity to
+        // the parent's left edge, putting the child entirely left of it.
+        Some(anchor_width) => ([0, anchor_y, anchor_width, 1], POSITIONER_TOP_RIGHT),
+        None => ([anchor_x, anchor_y, 1, 1], POSITIONER_TOP_LEFT),
+    };
     push_message(
         &mut replacement,
         positioner_id,
         REQ_POSITIONER_SET_ANCHOR_RECT,
-        &[anchor_x, anchor_y, 1, 1],
+        &anchor_rect,
     );
     push_message(
         &mut replacement,
         positioner_id,
         REQ_POSITIONER_SET_ANCHOR,
-        &[POSITIONER_TOP_LEFT],
+        &[anchor],
     );
     push_message(
         &mut replacement,
@@ -260,7 +264,6 @@ fn build_popup_role(
     conn.top_to_xdg.insert(top_id, xdg_surface_id);
     if let Some(wl_id) = conn.xdg_to_wl.get(&xdg_surface_id).copied() {
         conn.wl_to_top.insert(wl_id, top_id);
-        fx.arm_watchers_for.push(wl_id);
     }
     Some(replacement)
 }
@@ -282,6 +285,30 @@ pub(crate) fn on_popup_geometry(conn: &WaylandConn, msg: &WlMessage) -> Action {
         ],
     );
     Action::Replace(vec![replacement])
+}
+
+/// Track the `activated` state from `xdg_toplevel.configure`.
+pub(crate) fn on_toplevel_configure(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    if msg.opcode != EVT_TOPLEVEL_CONFIGURE {
+        return Action::Forward;
+    }
+    let Some(wl_surface) = conn
+        .top_to_xdg
+        .get(&msg.object_id)
+        .and_then(|xdg| conn.xdg_to_wl.get(xdg))
+        .copied()
+    else {
+        return Action::Forward;
+    };
+    let activated = msg
+        .u32_array_arg(16)
+        .is_some_and(|states| states.contains(&4));
+    if activated {
+        conn.activated_surfaces.insert(wl_surface);
+    } else {
+        conn.activated_surfaces.remove(&wl_surface);
+    }
+    Action::Forward
 }
 
 pub(crate) fn on_popup_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
@@ -475,13 +502,7 @@ mod popup_shadow_tests {
             REQ_GET_TOPLEVEL,
             request(40, REQ_GET_TOPLEVEL, 12, &[50]),
         );
-        let Action::Replace(out) = on_get_toplevel(
-            fd,
-            &mut conn,
-            &msg,
-            &mut Effects::default(),
-            Some("shadow-menu"),
-        ) else {
+        let Action::Replace(out) = on_get_toplevel(fd, &mut conn, &msg, Some("shadow-menu")) else {
             panic!("popup not converted")
         };
         let (messages, _) = decode(&out.concat());

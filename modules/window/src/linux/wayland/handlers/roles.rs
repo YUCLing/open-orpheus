@@ -411,7 +411,6 @@ fn flush_role(
             pending.wl_surface,
             toplevel,
             options,
-            fx,
         ) {
             // The client's xdg_surface never reaches the compositor, so reserve
             // its id with an object that does not claim the surface's role. A
@@ -462,7 +461,7 @@ fn flush_role(
         append_action(
             &mut out,
             &pending.toplevel_msg,
-            objects::on_get_toplevel(fd, conn, &pending.toplevel_msg, fx, resolved.as_deref()),
+            objects::on_get_toplevel(fd, conn, &pending.toplevel_msg, resolved.as_deref()),
         );
     }
 
@@ -1310,8 +1309,7 @@ mod tests {
         let (_guard, mut conn) = reserved(fd);
 
         // The first role was converted, caching the role on the surface.
-        let mut fx = Effects::default();
-        let first = conversion::convert_to_layer_surface(&mut conn, 40, 10, 50, options(), &mut fx)
+        let first = conversion::convert_to_layer_surface(&mut conn, 40, 10, 50, options())
             .expect("converted");
         assert_eq!(first.len(), 7);
 

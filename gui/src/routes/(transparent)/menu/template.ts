@@ -1,4 +1,4 @@
-import type { ElementTemplate } from "@shared/contracts/menu-api";
+import type { ElementTemplate } from "@shared/types/dui";
 
 // Template cache: style path → parsed template
 const templateCache: Record<string, ElementTemplate> = {};

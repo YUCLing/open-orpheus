@@ -1,4 +1,4 @@
-import type { BtnImages, ElementTemplate } from "./dui";
+import type { BtnImages } from "./dui";
 
 export type AppMenuItemBtn = {
   id: string;
@@ -30,15 +30,3 @@ export type MenuSkin = {
   separator: string;
   itemHover: string;
 };
-
-export interface MenuPullResult {
-  items: unknown[];
-  templates: Record<string, ElementTemplate>;
-  colors: MenuSkin;
-  cursorX?: number;
-  cursorY?: number;
-  /** Transparent margin around a native popup, excluded from its window geometry. */
-  shadowInset?: number;
-  /** Measure while hidden until main confirms the native popup role. */
-  pendingPopup?: boolean;
-}
