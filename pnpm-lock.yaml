@@ -213,7 +213,7 @@ importers:
         version: 1.0.1
       music-tag-native:
         specifier: ^1.1.0
-        version: 1.1.0
+        version: 1.2.0
     devDependencies:
       '@electron-forge/cli':
         specifier: ^8.0.1
@@ -392,7 +392,7 @@ importers:
         version: 1.24.0(svelte@5.57.2(@typescript-eslint/types@8.72.0))
       '@sveltejs/adapter-static':
         specifier: latest
-        version: 4.0.0(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))
+        version: 4.0.1(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))
       '@sveltejs/kit':
         specifier: ^2.70.3
         version: 2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0))
@@ -2157,8 +2157,8 @@ packages:
     peerDependencies:
       acorn: ^8.9.0
 
-  '@sveltejs/adapter-static@4.0.0':
-    resolution: {integrity: sha512-aF1J23R1ebKqUxQ4/qLr/Lxu63NFmLAtg8UZl3HFLxaoA1D/nhTVGcD9lTqx65iUbjNR2iOL0TgOxSX82x6Paw==}
+  '@sveltejs/adapter-static@4.0.1':
+    resolution: {integrity: sha512-svOU1OcBiJ9Kn1cdxHDmJIsBy1/iQe9STPvUFkO2/iinxPFS7r8fc9TiCaWWUgbrE+7ox6Bt4MURv3RPi7sunQ==}
     peerDependencies:
       '@sveltejs/kit': ^3.0.0-next.0
 
@@ -3673,84 +3673,84 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  music-tag-native-android-arm64@1.1.0:
-    resolution: {integrity: sha512-VPK7DCuzDRQZQQQPuQkGTQUxkyi2uq2e12UA4bWelEz+1Z6NOt7hdEX6UjKgKDsoQRD8xextD+AFVLpRIRhVkw==}
+  music-tag-native-android-arm64@1.2.0:
+    resolution: {integrity: sha512-YoWd+eMofd7ZshARjgerHNarMJNRSu52NyJzyX/Xi0q/REZyElvVmrJ2JJzrtJ//H9WOpOUO9/snRdJgX3JzNA==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [android]
 
-  music-tag-native-darwin-arm64@1.1.0:
-    resolution: {integrity: sha512-ABLOO6uOnGkbhnlNWYW5sUJdPPasXH8mGnLCudkZPu/i8JmH39QcuB9MIkAiQx+dVHdFcjSrIi3bgQvo7MZoUg==}
+  music-tag-native-darwin-arm64@1.2.0:
+    resolution: {integrity: sha512-YH0Jp1IUA22qKkaHZRnkVeNaxTVcfK2gZKDoLNmEriIfnMS32ys+SxgtEQUl7fNmI76L2FrQWqQzILzj66dT2g==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  music-tag-native-darwin-x64@1.1.0:
-    resolution: {integrity: sha512-VEEWpfBnQQCytZ+oLH2bG52wyRecELevvi24qN59pIAERhIJO8kFAl/mEzkKCsNbmbscdsTCZLpeeJ7dmb1cZA==}
+  music-tag-native-darwin-x64@1.2.0:
+    resolution: {integrity: sha512-bzZO5+pAxavNX7Poq/PVWeaO71W7e54M9rCf646UDKS2Ow0429gYKGChlYJNyelyjngiFjuy2+DphsD1cNmWLg==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  music-tag-native-linux-arm-gnueabihf@1.1.0:
-    resolution: {integrity: sha512-PKYnDg/DPvZc+AFS00WPHr0XcQLpZmld5ot6v1TQOzCIDKRfGIyJgH8wuBLKBjqEeMDxLTYxriWgNEeTu/8GZA==}
+  music-tag-native-linux-arm-gnueabihf@1.2.0:
+    resolution: {integrity: sha512-5T3+HUMePKebjTGM1jztx9WC2ENy70oDXLmyQx2OVXAA68CsU+58OwuzGNzQ+aogZmCD4Xu5KDb5URj5kAEInQ==}
     engines: {node: '>= 10'}
     cpu: [arm]
     os: [linux]
 
-  music-tag-native-linux-arm-musleabihf@1.1.0:
-    resolution: {integrity: sha512-3fUS4NCBMCltF1nTrBynIt5/dP6z0bd1k0PY8LZTBwKyUZ+Luu2+vW6lGtR9n9MYAekIxqspPVacAN1MYi556g==}
+  music-tag-native-linux-arm-musleabihf@1.2.0:
+    resolution: {integrity: sha512-lhjGI/5S7ONjesNb7oIR2AcWH7UyS+Y1G4OqbYBcvt7Ha/DdRlqVHtcC4BXkj9xWjsCqo812+oma9Zr6hFcUog==}
     engines: {node: '>= 10'}
     cpu: [arm]
     os: [linux]
 
-  music-tag-native-linux-arm64-gnu@1.1.0:
-    resolution: {integrity: sha512-0SmMJb2qbruoYOTyqou6YG6hZ5bUuU1+DyqpSPiqeJul8h2rxRmyxGzriGdHkuUDslp5J8SOGRF1FH4MXfbNeg==}
+  music-tag-native-linux-arm64-gnu@1.2.0:
+    resolution: {integrity: sha512-Ld8glvAVq58z9FyA6EM6ja3A3wCHFH13EKE4ApumAuPoPJavpIsHbgHiNTldHLJk0kHaO+y1HmKykQfjNDcepg==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  music-tag-native-linux-arm64-musl@1.1.0:
-    resolution: {integrity: sha512-Sej99aNP8bH4OOwnJN1J1Kk2Vwq8QAoysbzrOCaCNc1kW1UhN8SpU1BeLa61+tNK+KebRMkk3vfOgsN6bSq6Xw==}
+  music-tag-native-linux-arm64-musl@1.2.0:
+    resolution: {integrity: sha512-42WfA3py8rIaX248WpLaQKW0730yR16Zr2OIHELPI38FzcSGMGFYADbVItaqogcYlmt56E9WAATPzLn3XadIsw==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  music-tag-native-linux-x64-gnu@1.1.0:
-    resolution: {integrity: sha512-xzqVPvfHISnla927oDkI+DfNv/H0s/2UF0CEmsU08Pl6lJsP77hZV0l/4B8k7eahDrpqh9Zp94Wg4fgSfITuzQ==}
+  music-tag-native-linux-x64-gnu@1.2.0:
+    resolution: {integrity: sha512-6PU5ekHLWH4fkjHCjM4SojiuEroQZYgSy+uy6tDa/xqtxDhnlAfv4upyt7wFMsxNmTxif6jwPDzEFCLUw7Jryw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  music-tag-native-linux-x64-musl@1.1.0:
-    resolution: {integrity: sha512-3fXFVUTsDDBCUPKWWJpyKiUglwdkZ82l6ZVUTRdtiRnlZXNbtGePi1Q4JCN7+qd3h9zN66NeHXAZmA2NitrcMA==}
+  music-tag-native-linux-x64-musl@1.2.0:
+    resolution: {integrity: sha512-//E+D8RvsEyPhKZ3bGlggy8ugODddi9SjGwTSS8i02kg2NHY3Nmgb94kHkq0/lIY9VZt6DAUAugbkhGia/ZSkA==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  music-tag-native-win32-arm64-msvc@1.1.0:
-    resolution: {integrity: sha512-4olRYsuOBDUDk2MgSHiiKEyiUcRx4JnQGLzlKO/e9i68/of/2VXyuIJ1FF3ws98tT7n7OwyieKkt9GBX14/CBQ==}
+  music-tag-native-win32-arm64-msvc@1.2.0:
+    resolution: {integrity: sha512-5ICN8WmpLxhGMiVethzJHao1udRYRu5nnWS+JjbnhJiJbr7hzKhqMxTewgQRLxcAnT2EqaXcG/STN3h5BiMMvw==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [win32]
 
-  music-tag-native-win32-ia32-msvc@1.1.0:
-    resolution: {integrity: sha512-PRtVVaKyoISmqCy19gSuOF4afINFfKDNuEx5+1Kn4fVr+g8si/qjsk0pXU2gGQD+F4m0xLZnA0whyWyoscCjXQ==}
+  music-tag-native-win32-ia32-msvc@1.2.0:
+    resolution: {integrity: sha512-2LrV0E1iadNZlHP/iFE3BEthDvS7WI5PLZOPLf/fPt2Jeuaf6QvRVxEvd32snbSLQSCMYD1LD6HIn/S0iA5yyA==}
     engines: {node: '>= 10'}
     cpu: [ia32]
     os: [win32]
 
-  music-tag-native-win32-x64-msvc@1.1.0:
-    resolution: {integrity: sha512-UwZyZhyFoYN/2UUicgYdd+siYVwl32zbayIsYe6ZyFwuMq8N+ammyMdFQDwu72lgxToDmJzo20HZmOpvSibRaQ==}
+  music-tag-native-win32-x64-msvc@1.2.0:
+    resolution: {integrity: sha512-VrEgFIGUf7SW2obJ9gNjGo17Ayu1CVn4rB6qt/0k1cFRdwNR2hss1Pt9BcoO/bmnSdwqJekbtQjIAqIvLbe0hw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
 
-  music-tag-native@1.1.0:
-    resolution: {integrity: sha512-VmXOJnFufiwbxnW813Hn+NZVEOTqd+724UwQlOXMDqwLD4Bbz6/dCzR7bpiFIRo4gHoQd0E/5fP9XnmxA/TYfA==}
+  music-tag-native@1.2.0:
+    resolution: {integrity: sha512-bV55dn+pHDhW9SitwimnfsQysg9zJbuBNU6e3BcxjS+AMke+gKxDmM47ET5jvUTCnnsnvhI0Hr81+jie7Zc/zw==}
     engines: {node: '>= 10'}
 
   mute-stream@3.0.0:
@@ -6017,7 +6017,7 @@ snapshots:
     dependencies:
       acorn: 8.19.0
 
-  '@sveltejs/adapter-static@4.0.0(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))':
+  '@sveltejs/adapter-static@4.0.1(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))':
     dependencies:
       '@sveltejs/kit': 2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0))
 
@@ -7509,56 +7509,56 @@ snapshots:
 
   ms@2.1.3: {}
 
-  music-tag-native-android-arm64@1.1.0:
+  music-tag-native-android-arm64@1.2.0:
     optional: true
 
-  music-tag-native-darwin-arm64@1.1.0:
+  music-tag-native-darwin-arm64@1.2.0:
     optional: true
 
-  music-tag-native-darwin-x64@1.1.0:
+  music-tag-native-darwin-x64@1.2.0:
     optional: true
 
-  music-tag-native-linux-arm-gnueabihf@1.1.0:
+  music-tag-native-linux-arm-gnueabihf@1.2.0:
     optional: true
 
-  music-tag-native-linux-arm-musleabihf@1.1.0:
+  music-tag-native-linux-arm-musleabihf@1.2.0:
     optional: true
 
-  music-tag-native-linux-arm64-gnu@1.1.0:
+  music-tag-native-linux-arm64-gnu@1.2.0:
     optional: true
 
-  music-tag-native-linux-arm64-musl@1.1.0:
+  music-tag-native-linux-arm64-musl@1.2.0:
     optional: true
 
-  music-tag-native-linux-x64-gnu@1.1.0:
+  music-tag-native-linux-x64-gnu@1.2.0:
     optional: true
 
-  music-tag-native-linux-x64-musl@1.1.0:
+  music-tag-native-linux-x64-musl@1.2.0:
     optional: true
 
-  music-tag-native-win32-arm64-msvc@1.1.0:
+  music-tag-native-win32-arm64-msvc@1.2.0:
     optional: true
 
-  music-tag-native-win32-ia32-msvc@1.1.0:
+  music-tag-native-win32-ia32-msvc@1.2.0:
     optional: true
 
-  music-tag-native-win32-x64-msvc@1.1.0:
+  music-tag-native-win32-x64-msvc@1.2.0:
     optional: true
 
-  music-tag-native@1.1.0:
+  music-tag-native@1.2.0:
     optionalDependencies:
-      music-tag-native-android-arm64: 1.1.0
-      music-tag-native-darwin-arm64: 1.1.0
-      music-tag-native-darwin-x64: 1.1.0
-      music-tag-native-linux-arm-gnueabihf: 1.1.0
-      music-tag-native-linux-arm-musleabihf: 1.1.0
-      music-tag-native-linux-arm64-gnu: 1.1.0
-      music-tag-native-linux-arm64-musl: 1.1.0
-      music-tag-native-linux-x64-gnu: 1.1.0
-      music-tag-native-linux-x64-musl: 1.1.0
-      music-tag-native-win32-arm64-msvc: 1.1.0
-      music-tag-native-win32-ia32-msvc: 1.1.0
-      music-tag-native-win32-x64-msvc: 1.1.0
+      music-tag-native-android-arm64: 1.2.0
+      music-tag-native-darwin-arm64: 1.2.0
+      music-tag-native-darwin-x64: 1.2.0
+      music-tag-native-linux-arm-gnueabihf: 1.2.0
+      music-tag-native-linux-arm-musleabihf: 1.2.0
+      music-tag-native-linux-arm64-gnu: 1.2.0
+      music-tag-native-linux-arm64-musl: 1.2.0
+      music-tag-native-linux-x64-gnu: 1.2.0
+      music-tag-native-linux-x64-musl: 1.2.0
+      music-tag-native-win32-arm64-msvc: 1.2.0
+      music-tag-native-win32-ia32-msvc: 1.2.0
+      music-tag-native-win32-x64-msvc: 1.2.0
 
   mute-stream@3.0.0: {}
 
