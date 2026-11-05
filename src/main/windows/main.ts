@@ -16,15 +16,13 @@ function getWindowState(wnd: BrowserWindow): "minimize" | "maximize" | "restore"
 function getWindowSizeStatus(
   wnd: BrowserWindow
 ): ["minimize" | "maximize" | "restore", number, number, number] {
-  const bounds = wnd.getBounds();
-  const screenScaleFactor = screen.getDisplayMatching(bounds).scaleFactor;
-  // TODO: Confirm macOS desired behavior, Windows and Linux (Wayland) is already tested to be correct
-  const scaleFactor = os.platform() === "win32" ? 1 : screenScaleFactor;
+  const bounds = wnd.getContentBounds();
+  const scaleFactor = screen.getDisplayMatching(bounds).scaleFactor;
   return [
     getWindowState(wnd),
     bounds.width * scaleFactor,
     bounds.height * scaleFactor,
-    screenScaleFactor,
+    scaleFactor,
   ];
 }
 
@@ -41,33 +39,55 @@ const mainWindowOptions = {
 
 /** Wire the main window's cross-window behaviour and lifecycle. */
 function setupMainWindow(mainWindow: BrowserWindow) {
-  ["maximize", "minimize", "restore", os.platform() === "linux" ? "resize" : "resized"].forEach(
-    (event) => {
-      mainWindow.on(event as unknown as "maximize", () => {
-        // resize is triggered instead of restore on Linux (Wayland)
-        mainWindow.webContents.send(
-          "channel.call",
-          "winhelper.onSizeStatus",
-          ...getWindowSizeStatus(mainWindow)
-        );
-      });
-    }
-  );
+  const isLinux = os.platform() === "linux";
+
+  const sendSizeStatus = () => {
+    mainWindow.webContents.send(
+      "channel.call",
+      "winhelper.onSizeStatus",
+      ...getWindowSizeStatus(mainWindow)
+    );
+  };
 
   const sendResizeDone = () => {
-    const bounds = mainWindow.getBounds();
+    const bounds = mainWindow.getContentBounds();
+    const scaleFactor = screen.getDisplayMatching(bounds).scaleFactor;
     mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
       top: 0,
       left: 0,
-      right: bounds.width,
-      bottom: bounds.height,
-      deviceScaleFaactor: screen.getDisplayMatching(bounds).scaleFactor,
+      right: bounds.width * scaleFactor,
+      bottom: bounds.height * scaleFactor,
+      deviceScaleFactor: scaleFactor,
     });
   };
 
-  if (os.platform() !== "linux") {
-    mainWindow.on("resized", sendResizeDone);
-  } else {
+  if (isLinux) {
+    // Linux does not emit "resized", so debounce "resize" to emulate resize-end.
+    // LayoutStore checks onSizeStatus against the window size snapshot it took
+    // before handling the event, so onsizeWindowDone must arrive before that
+    // check and carry physical pixels (the renderer divides them by
+    // devicePixelRatio to get DIP).
+    const sendSizeDoneAndStatus = () => {
+      const [status, width, height, scaleFactor] = getWindowSizeStatus(mainWindow);
+      mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
+        top: 0,
+        left: 0,
+        right: width,
+        bottom: height,
+        deviceScaleFactor: scaleFactor,
+      });
+      mainWindow.webContents.send(
+        "channel.call",
+        "winhelper.onSizeStatus",
+        status,
+        width,
+        height,
+        scaleFactor
+      );
+    };
+
+    // TODO(maybe): Some layout depends on windowWidth/windowHeight updating during
+    // resize, but this only syncs them at resize-end.
     let resizeEndTimer: NodeJS.Timeout | undefined;
 
     mainWindow.on("resize", () => {
@@ -75,9 +95,20 @@ function setupMainWindow(mainWindow: BrowserWindow) {
         clearTimeout(resizeEndTimer);
       }
 
-      // Linux does not emit "resized", so debounce "resize" to emulate resize-end.
-      resizeEndTimer = setTimeout(sendResizeDone, 150);
+      resizeEndTimer = setTimeout(sendSizeDoneAndStatus, 150);
     });
+
+    mainWindow.on("maximize", sendSizeDoneAndStatus);
+    mainWindow.on("minimize", sendSizeDoneAndStatus);
+    mainWindow.on("restore", sendSizeDoneAndStatus);
+  } else {
+    mainWindow.on("maximize", sendSizeStatus);
+    mainWindow.on("minimize", sendSizeStatus);
+    mainWindow.on("restore", sendSizeStatus);
+    // The order is intentional, the renderer will catch it since there's a debounce
+    // for size status events
+    mainWindow.on("resized", sendSizeStatus);
+    mainWindow.on("resized", sendResizeDone);
   }
 
   mainWindow.on("focus", () => {
