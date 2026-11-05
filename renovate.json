@@ -1,6 +1,24 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "timezone": "Asia/Shanghai",
+  // One batch a week, outside working hours. Vulnerability alerts still run
+  // immediately because they override this schedule below.
+  "schedule": ["before 6am on saturday"],
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  // Give the ecosystem a few days to yank a bad release before we open a PR.
+  "minimumReleaseAge": "3 days",
+  // Do not rebase every open PR after each merge; only when it conflicts.
+  "rebaseWhen": "conflicted",
+  "platformAutomerge": true,
+  "dependencyDashboard": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "automerge": false
+  },
+  "prFooter": "",
   "commitMessageAction": "更新",
   "commitMessageTopic": "{{depName}}",
   "commitMessageExtra": "到 {{#if newVersion}}{{newVersion}}{{else}}{{newValue}}{{/if}}",
@@ -46,6 +64,52 @@
     {
       "matchJsonata": ["manager != 'cargo' and manager != 'npm'"],
       "addLabels": ["release/ignore"]
+    },
+    // Collapse the weekly non-major updates into one PR per ecosystem instead
+    // of one PR per dependency.
+    {
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm dev non-major"
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["dependencies", "optionalDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm prod non-major"
+    },
+    {
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Cargo non-major"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "GitHub Actions"
+    },
+    // Merge low-risk updates automatically once the required CI checks pass.
+    {
+      "matchUpdateTypes": ["pin", "digest"],
+      "automerge": true
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    // Major updates are opened only after you tick them on the Dependency
+    // Dashboard. They are never automerged.
+    {
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
     }
   ]
 }

@@ -1,0 +1,66 @@
+name: Greptile Gate
+
+# Greptile only reviews PRs opened by humans. Bot PRs (Renovate, Dependabot)
+# never get a "Greptile Review" check, so requiring that check directly leaves
+# every bot PR stuck on "Expected". This workflow is the required check
+# instead: it waits for Greptile on human PRs and is skipped for bots.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  checks: read
+  pull-requests: read
+
+concurrency:
+  group: greptile-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  greptile:
+    name: Greptile review gate
+    # Drafts are not reviewed yet. Bots are exempt; a collaborator can also
+    # bypass with the "skip-greptile" label.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot' &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-greptile')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Wait for Greptile Review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 2400)) # 40 minutes
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            conclusion="$(
+              gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+                --jq '[.check_runs[] | select(.name == "Greptile Review")]
+                      | sort_by(.started_at) | last | .conclusion' \
+                2>/dev/null || true
+            )"
+            case "$conclusion" in
+              success | neutral | skipped)
+                echo "Greptile Review concluded: $conclusion"
+                exit 0
+                ;;
+              failure | cancelled | timed_out | action_required)
+                echo "Greptile Review concluded: $conclusion"
+                exit 1
+                ;;
+              "" | null)
+                echo "Greptile has not reported yet; waiting..."
+                ;;
+              *)
+                echo "Greptile is still running ($conclusion); waiting..."
+                ;;
+            esac
+            sleep 30
+          done
+          echo "::error::Timed out waiting for the Greptile Review check."
+          exit 1
