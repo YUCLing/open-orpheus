@@ -3,6 +3,7 @@ import dns from "node:dns";
 import { RequestError } from "got";
 
 import { registerCallHandler } from "../calls";
+import { sendIfAlive } from "../util/send";
 import { AegisEncryptState, XeapiAegis, type AegisInitConfig } from "../xeapi";
 import { toError } from "@shared/util";
 import {
@@ -89,10 +90,11 @@ registerCallHandler<[AegisInitConfig], [{ errorCode: number }]>(
   (event, config) => [
     aegis.init(config ?? {}, {
       onEncryptStateChange: (state: AegisEncryptState, reason: string) => {
-        event.sender.send("channel.call", "network.onEncryptStateChange", state, reason);
+        sendIfAlive(event.sender, "channel.call", "network.onEncryptStateChange", state, reason);
       },
       onRequestPublicKey: (request) => {
-        event.sender.send(
+        sendIfAlive(
+          event.sender,
           "channel.call",
           "network.onRequestAegisPublicKey",
           request.currentKeyVersion,

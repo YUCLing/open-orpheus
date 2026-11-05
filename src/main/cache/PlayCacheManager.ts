@@ -2,6 +2,7 @@ import { access, mkdir, readdir, readFile, writeFile, rm, statfs } from "node:fs
 import { resolve } from "node:path";
 
 import { mainWindow } from "../window";
+import { sendIfAlive } from "../util/send";
 
 // #region Types
 
@@ -288,14 +289,10 @@ export default class PlayCacheManager {
   }
 
   private notifyPlayCacheUpdate(meta: CacheTrackMeta, playCacheUpdateType: number): void {
-    try {
-      mainWindow?.webContents.send("channel.call", "storage.onPlayCacheUpdate", {
-        ...meta,
-        playCacheUpdateType,
-      });
-    } catch {
-      // Window might be destroyed
-    }
+    sendIfAlive(mainWindow, "channel.call", "storage.onPlayCacheUpdate", {
+      ...meta,
+      playCacheUpdateType,
+    });
   }
 
   private async getCachedSizeGB(): Promise<number> {

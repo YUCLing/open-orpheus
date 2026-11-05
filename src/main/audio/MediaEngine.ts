@@ -6,6 +6,7 @@ import mime from "mime";
 
 import type { AudioPlayInfo } from "../../preload/Player";
 import { mainWindow } from "../window";
+import { sendIfAlive } from "../util/send";
 import { playCacheManager } from "../cache";
 import { normalizePath } from "../util/path";
 import { toError } from "@shared/util";
@@ -66,8 +67,7 @@ export class MediaEngine {
   }
 
   private sendProgress(prog: number) {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send("audio.onProgress", prog);
+    sendIfAlive(mainWindow, "audio.onProgress", prog);
   }
 
   /**

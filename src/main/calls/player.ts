@@ -9,6 +9,7 @@ import { storage as storageDir } from "../folders";
 import { lyricsDispatcher } from "../lyrics";
 import { parseLrc, parseYrc } from "../lyrics/parse";
 import { sanitizeRelativePath } from "../util/path";
+import { sendIfAlive } from "../util/send";
 import {
   createDesktopLyricsPreview,
   window as desktopLyricsWindow,
@@ -327,7 +328,15 @@ registerCallHandler<[string, string], [boolean]>(
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, buf);
     LOGGER.debug({ path }, "Desktop lyrics preview rendered");
-    event.sender.send("channel.call", "player.onRenderLRCImageResult", path, true, width, height);
+    sendIfAlive(
+      event.sender,
+      "channel.call",
+      "player.onRenderLRCImageResult",
+      path,
+      true,
+      width,
+      height
+    );
     return [true];
   }
 );

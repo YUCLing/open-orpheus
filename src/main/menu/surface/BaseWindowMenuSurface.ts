@@ -10,6 +10,7 @@ import { toError } from "@shared/util";
 import { SURFACE_READY_TIMEOUT_MS } from "../constants";
 import { font } from "../../gui";
 import { BaseWindowManagedWindow, guiUrl as makeGuiUrl } from "../../window";
+import { sendIfAlive } from "../../util/send";
 import type {
   MenuMeasurement,
   MenuSurfaceConfig,
@@ -222,7 +223,7 @@ export class BaseWindowMenuSurface implements MenuSurface {
     const measurement = deferred<MenuMeasurement>();
     this.measurementRequest = measurement;
     const message: PrepareMessage = { ...config, requestId: this.requestId };
-    this.view.webContents.send("menu.surface.prepare", message);
+    sendIfAlive(this.view.webContents, "menu.surface.prepare", message);
 
     const result = this.options.measure
       ? await withTimeout(measurement.promise, readyTimeout, "menu measurement")
@@ -319,7 +320,7 @@ export class BaseWindowMenuSurface implements MenuSurface {
   }
 
   sendCursor(position: { x: number; y: number; fallback?: boolean }): void {
-    this.view.webContents.send("menu.surface.cursor", {
+    sendIfAlive(this.view.webContents, "menu.surface.cursor", {
       requestId: this.requestId,
       x: position.x,
       y: position.y,
@@ -367,7 +368,7 @@ export class BaseWindowMenuSurface implements MenuSurface {
     };
     syncViewBounds();
     this.view.webContents.focus();
-    this.view.webContents.send("menu.surface.show", { requestId: this.requestId });
+    sendIfAlive(this.view.webContents, "menu.surface.show", { requestId: this.requestId });
 
     await withTimeout(
       visible.promise,
@@ -383,8 +384,8 @@ export class BaseWindowMenuSurface implements MenuSurface {
   }
 
   update(update: MenuUpdate): void {
-    if (this.closed || this.view.webContents.isDestroyed()) return;
-    this.view.webContents.send("menu.surface.update", update);
+    if (this.closed) return;
+    sendIfAlive(this.view.webContents, "menu.surface.update", update);
     if (update.items) {
       this.presentation = this.presentation ? { ...this.presentation, items: update.items } : null;
     }

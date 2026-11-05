@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { app, Menu, MenuItemConstructorOptions, nativeImage, NativeImage, Tray } from "electron";
 
 import { mainWindow } from "./window";
+import { sendIfAlive } from "./util/send";
 import { registerShutdownTask } from "./lifecycle";
 import { kv as settings } from "./settings";
 import showManageWindow from "./windows/manage";
@@ -23,9 +24,12 @@ const defaultMenuItems: MenuItemConstructorOptions[] = [
   {
     label: "退出",
     click: () => {
-      if (trayInstalled && !quitRequested && mainWindow && !mainWindow.isDestroyed()) {
+      if (
+        trayInstalled &&
+        !quitRequested &&
+        sendIfAlive(mainWindow, "channel.call", "winhelper.onmenuclick", "exitApp", 0)
+      ) {
         // NCM seems to be ready, and is not , we will go with graceful way as of now
-        mainWindow.webContents.send("channel.call", "winhelper.onmenuclick", "exitApp", 0);
         quitRequested = true;
         return;
       }
@@ -87,7 +91,8 @@ async function clickHandler() {
   // Linux can only receives click, so a different behavior is used
   // The `onclick` will be send when main window is invisible, and `onrightclick` will be send when main window is visible
   const clickBehavior = await settings.get("tray.clickBehavior");
-  mainWindow.webContents.send(
+  sendIfAlive(
+    mainWindow,
     "channel.call",
     // We only send rightclick here if is Linux, the main window is visible, and the user has not set the click behavior to "always-show-main-window",
     // or, on Linux, if the user has set the click behavior to "always-show-menu", in which case we always send rightclick to show the menu
@@ -100,8 +105,7 @@ async function clickHandler() {
 }
 
 function rightClickHandler() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
+  sendIfAlive(mainWindow, "channel.call", "trayicon.onrightclick");
 }
 
 export function install() {
@@ -128,8 +132,7 @@ export function install() {
           label: "显示网易云音乐菜单",
           click: () => {
             // Although it can't be non-existing...
-            if (!mainWindow || mainWindow.isDestroyed()) return;
-            mainWindow.webContents.send("channel.call", "trayicon.onrightclick");
+            sendIfAlive(mainWindow, "channel.call", "trayicon.onrightclick");
           },
         },
         {

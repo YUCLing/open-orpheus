@@ -14,6 +14,7 @@ import {
 } from "@shared/types/desktop-lyrics";
 
 import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
+import { sendIfAlive } from "../util/send";
 import { registerIpcHandlers } from "../bridge/register";
 import { toError } from "@shared/util";
 import type {
@@ -74,9 +75,7 @@ export function updateLyricsPlayInfo(info: DesktopLyricsPlayInfo | null) {
 }
 
 function performAction(action: string) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("channel.call", "player.ondesktoplyricaction", action);
-  }
+  sendIfAlive(mainWindow, "channel.call", "player.ondesktoplyricaction", action);
 }
 
 const desktopLyricsWindowOptions = {
@@ -105,8 +104,7 @@ function setupDesktopLyricsWindow(wnd: BrowserWindow): BrowserWindow {
   });
 
   wnd.on("blur", () => {
-    if (wnd.isDestroyed()) return;
-    wnd.webContents.send("desktopLyrics.blur");
+    sendIfAlive(wnd, "desktopLyrics.blur");
   });
 
   const de = getDesktopEnvironment();
@@ -131,14 +129,7 @@ function setupDesktopLyricsWindow(wnd: BrowserWindow): BrowserWindow {
         const scrCursor = screen.getCursorScreenPoint();
         [x, y] = [scrCursor.x, scrCursor.y];
       }
-      mainWindow.webContents.send(
-        "channel.call",
-        "player.ondesktopmousewheel",
-        modifier,
-        delta,
-        x,
-        y
-      );
+      sendIfAlive(mainWindow, "channel.call", "player.ondesktopmousewheel", modifier, delta, x, y);
     },
     changeOrientation: async () => {
       if (wnd.isDestroyed()) return;

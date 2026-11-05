@@ -5,6 +5,7 @@ import type { BrowserWindowConstructorOptions } from "electron";
 import packManager from "../pack";
 import { PackageDownloadReason } from "@shared/types/package-download";
 import { ManagedWindow } from "../window";
+import { sendIfAlive } from "../util/send";
 import { toError } from "@shared/util";
 
 const packageDownloadWindowOptions = {
@@ -56,6 +57,7 @@ class PackageDownloadWindow extends ManagedWindow {
       this.downloadReason === PackageDownloadReason.LoadFailed;
 
     return new Promise<void>((resolve, reject) => {
+      const controller = new AbortController();
       let downloadSuccess = false;
       let downloadFailed = false;
       let lastProgressStep: string | undefined;
@@ -63,7 +65,7 @@ class PackageDownloadWindow extends ManagedWindow {
         LOGGER.info({ downloadReason: reasonName }, "Package download started");
         packManager
           .downloadPackage((progress) => {
-            wnd.webContents.send("download-package-progress", progress);
+            sendIfAlive(wnd, "download-package-progress", progress);
             if (progress.step !== lastProgressStep) {
               lastProgressStep = progress.step;
               if (progress.step === "completed") {
@@ -84,8 +86,11 @@ class PackageDownloadWindow extends ManagedWindow {
               resolve();
               wnd.close();
             }
-          })
+          }, controller.signal)
           .catch((e) => {
+            // Closing the window aborts the download; the `closed` handler has
+            // already rejected with "CANCEL", so this is not a failure.
+            if (controller.signal.aborted) return;
             downloadFailed = true;
             if (noUsablePack) {
               LOGGER.fatal(
@@ -103,6 +108,7 @@ class PackageDownloadWindow extends ManagedWindow {
           });
       });
       wnd.on("closed", () => {
+        controller.abort();
         if (downloadSuccess || downloadFailed) return;
         if (noUsablePack) {
           LOGGER.fatal(

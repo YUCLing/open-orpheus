@@ -11,6 +11,7 @@ import { registerCallHandler } from "../calls";
 import { fileExists, isFileNotFound } from "../util/fs";
 import { isMusicFile } from "../util/musicFile";
 import { normalizePath } from "../util/path";
+import { sendIfAlive } from "../util/send";
 import { toError } from "@shared/util";
 import { commentToID3Metadata } from "../id3";
 
@@ -155,7 +156,7 @@ registerCallHandler<[string, string[]], [boolean]>(
   async (event, taskId, sql) => {
     try {
       const result = await musicLibraryDb.executeSqls(sql);
-      event.sender.send("channel.call", "musiclibrary.onexecsql", {
+      sendIfAlive(event.sender, "channel.call", "musiclibrary.onexecsql", {
         error: 0,
         id: taskId,
         reason: "",
@@ -164,7 +165,7 @@ registerCallHandler<[string, string[]], [boolean]>(
       });
     } catch (error) {
       LOGGER.error({ sql }, "Error executing music library SQL: %s", error);
-      event.sender.send("channel.call", "musiclibrary.onexecsql", {
+      sendIfAlive(event.sender, "channel.call", "musiclibrary.onexecsql", {
         error: 1,
         id: taskId,
         reason: "",
@@ -208,7 +209,7 @@ registerCallHandler<[MusicLibraries], void>("musiclibrary.observeLibrary", (even
               "Failed to refresh music metadata in library"
             );
         }
-        event.sender.send("channel.call", "musiclibrary.onobserveLibrary", {
+        sendIfAlive(event.sender, "channel.call", "musiclibrary.onobserveLibrary", {
           library: lib,
         });
       }
@@ -238,7 +239,7 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
       try {
         const libPath = getLibraryPath(library);
         if (!libPath || !(await fileExists(libPath))) {
-          event.sender.send("channel.call", "musiclibrary.onaddend", {
+          sendIfAlive(event.sender, "channel.call", "musiclibrary.onaddend", {
             dirs: undefined,
             library,
             reason: "",
@@ -298,7 +299,13 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
 
             // Progress update every 10 entries
             if (processed % 10 === 0) {
-              event.sender.send("channel.call", "musiclibrary.onaddprogress", library, processed);
+              sendIfAlive(
+                event.sender,
+                "channel.call",
+                "musiclibrary.onaddprogress",
+                library,
+                processed
+              );
             }
           } catch (err) {
             LOGGER.error(
@@ -315,7 +322,7 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
         }
 
         LOGGER.info({ library, processed, stale: existingMap.size }, "Music library scan finished");
-        event.sender.send("channel.call", "musiclibrary.onaddend", {
+        sendIfAlive(event.sender, "channel.call", "musiclibrary.onaddend", {
           dirs: [libPath],
           library,
           reason: "",
@@ -323,7 +330,7 @@ registerCallHandler<[MusicLibraries, number], [boolean]>(
         });
       } catch (err) {
         LOGGER.error({ err: toError(err) }, "Failed to add music library");
-        event.sender.send("channel.call", "musiclibrary.onaddend", {
+        sendIfAlive(event.sender, "channel.call", "musiclibrary.onaddend", {
           dirs: undefined,
           library,
           reason: toError(err).message,
@@ -345,7 +352,7 @@ registerCallHandler<[string], [boolean]>("musiclibrary.removeLibrary", (event, l
       LOGGER.error({ library, err: toError(err) }, "Failed to delete tracks from library");
     }
     LOGGER.info({ library }, "Music library removed");
-    event.sender.send("channel.call", "musiclibrary.onremovelibrary", library);
+    sendIfAlive(event.sender, "channel.call", "musiclibrary.onremovelibrary", library);
   })();
   return [true];
 });
@@ -358,7 +365,7 @@ registerCallHandler<[string, string, boolean], void>(
       try {
         const [stats, taggedFile] = await Promise.all([stat(fullPath), MusicFile.load(fullPath)]);
 
-        event.sender.send("channel.call", "musiclibrary.onreadmusicinfo", taskId, path, 0, {
+        sendIfAlive(event.sender, "channel.call", "musiclibrary.onreadmusicinfo", taskId, path, 0, {
           album: taggedFile.album,
           artist: taggedFile.artist,
           audiomd5: "",
@@ -370,7 +377,8 @@ registerCallHandler<[string, string, boolean], void>(
           title: taggedFile.title || basename(fullPath),
         });
       } catch (err) {
-        event.sender.send(
+        sendIfAlive(
+          event.sender,
           "channel.call",
           "musiclibrary.onreadmusicinfo",
           taskId,

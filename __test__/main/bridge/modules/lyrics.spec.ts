@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { BrowserWindow } from "electron";
+import { createFakeWindow } from "../../../helpers/fakeWindow";
 
 // The real dispatcher is wired to the media session, so it is faked here.
 const hoisted = vi.hoisted(() => ({
@@ -48,33 +48,6 @@ const FORWARDING = [
   ["timeupdate", "lyrics.timeUpdate"],
   ["playbackratechange", "lyrics.playbackRateUpdate"],
 ] as const;
-
-function createFakeWindow() {
-  const send = vi.fn();
-  const handle = vi.fn();
-  const on = vi.fn();
-  const wnd = {
-    webContents: { send, ipc: { handle } },
-    on,
-  } as unknown as BrowserWindow;
-
-  return {
-    wnd,
-    send,
-    /** Invoke a handler registered through `ipc.handle` by channel name. */
-    invoke(channel: string, ...args: unknown[]) {
-      const call = handle.mock.calls.find(([name]) => name === channel);
-      if (!call) throw new Error(`No handler registered for ${channel}`);
-      return (call[1] as (...a: unknown[]) => unknown)({}, ...args);
-    },
-    /** Fire the `closed` listener installed by the handler. */
-    close() {
-      const call = on.mock.calls.find(([name]) => name === "closed");
-      if (!call) throw new Error("No closed listener registered");
-      return (call[1] as () => void)();
-    },
-  };
-}
 
 beforeEach(() => {
   hoisted.listeners.clear();

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { BrowserWindow } from "electron";
+import { createFakeWindow } from "../../../helpers/fakeWindow";
 
 // The settings store needs a native sqlite database, so it is faked here.
 vi.mock("@main/settings", async () => {
@@ -22,33 +22,6 @@ import { events, kv } from "@main/settings";
 
 /** Emittery notifies listeners from a microtask, so drain the queue first. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-function createFakeWindow() {
-  const send = vi.fn();
-  const handle = vi.fn();
-  const on = vi.fn();
-  const wnd = {
-    webContents: { send, ipc: { handle } },
-    on,
-  } as unknown as BrowserWindow;
-
-  return {
-    wnd,
-    send,
-    /** Invoke a handler registered through `ipc.handle` by channel name. */
-    invoke(channel: string, ...args: unknown[]) {
-      const call = handle.mock.calls.find(([name]) => name === channel);
-      if (!call) throw new Error(`No handler registered for ${channel}`);
-      return (call[1] as (...a: unknown[]) => unknown)({}, ...args);
-    },
-    /** Fire the `closed` listener installed by the handler. */
-    close() {
-      const call = on.mock.calls.find(([name]) => name === "closed");
-      if (!call) throw new Error("No closed listener registered");
-      return (call[1] as () => void)();
-    },
-  };
-}
 
 beforeEach(() => {
   vi.clearAllMocks();

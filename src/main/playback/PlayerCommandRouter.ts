@@ -2,6 +2,7 @@ import Emittery from "emittery";
 import type { PlaybackMode } from "@shared/types/playback-mode";
 
 import { mainWindow } from "../window";
+import { sendIfAlive } from "../util/send";
 import { PlayerCommandEvents } from "./adapters/MediaSessionAdapter";
 import { modeForLoopStatus, modeForShuffle } from "./modes";
 import type PlaybackController from "./PlaybackController";
@@ -205,7 +206,7 @@ export default class PlayerCommandRouter {
   }
 
   private send(channel: string, ...args: unknown[]): void {
-    mainWindow?.webContents.send(channel, ...args);
+    sendIfAlive(mainWindow, channel, ...args);
   }
 
   /** Serialize mode writes so each request starts from confirmed renderer state. */
@@ -238,6 +239,6 @@ export default class PlayerCommandRouter {
   }
 
   private sendHotkey(name: string): void {
-    mainWindow?.webContents.send("channel.call", "winhelper.onHotkey", name, true);
+    sendIfAlive(mainWindow, "channel.call", "winhelper.onHotkey", name, true);
   }
 }

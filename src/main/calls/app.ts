@@ -6,6 +6,7 @@ import { app, BrowserWindow, dialog, nativeImage, ThumbarButton, WebContents } f
 import { registerCallHandler, registerCallbackHandler } from "../calls";
 import { loadFromOrpheusUrl } from "../orpheus";
 import { fileExists } from "../util/fs";
+import { sendIfAlive } from "../util/send";
 import { pngFromIco } from "../util/image";
 import { toError } from "@shared/util";
 import packManager from "../pack";
@@ -188,7 +189,7 @@ function createButtonFactory(webContents: WebContents): (btn: Button) => Promise
       tooltip: btn.tooltip,
       icon: nativeImage.createFromBuffer(Buffer.from(buf)),
       click() {
-        webContents.send("channel.call", "player.onthumbnailaction", btn.id);
+        sendIfAlive(webContents, "channel.call", "player.onthumbnailaction", btn.id);
       },
     };
   };
@@ -362,7 +363,7 @@ registerCallHandler<[string, string, "", string], void>(
       filters,
     });
     if (result.canceled) {
-      event.sender.send("channel.call", "app.onSelectFileAndDir", false, taskId);
+      sendIfAlive(event.sender, "channel.call", "app.onSelectFileAndDir", false, taskId);
       return;
     }
     const items: { isDir: boolean; path: string }[] = [];
@@ -372,7 +373,7 @@ registerCallHandler<[string, string, "", string], void>(
         items.push({ isDir: statResult.isDirectory(), path: filePath });
       })
     );
-    event.sender.send("channel.call", "app.onSelectFileAndDir", true, taskId, items);
+    sendIfAlive(event.sender, "channel.call", "app.onSelectFileAndDir", true, taskId, items);
   }
 );
 
@@ -387,10 +388,17 @@ registerCallHandler<[string, string, "", string], void>(
       properties: ["openDirectory", "dontAddToRecent", "createDirectory"],
     });
     if (result.canceled) {
-      event.sender.send("channel.call", "app.onSelectDir", false, taskId);
+      sendIfAlive(event.sender, "channel.call", "app.onSelectDir", false, taskId);
       return;
     }
-    event.sender.send("channel.call", "app.onselectsystemfile", true, taskId, result.filePaths[0]);
+    sendIfAlive(
+      event.sender,
+      "channel.call",
+      "app.onselectsystemfile",
+      true,
+      taskId,
+      result.filePaths[0]
+    );
   }
 );
 
@@ -501,10 +509,10 @@ registerCallHandler<[number, ProxyTypes, string, string, string, string], void>(
           throwHttpErrors: false,
         });
         LOGGER.debug({ taskId, ok: req.ok, status: req.statusCode }, "Proxy test finished");
-        event.sender.send("channel.call", "app.ontestproxy", taskId, req.ok ? 0 : 7);
+        sendIfAlive(event.sender, "channel.call", "app.ontestproxy", taskId, req.ok ? 0 : 7);
       } catch (error) {
         LOGGER.debug({ taskId, err: toError(error) }, "Proxy test request failed");
-        event.sender.send("channel.call", "app.ontestproxy", taskId, 7);
+        sendIfAlive(event.sender, "channel.call", "app.ontestproxy", taskId, 7);
       }
     })();
   }

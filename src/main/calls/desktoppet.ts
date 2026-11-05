@@ -2,6 +2,7 @@ import { BrowserWindow } from "electron";
 
 import { AppMenuItem } from "@shared/types/menu";
 import { registerCallHandler } from "../calls";
+import { sendIfAlive } from "../util/send";
 import { isAppUrl } from "../util/url";
 import DesktopPetWindow from "../windows/desktop-pet";
 import { ManagedWindow } from "../window";
@@ -65,8 +66,7 @@ registerCallHandler<
   const managed = ManagedWindow.fromBrowserWindow(wnd);
   if (!managed) return;
   const onClick = (itemId: string | null) => {
-    if (event.sender.isDestroyed()) return;
-    event.sender.send("channel.call", "winhelper.onmenuclick", itemId, 0);
+    sendIfAlive(event.sender, "channel.call", "winhelper.onmenuclick", itemId, 0);
   };
   const menu = new AppMenu(param.content);
   managed.setMenu(menu);
