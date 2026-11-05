@@ -102,7 +102,7 @@ jobs:
 
       - name: Setup pnpm
         if: steps.inputs.outputs.changed == 'true'
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         if: steps.inputs.outputs.changed == 'true'
