@@ -3,13 +3,14 @@
   "extends": ["config:recommended"],
   "commitMessageAction": "更新",
   "commitMessageTopic": "{{depName}}",
-  "commitMessageExtra": "到 {{newVersion}}",
+  "commitMessageExtra": "到 {{#if newVersion}}{{newVersion}}{{else}}{{newValue}}{{/if}}",
   "semanticCommits": "disabled",
+  "labels": ["dependencies"],
   "packageRules": [
     {
-      // Locked to patched version
+      // Locked to patched version.
       "matchManagers": "cargo",
-      "matchPackageNames": ["font-kit"],
+      "matchDepNames": ["font-kit"],
       "enabled": false
     },
     {
@@ -22,6 +23,7 @@
         "@types/*",
         "pnpm",
         "eslint*",
+        "@eslint/*",
         "typescript",
         "typescript-eslint",
         "ava",
@@ -37,7 +39,7 @@
         "@oxc-node/*",
         "@emnapi/*",
         "oxfmt",
-        "oxlint"
+        "oxlint*"
       ],
       "addLabels": ["release/ignore"]
     },
