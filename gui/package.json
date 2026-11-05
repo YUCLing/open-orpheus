@@ -24,7 +24,7 @@
     "@types/node": "^24.13.3",
     "bits-ui": "^2.19.1",
     "clsx": "^2.1.1",
-    "cookie": "^1.1.1",
+    "cookie": "^2.0.0",
     "emittery": "^2.0.0",
     "eslint": "^10.11.0",
     "eslint-plugin-svelte": "^3.23.0",
