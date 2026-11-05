@@ -94,6 +94,7 @@ pub(super) fn set_input_region_rects(window_id: &str, rects: Option<&[Rect]>) ->
     inject::set_input_region_rects(window_id, rects)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn set_popup_policy(
     target_window_id: &str,
     parent_window_id: &str,
@@ -101,6 +102,7 @@ pub(super) fn set_popup_policy(
     height: i32,
     anchor: Option<(i32, i32)>,
     shadow_inset: i32,
+    anchor_rect_width: Option<i32>,
 ) -> bool {
     state::set_popup_policy(
         target_window_id,
@@ -109,6 +111,7 @@ pub(super) fn set_popup_policy(
         height,
         anchor,
         shadow_inset,
+        anchor_rect_width,
     )
 }
 
@@ -116,8 +119,31 @@ pub(super) fn clear_popup_policy(target_window_id: &str) -> bool {
     state::clear_popup_policy(target_window_id)
 }
 
+pub(super) fn window_is_activated(window_id: &str) -> bool {
+    state::window_is_activated(window_id)
+}
+
 pub(super) fn window_is_popup(window_id: &str) -> bool {
     state::window_is_popup(window_id)
+}
+
+pub(super) fn window_pointer_position(window_id: &str) -> Option<(i32, i32)> {
+    state::window_pointer_position(window_id)
+}
+
+pub(super) fn on_window_touch(
+    window_id: &str,
+    cb: impl FnOnce(i32, i32) + Send + 'static,
+) -> Option<u32> {
+    state::watch_window_touch(window_id, Box::new(cb))
+}
+
+pub(super) fn cancel_window_touch(token: u32) -> bool {
+    state::cancel_window_touch(token)
+}
+
+pub(super) fn latest_press() -> Option<(String, i32, i32, bool, u32)> {
+    state::latest_press()
 }
 
 /// How long ago the most recent pointer press landed in `window_id`.
@@ -141,14 +167,15 @@ pub(super) fn cancel_pointer_axis_watcher(token: u32) -> bool {
     state::cancel_pointer_axis_watcher(token)
 }
 
-pub(super) fn on_next_new_window_first_cursor_enter(
+pub(super) fn on_window_cursor_enter(
+    window_id: &str,
     cb: impl FnOnce(Option<(i32, i32)>) + Send + 'static,
 ) -> Option<u32> {
-    state::watch_next_toplevel_cursor_enter(Box::new(cb))
+    state::watch_window_cursor_enter(window_id, Box::new(cb))
 }
 
-pub(super) fn cancel_cursor_enter_watcher(token: u32) -> bool {
-    state::cancel_cursor_enter_watcher(token)
+pub(super) fn cancel_window_cursor_enter(token: u32) -> bool {
+    state::cancel_window_cursor_enter(token)
 }
 
 pub(crate) fn init_state() {

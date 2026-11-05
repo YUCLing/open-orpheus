@@ -1,6 +1,7 @@
 use std::{
     mem::ManuallyDrop,
-    sync::{Mutex, OnceLock},
+    sync::{Mutex, OnceLock, mpsc},
+    time::Duration,
 };
 
 use napi::{
@@ -20,6 +21,16 @@ static DISABLE_DISPLAY_SERVER_HOOKS: OnceLock<bool> = OnceLock::new();
 // main-thread API call can release them, including the final cancellation.
 type RetiredRelease = Box<dyn FnOnce() + Send>;
 static RETIRED_RELEASES: OnceLock<Mutex<Vec<RetiredRelease>>> = OnceLock::new();
+
+struct ThreadsafeRelease<T: Send + 'static>(Option<ManuallyDrop<T>>);
+
+impl<T: Send + 'static> Drop for ThreadsafeRelease<T> {
+    fn drop(&mut self) {
+        if let Some(value) = self.0.take() {
+            retire_release(move || drop(ManuallyDrop::into_inner(value)));
+        }
+    }
+}
 
 fn retire_release(release: impl FnOnce() + Send + 'static) {
     RETIRED_RELEASES
@@ -55,6 +66,16 @@ fn disable_display_server_hooks() -> bool {
 
 pub fn supports_native_wayland_popup() -> bool {
     !disable_display_server_hooks() && wayland::is_wayland()
+}
+
+pub fn popup_capability() -> (bool, Option<String>) {
+    if disable_display_server_hooks() {
+        return (false, Some("hooks-disabled".to_string()));
+    }
+    if !wayland::is_wayland() {
+        return (false, Some("not-wayland".to_string()));
+    }
+    (true, None)
 }
 
 #[derive(Clone, Copy)]
@@ -308,55 +329,31 @@ pub fn on_layer_shell_role_refused(env: Env, callback: Function<String, ()>) -> 
     Ok(())
 }
 
-pub fn capture_next_window_first_cursor_enter(
-    callback: Function<FnArgs<(i32, i32)>, ()>,
-) -> Result<u32> {
-    reap_retired_releases();
+/// Capture the first pointer enter on a window that already has a surface.
+pub fn capture_cursor_enter(window_id: String, timeout_ms: u32) -> Option<(i32, i32)> {
     if disable_display_server_hooks() || !wayland::is_wayland() {
-        return Err(Error::from_reason(
-            "captureNextWindowFirstCursorEnter requires active Wayland hooks",
-        ));
+        return None;
     }
 
-    // Give only one undroppable reference to the callback closure below, to avoid double drop
-    // when FD close (FD close causes the closure to drop its referenced value)
-    let mut callback = Some(ManuallyDrop::new(
-        callback.build_threadsafe_function().build_callback(
-            |ctx: ThreadsafeCallContext<(u32, u32)>| {
-                Ok(std::convert::Into::<FnArgs<(u32, u32)>>::into(ctx.value))
-            },
-        )?,
-    ));
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let token = wayland::on_window_cursor_enter(
+        &window_id,
+        Box::new(move |position| {
+            let _ = sender.send(position);
+        }),
+    )?;
 
-    let token = wayland::on_next_new_window_first_cursor_enter(move |position| {
-        let Some(cb) = callback.take() else {
-            return;
-        };
-        if let Some((x, y)) = position
-            && x >= 0
-            && y >= 0
-        {
-            cb.call(
-                (x as u32, y as u32),
-                ThreadsafeFunctionCallMode::NonBlocking,
-            );
+    match receiver.recv_timeout(Duration::from_millis(u64::from(timeout_ms))) {
+        Ok(Some((x, y))) if x >= 0 && y >= 0 => Some((x, y)),
+        Ok(_) => None,
+        Err(_) => {
+            wayland::cancel_window_cursor_enter(token);
+            None
         }
-        retire_release(move || drop(ManuallyDrop::into_inner(cb)));
-    });
-    token.ok_or_else(|| {
-        Error::from_reason(
-            "captureNextWindowFirstCursorEnter is unavailable because Wayland hooks are not initialized",
-        )
-    })
+    }
 }
 
-pub fn cancel_next_window_first_cursor_enter(token: u32) -> bool {
-    reap_retired_releases();
-    let cancelled = wayland::cancel_cursor_enter_watcher(token);
-    reap_retired_releases();
-    cancelled
-}
-
+#[allow(clippy::too_many_arguments)]
 pub fn set_popup_policy(
     target_window_id: String,
     parent_window_id: String,
@@ -365,6 +362,7 @@ pub fn set_popup_policy(
     anchor_x: Option<i32>,
     anchor_y: Option<i32>,
     shadow_inset: Option<i32>,
+    anchor_rect_width: Option<i32>,
 ) -> bool {
     if !supports_native_wayland_popup() {
         return false;
@@ -377,6 +375,7 @@ pub fn set_popup_policy(
         height,
         anchor,
         shadow_inset.unwrap_or(0),
+        anchor_rect_width,
     )
 }
 
@@ -384,8 +383,46 @@ pub fn clear_popup_policy(target_window_id: String) -> bool {
     wayland::clear_popup_policy(&target_window_id)
 }
 
+pub fn is_window_activated(window_id: String) -> bool {
+    wayland::window_is_activated(&window_id)
+}
+
 pub fn is_window_wayland_popup(window_id: String) -> bool {
     wayland::window_is_popup(&window_id)
+}
+
+pub fn latest_window_press() -> Option<(String, i32, i32, bool, u32)> {
+    wayland::latest_press()
+}
+
+pub fn window_pointer_position(window_id: String) -> Option<(i32, i32)> {
+    wayland::window_pointer_position(&window_id)
+}
+
+pub fn capture_window_touch(
+    window_id: String,
+    callback: Function<FnArgs<(i32, i32)>, ()>,
+) -> Result<u32> {
+    reap_retired_releases();
+    let mut callback = ThreadsafeRelease(Some(ManuallyDrop::new(
+        callback
+            .build_threadsafe_function()
+            .build_callback(|ctx: ThreadsafeCallContext<(i32, i32)>| Ok(ctx.value))?,
+    )));
+    let token = wayland::on_window_touch(&window_id, move |x, y| {
+        let Some(cb) = callback.0.take() else {
+            return;
+        };
+        cb.call((x, y), ThreadsafeFunctionCallMode::NonBlocking);
+        retire_release(move || drop(ManuallyDrop::into_inner(cb)));
+    });
+    token.ok_or_else(|| Error::from_reason("captureWindowTouch could not find the window"))
+}
+
+pub fn cancel_window_touch(token: u32) -> bool {
+    let cancelled = wayland::cancel_window_touch(token);
+    reap_retired_releases();
+    cancelled
 }
 
 pub fn window_last_press_age_ms(window_id: String) -> Option<u32> {

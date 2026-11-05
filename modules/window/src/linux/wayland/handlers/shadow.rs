@@ -36,7 +36,7 @@ pub(crate) fn on_client_toplevel_request(
         REQ_SET_TITLE => {
             // The smuggled window id still has to be captured, but a title has
             // no meaning for a layer surface.
-            let _ = super::title::on_set_title(conn, msg, fx);
+            let _ = super::title::on_set_title(None, conn, msg, fx);
             Action::Suppress
         }
         _ => Action::Suppress,
@@ -227,7 +227,7 @@ mod tests {
     /// Convert window 30 the way `flush_role` would, for the tests that only
     /// need a converted window to exist.
     fn convert(conn: &mut WaylandConn) -> Vec<Vec<u8>> {
-        conversion::convert_to_layer_surface(conn, 20, 10, 30, options(), &mut Effects::default())
+        conversion::convert_to_layer_surface(conn, 20, 10, 30, options())
             .expect("the conversion is sendable")
     }
 

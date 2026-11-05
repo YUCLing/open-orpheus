@@ -38,10 +38,10 @@ pub(crate) enum Action {
 #[derive(Default)]
 pub(crate) struct Effects {
     pub(crate) button: Option<(u32, u32, u32, i32, i32)>,
+    pub(crate) button_is_touch: bool,
     /// A window whose surface could not take the layer role, by custom id.
     pub(crate) layer_shell_refused: Option<String>,
     pub(crate) entered: Vec<(u32, i32, i32)>,
-    pub(crate) arm_watchers_for: Vec<u32>,
     pub(crate) pointer_axes: Vec<(u32, u32)>,
     pub(crate) destroyed_surfaces: Vec<u32>,
 }
@@ -98,13 +98,13 @@ fn dispatch_request_inner(
         (Iface::XdgToplevelIconManager, REQ_SET_ICON) => shadow::on_set_icon(conn, msg),
         // `roles::dispatch` owns the role decision and only delegates here when
         // no window identity could change the outcome, so the id is unknown.
-        (Iface::XdgSurface, REQ_GET_TOPLEVEL) => objects::on_get_toplevel(fd, conn, msg, fx, None),
+        (Iface::XdgSurface, REQ_GET_TOPLEVEL) => objects::on_get_toplevel(fd, conn, msg, None),
         (Iface::XdgSurface, REQ_SET_WINDOW_GEOMETRY) => objects::on_popup_geometry(conn, msg),
         (Iface::WlSeat, WL_SEAT_RELEASE) => objects::on_destroy(fd, conn, msg, fx),
         (Iface::XdgWmBase, REQ_DESTROY) => objects::on_destroy(fd, conn, msg, fx),
-        (Iface::XdgToplevel, REQ_SET_TITLE) => title::on_set_title(conn, msg, fx),
+        (Iface::XdgToplevel, REQ_SET_TITLE) => title::on_set_title(Some(fd), conn, msg, fx),
         (Iface::XdgPopupShim, REQ_SET_TITLE) => {
-            let _ = title::on_set_title(conn, msg, fx);
+            let _ = title::on_set_title(Some(fd), conn, msg, fx);
             Action::Suppress
         }
         (Iface::XdgPopupShim, REQ_DESTROY) => objects::on_destroy(fd, conn, msg, fx),
@@ -172,6 +172,9 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
     }
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::XdgPopupShim) {
         return objects::on_popup_event(conn, msg);
+    }
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::XdgToplevel) {
+        return objects::on_toplevel_configure(conn, msg);
     }
 
     Action::Forward
@@ -346,7 +349,6 @@ mod tests {
         assert_eq!(conn.ifaces.get(&30), Some(&Iface::XdgToplevel));
         assert_eq!(conn.top_to_xdg.get(&30), Some(&20));
         assert_eq!(conn.wl_to_top.get(&10), Some(&30));
-        assert_eq!(fx.arm_watchers_for, vec![10], "cursor watchers arm on bind");
     }
 
     #[test]

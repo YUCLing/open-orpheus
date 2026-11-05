@@ -118,9 +118,12 @@
           : 'var(--menu-fg)'}; background-color: {hoveredIndex === i
           ? 'var(--menu-item-hover)'
           : ''}"
-        onclick={() => onitemclick?.(item)}
-        onmouseenter={(e) => onitemhover?.(i, item, e)}
-        onmouseleave={() => onitemleave?.(i)}
+        onclick={(event) => {
+          if (item.menu && item.children?.length) onitemhover?.(i, item, event);
+          else onitemclick?.(item);
+        }}
+        onpointermove={(e) => onitemhover?.(i, item, e)}
+        onpointerleave={() => onitemleave?.(i)}
       >
         {#if item.image_path}
           <span

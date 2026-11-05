@@ -230,6 +230,26 @@ impl WlMessage {
         ru32(&self.body, offset)
     }
 
+    /// Parses a Wayland array of u32 values at `offset`.
+    ///
+    /// The wire length of a Wayland array is in **bytes**, not elements.
+    pub(crate) fn u32_array_arg(&self, offset: usize) -> Option<Vec<u32>> {
+        let byte_len = self.u32_arg(offset)? as usize;
+        if !byte_len.is_multiple_of(4) {
+            return None;
+        }
+        let start = offset + 4;
+        let end = start.checked_add(byte_len)?;
+        let body = self.body.get(start..end)?;
+        Some(
+            body.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|chunk| u32::from_ne_bytes(*chunk))
+                .collect(),
+        )
+    }
+
     pub(crate) fn fixed_arg(&self, offset: usize) -> Option<i32> {
         rfixed_i32(&self.body, offset)
     }
@@ -421,6 +441,15 @@ mod tests {
         unterminated.extend_from_slice(b"abcd");
 
         assert_eq!(parse_wl_str(&unterminated, 0), Some(("abcd", 8)));
+    }
+
+    #[test]
+    fn u32_arrays_use_byte_length() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&4u32.to_ne_bytes()); // four bytes: one element
+        body.extend_from_slice(&4u32.to_ne_bytes()); // ACTIVATED
+        let msg = WlMessage::new(11, 0, body);
+        assert_eq!(msg.u32_array_arg(0), Some(vec![4]));
     }
 
     #[test]

@@ -33,28 +33,8 @@ describe("window preload entry points", () => {
       settings: {},
       desktopLyricsPreview: {},
       manage: { platform: process.platform, versions: process.versions },
-      menu: { wayland: false, submenu: false },
+      menu: {},
       miniPlayer: {},
-    });
-  });
-
-  it("reads the menu switches from the command line", async () => {
-    const before = hoisted.exposeInMainWorld.mock.calls.length;
-    vi.resetModules();
-    const original = process.argv;
-    process.argv = [...original, "--wayland"];
-    try {
-      await import("../../src/windows/menu");
-    } finally {
-      process.argv = original;
-    }
-
-    // Only the freshly imported module's registrations.
-    const menu = Object.fromEntries(hoisted.exposeInMainWorld.mock.calls.slice(before));
-
-    expect(menu).toEqual({
-      menu: { wayland: true, submenu: false },
-      inputRegion: { platform: process.platform },
     });
   });
 });

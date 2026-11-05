@@ -47,6 +47,7 @@ pub(crate) fn on_pointer_event(
                 let position = conn.pointer_position.get(&msg.object_id).copied();
                 if let (Some(surf_id), Some(seat_id), Some((x, y))) = (surf_id, seat_id, position) {
                     fx.button = Some((seat_id, serial, surf_id, x, y));
+                    fx.button_is_touch = false;
                 }
             }
         }

@@ -1,5 +1,4 @@
 import { checkEnvFlagPresent } from "../util/env";
-import { getOverlayPolicy } from "./overlay-policy";
 
 export let workaroundFlags = 0;
 
@@ -21,8 +20,6 @@ const desktopTokens = desktopName
   .split(":")
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
-
-export const overlayPolicy = getOverlayPolicy(desktopName);
 
 // Only KDE allows fullscreen transparent windows, see https://gitlab.freedesktop.org/wayland/wayland-protocols/-/issues/116
 if (

@@ -34,8 +34,7 @@ describe("workaround flags", () => {
     { XDG_CURRENT_DESKTOP: "", XDG_SESSION_DESKTOP: "niri", DESKTOP_SESSION: "KDE" },
     { XDG_CURRENT_DESKTOP: "", XDG_SESSION_DESKTOP: "", DESKTOP_SESSION: "niri" },
   ])("falls back past empty desktop variables: %j", async (env) => {
-    const { WorkaroundFlags, workaroundFlags, overlayPolicy } = await loadWorkarounds(env);
-    expect(overlayPolicy).toEqual({ capturePhase: "before-show" });
+    const { WorkaroundFlags, workaroundFlags } = await loadWorkarounds(env);
     expect(workaroundFlags & WorkaroundFlags.OverlayNoMaximize).not.toBe(0);
   });
 

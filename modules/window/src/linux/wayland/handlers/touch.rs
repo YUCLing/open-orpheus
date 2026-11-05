@@ -19,6 +19,7 @@ pub(crate) fn on_touch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
                 (seat_id, msg.fixed_arg(24), msg.fixed_arg(28))
             {
                 fx.button = Some((seat_id, serial, surf_id, x, y));
+                fx.button_is_touch = true;
             }
         }
     }

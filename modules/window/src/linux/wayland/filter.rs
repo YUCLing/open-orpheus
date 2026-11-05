@@ -120,6 +120,15 @@ pub(crate) fn filter(
         && let Some(m) = LAST_BUTTON.get()
         && let Ok(mut buttons) = m.lock()
     {
+        if let Some(presses) = TOUCH_PRESSES.get()
+            && let Ok(mut presses) = presses.lock()
+        {
+            if fx.button_is_touch {
+                presses.insert((fd, surf_id));
+            } else {
+                presses.remove(&(fd, surf_id));
+            }
+        }
         buttons.by_surface.insert(
             (fd, surf_id),
             LastButton {
@@ -134,11 +143,13 @@ pub(crate) fn filter(
         );
         buttons.latest = Some((fd, surf_id));
     }
+    if fx.button_is_touch
+        && let Some((_, _, surf_id, x, y)) = fx.button
+    {
+        fire_window_touch(fd, surf_id, x, y);
+    }
     for (wl_surface_id, x, y) in fx.entered {
         fire_first_cursor_enter_watchers(fd, wl_surface_id, x, y);
-    }
-    for wl_surface_id in fx.arm_watchers_for {
-        arm_first_cursor_enter_watchers(fd, wl_surface_id);
     }
     if let Some(window_id) = fx.layer_shell_refused {
         fire_layer_shell_refused(window_id);

@@ -9,21 +9,19 @@
  */
 export declare const __napiBindingTarget: 'native' | 'wasm32-wasi' | 'wasm32-wasip1'
 
-/** Cancel a pending first-cursor-enter capture. */
-export declare function cancelNextWindowFirstCursorEnter(token: number): boolean
-
 /** Cancel a pending pointer-axis capture. */
 export declare function cancelWindowPointerAxisCapture(token: number): boolean
 
-/**
- * Listen for first CursorEnter event of the next created window.
- *
- * Only for Wayland on Linux.
- */
-export declare function captureNextWindowFirstCursorEnter(callback: (x: number, y: number) => void): number
+export declare function cancelWindowTouch(token: number): boolean
+
+/** Capture the first pointer enter on an existing managed window surface. */
+export declare function captureCursorEnter(windowId: string, timeoutMs: number): Promise<[number, number] | null>
 
 /** Invoke once when a Wayland pointer-axis event reaches this window's client. */
 export declare function captureWindowNextPointerAxis(windowId: string, callback: (axis: number) => void): number
+
+/** Invoke once when a touch press lands in a managed window. */
+export declare function captureWindowTouch(windowId: string, callback: (x: number, y: number) => void): number
 
 /** Withdraw a popup policy the window will not use after all. */
 export declare function clearWindowPopupPolicy(targetWindowId: string): boolean
@@ -74,6 +72,12 @@ export declare function getCursorPosition(): [number, number] | null
  */
 export declare function getDesktopEnvironment(): DesktopEnvironment
 
+/** Current pointer position inside a window surface, when the pointer is over it. */
+export declare function getPointerPosition(windowId: string): WindowPointerPosition | null
+
+/** Native popup capability. */
+export declare function getPopupCapability(): PopupCapability
+
 /**
  * The compositor's unique name for the output Electron reports as a `Display.id`.
  *
@@ -92,11 +96,25 @@ export declare function getUniqueDisplayId(displayId: number): string | null
  */
 export declare function isLayerShellAvailable(): boolean
 
+/** Whether the compositor currently reports the window's toplevel as activated. */
+export declare function isWindowActivated(windowId: string): boolean
+
 /** Whether a pointer is currently over this window's surface. */
 export declare function isWindowPointerInside(windowId: string): boolean
 
-/** Whether this tracked BrowserWindow was actually converted to xdg_popup. */
+/** Whether the window's Wayland surface was converted to an xdg_popup. */
 export declare function isWindowWaylandPopup(windowId: string): boolean
+
+/** Latest mouse/touch press across all tracked windows, if any. */
+export declare function latestWindowPress(): LatestWindowPress | null
+
+export interface LatestWindowPress {
+  windowId: string
+  x: number
+  y: number
+  touch: boolean
+  ageMs: number
+}
 
 /** The stacking layer a layer surface is placed in, bottom-most first. */
 export declare const enum LayerShellLayer {
@@ -158,6 +176,17 @@ export interface LayerShellOptions {
 export declare function onLayerShellRoleRefused(callback: (windowId: string) => void): void
 
 /**
+ * Whether the active Wayland hooks allow a native popup attempt.
+ *
+ * Independent of the desktop name. This does not guarantee that a particular
+ * window can become a popup: arming still requires a tracked parent, anchor
+ */
+export interface PopupCapability {
+  supported: boolean
+  reason?: string
+}
+
+/**
  * Set regions that the window is used to receive inputs.
  *
  * Only for Linux.
@@ -190,16 +219,12 @@ export declare function setWindowLayerShell(windowId: string, options?: LayerShe
  * positioner needs (the parent's surface, the anchor, the object id) is
  * resolved then. Omit the anchor to use the last pointer-button position on
  * the parent. `shadow_inset` excludes transparent client-side shadow margins
- * from the window geometry. Returns whether the intent was accepted; callers
- * must still confirm the conversion and keep their overlay fallback.
+ * from the window geometry. Returns whether the intent was accepted.
  */
-export declare function setWindowPopupPolicy(targetWindowId: string, parentWindowId: string, width: number, height: number, anchorX?: number | undefined | null, anchorY?: number | undefined | null, shadowInset?: number | undefined | null): boolean
+export declare function setWindowPopupPolicy(targetWindowId: string, parentWindowId: string, width: number, height: number, anchorX?: number | undefined | null, anchorY?: number | undefined | null, shadowInset?: number | undefined | null, anchorRectWidth?: number | undefined | null): boolean
 
 /**
- * Whether the active Wayland hooks allow a native popup attempt.
- *
- * Independent of the desktop name. This does not guarantee that a particular
- * window can become a popup: arming still requires a tracked parent, anchor
+ * Whether native xdg_popup conversion is available.
  * data and a reusable object ID. Callers must retain an overlay fallback.
  */
 export declare function supportsNativeWaylandPopup(): boolean
@@ -234,3 +259,8 @@ export declare function validateLayerShellOptions(options: LayerShellOptions): b
  * happened at some point in the past.
  */
 export declare function windowLastPressAgeMs(windowId: string): number | null
+
+export interface WindowPointerPosition {
+  x: number
+  y: number
+}
