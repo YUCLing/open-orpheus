@@ -1,0 +1,49 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "commitMessageAction": "更新",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "到 {{newVersion}}",
+  "semanticCommits": "disabled",
+  "packageRules": [
+    {
+      // Locked to patched version
+      "matchManagers": "cargo",
+      "matchPackageNames": ["font-kit"],
+      "enabled": false
+    },
+    {
+      // Follow Electron
+      "matchPackageNames": ["node", "@types/node"],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": [
+        "@types/*",
+        "pnpm",
+        "eslint*",
+        "typescript",
+        "typescript-eslint",
+        "ava",
+        "vitest",
+        "@vitest/coverage-v8",
+        "@playwright/test",
+        "tailwindcss",
+        "@tailwindcss/vite",
+        "@napi-rs/cross-toolchain*",
+        "@electron-forge/*",
+        "@electron/fuses",
+        "electron-squirrel-startup",
+        "@oxc-node/*",
+        "@emnapi/*",
+        "oxfmt",
+        "oxlint"
+      ],
+      "addLabels": ["release/ignore"]
+    },
+    {
+      "matchJsonata": ["manager != 'cargo' and manager != 'npm'"],
+      "addLabels": ["release/ignore"]
+    }
+  ]
+}
