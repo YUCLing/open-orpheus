@@ -1,5 +1,6 @@
 import type { AudioPlayInfo } from "../../preload/Player";
 import { mainWindow } from "../window";
+import { sendIfAlive } from "../util/send";
 import { normalizePath } from "../util/path";
 import { toError } from "@shared/util";
 import { playCacheManager } from "../cache";
@@ -36,8 +37,7 @@ export class Av3aEngine {
 
   /** Push a fallback `av3a.<event>` to the player window. */
   private sendEvent(event: string, ...args: unknown[]) {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send(`av3a.${event}`, ...args);
+    sendIfAlive(mainWindow, `av3a.${event}`, ...args);
   }
 
   /** Stop the currently active AV3A session. Has no freshness side effects. */

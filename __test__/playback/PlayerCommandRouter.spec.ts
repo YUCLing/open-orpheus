@@ -13,7 +13,10 @@ const { send, host } = vi.hoisted(() => {
     send,
     /** Mutable so a test can model a window that is not available (yet). */
     host: { window: null } as {
-      window: { webContents: { send: typeof send } } | null;
+      window: {
+        isDestroyed: () => boolean;
+        webContents: { isDestroyed: () => boolean; send: typeof send };
+      } | null;
     },
   };
 });
@@ -54,7 +57,10 @@ async function flushMicrotasks(): Promise<void> {
 
 beforeEach(() => {
   send.mockClear();
-  host.window = { webContents: { send } };
+  host.window = {
+    isDestroyed: () => false,
+    webContents: { isDestroyed: () => false, send },
+  };
 });
 
 describe("PlayerCommandRouter playback translation", () => {

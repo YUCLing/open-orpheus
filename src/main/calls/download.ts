@@ -5,6 +5,7 @@ import { registerCallHandler } from "../calls";
 import startDownload, { type DownloadTask } from "../download";
 import { data as dataDir, downloadTemp } from "../folders";
 import { normalizePath, sanitizeRelativePath } from "../util/path";
+import { sendIfAlive } from "../util/send";
 
 type DownloadStartRequest = {
   ext_header: string;
@@ -69,7 +70,7 @@ registerCallHandler<[DownloadStartRequest], void>(
     LOGGER.debug({ id, size, type }, "Download started");
 
     task.on("progress", (e) => {
-      event.sender.send("channel.call", "download.onprocess", id, {
+      sendIfAlive(event.sender, "channel.call", "download.onprocess", id, {
         down: e.data.downloaded,
         islast: false,
         path: destPath,
@@ -94,7 +95,7 @@ registerCallHandler<[DownloadStartRequest], void>(
       }
 
       LOGGER.info({ id, type }, "Download completed");
-      event.sender.send("channel.call", "download.onprocess", id, {
+      sendIfAlive(event.sender, "channel.call", "download.onprocess", id, {
         down: e.data.downloaded,
         islast: true,
         path: destPath,
@@ -109,7 +110,7 @@ registerCallHandler<[DownloadStartRequest], void>(
 
     task.on("error", (e) => {
       LOGGER.error({ id, err: e.data }, "Download errored");
-      event.sender.send("channel.call", "download.onprocess", id, {
+      sendIfAlive(event.sender, "channel.call", "download.onprocess", id, {
         down: 0,
         islast: true,
         path: destPath,

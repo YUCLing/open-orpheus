@@ -1,6 +1,7 @@
 import { BrowserWindow, Notification } from "electron";
 
 import { registerCallHandler } from "../calls";
+import { sendIfAlive } from "../util/send";
 
 registerCallHandler<
   [
@@ -33,7 +34,8 @@ registerCallHandler<
       title: "Open Orpheus",
       body: "由于更新包和 Open Orpheus 的特殊性，Open Orpheus 无法支持在网易云内更新，十分抱歉。",
     }).show();
-    event.sender.send(
+    sendIfAlive(
+      event.sender,
       "channel.call",
       "update.onupdateprogress",
       "", // currentFile

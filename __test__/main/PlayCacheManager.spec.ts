@@ -6,7 +6,10 @@ vi.mock("node:fs/promises");
 const hoisted = vi.hoisted(() => ({ send: vi.fn() }));
 
 vi.mock("../../src/main/window", () => ({
-  mainWindow: { webContents: { send: hoisted.send } },
+  mainWindow: {
+    isDestroyed: () => false,
+    webContents: { isDestroyed: () => false, send: hoisted.send },
+  },
 }));
 
 import { readFile } from "node:fs/promises";

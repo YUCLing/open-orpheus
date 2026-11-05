@@ -7,6 +7,7 @@ import { app, BrowserWindow, Notification, powerSaveBlocker, screen, shell } fro
 import { getSystemFonts } from "@open-orpheus/ui";
 
 import { fileExists } from "../util/fs";
+import { sendIfAlive } from "../util/send";
 import { normalizePath, sanitizeRelativePath } from "../util/path";
 import { registerCallHandler } from "../calls";
 import { getADDeviceId, getDeviceId } from "../device";
@@ -37,7 +38,7 @@ registerCallHandler<[], void>("os.getDeviceInfo", (event) => {
   const mainWindow = BrowserWindow.fromWebContents(event.sender);
   if (!mainWindow) return;
 
-  event.sender.send("channel.call", "os.onGetDeviceInfo", {
+  sendIfAlive(event.sender, "channel.call", "os.onGetDeviceInfo", {
     app_platform: process.arch === "x64" ? "64" : "32",
     computername: os.hostname(),
     cpu: os.cpus()[0].model,

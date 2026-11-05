@@ -4,6 +4,7 @@ import { screen } from "electron";
 import type { UnsubscribeFunction } from "emittery";
 
 import { ManagedWindow } from "../window";
+import { sendIfAlive } from "../util/send";
 import { isAppUrl } from "../util/url";
 import { playbackController, playId } from "../mediaSession";
 
@@ -38,8 +39,7 @@ export default class DesktopPetWindow extends ManagedWindow {
     wnd.on("show", () => {
       if (timeupdateUnsub) timeupdateUnsub();
       timeupdateUnsub = playbackController.on("timeupdate", ({ data }) => {
-        if (wnd.isDestroyed()) return;
-        wnd.webContents.send("channel.call", "audioplayer.onPlayProgress", playId, data, 1);
+        sendIfAlive(wnd, "channel.call", "audioplayer.onPlayProgress", playId, data, 1);
       });
     });
     wnd.on("hide", () => {
@@ -87,6 +87,6 @@ export default class DesktopPetWindow extends ManagedWindow {
       y = dip.y;
     }
 
-    this.window.webContents.send("channel.call", "desktoppet.onMouseEvent", { type, x, y, px, py });
+    sendIfAlive(this.window, "channel.call", "desktoppet.onMouseEvent", { type, x, y, px, py });
   }
 }

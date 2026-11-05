@@ -1,6 +1,7 @@
 import { registerIpcHandlers } from "../register";
 import { SettingsContract } from "@shared/contracts/settings-api";
 import { kv, events } from "../../settings";
+import { sendIfAlive } from "../../util/send";
 
 export function registerSettingsHandlers(wnd: Electron.BrowserWindow) {
   registerIpcHandlers<SettingsContract>(wnd.webContents, "settings", {
@@ -23,11 +24,11 @@ export function registerSettingsHandlers(wnd: Electron.BrowserWindow) {
 
   const unlistenChange = events.on("change", (e) => {
     LOGGER.debug({ key: e.data.key }, "Forwarded settings change");
-    wnd.webContents.send("settings.change", e.data.key, e.data.value);
+    sendIfAlive(wnd, "settings.change", e.data.key, e.data.value);
   });
   const unlistenDelete = events.on("delete", (e) => {
     LOGGER.debug({ key: e.data.key }, "Forwarded settings deletion");
-    wnd.webContents.send("settings.delete", e.data.key);
+    sendIfAlive(wnd, "settings.delete", e.data.key);
   });
 
   wnd.on("closed", () => {

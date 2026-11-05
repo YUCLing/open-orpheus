@@ -21,6 +21,7 @@ import type { LayerShellOptions } from "@open-orpheus/window";
 export type { LayerShellOptions };
 
 import type AppMenu from "./menu";
+import { sendIfAlive } from "./util/send";
 import {
   events as lifecycleEvents,
   LifecycleState,
@@ -675,8 +676,7 @@ export abstract class ManagedWindow<
   send(channel: string, ...args: unknown[]) {
     const wnd = this.liveWindow();
     if (!(wnd instanceof BrowserWindow)) return false;
-    wnd.webContents.send(channel, ...args);
-    return true;
+    return sendIfAlive(wnd, channel, ...args);
   }
 
   show(): void | Promise<void> {

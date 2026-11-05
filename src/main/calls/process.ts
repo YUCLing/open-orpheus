@@ -10,6 +10,7 @@ import { serialData } from "../crypto";
 import { client, type ProxyTypes } from "../request";
 import { isFileNotFound } from "../util/fs";
 import { normalizePath } from "../util/path";
+import { sendIfAlive } from "../util/send";
 import globalLogger from "../logger";
 
 type UploadPayload = {
@@ -56,7 +57,8 @@ async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadP
   try {
     const [stats, content] = await Promise.all([stat(fullPath), readFile(fullPath)]);
 
-    event.sender.send(
+    sendIfAlive(
+      event.sender,
       "channel.call",
       "subprocess.oncall",
       0,
@@ -162,7 +164,8 @@ async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadP
         uploadChannel: "Nos",
       };
 
-      event.sender.send(
+      sendIfAlive(
+        event.sender,
         "channel.call",
         "subprocess.oncall",
         0,
@@ -200,7 +203,8 @@ async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadP
       );
 
       uploadReq.on("uploadProgress", (progress: Progress) => {
-        event.sender.send(
+        sendIfAlive(
+          event.sender,
           "channel.call",
           "subprocess.oncall",
           0,
@@ -245,7 +249,8 @@ async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadP
       upload.context = uploadRes.context;
       upload.token = allocRes.data.token;
 
-      event.sender.send(
+      sendIfAlive(
+        event.sender,
         "channel.call",
         "subprocess.oncall",
         0,
@@ -289,7 +294,8 @@ async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadP
         throw new Error("Meta upload failed");
       }
 
-      event.sender.send(
+      sendIfAlive(
+        event.sender,
         "channel.call",
         "subprocess.oncall",
         0,
@@ -331,7 +337,8 @@ async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadP
         throw new Error("Meta upload failed");
       }
 
-      event.sender.send(
+      sendIfAlive(
+        event.sender,
         "channel.call",
         "subprocess.oncall",
         0,
@@ -352,7 +359,8 @@ async function handleUpload(event: Electron.IpcMainInvokeEvent, payload: UploadP
     LOGGER.info({ songId: payload.songId }, "Cloud upload finished");
   } catch (e) {
     if (!isFileNotFound(e)) globalLogger.error({ name: "cloud-upload", err: e }, "Upload error");
-    event.sender.send(
+    sendIfAlive(
+      event.sender,
       "channel.call",
       "subprocess.oncall",
       0,

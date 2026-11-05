@@ -8,6 +8,7 @@ import { DOMParser, Element } from "@xmldom/xmldom";
 import { dragWindow } from "@open-orpheus/window";
 
 import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
+import { sendIfAlive } from "../util/send";
 import { registerIpcHandlers } from "../bridge/register";
 import { toError } from "@shared/util";
 import { MiniPlayerContract } from "@shared/contracts/mini-player-api";
@@ -450,8 +451,7 @@ function setupMiniPlayerWindow(wnd: BrowserWindow): BrowserWindow {
       dragWindow(hwnd);
     },
     fireCall: async (event, cmd, ...args) => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      mainWindow.webContents.send("channel.call", cmd, ...args);
+      sendIfAlive(mainWindow, "channel.call", cmd, ...args);
     },
   });
   registerInputRegionHandlers(wnd);
@@ -461,8 +461,7 @@ function setupMiniPlayerWindow(wnd: BrowserWindow): BrowserWindow {
 
 /** Closing the window asks the player to close, unless it is being dismissed. */
 function notifyMiniPlayerClose() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.send("channel.call", "player.onrequestclose", "");
+  sendIfAlive(mainWindow, "channel.call", "player.onrequestclose", "");
 }
 
 class MiniPlayerWindow extends ManagedWindow {

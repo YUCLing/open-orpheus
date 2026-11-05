@@ -5,6 +5,7 @@ import { BrowserWindow, screen } from "electron";
 import type { BrowserWindowConstructorOptions } from "electron";
 
 import { ManagedWindow, setMainWindow } from "../window";
+import { sendIfAlive } from "../util/send";
 import { window as miniPlayerWindow } from "./mini-player";
 import { LifecycleState, setLifecycleState } from "../lifecycle";
 import { toError } from "@shared/util";
@@ -42,7 +43,8 @@ function setupMainWindow(mainWindow: BrowserWindow) {
   const isLinux = os.platform() === "linux";
 
   const sendSizeStatus = () => {
-    mainWindow.webContents.send(
+    sendIfAlive(
+      mainWindow,
       "channel.call",
       "winhelper.onSizeStatus",
       ...getWindowSizeStatus(mainWindow)
@@ -52,7 +54,7 @@ function setupMainWindow(mainWindow: BrowserWindow) {
   const sendResizeDone = () => {
     const bounds = mainWindow.getContentBounds();
     const scaleFactor = screen.getDisplayMatching(bounds).scaleFactor;
-    mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
+    sendIfAlive(mainWindow, "channel.call", "winhelper.onsizeWindowDone", {
       top: 0,
       left: 0,
       right: bounds.width * scaleFactor,
@@ -69,14 +71,15 @@ function setupMainWindow(mainWindow: BrowserWindow) {
     // devicePixelRatio to get DIP).
     const sendSizeDoneAndStatus = () => {
       const [status, width, height, scaleFactor] = getWindowSizeStatus(mainWindow);
-      mainWindow.webContents.send("channel.call", "winhelper.onsizeWindowDone", {
+      sendIfAlive(mainWindow, "channel.call", "winhelper.onsizeWindowDone", {
         top: 0,
         left: 0,
         right: width,
         bottom: height,
         deviceScaleFactor: scaleFactor,
       });
-      mainWindow.webContents.send(
+      sendIfAlive(
+        mainWindow,
         "channel.call",
         "winhelper.onSizeStatus",
         status,
@@ -112,10 +115,10 @@ function setupMainWindow(mainWindow: BrowserWindow) {
   }
 
   mainWindow.on("focus", () => {
-    mainWindow.webContents.send("channel.call", "winhelper.onfocus");
+    sendIfAlive(mainWindow, "channel.call", "winhelper.onfocus");
   });
   mainWindow.on("blur", () => {
-    mainWindow.webContents.send("channel.call", "winhelper.onlosefocus");
+    sendIfAlive(mainWindow, "channel.call", "winhelper.onlosefocus");
   });
 
   mainWindow.on("show", () => {
