@@ -12,6 +12,9 @@ changelog:
     - title: BUG修复 / Bug Fixes 🐛
       labels:
         - bug
+    - title: 依赖更新 / Dependency Updates 📦
+      labels:
+        - dependencies
     - title: 其他修改 / Other Changes 🧹
       labels:
         - "*"
