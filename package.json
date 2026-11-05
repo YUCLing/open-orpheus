@@ -60,7 +60,7 @@
     "@xmldom/xmldom": "^0.9.12",
     "@yxim/nim-web-sdk": "^9.21.18",
     "cookie": "^2.0.1",
-    "ejs": "^6.0.1",
+    "ejs": "^7.0.0",
     "electron": "45.0.0",
     "emittery": "^2.2.0",
     "es-toolkit": "^1.52.0",
