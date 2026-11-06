@@ -75,7 +75,9 @@ strip_flags() {
         -e 's|-fstack-protector||g' \
         -e 's|-fstack-clash-protection||g' \
         -e 's|-fcf-protection[^ ]*||g' \
+        -e 's|-mbranch-protection=[^ ]*||g' \
         -e 's|-fplugin=[^ ]*||g' \
+        -e 's|-fplugin-arg-[^ ]*||g' \
         -e 's|-mtune=[^ ]*||g' \
         -e 's|-march=[^ ]*||g'
 }
