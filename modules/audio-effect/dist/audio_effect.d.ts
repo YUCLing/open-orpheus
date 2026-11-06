@@ -10,7 +10,7 @@ export class EarlyReflections {
      *
      * `output_l` / `output_r` receive only the early-reflection contribution.
      */
-    process_block(input_l: Float32Array, input_r: Float32Array, output_l: Float32Array, output_r: Float32Array): void;
+    process_block(input_l: Float32Array | number[], input_r: Float32Array | number[], output_l: Float32Array, output_r: Float32Array): void;
     /**
      * Configure the early-reflection pattern.
      *
@@ -39,7 +39,7 @@ export class FdnReverb {
      * `input_l` / `input_r`: input frames.
      * `output_l` / `output_r`: wet output only, without dry signal.
      */
-    process_block(input_l: Float32Array, input_r: Float32Array, output_l: Float32Array, output_r: Float32Array): void;
+    process_block(input_l: Float32Array | number[], input_r: Float32Array | number[], output_l: Float32Array, output_r: Float32Array): void;
     set_decay(dtime: number): void;
     set_density(density: number): void;
     set_diffusion(diffusion: number): void;
@@ -84,11 +84,11 @@ export interface InitOutput {
     readonly __wbg_fdnreverb_free: (a: number, b: number) => void;
     readonly __wbg_spatialenhancer_free: (a: number, b: number) => void;
     readonly earlyreflections_new: (a: number) => number;
-    readonly earlyreflections_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
+    readonly earlyreflections_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: number, j: number, k: any) => void;
     readonly earlyreflections_set_pattern: (a: number, b: number, c: number) => void;
     readonly earlyreflections_set_sdelay: (a: number, b: number) => void;
     readonly fdnreverb_new: (a: number) => number;
-    readonly fdnreverb_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
+    readonly fdnreverb_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: number, j: number, k: any) => void;
     readonly fdnreverb_set_decay: (a: number, b: number) => void;
     readonly fdnreverb_set_density: (a: number, b: number) => void;
     readonly fdnreverb_set_diffusion: (a: number, b: number) => void;
@@ -98,12 +98,15 @@ export interface InitOutput {
     readonly fdnreverb_set_rshape: (a: number, b: number) => void;
     readonly fdnreverb_set_swidth: (a: number, b: number) => void;
     readonly spatialenhancer_new: (a: number) => number;
-    readonly spatialenhancer_process_block: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly spatialenhancer_process_block: (a: number, b: number, c: number, d: any, e: number, f: number, g: any) => void;
     readonly spatialenhancer_set_ambience: (a: number, b: number) => void;
     readonly spatialenhancer_set_presence: (a: number, b: number) => void;
     readonly spatialenhancer_set_sshaper: (a: number, b: number, c: number) => void;
     readonly spatialenhancer_set_stereoizer: (a: number, b: number) => void;
+    readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_export: (a: number, b: number) => number;
+    readonly __wbindgen_export2: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_start: () => void;
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;

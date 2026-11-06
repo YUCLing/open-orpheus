@@ -37,7 +37,7 @@ jobs:
     steps:
       # Bootstrap checkout: makes the local composite action available.
       - name: Checkout (bootstrap)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
           persist-credentials: false
@@ -52,16 +52,16 @@ jobs:
 
       # Re-checkout so git push authenticates as the app.
       - name: Checkout main
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
           token: ${{ steps.app.outputs.token }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -160,7 +160,7 @@ jobs:
 
     steps:
       - name: Checkout for git context
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.commit-sha }}
           persist-credentials: false
@@ -232,7 +232,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout (bootstrap)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 

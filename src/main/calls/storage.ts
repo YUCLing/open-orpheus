@@ -488,34 +488,64 @@ registerCallHandler<[string, string, string | "", string | "", AddId3Request], v
         trck !== undefined;
       let taggedFile: MusicFile | null = null;
       let imageFullPath: string | null = null;
-      if (hasID3Meta || imagePath || mediaInfo) {
-        taggedFile = await MusicFile.load(mediaPath);
 
-        if (hasID3Meta) {
-          taggedFile.album = talb;
-          taggedFile.title = tit2;
-          taggedFile.artist = typeof tpe1 === "string" ? tpe1 : tpe1.join(",");
-          taggedFile.discNumber = parseInt(tpos) || 0;
-          taggedFile.trackNumber = parseInt(trck) || 0;
-        }
+      // Throws when a tag has no mapping for a field.
+      // Must not lose the downloaded file: fall back to an untagged copy.
+      try {
+        if (hasID3Meta || imagePath || mediaInfo) {
+          taggedFile = await MusicFile.load(mediaPath);
 
-        if (imagePath) {
-          imageFullPath = normalizePath(downloadTemp, imagePath);
-          const mimeType = mime.getType(imageFullPath);
-          if (mimeType) {
+          if (hasID3Meta) {
+            taggedFile.album = talb;
+            taggedFile.title = tit2;
+            taggedFile.artist = typeof tpe1 === "string" ? tpe1 : tpe1.join(",");
+
+            const disc = Number.parseInt(tpos, 10);
+            const track = Number.parseInt(trck, 10);
+
+            // Track/disc are optional; skip them when absent or unsupported.
             try {
-              const imageData = await readFile(imageFullPath);
-              taggedFile.pictures = [new MetaPicture(mimeType, imageData)];
+              if (disc > 0) taggedFile.discNumber = disc;
             } catch (err) {
-              LOGGER.error(
-                { err: toError(err), mediaPath, imagePath: imageFullPath },
-                "Failed to insert cover art to media file"
-              );
+              LOGGER.warn({ err: toError(err), mediaPath }, "Failed to write disc number");
+            }
+            try {
+              if (track > 0) taggedFile.trackNumber = track;
+            } catch (err) {
+              LOGGER.warn({ err: toError(err), mediaPath }, "Failed to write track number");
+            }
+          }
+
+          if (imagePath) {
+            imageFullPath = normalizePath(downloadTemp, imagePath);
+            const mimeType = mime.getType(imageFullPath);
+            if (mimeType) {
+              try {
+                const imageData = await readFile(imageFullPath);
+                taggedFile.pictures = [new MetaPicture(mimeType, imageData)];
+              } catch (err) {
+                LOGGER.error(
+                  { err: toError(err), mediaPath, imagePath: imageFullPath },
+                  "Failed to insert cover art to media file"
+                );
+              }
+            }
+          }
+
+          if (mediaInfo) {
+            try {
+              taggedFile.comment = ID3JsonToComment(mediaInfo);
+            } catch (err) {
+              LOGGER.warn({ err: toError(err), mediaPath }, "Failed to write comment metadata");
             }
           }
         }
-
-        if (mediaInfo) taggedFile.comment = ID3JsonToComment(mediaInfo);
+      } catch (err) {
+        LOGGER.warn(
+          { err: toError(err), mediaPath },
+          "Failed to write metadata; saving the media file without tags"
+        );
+        taggedFile = null;
       }
 
       let relPath = id3Info.media_rel_path;
@@ -527,8 +557,19 @@ registerCallHandler<[string, string, string | "", string | "", AddId3Request], v
 
       const finalPath = normalizePath(download, relPath);
       await mkdir(dirname(finalPath), { recursive: true });
-      if (taggedFile) await taggedFile.save(finalPath);
-      else await cp(mediaPath, finalPath);
+      if (taggedFile) {
+        try {
+          await taggedFile.save(finalPath);
+        } catch (err) {
+          LOGGER.error(
+            { err: toError(err), mediaPath, finalPath },
+            "Failed to save tagged media; copying the media file without tags"
+          );
+          await cp(mediaPath, finalPath);
+        }
+      } else {
+        await cp(mediaPath, finalPath);
+      }
 
       if (imageFullPath) await rm(imageFullPath, { force: true });
       await rm(mediaPath, { force: true });

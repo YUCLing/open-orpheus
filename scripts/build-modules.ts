@@ -74,10 +74,19 @@ async function readModuleInfos(modulesDir: string, moduleNames: string[]): Promi
  * when present, so a module can opt into napi's prebuilt cross toolchain on
  * Linux (`--use-napi-cross`) while every other platform keeps the plain script.
  *
+ * Pass `allowPlatformVariant: false` when the caller builds inside a sandbox
+ * that already provides the native toolchain (Flatpak) and the cross variant
+ * must not be selected.
+ *
  * Returns undefined when neither the variant nor the bare script exists.
  */
-function resolvePlatformScript(scripts: Record<string, string>, base: string): string | undefined {
-  return [`${base}:${process.platform}`, base].find((name) => scripts[name]);
+function resolvePlatformScript(
+  scripts: Record<string, string>,
+  base: string,
+  allowPlatformVariant = true
+): string | undefined {
+  const candidates = allowPlatformVariant ? [`${base}:${process.platform}`, base] : [base];
+  return candidates.find((name) => scripts[name]);
 }
 
 /**
@@ -163,6 +172,10 @@ async function buildModules() {
   const layers = computeLayers(modules);
   const preferScript = process.env.PREFER_SCRIPT;
   const skipIfNoScript = process.env.SKIP_IF_NO_SCRIPT;
+  // Packagers whose sandbox already ships the native toolchain (the Flatpak
+  // SDK) set this so the `:${platform}` variants, which only exist to opt into
+  // napi's glibc 2.17 cross toolchain, are not selected.
+  const allowPlatformVariant = process.env.SKIP_PLATFORM_VARIANT !== "1";
 
   for (const layer of layers) {
     const tasks: BuildTask[] = [];
@@ -174,7 +187,7 @@ async function buildModules() {
         continue;
       }
       const baseScript = preferScript || "build";
-      const script = resolvePlatformScript(mod.scripts, baseScript);
+      const script = resolvePlatformScript(mod.scripts, baseScript, allowPlatformVariant);
       if (!script && skipIfNoScript) {
         console.log(
           `Skipping module: ${mod.dirName} (${mod.packageName}) - script "${baseScript}" not found`
