@@ -76,6 +76,8 @@ strip_flags() {
         -e 's|-fstack-clash-protection||g' \
         -e 's|-fcf-protection[^ ]*||g' \
         -e 's|-mbranch-protection=[^ ]*||g' \
+        -e 's|-mtls-dialect=[^ ]*||g' \
+        -e 's|-specs=/usr/lib/rpm/redhat/[^ ]*||g' \
         -e 's|-fplugin=[^ ]*||g' \
         -e 's|-fplugin-arg-[^ ]*||g' \
         -e 's|-mtune=[^ ]*||g' \
