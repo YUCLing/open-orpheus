@@ -64,14 +64,18 @@ ORIGINAL_RUSTFLAGS="$RUSTFLAGS"
 export RUSTFLAGS="$(printf '%s' "$RUSTFLAGS" | sed 's|-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes||g')"
 
 # Strip CFLAGS/CXXFLAGS that the cross-compilation toolchain cannot understand.
-# Remove -flto=auto, -ffat-lto-objects, -fno-omit-frame-pointer,
-# and -mno-omit-leaf-frame-pointer.
 strip_flags() {
     printf '%s' "$1" | sed \
         -e 's|-flto=auto||g' \
         -e 's|-ffat-lto-objects||g' \
         -e 's|-fno-omit-frame-pointer||g' \
         -e 's|-mno-omit-leaf-frame-pointer||g' \
+        -e 's|-fstack-protector-strong||g' \
+        -e 's|-fstack-protector-all||g' \
+        -e 's|-fstack-protector||g' \
+        -e 's|-fstack-clash-protection||g' \
+        -e 's|-fcf-protection[^ ]*||g' \
+        -e 's|-fplugin=[^ ]*||g' \
         -e 's|-mtune=[^ ]*||g' \
         -e 's|-march=[^ ]*||g'
 }
