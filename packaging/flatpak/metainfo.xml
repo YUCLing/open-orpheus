@@ -62,6 +62,47 @@
   </screenshots>
 
   <releases>
+    <release version="0.20.0" date="2026-11-06">
+      <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.20.0</url>
+      <description>
+        <ul>
+          <li>Added a D-Bus service for lyrics.</li>
+          <li xml:lang="zh-CN">新增歌词 D-Bus 服务。</li>
+          <li>Improved the logging system.</li>
+          <li xml:lang="zh-CN">改进日志系统。</li>
+          <li>Added MPRIS shuffle and repeat mode controls.</li>
+          <li xml:lang="zh-CN">新增 MPRIS 随机播放和重复模式控制。</li>
+          <li>Blocked NetEase Cloud Music update checks.</li>
+          <li xml:lang="zh-CN">拦截网易云音乐更新检查。</li>
+          <li>Added desktop pet support.</li>
+          <li xml:lang="zh-CN">新增桌宠支持。</li>
+          <li>Added multi-monitor support for the music review desktop.</li>
+          <li xml:lang="zh-CN">新增乐评桌面多显示器支持。</li>
+          <li>Fixed a hang caused by storage initialization errors.</li>
+          <li xml:lang="zh-CN">修复存储初始化出错导致的卡死。</li>
+          <li>Fixed the inability to disable sleep prevention during playback.</li>
+          <li xml:lang="zh-CN">修复播放音乐时无法禁用阻止睡眠。</li>
+          <li>Fixed cross-device (disk) migration failures.</li>
+          <li xml:lang="zh-CN">修复跨设备（磁盘）迁移失败。</li>
+          <li>Fixed infinite error popups in some cases.</li>
+          <li xml:lang="zh-CN">修复部分情况下错误提示无限弹窗。</li>
+          <li>Fixed a timing issue when closing tasks.</li>
+          <li xml:lang="zh-CN">修复关闭任务中的时序问题。</li>
+          <li>Fixed context menus triggering during touch drag.</li>
+          <li xml:lang="zh-CN">修复触屏拖动时触发上下文菜单。</li>
+          <li>Fixed main window size calculation.</li>
+          <li xml:lang="zh-CN">修复主窗口大小计算。</li>
+          <li>Fixed reuse after destruction.</li>
+          <li xml:lang="zh-CN">修复销毁后复用。</li>
+          <li>Optimized Wayland menus and refactored Wayland surface/menu internals.</li>
+          <li xml:lang="zh-CN">优化 Wayland 菜单并重构 Wayland surface 与菜单内部实现。</li>
+          <li>Added useful debug-menu features for regular users and ignored log worker errors on exit.</li>
+          <li xml:lang="zh-CN">调试菜单新增对普通用户有用的功能，并在退出时忽略日志 worker 错误。</li>
+          <li>Updated dependencies and Electron.</li>
+          <li xml:lang="zh-CN">更新依赖和 Electron。</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.19.2" date="2026-10-05">
       <url type="details">https://github.com/YUCLing/open-orpheus/releases/tag/v0.19.2</url>
       <description>

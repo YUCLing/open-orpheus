@@ -1,3 +1,22 @@
+* Fri Nov 6 2026 YUCLing <luotianyi@luotianyi.me> - 0.20.0-1
+- Added a D-Bus service for lyrics.
+- Improved the logging system.
+- Added MPRIS shuffle and repeat mode controls.
+- Blocked NetEase Cloud Music update checks.
+- Added desktop pet support.
+- Added multi-monitor support for the music review desktop.
+- Fixed a hang caused by storage initialization errors.
+- Fixed the inability to disable sleep prevention during playback.
+- Fixed cross-device (disk) migration failures.
+- Fixed infinite error popups in some cases.
+- Fixed a timing issue when closing tasks.
+- Fixed context menus triggering during touch drag.
+- Fixed main window size calculation.
+- Fixed reuse after destruction.
+- Optimized Wayland menus and refactored Wayland surface/menu internals.
+- Added useful debug-menu features for regular users and ignored log worker errors on exit.
+- Updated dependencies and Electron.
+
 * Mon Oct 5 2026 YUCLing <luotianyi@luotianyi.me> - 0.19.2-1
 - Fixed menus drifting to the wrong position under Wayland.
 - Removed module source code from the packaged application.
