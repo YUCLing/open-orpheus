@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
 
@@ -29,19 +29,26 @@ jobs:
         uses: ./.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
+          # v2 turns `build.warnings` into "deny", which fails a crate on any
+          # lint warning. The napi-rs cross toolchain's ld.bfd emits a benign
+          # "unsupported GNU_PROPERTY_TYPE (5)" message for every aarch64 rlib
+          # when linking for aarch64-unknown-linux-gnu, and rustc's
+          # `linker_messages` lint deliberately ignores `-D warnings` for
+          # exactly that reason. Keep the v1 behaviour (warn, don't fail).
+          build-warnings: warn
 
       - name: Install dependencies
         shell: bash

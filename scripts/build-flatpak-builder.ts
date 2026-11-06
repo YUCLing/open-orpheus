@@ -294,7 +294,13 @@ const appModule = {
     `tar xf rust-std-${RUST_VERSION}-wasm32-unknown-unknown.tar.xz`,
     `cp -r rust-std-${RUST_VERSION}-wasm32-unknown-unknown/rust-std-wasm32-unknown-unknown/lib/rustlib/wasm32-unknown-unknown $FLATPAK_BUILDER_BUILDDIR/.rust/lib/rustlib/wasm32-unknown-unknown`,
 
-    `pnpm run build:modules`,
+    // Build the native modules with the SDK toolchain. The sandbox already
+    // compiles against the runtime the app will use, so keep the plain
+    // `build` scripts instead of the `build:linux` variants that switch to
+    // napi's glibc 2.17 cross toolchain — its GCC 4.8.5 rejects the SDK's
+    // hardening CFLAGS (`-fstack-protector-strong`, `-fstack-clash-protection`,
+    // `-fcf-protection`).
+    `SKIP_PLATFORM_VARIANT=1 pnpm run build:modules`,
 
     // Package the Electron app
     `pnpm run package`,

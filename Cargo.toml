@@ -14,7 +14,11 @@ resolver = "3"
 [workspace.dependencies]
 napi = "3.0.0"
 napi-derive = "3.0.0"
-wasm-bindgen = "0.2.129"
+wasm-bindgen = "0.2.130"
+
+[patch.crates-io]
+# Our patch makes freetype-sys use libz-sys's headers
+freetype-sys = { git = "https://github.com/YUCLing/freetype-sys.git", rev = "a6b10931605e38918528e048952067e1c3abdeec" }
 
 [profile.release]
 lto = true
