@@ -55,11 +55,23 @@ jobs:
           build-warnings: warn
 
       - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve wasm-bindgen-cli version
+        id: wasm-bindgen
         shell: bash
         run: |
-          pnpm install --frozen-lockfile
           version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
-          cargo install "wasm-bindgen-cli@$version"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+          # wasm-bindgen ships no prebuilt binary for aarch64-pc-windows-msvc
+          # (windows-11-arm), so build from source there rather than pulling in
+          # cargo-binstall just to reach the same fallback.
+          fallback: cargo-install
 
       - name: Install system and packaging dependencies
         if: runner.os == 'Linux'

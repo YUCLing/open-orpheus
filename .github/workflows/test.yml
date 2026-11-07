@@ -54,11 +54,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install wasm-bindgen-cli
+      - name: Resolve wasm-bindgen-cli version
+        id: wasm-bindgen
         shell: bash
         run: |
           version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
-          cargo install "wasm-bindgen-cli@$version"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+          # Prebuilt on every platform these jobs use; keep the source build as
+          # the fallback so a missing asset never depends on cargo-binstall.
+          fallback: cargo-install
 
       - name: Restore built native modules
         id: modules
@@ -139,11 +148,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install wasm-bindgen-cli
+      - name: Resolve wasm-bindgen-cli version
+        id: wasm-bindgen
         shell: bash
         run: |
           version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
-          cargo install "wasm-bindgen-cli@$version"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+          # Prebuilt on every platform these jobs use; keep the source build as
+          # the fallback so a missing asset never depends on cargo-binstall.
+          fallback: cargo-install
 
       # Electron is Chromium, so Playwright can resolve the shared libraries it
       # links against (and Xvfb) to the runner's distro package names.
