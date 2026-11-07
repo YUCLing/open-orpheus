@@ -117,8 +117,8 @@ app.on("ready", async () => {
     await mkdir(path.join(dataDir), { recursive: true });
 
     let userAgent = session.defaultSession.getUserAgent();
-    if (os.platform() === "linux") {
-      // Make some modules think we are indeed on desktop.
+    if (os.platform() !== "win32") {
+      // Force Windows User-Agent
       userAgent = userAgent.replace(
         /^(Mozilla\/5\.0 \([^)]*\))/,
         "Mozilla/5.0 (Windows NT 10.0; WOW64)"
