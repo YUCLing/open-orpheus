@@ -1,0 +1,172 @@
+name: Sign artifact
+description: >-
+  Upload an artifact, have SignPath sign it, download the signed result and
+  delete the intermediate artifact again.
+
+# SignPath's signing policies require the artifact to come from a trusted build
+# system, which for GitHub means it has to exist as a workflow artifact first
+# (the connector verifies the origin against the GitHub API). That forces the
+# upload/download round trip; the signed copy is back on disk before the
+# intermediate artifact is deleted, so nothing downstream notices.
+#
+# The signed artifact always arrives in `output-artifact-directory` under the
+# name it was uploaded with, whether or not `upload-artifact` archived it.
+
+inputs:
+  name:
+    description: Name of the intermediate GitHub Actions artifact.
+    required: true
+  path:
+    description: File or directory to sign (globs allowed).
+    required: true
+  output-artifact-directory:
+    description: Directory the signed artifact is written to, under its original name.
+    required: true
+  artifact-configuration-slug:
+    description: >-
+      SignPath artifact configuration describing what to sign. When unset, the
+      project's default configuration is used.
+    required: false
+    default: ""
+  api-token:
+    description: SignPath REST API token.
+    required: true
+  organization-id:
+    description: SignPath organization id.
+    required: true
+  project-slug:
+    description: SignPath project slug.
+    required: true
+  signing-policy-slug:
+    description: SignPath signing policy slug.
+    required: true
+  archive:
+    description: >-
+      Let `upload-artifact` store the artifact as a ZIP. Set to false for a file
+      that is not an archive, such as a `.nupkg` or a single executable, so the
+      artifact configuration can address it as its own root element.
+    required: false
+    default: "true"
+  delete-artifact:
+    description: Delete the intermediate artifact once the signed copy is downloaded.
+    required: false
+    default: "true"
+  retention-days:
+    description: Retention of the intermediate artifact, in case deletion is not permitted.
+    required: false
+    default: "1"
+
+outputs:
+  artifact-id:
+    description: Id of the intermediate artifact.
+    value: ${{ steps.upload.outputs.artifact-id }}
+
+runs:
+  using: composite
+  steps:
+    # An unarchived artifact is named after the file it holds and `name` is
+    # ignored, so the same file uploaded by both runners of a matrix would
+    # collide. Upload a copy named after `name` and rename the signed file back
+    # afterwards, so the caller sees no difference.
+    - name: Stage file for signing
+      if: inputs.archive == 'false'
+      id: stage
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.path }}
+        ARTIFACT_NAME: ${{ inputs.name }}
+        OUTPUT_DIR: ${{ inputs.output-artifact-directory }}
+      run: |
+        set -euo pipefail
+        mapfile -t matches < <(compgen -G "$SOURCE")
+        if [ "${#matches[@]}" -ne 1 ]; then
+          echo "::error::$SOURCE matched ${#matches[@]} files, expected exactly one"
+          exit 1
+        fi
+        source_file="${matches[0]}"
+        # Git Bash needs forward slashes for a path that came from a Windows context.
+        stage_dir="${RUNNER_TEMP//\\//}/signed-artifact"
+        mkdir -p "$stage_dir" "${OUTPUT_DIR//\\//}"
+        staged="${stage_dir}/${ARTIFACT_NAME}.${source_file##*.}"
+        cp -f "$source_file" "$staged"
+        echo "original=$(basename "$source_file")" >> "$GITHUB_OUTPUT"
+        echo "path=$staged" >> "$GITHUB_OUTPUT"
+        echo "Staged ${source_file} as ${staged}"
+
+    - name: Upload unsigned artifact
+      id: upload
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ steps.stage.outputs.path || inputs.path }}
+        if-no-files-found: error
+        archive: ${{ inputs.archive }}
+        retention-days: ${{ inputs.retention-days }}
+
+    # The slug is omitted rather than passed empty so SignPath falls back to the
+    # project's default configuration; that is the only difference between the
+    # two submit steps.
+    - name: Submit signing request
+      if: inputs.artifact-configuration-slug == ''
+      uses: SignPath/github-action-submit-signing-request@4184a38a17e5b37d026a3ed443581c1f03ae1b3a
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: ${{ inputs.project-slug }}
+        signing-policy-slug: ${{ inputs.signing-policy-slug }}
+        github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+        wait-for-completion: true
+        output-artifact-directory: ${{ inputs.output-artifact-directory }}
+        skip-decompress: ${{ inputs.archive == 'false' }}
+
+    - name: Submit signing request with artifact configuration
+      if: inputs.artifact-configuration-slug != ''
+      uses: SignPath/github-action-submit-signing-request@4184a38a17e5b37d026a3ed443581c1f03ae1b3a
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: ${{ inputs.project-slug }}
+        signing-policy-slug: ${{ inputs.signing-policy-slug }}
+        artifact-configuration-slug: ${{ inputs.artifact-configuration-slug }}
+        github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+        wait-for-completion: true
+        output-artifact-directory: ${{ inputs.output-artifact-directory }}
+        skip-decompress: ${{ inputs.archive == 'false' }}
+
+    - name: Restore original file name
+      if: inputs.archive == 'false'
+      shell: bash
+      env:
+        OUTPUT_DIR: ${{ inputs.output-artifact-directory }}
+        STAGED: ${{ steps.stage.outputs.path }}
+        ORIGINAL_NAME: ${{ steps.stage.outputs.original }}
+      run: |
+        set -euo pipefail
+        # Git Bash needs forward slashes for a path that came from a Windows context.
+        output_dir="${OUTPUT_DIR//\\//}"
+        staged_name="$(basename "$STAGED")"
+        signed="${output_dir}/${staged_name}"
+        if [ ! -f "$signed" ]; then
+          echo "::error::the signing action wrote no file at ${signed}"
+          exit 1
+        fi
+        if [ "$staged_name" != "$ORIGINAL_NAME" ]; then
+          mv -f "$signed" "${output_dir}/${ORIGINAL_NAME}"
+        fi
+        echo "Signed ${ORIGINAL_NAME}"
+
+    # Housekeeping: the signed copy already replaced the unsigned file on disk.
+    # Needs `actions: write` on the token, so treat a refusal as a warning.
+    - name: Delete intermediate artifact
+      if: always() && inputs.delete-artifact == 'true' && steps.upload.outputs.artifact-id != ''
+      shell: bash
+      continue-on-error: true
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+      run: |
+        if gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}"; then
+          echo "Deleted intermediate artifact ${ARTIFACT_ID}"
+        else
+          echo "::warning::Could not delete intermediate artifact ${ARTIFACT_ID}"
+        fi
