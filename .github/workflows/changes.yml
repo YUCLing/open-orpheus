@@ -12,6 +12,9 @@ on:
       build:
         description: Application bundle inputs changed
         value: ${{ jobs.changes.outputs.build }}
+      build_cross:
+        description: Inputs that need the cross-platform bundle matrix (packaging, makers, native modules) changed
+        value: ${{ jobs.changes.outputs.build_cross }}
       flathub:
         description: Flatpak manifest inputs (packaging, toolchains, lockfiles) changed
         value: ${{ jobs.changes.outputs.flathub }}
@@ -31,6 +34,7 @@ jobs:
       node: ${{ steps.filter.outputs.node }}
       rust: ${{ steps.filter.outputs.rust }}
       build: ${{ steps.filter.outputs.build }}
+      build_cross: ${{ steps.filter.outputs.build_cross }}
       flathub: ${{ steps.filter.outputs.flathub }}
       flathub_build: ${{ steps.filter.outputs.flathub_build }}
 
@@ -105,6 +109,25 @@ jobs:
               - "src/**"
               - "gui/**"
               - "modules/**"
+              - "plugins/**"
+              - "scripts/**"
+              - "packaging/**"
+              - "patches/**"
+              - "assets/**"
+              - "LICENSE"
+              - "versions.json"
+            # The subset that can break a single platform's packaging: makers,
+            # native addons, assets, lockfiles. UI/logic-only PRs skip it.
+            build_cross:
+              - ".github/workflows/build.yml"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "forge.config.ts"
+              - "modules/**"
+              - "plugins/**"
               - "scripts/**"
               - "packaging/**"
               - "patches/**"

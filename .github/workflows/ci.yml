@@ -22,18 +22,38 @@ jobs:
     name: Detect relevant changes
     uses: $/.github/workflows/changes.yml
 
-  build:
+  # The matrix is chosen at run time: PRs that only touch app code build Linux,
+  # while packaging/platform inputs, `main` and the ci/full-build label get all
+  # five runners. A matrix cannot be conditional in place, hence this job.
+  plan:
+    name: Plan build matrix
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.build == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      runners: ${{ steps.plan.outputs.runners }}
+
+    steps:
+      - name: Choose runners
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CROSS_PLATFORM_CHANGED: ${{ needs.changes.outputs.build_cross }}
+          FULL_BUILD_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci/full-build') }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$CROSS_PLATFORM_CHANGED" = "true" ] || [ "$FULL_BUILD_LABEL" = "true" ]; then
+            echo 'runners=["ubuntu-latest","ubuntu-24.04-arm","xcode-27","windows-latest","windows-11-arm"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runners=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: [changes, plan]
     strategy:
       fail-fast: false
       matrix:
-        runner:
-          - ubuntu-latest
-          - ubuntu-24.04-arm
-          - xcode-27
-          - windows-latest
-          - windows-11-arm
+        runner: ${{ fromJSON(needs.plan.outputs.runners) }}
 
     uses: $/.github/workflows/build.yml
     with:
