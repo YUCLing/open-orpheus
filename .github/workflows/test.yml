@@ -28,6 +28,9 @@ jobs:
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.node == 'true' }}
     runs-on: ubuntu-latest
+    environment:
+      name: codecov
+      deployment: false
 
     steps:
       - name: Checkout repository
@@ -125,6 +128,9 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.node == 'true' || needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    environment:
+      name: codecov
+      deployment: false
 
     steps:
       - name: Checkout repository
@@ -270,6 +276,9 @@ jobs:
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
+    environment:
+      name: codecov
+      deployment: false
 
     steps:
       - name: Checkout repository

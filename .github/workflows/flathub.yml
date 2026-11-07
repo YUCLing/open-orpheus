@@ -94,6 +94,9 @@ jobs:
     name: Create Flathub update PR
     needs: build-manifest
     runs-on: ubuntu-latest
+    environment:
+      name: flathub
+      deployment: false
     permissions:
       contents: write
       pull-requests: write

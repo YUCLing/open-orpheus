@@ -19,6 +19,9 @@ jobs:
   build:
     name: Build ICU data
     runs-on: ubuntu-latest
+    environment:
+      name: icu
+      deployment: false
     permissions:
       contents: read
 

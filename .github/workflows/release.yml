@@ -39,6 +39,9 @@ jobs:
   prepare:
     name: Prepare release
     runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
     permissions:
       contents: read
     outputs:
@@ -179,6 +182,7 @@ jobs:
     name: Publish release
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
       actions: write
@@ -261,6 +265,9 @@ jobs:
     needs: [prepare, build, publish]
     if: failure() || cancelled()
     runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
     permissions:
       contents: read
     steps:
