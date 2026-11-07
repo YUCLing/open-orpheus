@@ -9,6 +9,9 @@ on:
       - packaging/resources/icu-filters.json
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   # Serialize instead of cancel: these workflows push commits or publish, so an
   # overlapping run would race the previous one's side effects.

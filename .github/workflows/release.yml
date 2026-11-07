@@ -185,7 +185,7 @@ jobs:
     environment: release
     permissions:
       contents: read
-      actions: write
+      actions: write # gh workflow run flathub.yml
 
     steps:
       - name: Checkout for git context

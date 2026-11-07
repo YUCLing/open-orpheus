@@ -97,9 +97,6 @@ jobs:
     environment:
       name: flathub
       deployment: false
-    permissions:
-      contents: write
-      pull-requests: write
 
     steps:
       - name: Download manifest artifacts
@@ -115,7 +112,7 @@ jobs:
           ref: ${{ env.FLATHUB_BASE_BRANCH }}
           token: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
           path: flathub-repo
-          # The token is only used by peter-evans/create-pull-request, not git.
+          # Pushed with an explicit token URL below; keep it out of .git/config.
           persist-credentials: false
 
       - name: Copy generated files into Flathub repo
@@ -124,19 +121,49 @@ jobs:
           cp -r flatpak-builder/. flathub-repo/
 
       - name: Create pull request in Flathub repository
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          token: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
-          path: flathub-repo
-          branch: update/v${{ needs.build-manifest.outputs.version }}
-          base: ${{ env.FLATHUB_BASE_BRANCH }}
-          commit-message: Open Orpheus v${{ needs.build-manifest.outputs.version }}
-          title: Open Orpheus v${{ needs.build-manifest.outputs.version }}
-          body: |
-            Automated Flathub manifest update for Open Orpheus v${{ needs.build-manifest.outputs.version }}.
+        working-directory: flathub-repo
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
+          REPO: ${{ env.FLATHUB_REPO }}
+          BASE: ${{ env.FLATHUB_BASE_BRANCH }}
+          VERSION: ${{ needs.build-manifest.outputs.version }}
+          BRANCH: update/v${{ needs.build-manifest.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Commit as the same bot identity the previous action used.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-            Source workflow run:
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          assignees: YUCLing
-          delete-branch: false
+          git add --all
+          if git diff --cached --quiet; then
+            echo "No manifest changes for v${VERSION}; nothing to publish."
+            exit 0
+          fi
+
+          git commit --message "Open Orpheus v${VERSION}"
+
+          # No persisted credentials: push with the app token in the URL. The
+          # branch is generated, so a re-run must be able to replace the commit
+          # a previous run pushed. Lease on the value fetched a moment earlier,
+          # so a concurrent push fails the job instead of being clobbered.
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          branch_ref="refs/heads/${BRANCH}"
+          if git fetch --quiet "$remote" "+${branch_ref}:refs/remotes/update-target"; then
+            git push --force-with-lease="${branch_ref}:$(git rev-parse refs/remotes/update-target)" \
+              "$remote" "HEAD:${branch_ref}"
+          else
+            git push "$remote" "HEAD:${branch_ref}"
+          fi
+
+          body=$(printf 'Automated Flathub manifest update for Open Orpheus v%s.\n\nSource workflow run:\n%s' \
+            "$VERSION" "$RUN_URL")
+          existing=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$REPO" \
+              --title "Open Orpheus v${VERSION}" --body "$body"
+          else
+            gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" \
+              --title "Open Orpheus v${VERSION}" --body "$body" --assignee YUCLing
+          fi
