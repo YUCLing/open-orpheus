@@ -7,6 +7,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Serialize instead of cancel: these workflows push commits or publish, so an
+  # overlapping run would race the previous one's side effects.
+  group: flathub
+  cancel-in-progress: false
+
 env:
   FLATHUB_REPO: flathub/io.github.yucling.open-orpheus
   FLATHUB_BASE_BRANCH: master

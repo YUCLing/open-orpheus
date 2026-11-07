@@ -9,6 +9,12 @@ on:
       - packaging/resources/icu-filters.json
   workflow_dispatch:
 
+concurrency:
+  # Serialize instead of cancel: these workflows push commits or publish, so an
+  # overlapping run would race the previous one's side effects.
+  group: icu
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ICU data

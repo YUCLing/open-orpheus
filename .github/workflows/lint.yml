@@ -11,6 +11,12 @@ permissions:
   contents: read
   pull-requests: read
 
+concurrency:
+  # Superseded runs on the same PR are useless: cancel them. On main, queue
+  # instead, so a run that is already building can still save its caches.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     name: Detect relevant changes

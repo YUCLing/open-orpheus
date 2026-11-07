@@ -29,6 +29,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Serialize instead of cancel: these workflows push commits or publish, so an
+  # overlapping run would race the previous one's side effects.
+  group: release
+  cancel-in-progress: false
+
 jobs:
   prepare:
     name: Prepare release
