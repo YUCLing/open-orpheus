@@ -336,6 +336,23 @@ jobs:
       LINTER_SECCOMP_URL: https://raw.githubusercontent.com/flathub-infra/vorarbeiter/57e57bbb3d951c04cea355cb9335f5145d74704d/flatpak.seccomp.json
 
     steps:
+      # Dependency-only bumps still generate and lint the manifest, but the
+      # sandbox build (~6.4 min) only runs for packaging changes, on `main` or a
+      # manual dispatch, or when a PR carries the ci/full-flatpak-build label.
+      - name: Decide whether to run the full build
+        id: build
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PACKAGING_CHANGED: ${{ needs.changes.outputs.flathub_build }}
+          FULL_BUILD_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci/full-flatpak-build') }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$PACKAGING_CHANGED" = "true" ] || [ "$FULL_BUILD_LABEL" = "true" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -404,6 +421,7 @@ jobs:
             manifest io.github.yucling.open-orpheus.yaml
 
       - name: Set up Flatpak runtimes
+        if: steps.build.outputs.build == 'true'
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub \
@@ -412,6 +430,7 @@ jobs:
             org.freedesktop.Sdk.Extension.node24//26.08
 
       - name: Build the Flatpak
+        if: steps.build.outputs.build == 'true'
         working-directory: out/make/flatpak-builder
         run: |
           flatpak-builder --user --force-clean --repo=repo \
@@ -419,6 +438,7 @@ jobs:
             build-dir io.github.yucling.open-orpheus.yaml
 
       - name: Lint the built repository
+        if: steps.build.outputs.build == 'true'
         working-directory: out/make/flatpak-builder
         run: |
           mkdir -p tmp .local/state

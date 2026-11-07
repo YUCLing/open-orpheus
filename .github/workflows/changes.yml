@@ -15,6 +15,9 @@ on:
       flathub:
         description: Flatpak manifest inputs (packaging, toolchains, lockfiles) changed
         value: ${{ jobs.changes.outputs.flathub }}
+      flathub_build:
+        description: Inputs that need a real Flatpak build (packaging, generator) changed
+        value: ${{ jobs.changes.outputs.flathub_build }}
 
 permissions:
   contents: read
@@ -29,6 +32,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       build: ${{ steps.filter.outputs.build }}
       flathub: ${{ steps.filter.outputs.flathub }}
+      flathub_build: ${{ steps.filter.outputs.flathub_build }}
 
     steps:
       - name: Checkout repository
@@ -119,5 +123,14 @@ jobs:
               - "pnpm-workspace.yaml"
               - "Cargo.toml"
               - "Cargo.lock"
+              - "packaging/**"
+              - "scripts/build-flatpak-builder.ts"
+            # The subset that warrants the real sandbox build: dependency-only
+            # bumps still generate and lint the manifest, but skip the build.
+            flathub_build:
+              - ".github/workflows/changes.yml"
+              - ".github/workflows/test.yml"
+              - ".github/workflows/flathub.yml"
+              - ".github/flatpak-lint-exceptions.json"
               - "packaging/**"
               - "scripts/build-flatpak-builder.ts"
