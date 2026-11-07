@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -43,16 +43,16 @@ jobs:
         uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
@@ -71,7 +71,7 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Install wasm-bindgen-cli
-        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
           # Prebuilt on every platform these jobs use; keep the source build as
@@ -80,7 +80,7 @@ jobs:
 
       - name: Restore built native modules
         id: modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # The .node addons and the wasm bundle are the only non-source
           # artifacts of `build:modules`; the generated JS/d.ts shims are
@@ -104,7 +104,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           report_type: test_results
           flags: node
@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           flags: node
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -134,7 +134,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -143,16 +143,16 @@ jobs:
         uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
@@ -166,7 +166,7 @@ jobs:
         run: echo "version=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Electron binaries
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # @electron/get stores the platform zip under env-paths('electron').cache,
           # which both the pnpm postinstall and electron's lazy download use.
@@ -184,7 +184,7 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Install wasm-bindgen-cli
-        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
           # Prebuilt on every platform these jobs use; keep the source build as
@@ -198,7 +198,7 @@ jobs:
 
       - name: Restore built native modules
         id: modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # The .node addons and the wasm bundle are the only non-source
           # artifacts of `build:modules`; the generated JS/d.ts shims are
@@ -219,7 +219,7 @@ jobs:
 
       - name: Restore cached NetEase installer
         id: installer
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # The E2E download test streams this file from loopback instead of
           # NetEase's CDN. Unlike the other caches this file has no producer
@@ -260,7 +260,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           report_type: test_results
           files: test-results/junit.xml
@@ -282,7 +282,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -291,19 +291,19 @@ jobs:
         uses: $/.github/actions/toolchain
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           # cargo-llvm-cov needs llvm-cov/llvm-profdata from the toolchain.
           components: llvm-tools-preview
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: nextest@0.9.144
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: cargo-llvm-cov@0.9.1
 
@@ -315,7 +315,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           report_type: test_results
           files: target/nextest/ci/junit.xml
@@ -324,7 +324,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: lcov.info
           flags: rust
@@ -363,15 +363,15 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm

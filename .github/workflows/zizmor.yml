@@ -1,0 +1,43 @@
+name: zizmor Static Analysis
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+      security-events: write # upload the SARIF report to the Security tab
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same-repo runs upload SARIF, so findings land as code-scanning alerts and
+      # this check does not fail (zizmor exits 0 in SARIF mode). Fork PRs only get
+      # a read-only token, which cannot upload SARIF, so they fall back to
+      # annotations — a real gate, since zizmor then exits non-zero on findings.
+      # The two modes are mutually exclusive, hence the paired expressions.
+      # `version` is pinned rather than `latest`: new zizmor releases add audits,
+      # which would otherwise raise alerts on untouched code.
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          version: 1.32.0
+          advanced-security: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          annotations: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
