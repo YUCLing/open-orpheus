@@ -106,9 +106,12 @@ jobs:
           path: |
             modules/*/*.node
             modules/audio-effect/dist
+          # The lockfile is part of the key because the napi CLI and the
+          # cross toolchain that link the addons are pinned there: bumping
+          # either must invalidate the cached binaries.
           # No restore-keys: only an exact hit may skip the build, otherwise a
           # partial restore would silently leave addons missing.
-          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
 
       - name: Build native modules
         if: steps.modules.outputs.cache-hit != 'true'

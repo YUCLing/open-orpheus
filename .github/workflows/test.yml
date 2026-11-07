@@ -79,9 +79,12 @@ jobs:
           path: |
             modules/*/*.node
             modules/audio-effect/dist
+          # The lockfile is part of the key because the napi CLI and the
+          # cross toolchain that link the addons are pinned there: bumping
+          # either must invalidate the cached binaries.
           # No restore-keys: only an exact hit may skip the build, otherwise a
           # partial restore would silently leave addons missing.
-          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
 
       - name: Build native modules
         if: steps.modules.outputs.cache-hit != 'true'
@@ -191,13 +194,44 @@ jobs:
           path: |
             modules/*/*.node
             modules/audio-effect/dist
+          # The lockfile is part of the key because the napi CLI and the
+          # cross toolchain that link the addons are pinned there: bumping
+          # either must invalidate the cached binaries.
           # No restore-keys: only an exact hit may skip the build, otherwise a
           # partial restore would silently leave addons missing.
-          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
 
       - name: Build native modules
         if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
+
+      - name: Restore cached NetEase installer
+        id: installer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          # The E2E download test streams this file from loopback instead of
+          # NetEase's CDN. Unlike the other caches this file has no producer
+          # job: the app downloads the installer into memory, so the cache has
+          # to be filled by the step below on the first (miss) run.
+          path: ${{ runner.temp }}/open-orpheus-package/installer.exe
+          key: package-installer-v1-${{ runner.os }}-${{ hashFiles('versions.json') }}
+
+      - name: Fetch NetEase installer
+        if: steps.installer.outputs.cache-hit != 'true'
+        env:
+          INSTALLER: ${{ runner.temp }}/open-orpheus-package/installer.exe
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$INSTALLER")"
+          url=$(node -p "require('./versions.json').downloadUrl")
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 5 \
+            --max-time 900 \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36" \
+            --output "$INSTALLER" "$url"
+          # A Windows PE of plausible size: never cache an error page or a
+          # truncated download, since the entry is shared with later runs.
+          test "$(head -c 2 "$INSTALLER")" = "MZ"
+          test "$(wc -c < "$INSTALLER")" -gt 50000000
 
       - name: Run E2E tests
         env:
@@ -205,6 +239,7 @@ jobs:
           # setuid, and unprivileged user namespaces are restricted) and Xvfb
           # has no GPU, so the tests launch Electron with these extra switches.
           OPEN_ORPHEUS_E2E_ELECTRON_ARGS: --no-sandbox --disable-gpu
+          OPEN_ORPHEUS_E2E_PACKAGE_FILE: ${{ runner.temp }}/open-orpheus-package/installer.exe
           PLAYWRIGHT_JUNIT_OUTPUT_DIR: test-results
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: junit.xml
         run: >-

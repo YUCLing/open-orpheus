@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 import {
   test,
@@ -9,7 +9,15 @@ import {
   type Page,
 } from "@playwright/test";
 
+import { redirectBuiltDownloadUrl, startPackageServer } from "./package-server";
+
 const dataDir = process.env["OPEN_ORPHEUS_CUSTOM_DATA_DIR"]!;
+const cachedPackage = process.env["OPEN_ORPHEUS_E2E_PACKAGE_FILE"];
+const downloadUrl = (
+  JSON.parse(readFileSync(resolve(import.meta.dirname, "../../versions.json"), "utf-8")) as {
+    downloadUrl: string;
+  }
+).downloadUrl;
 
 // Chromium switches for the app under test. CI passes `--no-sandbox
 // --disable-gpu`: Actions runners cannot set up Chromium's sandbox, and Xvfb
@@ -18,12 +26,30 @@ const extraElectronArgs = (process.env["OPEN_ORPHEUS_E2E_ELECTRON_ARGS"] ?? "")
   .split(/\s+/)
   .filter(Boolean);
 
+// CI restores the installer from a cache instead of pulling the ~160 MB file
+// from NetEase's CDN on every run. Serving it from loopback keeps the real
+// download + 7z-wasm extraction path, and it must happen before the app is
+// launched: the URL is baked into the build output.
+let packageServer: Awaited<ReturnType<typeof startPackageServer>> | undefined;
+let restoreBundles: (() => void) | undefined;
+
+test.beforeAll(async () => {
+  if (!cachedPackage || !existsSync(cachedPackage)) return;
+  packageServer = await startPackageServer(cachedPackage);
+  restoreBundles = redirectBuiltDownloadUrl(downloadUrl, packageServer.url);
+});
+
+test.afterAll(async () => {
+  restoreBundles?.();
+  await packageServer?.close();
+});
+
 function launchApp() {
   return electron.launch({ args: [".", ...extraElectronArgs] });
 }
 
-// The web pack download pulls the ~160 MB installer from NetEase's CDN and
-// unpacks it with 7z-wasm in-process, which takes minutes on a CI runner.
+// The web pack download pulls the ~160 MB installer and unpacks it with
+// 7z-wasm in-process, which takes minutes on a CI runner.
 const DOWNLOAD_TIMEOUT = 15 * 60_000;
 
 test("package download", async () => {
