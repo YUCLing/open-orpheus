@@ -43,10 +43,6 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
-      - name: Build native modules
-        shell: bash
-        run: SKIP_IF_NO_SCRIPT=1 PREFER_SCRIPT=types pnpm build:modules
-
       - name: Run Oxlint
         run: pnpm lint:oxlint
 

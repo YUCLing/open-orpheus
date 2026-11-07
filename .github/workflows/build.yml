@@ -43,6 +43,9 @@ jobs:
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
+          # Share the cargo target directory with the other jobs that build the
+          # native modules (Vitest, E2E). OS/arch stay part of the key.
+          cache-shared-key: native-modules
           # v2 turns `build.warnings` into "deny", which fails a crate on any
           # lint warning. The napi-rs cross toolchain's ld.bfd emits a benign
           # "unsupported GNU_PROPERTY_TYPE (5)" message for every aarch64 rlib
@@ -68,7 +71,22 @@ jobs:
         if: runner.os == 'Linux'
         run: appstreamcli validate packaging/flatpak/metainfo.xml
 
+      - name: Restore built native modules
+        id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          # The .node addons and the wasm bundle are the only non-source
+          # artifacts of `build:modules`; the generated JS/d.ts shims are
+          # committed, so a checkout already restores them.
+          path: |
+            modules/*/*.node
+            modules/audio-effect/dist
+          # No restore-keys: only an exact hit may skip the build, otherwise a
+          # partial restore would silently leave addons missing.
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+
       - name: Build native modules
+        if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
 
       - name: Set up Flatpak runtimes

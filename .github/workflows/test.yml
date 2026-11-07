@@ -47,6 +47,9 @@ jobs:
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
+          # Share the cargo target directory with the other jobs that build the
+          # native modules (E2E, bundle builds). OS/arch stay part of the key.
+          cache-shared-key: native-modules
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -57,7 +60,22 @@ jobs:
           version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
           cargo install "wasm-bindgen-cli@$version"
 
+      - name: Restore built native modules
+        id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          # The .node addons and the wasm bundle are the only non-source
+          # artifacts of `build:modules`; the generated JS/d.ts shims are
+          # committed, so a checkout already restores them.
+          path: |
+            modules/*/*.node
+            modules/audio-effect/dist
+          # No restore-keys: only an exact hit may skip the build, otherwise a
+          # partial restore would silently leave addons missing.
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+
       - name: Build native modules
+        if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
 
       - name: Run tests
@@ -114,6 +132,9 @@ jobs:
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
+          # Share the cargo target directory with the other jobs that build the
+          # native modules (E2E, bundle builds). OS/arch stay part of the key.
+          cache-shared-key: native-modules
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -129,7 +150,22 @@ jobs:
       - name: Install Electron runtime dependencies
         run: sudo env "PATH=$PATH" pnpm exec playwright install-deps chromium
 
+      - name: Restore built native modules
+        id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          # The .node addons and the wasm bundle are the only non-source
+          # artifacts of `build:modules`; the generated JS/d.ts shims are
+          # committed, so a checkout already restores them.
+          path: |
+            modules/*/*.node
+            modules/audio-effect/dist
+          # No restore-keys: only an exact hit may skip the build, otherwise a
+          # partial restore would silently leave addons missing.
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+
       - name: Build native modules
+        if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
 
       - name: Run E2E tests
