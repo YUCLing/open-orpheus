@@ -3,6 +3,10 @@ name: Publish to Flathub
 on:
   workflow_dispatch:
 
+# Least privilege by default; the publish job widens this for its own needs.
+permissions:
+  contents: read
+
 env:
   FLATHUB_REPO: flathub/io.github.yucling.open-orpheus
   FLATHUB_BASE_BRANCH: master
@@ -16,15 +20,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.ref }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm
@@ -38,9 +43,12 @@ jobs:
 
       - name: Determine source tag and compute SHA256
         id: source
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          TAG="v${{ steps.pkg.outputs.version }}"
-          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          TAG="v${VERSION}"
+          URL="https://github.com/${REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
           SHA256=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
           echo "flatpak_source=${URL}+${SHA256}" >> "$GITHUB_OUTPUT"
 
@@ -71,7 +79,7 @@ jobs:
         run: node scripts/build-flatpak-builder.ts
 
       - name: Upload manifest artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: flatpak-builder
           path: out/make/flatpak-builder/
@@ -86,18 +94,20 @@ jobs:
 
     steps:
       - name: Download manifest artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: flatpak-builder
           path: flatpak-builder
 
       - name: Checkout Flathub repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ env.FLATHUB_REPO }}
           ref: ${{ env.FLATHUB_BASE_BRANCH }}
           token: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
           path: flathub-repo
+          # The token is only used by peter-evans/create-pull-request, not git.
+          persist-credentials: false
 
       - name: Copy generated files into Flathub repo
         run: |
@@ -105,7 +115,7 @@ jobs:
           cp -r flatpak-builder/. flathub-repo/
 
       - name: Create pull request in Flathub repository
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
           path: flathub-repo

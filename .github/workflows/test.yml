@@ -14,7 +14,7 @@ permissions:
 jobs:
   changes:
     name: Detect relevant changes
-    uses: ./.github/workflows/changes.yml
+    uses: $/.github/workflows/changes.yml
 
   # Linux only: the packaging snapshots embed POSIX path separators.
   test-node:
@@ -25,23 +25,25 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
@@ -63,7 +65,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           report_type: test_results
           flags: node
@@ -71,7 +73,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           flags: node
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -90,23 +92,25 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
@@ -142,7 +146,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           report_type: test_results
           files: test-results/junit.xml
@@ -161,26 +165,28 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           # cargo-llvm-cov needs llvm-cov/llvm-profdata from the toolchain.
           components: llvm-tools-preview
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
         with:
           tool: nextest@0.9.144
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
         with:
           tool: cargo-llvm-cov@0.9.1
 
@@ -192,7 +198,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           report_type: test_results
           files: target/nextest/ci/junit.xml
@@ -201,7 +207,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           files: lcov.info
           flags: rust
@@ -223,13 +229,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm

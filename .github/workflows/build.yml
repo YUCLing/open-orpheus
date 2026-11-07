@@ -20,25 +20,26 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
@@ -82,49 +83,49 @@ jobs:
           EXTRACT_LICENSES_TO: out/license
 
       - name: Upload licenses
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: licenses-${{ inputs.runner }}
           path: out/license/**
           if-no-files-found: ignore
 
       - name: Upload flatpak
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: flatpak-${{ inputs.runner }}
           path: out/make/flatpak/**
           if-no-files-found: ignore
 
       - name: Upload deb
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: deb-${{ inputs.runner }}
           path: out/make/deb/**
           if-no-files-found: ignore
 
       - name: Upload rpm
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: rpm-${{ inputs.runner }}
           path: out/make/rpm/**
           if-no-files-found: ignore
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: AppImage-${{ inputs.runner }}
           path: out/make/AppImage/**
           if-no-files-found: ignore
 
       - name: Upload squirrel
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: squirrel-${{ inputs.runner }}
           path: out/make/squirrel.windows/**
           if-no-files-found: ignore
 
       - name: Upload zip
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: zip-${{ inputs.runner }}
           path: out/make/zip/**

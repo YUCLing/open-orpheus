@@ -25,6 +25,10 @@ on:
         type: boolean
         default: false
 
+# Least privilege by default; individual jobs widen this as needed.
+permissions:
+  contents: read
+
 jobs:
   prepare:
     name: Prepare release
@@ -35,16 +39,16 @@ jobs:
       commit-sha: ${{ steps.push.outputs.commit-sha }}
 
     steps:
-      # Bootstrap checkout: makes the local composite action available.
+      # Bootstrap checkout: the steps below run against this working tree.
       - name: Checkout (bootstrap)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           persist-credentials: false
 
       - name: Create app token
         id: app
-        uses: ./.github/actions/create-app-token
+        uses: $/.github/actions/create-app-token
         with:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -52,16 +56,19 @@ jobs:
 
       # Re-checkout so git push authenticates as the app.
       - name: Checkout main
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           token: ${{ steps.app.outputs.token }}
+          # Explicit: the app token is used by `git push`, so the credential
+          # must stay configured.
+          persist-credentials: true
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm
@@ -71,15 +78,18 @@ jobs:
 
       - name: Update version in package.json
         if: ${{ !inputs.skip_commit }}
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          jq --arg v "${{ inputs.version }}" '.version = $v' package.json > tmp.json
+          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json
           mv tmp.json package.json
 
       - name: Clean up existing release if any
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
         run: |
-          TAG="v${{ inputs.version }}"
+          TAG="v${VERSION}"
           if gh release view "$TAG" --json isDraft -q '.isDraft' 2>/dev/null; then
             IS_DRAFT=$(gh release view "$TAG" --json isDraft -q '.isDraft')
             if [ "$IS_DRAFT" = "true" ]; then
@@ -96,20 +106,26 @@ jobs:
       - name: Create draft release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          PRE_RELEASE: ${{ inputs.pre_release }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
         run: |
-          gh release create "v${{ inputs.version }}" \
-            --draft \
-            --generate-notes \
-            --title "v${{ inputs.version }}" \
-            ${{ inputs.pre_release && '--prerelease' || '' }} \
-            ${{ inputs.previous_tag && format('--notes-start-tag "{0}"', inputs.previous_tag) || '' }} \
+          args=(--draft --generate-notes --title "v${VERSION}")
+          if [ "$PRE_RELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          if [ -n "$PREVIOUS_TAG" ]; then
+            args+=(--notes-start-tag "$PREVIOUS_TAG")
+          fi
+          gh release create "v${VERSION}" "${args[@]}"
 
       - name: Fetch auto-generated release notes
         if: ${{ !inputs.skip_commit }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
         run: |
-          gh release view "v${{ inputs.version }}" \
+          gh release view "v${VERSION}" \
             --json body \
             -q '.body' > /tmp/release-notes.md
 
@@ -117,16 +133,19 @@ jobs:
         if: ${{ !inputs.skip_commit }}
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          VERSION: ${{ inputs.version }}
         run: |
           node scripts/generate-changelog.ts \
             --notes /tmp/release-notes.md \
-            --version "${{ inputs.version }}"
+            --version "$VERSION"
 
       - name: Commit and push
         if: ${{ !inputs.skip_commit }}
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           git add package.json packaging/flatpak/metainfo.xml packaging/resources/debian/changelog packaging/resources/rpm.changelog
-          git commit -m "chore: bump version to ${{ inputs.version }}" -m "[skip ci]"
+          git commit -m "chore: bump version to ${VERSION}" -m "[skip ci]"
           git push origin main
 
       - name: Capture commit SHA
@@ -145,7 +164,7 @@ jobs:
           - xcode-27
           - windows-latest
           - windows-11-arm
-    uses: ./.github/workflows/build.yml
+    uses: $/.github/workflows/build.yml
     with:
       runner: ${{ matrix.runner }}
       ref: ${{ needs.prepare.outputs.commit-sha }}
@@ -160,14 +179,14 @@ jobs:
 
     steps:
       - name: Checkout for git context
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.prepare.outputs.commit-sha }}
           persist-credentials: false
 
       - name: Create app token
         id: app
-        uses: ./.github/actions/create-app-token
+        uses: $/.github/actions/create-app-token
         with:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -175,7 +194,7 @@ jobs:
           discussions: ${{ inputs.discussion_category != '' && 'write' || '' }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: artifacts
           merge-multiple: false
@@ -205,17 +224,25 @@ jobs:
       - name: Upload assets to release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
         run: |
-          gh release upload "v${{ inputs.version }}" release-files/*
+          gh release upload "v${VERSION}" release-files/*
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          PRE_RELEASE: ${{ inputs.pre_release }}
+          DISCUSSION_CATEGORY: ${{ inputs.discussion_category }}
         run: |
-          gh release edit "v${{ inputs.version }}" \
-            --draft=false \
-            ${{ inputs.pre_release && '--prerelease' || '' }} \
-            ${{ inputs.discussion_category && format('--discussion-category "{0}"', inputs.discussion_category) || '' }}
+          args=(--draft=false)
+          if [ "$PRE_RELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          if [ -n "$DISCUSSION_CATEGORY" ]; then
+            args+=(--discussion-category "$DISCUSSION_CATEGORY")
+          fi
+          gh release edit "v${VERSION}" "${args[@]}"
 
       - name: Trigger Flathub publish workflow
         continue-on-error: true
@@ -232,13 +259,13 @@ jobs:
       contents: read
     steps:
       - name: Checkout (bootstrap)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Create app token
         id: app
-        uses: ./.github/actions/create-app-token
+        uses: $/.github/actions/create-app-token
         with:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -247,8 +274,9 @@ jobs:
       - name: Delete draft release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
         run: |
-          if gh release view "v${{ inputs.version }}" --json isDraft -q '.isDraft' 2>/dev/null | grep -q true; then
-            echo "Deleting draft release v${{ inputs.version }}"
-            gh release delete "v${{ inputs.version }}" --yes
+          if gh release view "v${VERSION}" --json isDraft -q '.isDraft' 2>/dev/null | grep -q true; then
+            echo "Deleting draft release v${VERSION}"
+            gh release delete "v${VERSION}" --yes
           fi

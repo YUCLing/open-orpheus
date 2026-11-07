@@ -21,9 +21,9 @@ jobs:
       FILTER_FILE: packaging/resources/icu-filters.json
 
     steps:
-      # Bootstrap checkout: makes the local composite action available.
+      # Bootstrap checkout: the steps below run against this working tree.
       - name: Checkout (bootstrap)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           fetch-depth: 0
@@ -31,7 +31,7 @@ jobs:
 
       - name: Create app token
         id: app
-        uses: ./.github/actions/create-app-token
+        uses: $/.github/actions/create-app-token
         with:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -39,28 +39,34 @@ jobs:
 
       # Re-checkout so git push authenticates as the app.
       - name: Checkout main
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
+          # Explicit: the app token below is used by `git push`, so the
+          # credential must stay configured.
+          persist-credentials: true
 
       # A manual dispatch always rebuilds. A push rebuilds when either the
       # Electron version in package.json changes (which can move the ICU
       # version Electron expects) or the ICU filter file changes.
       - name: Check whether inputs changed
         id: inputs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "Manual dispatch — rebuilding."
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "force=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          before="${{ github.event.before }}"
+          before="$BEFORE"
           if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
             echo "No previous revision to compare against; skipping."
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -102,11 +108,11 @@ jobs:
 
       - name: Setup pnpm
         if: steps.inputs.outputs.changed == 'true'
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
 
       - name: Setup Node.js
         if: steps.inputs.outputs.changed == 'true'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: pnpm
@@ -132,16 +138,20 @@ jobs:
       - name: Decide whether to rebuild
         id: decide
         if: steps.inputs.outputs.changed == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE: ${{ steps.inputs.outputs.force }}
+          ELECTRON_DAT: ${{ steps.electron.outputs.dat }}
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "Manual dispatch — rebuilding."
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [ "${{ steps.inputs.outputs.force }}" = "true" ]; then
+          if [ "$FORCE" = "true" ]; then
             echo "ICU filter file changed; rebuilding."
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -153,7 +163,7 @@ jobs:
             exit 0
           fi
 
-          required=$(node scripts/icu-data.ts version --input "${{ steps.electron.outputs.dat }}")
+          required=$(node scripts/icu-data.ts version --input "$ELECTRON_DAT")
           committed=$(node scripts/icu-data.ts version --input "$OUTPUT_DAT")
           if [ "$required" = "$committed" ]; then
             echo "ICU data version unchanged ($committed); skipping rebuild."
@@ -165,9 +175,11 @@ jobs:
 
       - name: Build icudtl.dat
         if: steps.decide.outputs.rebuild == 'true'
+        env:
+          ELECTRON_DAT: ${{ steps.electron.outputs.dat }}
         run: |
           node scripts/icu-data.ts build \
-            --input "${{ steps.electron.outputs.dat }}" \
+            --input "$ELECTRON_DAT" \
             --filter "$FILTER_FILE" \
             --output "$OUTPUT_DAT"
 

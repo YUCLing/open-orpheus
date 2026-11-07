@@ -14,7 +14,7 @@ permissions:
 jobs:
   changes:
     name: Detect relevant changes
-    uses: ./.github/workflows/changes.yml
+    uses: $/.github/workflows/changes.yml
 
   build:
     needs: changes
@@ -29,6 +29,6 @@ jobs:
           - windows-latest
           - windows-11-arm
 
-    uses: ./.github/workflows/build.yml
+    uses: $/.github/workflows/build.yml
     with:
       runner: ${{ matrix.runner }}
