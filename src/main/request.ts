@@ -6,6 +6,7 @@ import got, { type Agents, type Got } from "got";
 import { session } from "electron";
 
 import { getCookies, setCookie } from "./cookie";
+import { isNCMUrl, isSsoUrl } from "./util/url";
 
 export type ProxyTypes = "none" | "ie" | "http" | "socks4" | "socks5";
 
@@ -112,7 +113,7 @@ export function setupRequestInterceptors() {
     const url = new URL(details.url);
 
     // Generic Cookie Injection
-    if (url.protocol === "https:" && url.hostname.endsWith("music.163.com")) {
+    if (url.protocol === "https:" && isNCMUrl(url)) {
       const cookies = stringifyCookie(await getCookies("https://" + url.hostname));
       details.requestHeaders["Cookie"] = cookies;
     }
@@ -140,8 +141,7 @@ export function setupRequestInterceptors() {
     // SSO login: add SameSite=None; Secure
     // only iframe
     if (details.frame !== null && details.frame?.top !== details.frame) {
-      const host = new URL(details.url).hostname;
-      if (host.endsWith("music.163.com") || host.endsWith("qq.com") || host.endsWith("weibo.com")) {
+      if (isSsoUrl(details.url)) {
         const cookieKey = Object.keys(details.responseHeaders).find(
           (k) => k.toLowerCase() === "set-cookie"
         );

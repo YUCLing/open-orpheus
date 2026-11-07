@@ -85,11 +85,11 @@ function extractBullets(html: string): string[] {
     bullets.push(
       m[2]
         .replace(/<[^>]+>/g, "")
-        .replace(/&amp;/g, "&")
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, "&")
         .trim()
         .replace(/\s+/g, " ")
     );

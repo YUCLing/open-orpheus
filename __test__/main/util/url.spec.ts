@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isAppUrl, isNCMUrl } from "@main/util/url";
+import { isAppUrl, isNCMUrl, isSsoUrl } from "@main/util/url";
 
 describe("isNCMUrl", () => {
   it.each([
@@ -23,6 +23,32 @@ describe("isNCMUrl", () => {
     "not a url",
   ])("rejects %s", (url) => {
     expect(isNCMUrl(url)).toBe(false);
+  });
+});
+
+describe("isSsoUrl", () => {
+  it.each([
+    "https://music.163.com/",
+    "https://interfacepc.music.163.com/api/music/audio/match",
+    "https://qq.com/",
+    "https://y.qq.com/",
+    "https://weibo.com/",
+    "https://login.weibo.com/",
+  ])("accepts %s", (url) => {
+    expect(isSsoUrl(url)).toBe(true);
+    expect(isSsoUrl(new URL(url))).toBe(true);
+  });
+
+  it.each([
+    "https://evilmusic.163.com/",
+    "https://xqq.com/",
+    "https://notqq.com/",
+    "https://xweibo.com/",
+    "https://weibo.com.evil.example/",
+    "https://163.com/",
+    "not a url",
+  ])("rejects %s", (url) => {
+    expect(isSsoUrl(url)).toBe(false);
   });
 });
 
