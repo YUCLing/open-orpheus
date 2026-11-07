@@ -145,6 +145,19 @@ jobs:
           # native modules (E2E, bundle builds). OS/arch stay part of the key.
           cache-shared-key: native-modules
 
+      - name: Resolve Electron version
+        id: electron
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          # @electron/get stores the platform zip under env-paths('electron').cache,
+          # which both the pnpm postinstall and electron's lazy download use.
+          path: ${{ runner.os == 'Linux' && '~/.cache/electron' || runner.os == 'macOS' && '~/Library/Caches/electron' || '~/AppData/Local/electron/Cache' }}
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron.outputs.version }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
