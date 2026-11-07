@@ -12,13 +12,19 @@ on:
       build:
         description: Application bundle inputs changed
         value: ${{ jobs.changes.outputs.build }}
+      build_cross:
+        description: Inputs that need the cross-platform bundle matrix (packaging, makers, native modules) changed
+        value: ${{ jobs.changes.outputs.build_cross }}
       flathub:
         description: Flatpak manifest inputs (packaging, toolchains, lockfiles) changed
         value: ${{ jobs.changes.outputs.flathub }}
+      flathub_build:
+        description: Inputs that need a real Flatpak build (packaging, generator) changed
+        value: ${{ jobs.changes.outputs.flathub_build }}
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read # dorny/paths-filter lists the PR's changed files
 
 jobs:
   changes:
@@ -28,19 +34,22 @@ jobs:
       node: ${{ steps.filter.outputs.node }}
       rust: ${{ steps.filter.outputs.rust }}
       build: ${{ steps.filter.outputs.build }}
+      build_cross: ${{ steps.filter.outputs.build_cross }}
       flathub: ${{ steps.filter.outputs.flathub }}
+      flathub_build: ${{ steps.filter.outputs.flathub_build }}
 
     steps:
       - name: Checkout repository
         if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Detect changed files
         if: ${{ github.event_name != 'workflow_dispatch' }}
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           filters: |
             node:
@@ -100,6 +109,25 @@ jobs:
               - "src/**"
               - "gui/**"
               - "modules/**"
+              - "plugins/**"
+              - "scripts/**"
+              - "packaging/**"
+              - "patches/**"
+              - "assets/**"
+              - "LICENSE"
+              - "versions.json"
+            # The subset that can break a single platform's packaging: makers,
+            # native addons, assets, lockfiles. UI/logic-only PRs skip it.
+            build_cross:
+              - ".github/workflows/build.yml"
+              - "package.json"
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "forge.config.ts"
+              - "modules/**"
+              - "plugins/**"
               - "scripts/**"
               - "packaging/**"
               - "patches/**"
@@ -118,5 +146,14 @@ jobs:
               - "pnpm-workspace.yaml"
               - "Cargo.toml"
               - "Cargo.lock"
+              - "packaging/**"
+              - "scripts/build-flatpak-builder.ts"
+            # The subset that warrants the real sandbox build: dependency-only
+            # bumps still generate and lint the manifest, but skip the build.
+            flathub_build:
+              - ".github/workflows/changes.yml"
+              - ".github/workflows/test.yml"
+              - ".github/workflows/flathub.yml"
+              - ".github/flatpak-lint-exceptions.json"
               - "packaging/**"
               - "scripts/build-flatpak-builder.ts"

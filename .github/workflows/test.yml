@@ -9,12 +9,18 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read # dorny/paths-filter lists the PR's changed files
+
+concurrency:
+  # Superseded runs on the same PR are useless: cancel them. On main, queue
+  # instead, so a run that is already building can still save its caches.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
     name: Detect relevant changes
-    uses: ./.github/workflows/changes.yml
+    uses: $/.github/workflows/changes.yml
 
   # Linux only: the packaging snapshots embed POSIX path separators.
   test-node:
@@ -22,40 +28,75 @@ jobs:
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.node == 'true' }}
     runs-on: ubuntu-latest
+    environment:
+      name: codecov
+      deployment: false
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
+          # Share the cargo target directory with the other jobs that build the
+          # native modules (E2E, bundle builds). OS/arch stay part of the key.
+          cache-shared-key: native-modules
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install wasm-bindgen-cli
+      - name: Resolve wasm-bindgen-cli version
+        id: wasm-bindgen
         shell: bash
         run: |
           version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
-          cargo install "wasm-bindgen-cli@$version"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+          # Prebuilt on every platform these jobs use; keep the source build as
+          # the fallback so a missing asset never depends on cargo-binstall.
+          fallback: cargo-install
+
+      - name: Restore built native modules
+        id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # The .node addons and the wasm bundle are the only non-source
+          # artifacts of `build:modules`; the generated JS/d.ts shims are
+          # committed, so a checkout already restores them.
+          path: |
+            modules/*/*.node
+            modules/audio-effect/dist
+          # The lockfile is part of the key because the napi CLI and the
+          # cross toolchain that link the addons are pinned there: bumping
+          # either must invalidate the cached binaries.
+          # No restore-keys: only an exact hit may skip the build, otherwise a
+          # partial restore would silently leave addons missing.
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
 
       - name: Build native modules
+        if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
 
       - name: Run tests
@@ -63,7 +104,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           report_type: test_results
           flags: node
@@ -71,7 +112,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           flags: node
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -87,46 +128,122 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.node == 'true' || needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    environment:
+      name: codecov
+      deployment: false
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
+          # Share the cargo target directory with the other jobs that build the
+          # native modules (E2E, bundle builds). OS/arch stay part of the key.
+          cache-shared-key: native-modules
+
+      - name: Resolve Electron version
+        id: electron
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # @electron/get stores the platform zip under env-paths('electron').cache,
+          # which both the pnpm postinstall and electron's lazy download use.
+          path: ${{ runner.os == 'Linux' && '~/.cache/electron' || runner.os == 'macOS' && '~/Library/Caches/electron' || '~/AppData/Local/electron/Cache' }}
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron.outputs.version }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install wasm-bindgen-cli
+      - name: Resolve wasm-bindgen-cli version
+        id: wasm-bindgen
         shell: bash
         run: |
           version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
-          cargo install "wasm-bindgen-cli@$version"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+          # Prebuilt on every platform these jobs use; keep the source build as
+          # the fallback so a missing asset never depends on cargo-binstall.
+          fallback: cargo-install
 
       # Electron is Chromium, so Playwright can resolve the shared libraries it
       # links against (and Xvfb) to the runner's distro package names.
       - name: Install Electron runtime dependencies
         run: sudo env "PATH=$PATH" pnpm exec playwright install-deps chromium
 
+      - name: Restore built native modules
+        id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # The .node addons and the wasm bundle are the only non-source
+          # artifacts of `build:modules`; the generated JS/d.ts shims are
+          # committed, so a checkout already restores them.
+          path: |
+            modules/*/*.node
+            modules/audio-effect/dist
+          # The lockfile is part of the key because the napi CLI and the
+          # cross toolchain that link the addons are pinned there: bumping
+          # either must invalidate the cached binaries.
+          # No restore-keys: only an exact hit may skip the build, otherwise a
+          # partial restore would silently leave addons missing.
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+
       - name: Build native modules
+        if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
+
+      - name: Restore cached NetEase installer
+        id: installer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # The E2E download test streams this file from loopback instead of
+          # NetEase's CDN. Unlike the other caches this file has no producer
+          # job: the app downloads the installer into memory, so the cache has
+          # to be filled by the step below on the first (miss) run.
+          path: ${{ runner.temp }}/open-orpheus-package/installer.exe
+          key: package-installer-v1-${{ runner.os }}-${{ hashFiles('versions.json') }}
+
+      - name: Fetch NetEase installer
+        if: steps.installer.outputs.cache-hit != 'true'
+        env:
+          INSTALLER: ${{ runner.temp }}/open-orpheus-package/installer.exe
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$INSTALLER")"
+          url=$(node -p "require('./versions.json').downloadUrl")
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 5 \
+            --max-time 900 \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36" \
+            --output "$INSTALLER" "$url"
+          # A Windows PE of plausible size: never cache an error page or a
+          # truncated download, since the entry is shared with later runs.
+          test "$(head -c 2 "$INSTALLER")" = "MZ"
+          test "$(wc -c < "$INSTALLER")" -gt 50000000
 
       - name: Run E2E tests
         env:
@@ -134,6 +251,7 @@ jobs:
           # setuid, and unprivileged user namespaces are restricted) and Xvfb
           # has no GPU, so the tests launch Electron with these extra switches.
           OPEN_ORPHEUS_E2E_ELECTRON_ARGS: --no-sandbox --disable-gpu
+          OPEN_ORPHEUS_E2E_PACKAGE_FILE: ${{ runner.temp }}/open-orpheus-package/installer.exe
           PLAYWRIGHT_JUNIT_OUTPUT_DIR: test-results
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: junit.xml
         run: >-
@@ -142,7 +260,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           report_type: test_results
           files: test-results/junit.xml
@@ -158,29 +276,34 @@ jobs:
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
+    environment:
+      name: codecov
+      deployment: false
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           # cargo-llvm-cov needs llvm-cov/llvm-profdata from the toolchain.
           components: llvm-tools-preview
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: nextest@0.9.144
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
           tool: cargo-llvm-cov@0.9.1
 
@@ -192,7 +315,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           report_type: test_results
           files: target/nextest/ci/junit.xml
@@ -201,7 +324,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: lcov.info
           flags: rust
@@ -222,14 +345,33 @@ jobs:
       LINTER_SECCOMP_URL: https://raw.githubusercontent.com/flathub-infra/vorarbeiter/57e57bbb3d951c04cea355cb9335f5145d74704d/flatpak.seccomp.json
 
     steps:
+      # Dependency-only bumps still generate and lint the manifest, but the
+      # sandbox build (~6.4 min) only runs for packaging changes, on `main` or a
+      # manual dispatch, or when a PR carries the ci/full-flatpak-build label.
+      - name: Decide whether to run the full build
+        id: build
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PACKAGING_CHANGED: ${{ needs.changes.outputs.flathub_build }}
+          FULL_BUILD_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci/full-flatpak-build') }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$PACKAGING_CHANGED" = "true" ] || [ "$FULL_BUILD_LABEL" = "true" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
@@ -288,6 +430,7 @@ jobs:
             manifest io.github.yucling.open-orpheus.yaml
 
       - name: Set up Flatpak runtimes
+        if: steps.build.outputs.build == 'true'
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub \
@@ -296,6 +439,7 @@ jobs:
             org.freedesktop.Sdk.Extension.node24//26.08
 
       - name: Build the Flatpak
+        if: steps.build.outputs.build == 'true'
         working-directory: out/make/flatpak-builder
         run: |
           flatpak-builder --user --force-clean --repo=repo \
@@ -303,6 +447,7 @@ jobs:
             build-dir io.github.yucling.open-orpheus.yaml
 
       - name: Lint the built repository
+        if: steps.build.outputs.build == 'true'
         working-directory: out/make/flatpak-builder
         run: |
           mkdir -p tmp .local/state

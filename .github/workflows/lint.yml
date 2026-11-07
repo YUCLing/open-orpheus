@@ -9,12 +9,18 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read # dorny/paths-filter lists the PR's changed files
+
+concurrency:
+  # Superseded runs on the same PR are useless: cancel them. On main, queue
+  # instead, so a run that is already building can still save its caches.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
     name: Detect relevant changes
-    uses: ./.github/workflows/changes.yml
+    uses: $/.github/workflows/changes.yml
 
   lint-node:
     name: JS/TS Lint & Prettier
@@ -24,13 +30,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
@@ -40,10 +48,6 @@ jobs:
 
       - name: Check formatting
         run: pnpm format:check
-
-      - name: Build native modules
-        shell: bash
-        run: SKIP_IF_NO_SCRIPT=1 PREFER_SCRIPT=types pnpm build:modules
 
       - name: Run Oxlint
         run: pnpm lint:oxlint
@@ -66,14 +70,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           components: clippy,rustfmt

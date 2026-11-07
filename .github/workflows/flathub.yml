@@ -3,6 +3,16 @@ name: Publish to Flathub
 on:
   workflow_dispatch:
 
+# Least privilege by default; the publish job widens this for its own needs.
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize instead of cancel: these workflows push commits or publish, so an
+  # overlapping run would race the previous one's side effects.
+  group: flathub
+  cancel-in-progress: false
+
 env:
   FLATHUB_REPO: flathub/io.github.yucling.open-orpheus
   FLATHUB_BASE_BRANCH: master
@@ -16,15 +26,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
@@ -38,9 +49,12 @@ jobs:
 
       - name: Determine source tag and compute SHA256
         id: source
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          TAG="v${{ steps.pkg.outputs.version }}"
-          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          TAG="v${VERSION}"
+          URL="https://github.com/${REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
           SHA256=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
           echo "flatpak_source=${URL}+${SHA256}" >> "$GITHUB_OUTPUT"
 
@@ -71,7 +85,7 @@ jobs:
         run: node scripts/build-flatpak-builder.ts
 
       - name: Upload manifest artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: flatpak-builder
           path: out/make/flatpak-builder/
@@ -80,24 +94,26 @@ jobs:
     name: Create Flathub update PR
     needs: build-manifest
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
+    environment:
+      name: flathub
+      deployment: false
 
     steps:
       - name: Download manifest artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: flatpak-builder
           path: flatpak-builder
 
       - name: Checkout Flathub repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.FLATHUB_REPO }}
           ref: ${{ env.FLATHUB_BASE_BRANCH }}
           token: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
           path: flathub-repo
+          # Pushed with an explicit token URL below; keep it out of .git/config.
+          persist-credentials: false
 
       - name: Copy generated files into Flathub repo
         run: |
@@ -105,19 +121,49 @@ jobs:
           cp -r flatpak-builder/. flathub-repo/
 
       - name: Create pull request in Flathub repository
-        uses: peter-evans/create-pull-request@v8
-        with:
-          token: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
-          path: flathub-repo
-          branch: update/v${{ needs.build-manifest.outputs.version }}
-          base: ${{ env.FLATHUB_BASE_BRANCH }}
-          commit-message: Open Orpheus v${{ needs.build-manifest.outputs.version }}
-          title: Open Orpheus v${{ needs.build-manifest.outputs.version }}
-          body: |
-            Automated Flathub manifest update for Open Orpheus v${{ needs.build-manifest.outputs.version }}.
+        working-directory: flathub-repo
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
+          REPO: ${{ env.FLATHUB_REPO }}
+          BASE: ${{ env.FLATHUB_BASE_BRANCH }}
+          VERSION: ${{ needs.build-manifest.outputs.version }}
+          BRANCH: update/v${{ needs.build-manifest.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Commit as the same bot identity the previous action used.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-            Source workflow run:
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          assignees: YUCLing
-          delete-branch: false
+          git add --all
+          if git diff --cached --quiet; then
+            echo "No manifest changes for v${VERSION}; nothing to publish."
+            exit 0
+          fi
+
+          git commit --message "Open Orpheus v${VERSION}"
+
+          # No persisted credentials: push with the app token in the URL. The
+          # branch is generated, so a re-run must be able to replace the commit
+          # a previous run pushed. Lease on the value fetched a moment earlier,
+          # so a concurrent push fails the job instead of being clobbered.
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          branch_ref="refs/heads/${BRANCH}"
+          if git fetch --quiet "$remote" "+${branch_ref}:refs/remotes/update-target"; then
+            git push --force-with-lease="${branch_ref}:$(git rev-parse refs/remotes/update-target)" \
+              "$remote" "HEAD:${branch_ref}"
+          else
+            git push "$remote" "HEAD:${branch_ref}"
+          fi
+
+          body=$(printf 'Automated Flathub manifest update for Open Orpheus v%s.\n\nSource workflow run:\n%s' \
+            "$VERSION" "$RUN_URL")
+          existing=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$REPO" \
+              --title "Open Orpheus v${VERSION}" --body "$body"
+          else
+            gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" \
+              --title "Open Orpheus v${VERSION}" --body "$body" --assignee YUCLing
+          fi

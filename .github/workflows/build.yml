@@ -13,6 +13,9 @@ on:
         type: string
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build on ${{ inputs.runner }}
@@ -20,28 +23,32 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
 
       - name: Resolve pinned Rust version
         id: toolchain
-        uses: ./.github/actions/toolchain
+        uses: $/.github/actions/toolchain
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v2
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: ${{ steps.toolchain.outputs.rust }}
           target: wasm32-unknown-unknown
+          # Share the cargo target directory with the other jobs that build the
+          # native modules (Vitest, E2E). OS/arch stay part of the key.
+          cache-shared-key: native-modules
           # v2 turns `build.warnings` into "deny", which fails a crate on any
           # lint warning. The napi-rs cross toolchain's ld.bfd emits a benign
           # "unsupported GNU_PROPERTY_TYPE (5)" message for every aarch64 rlib
@@ -50,12 +57,37 @@ jobs:
           # exactly that reason. Keep the v1 behaviour (warn, don't fail).
           build-warnings: warn
 
+      - name: Resolve Electron version
+        id: electron
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # @electron/get stores the platform zip under env-paths('electron').cache,
+          # which both the pnpm postinstall and electron's lazy download use.
+          path: ${{ runner.os == 'Linux' && '~/.cache/electron' || runner.os == 'macOS' && '~/Library/Caches/electron' || '~/AppData/Local/electron/Cache' }}
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.electron.outputs.version }}
+
       - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve wasm-bindgen-cli version
+        id: wasm-bindgen
         shell: bash
         run: |
-          pnpm install --frozen-lockfile
           version=$(awk '/^wasm-bindgen =/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
-          cargo install "wasm-bindgen-cli@$version"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
+          # wasm-bindgen ships no prebuilt binary for aarch64-pc-windows-msvc
+          # (windows-11-arm), so build from source there rather than pulling in
+          # cargo-binstall just to reach the same fallback.
+          fallback: cargo-install
 
       - name: Install system and packaging dependencies
         if: runner.os == 'Linux'
@@ -67,7 +99,25 @@ jobs:
         if: runner.os == 'Linux'
         run: appstreamcli validate packaging/flatpak/metainfo.xml
 
+      - name: Restore built native modules
+        id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # The .node addons and the wasm bundle are the only non-source
+          # artifacts of `build:modules`; the generated JS/d.ts shims are
+          # committed, so a checkout already restores them.
+          path: |
+            modules/*/*.node
+            modules/audio-effect/dist
+          # The lockfile is part of the key because the napi CLI and the
+          # cross toolchain that link the addons are pinned there: bumping
+          # either must invalidate the cached binaries.
+          # No restore-keys: only an exact hit may skip the build, otherwise a
+          # partial restore would silently leave addons missing.
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+
       - name: Build native modules
+        if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
 
       - name: Set up Flatpak runtimes
@@ -82,49 +132,49 @@ jobs:
           EXTRACT_LICENSES_TO: out/license
 
       - name: Upload licenses
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: licenses-${{ inputs.runner }}
           path: out/license/**
           if-no-files-found: ignore
 
       - name: Upload flatpak
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: flatpak-${{ inputs.runner }}
           path: out/make/flatpak/**
           if-no-files-found: ignore
 
       - name: Upload deb
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deb-${{ inputs.runner }}
           path: out/make/deb/**
           if-no-files-found: ignore
 
       - name: Upload rpm
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rpm-${{ inputs.runner }}
           path: out/make/rpm/**
           if-no-files-found: ignore
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: AppImage-${{ inputs.runner }}
           path: out/make/AppImage/**
           if-no-files-found: ignore
 
       - name: Upload squirrel
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: squirrel-${{ inputs.runner }}
           path: out/make/squirrel.windows/**
           if-no-files-found: ignore
 
       - name: Upload zip
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: zip-${{ inputs.runner }}
           path: out/make/zip/**
