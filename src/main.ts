@@ -37,6 +37,7 @@ import { toError } from "@shared/util";
 import { installLifecycle, setStartupTask } from "./main/lifecycle";
 import { checkEnvFlagPresent } from "./main/util/env";
 import { isFileNotFound } from "./main/util/fs";
+import { isNCMUrl } from "./main/util/url";
 import { PackageDownloadReason } from "@shared/types/package-download";
 
 import type WebPack from "./main/packs/WebPack";
@@ -290,7 +291,7 @@ app.on("ready", async () => {
           if (frame.isDestroyed()) return;
           const url = new URL(frame.url);
           // We want only secure, trusted pages
-          if (url.protocol === "https:" || url.hostname.endsWith("music.163.com"))
+          if (url.protocol === "https:" || isNCMUrl(url))
             void frame.executeJavaScript("window.channel = window.channel ?? {};");
         });
       });
