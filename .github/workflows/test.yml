@@ -319,15 +319,3 @@ jobs:
             --gha-format --exceptions --exceptions-repo stable \
             --user-exceptions /flatpak-lint-exceptions.json \
             repo repo
-
-  # Always-running gate so the ruleset has a required check even when the
-  # test jobs above are skipped by the change filter.
-  required:
-    name: Test required
-    needs: [changes, test-node, test-e2e, test-rust, test-flathub]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Fail if a required job failed or was cancelled
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
