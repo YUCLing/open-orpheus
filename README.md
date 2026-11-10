@@ -124,6 +124,11 @@ Open Orpheus 在首次启动时如果检测到资源缺失，会自动从网易�
 - [D-Bus 服务文档](./docs/DBUS_SERVICES.md)
 - [日志配置文档](./docs/LOGGING.md)
 
+### Linux 桌面集成
+
+- **Discord 听歌状态**：在「管理 Open Orpheus → Discord 听歌状态」中填入自己的 Discord Application ID 并开启分享。使用与 Open Orpheus 同一用户会话的 Discord 桌面客户端。
+- **Dux Shell 歌词**：安装 [Open Orpheus 歌词源插件](./integrations/dux-shell-lyrics)，即可在 Dux Shell 自带的媒体界面中使用。
+
 ## 免责声明
 
 Open Orpheus 是一个以**互操作性**为目的的独立开源项目，与网易公司没有任何关联、授权或认可关系。

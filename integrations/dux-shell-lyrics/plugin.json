@@ -1,0 +1,14 @@
+{
+  "id": "openOrpheusLyrics",
+  "name": "Open Orpheus Lyrics",
+  "description": "Read synchronized lyrics from Open Orpheus for the built-in DMS media player.",
+  "version": "0.1.0",
+  "author": "Open Orpheus Lyrics contributors",
+  "type": "lyrics",
+  "requires_dms": ">=2.1.2",
+  "lyrics": {
+    "command": "./fetch.py",
+    "name": "Open Orpheus",
+    "url": "https://github.com/YUCLing/open-orpheus"
+  }
+}
