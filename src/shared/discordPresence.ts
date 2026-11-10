@@ -1,6 +1,5 @@
 export interface DiscordPresenceSettings {
   enabled: boolean;
-  applicationId: string;
 }
 
 export function isDiscordPresenceSupported(): boolean {

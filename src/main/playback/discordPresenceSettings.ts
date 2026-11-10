@@ -1,14 +1,11 @@
-import {
-  isDiscordApplicationId,
-  isDiscordPresenceSupported,
-  type DiscordPresenceSettings,
-} from "@shared/discordPresence";
+import { isDiscordPresenceSupported, type DiscordPresenceSettings } from "@shared/discordPresence";
 import { registerShutdownTask } from "../lifecycle";
 import { kv } from "../settings";
 import type PlaybackController from "./PlaybackController";
 import DiscordPresence from "./adapters/DiscordPresence";
 
 const settingsKey = "discordPresence";
+const DISCORD_APPLICATION_ID = "1569539057950658691";
 let presence: DiscordPresence | undefined;
 
 function parseSettings(value: unknown): DiscordPresenceSettings | null {
@@ -16,30 +13,24 @@ function parseSettings(value: unknown): DiscordPresenceSettings | null {
     typeof value !== "object" ||
     value === null ||
     !("enabled" in value) ||
-    typeof value.enabled !== "boolean" ||
-    !("applicationId" in value) ||
-    typeof value.applicationId !== "string"
+    typeof value.enabled !== "boolean"
   ) {
     return null;
   }
 
-  const applicationId = value.applicationId.trim();
-  if ((value.enabled || applicationId !== "") && !isDiscordApplicationId(applicationId)) {
-    return null;
-  }
-  return { enabled: value.enabled, applicationId };
+  return { enabled: value.enabled };
 }
 
 export async function getDiscordPresenceSettings(): Promise<DiscordPresenceSettings> {
   const value = isDiscordPresenceSupported() ? await kv.get(settingsKey) : undefined;
-  return parseSettings(value) ?? { enabled: false, applicationId: "" };
+  return parseSettings(value) ?? { enabled: false };
 }
 
 export async function setDiscordPresenceSettings(value: unknown): Promise<boolean> {
   if (!isDiscordPresenceSupported()) return false;
   const settings = parseSettings(value);
   if (!settings || !(await kv.set(settingsKey, settings))) return false;
-  presence?.configure(settings.enabled, settings.applicationId);
+  presence?.configure(settings.enabled, DISCORD_APPLICATION_ID);
   return true;
 }
 
@@ -55,5 +46,5 @@ export async function createDiscordPresence(playback: PlaybackController): Promi
       return adapter.dispose();
     },
   });
-  adapter.configure(settings.enabled, settings.applicationId);
+  adapter.configure(settings.enabled, DISCORD_APPLICATION_ID);
 }
