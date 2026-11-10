@@ -6,6 +6,7 @@ import { isAbsolute, join } from "node:path";
 const HEADER_SIZE = 8;
 const MAX_PAYLOAD_SIZE = 64 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 1000;
+const ACTIVITY_TIMEOUT_MS = 5000;
 const RECONNECT_DELAY_MS = 5000;
 const CLOSE_TIMEOUT_MS = 250;
 
@@ -33,7 +34,11 @@ export interface DiscordIpcOptions {
 
 function socketPaths(): string[] {
   const { XDG_RUNTIME_DIR, TMPDIR, TMP, TEMP } = process.env;
-  const directories = new Set([XDG_RUNTIME_DIR, TMPDIR, TMP, TEMP, "/tmp"]);
+  const flatpakDiscordDir =
+    XDG_RUNTIME_DIR && isAbsolute(XDG_RUNTIME_DIR)
+      ? join(XDG_RUNTIME_DIR, "app", "com.discordapp.Discord")
+      : undefined;
+  const directories = new Set([XDG_RUNTIME_DIR, flatpakDiscordDir, TMPDIR, TMP, TEMP, "/tmp"]);
   return [...directories].flatMap((directory) =>
     directory && isAbsolute(directory)
       ? Array.from({ length: 10 }, (_, index) => join(directory, `discord-ipc-${index}`))
@@ -67,8 +72,11 @@ export default class DiscordIpc {
   private readonly retryDelay: number;
   private socket: Socket | null = null;
   private ready = false;
-  private published: string | null = null;
-  private pendingActivity: { nonce: string; operation: "publish" | "clear" } | null = null;
+  private desiredActivity: DiscordActivity | null = null;
+  // 回执超时后无法确定 Discord 保留了哪次活动，下一次需要重新同步。
+  private published: string | null | undefined = null;
+  private pendingActivity: { nonce: string; value: string | null } | null = null;
+  private activityTimeout: ReturnType<typeof setTimeout> | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
@@ -83,17 +91,29 @@ export default class DiscordIpc {
 
   refresh(): void {
     if (this.closed) return;
-    const activity = this.activity();
-    if (this.ready && this.socket && !this.socket.destroyed) {
+    this.desiredActivity = this.activity();
+    this.flush();
+  }
+
+  private flush(): void {
+    if (this.closed) return;
+    const activity = this.desiredActivity;
+    const socket = this.socket;
+    if (this.ready && socket && !socket.destroyed) {
+      if (this.pendingActivity || this.retry) return;
       const next = activity === null ? null : JSON.stringify(activity);
       if (next !== this.published) {
-        this.socket.write(this.activityFrame(activity));
-        this.published = next;
+        socket.write(this.activityFrame(activity, next));
+        this.activityTimeout = setTimeout(() => {
+          this.clearPendingActivity();
+          this.published = undefined;
+          this.scheduleRetry();
+        }, ACTIVITY_TIMEOUT_MS).unref();
       }
     } else if (activity === null) {
       this.cancelRetry();
-      this.socket?.destroy();
-    } else if (!this.socket && !this.retry) {
+      socket?.destroy();
+    } else if (!socket && !this.retry) {
       this.connect(0);
     }
   }
@@ -101,6 +121,8 @@ export default class DiscordIpc {
   close(): Promise<void> {
     this.closed = true;
     this.cancelRetry();
+    const pending = this.pendingActivity;
+    this.clearPendingActivity();
     const socket = this.socket;
     if (!socket || socket.destroyed) return Promise.resolve();
 
@@ -110,19 +132,20 @@ export default class DiscordIpc {
         clearTimeout(timeout);
         resolve();
       });
-      if (this.ready && this.published !== null) {
-        socket.end(this.activityFrame(null));
-      } else if (this.pendingActivity?.operation === "clear") {
+      if (pending?.value === null) {
+        this.pendingActivity = pending;
         socket.end();
+      } else if (this.ready && (this.published !== null || pending !== null)) {
+        socket.end(this.activityFrame(null, null));
       } else {
         socket.destroy();
       }
     });
   }
 
-  private activityFrame(activity: DiscordActivity | null): Buffer {
+  private activityFrame(activity: DiscordActivity | null, value: string | null): Buffer {
     const nonce = randomUUID();
-    this.pendingActivity = { nonce, operation: activity === null ? "clear" : "publish" };
+    this.pendingActivity = { nonce, value };
     return jsonFrame(Opcode.Frame, {
       cmd: "SET_ACTIVITY",
       nonce,
@@ -178,12 +201,16 @@ export default class DiscordIpc {
               this.ready = true;
               this.refresh();
             } else if (reply?.cmd === "SET_ACTIVITY" && request && reply.nonce === request.nonce) {
-              this.pendingActivity = null;
-              const { operation } = request;
+              const operation = request.value === null ? "clear" : "publish";
               if (reply.evt === null || reply.evt === undefined) {
+                this.clearPendingActivity();
+                this.published = request.value;
                 LOGGER.debug({ operation }, "Discord acknowledged a Rich Presence update");
+                this.flush();
               } else if (reply.evt === "ERROR") {
+                this.clearPendingActivity();
                 LOGGER.debug({ operation }, "Discord rejected a Rich Presence update");
+                this.scheduleRetry();
               }
             } else if (reply?.evt === "ERROR" && !this.ready) {
               socket.destroy();
@@ -201,8 +228,8 @@ export default class DiscordIpc {
       this.socket = null;
       this.ready = false;
       this.published = null;
-      this.pendingActivity = null;
-      if (this.closed || this.activity() === null) return;
+      this.clearPendingActivity();
+      if (this.closed || this.desiredActivity === null) return;
       if (!wasReady && index + 1 < this.paths.length) {
         this.connect(index + 1);
       } else {
@@ -212,10 +239,17 @@ export default class DiscordIpc {
   }
 
   private scheduleRetry(): void {
+    if (this.closed || this.retry) return;
     this.retry = setTimeout(() => {
       this.retry = null;
-      this.refresh();
+      this.flush();
     }, this.retryDelay).unref();
+  }
+
+  private clearPendingActivity(): void {
+    this.pendingActivity = null;
+    if (this.activityTimeout !== null) clearTimeout(this.activityTimeout);
+    this.activityTimeout = null;
   }
 
   private cancelRetry(): void {

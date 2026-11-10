@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -28,9 +28,11 @@ function sendFrame(opcode: number, payload: object): Buffer {
   return Buffer.concat([header, json]);
 }
 
-async function mockDiscord() {
+async function mockDiscord(subdir?: string) {
   const dir = await mkdtemp(join(tmpdir(), "oo-discord-"));
-  const path = join(dir, "discord-ipc-0");
+  const socketDir = subdir ? join(dir, subdir) : dir;
+  if (subdir) await mkdir(socketDir, { recursive: true });
+  const path = join(socketDir, "discord-ipc-0");
   const sockets = new Set<Socket>();
   const messages: Array<{ socket: Socket; opcode: number; payload: Message }> = [];
   const server = createServer((socket) => {
@@ -53,6 +55,7 @@ async function mockDiscord() {
   await once(server, "listening");
 
   return {
+    dir,
     path,
     messages,
     activities: () => messages.filter(({ payload }) => payload.cmd === "SET_ACTIVITY"),
@@ -65,6 +68,13 @@ async function mockDiscord() {
       await rm(dir, { recursive: true, force: true });
     },
   };
+}
+
+function replyToActivity(
+  { socket, payload }: { socket: Socket; payload: Message },
+  evt: "ERROR" | null = null
+): void {
+  socket.write(sendFrame(1, { cmd: "SET_ACTIVITY", evt, nonce: payload.nonce }));
 }
 
 const waitFor = (assertion: () => void) => vi.waitFor(assertion, { interval: 5, timeout: 1000 });
@@ -84,6 +94,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
   afterEach(async () => {
     await presence.dispose();
     await discord.close();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -155,6 +166,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
     expect(discord.activities()[1].payload.args?.activity).toMatchObject({
       timestamps: { start: now - 45, end: now + 135 },
     });
+    replyToActivity(discord.activities()[1]);
 
     player.applyPlaybackChange(PlaybackChange.Paused);
     await waitFor(() => expect(discord.activities()).toHaveLength(3));
@@ -176,6 +188,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
       assets: { large_text: "Open Orpheus" },
     });
     expect(discord.activities()[3].payload.args?.activity).not.toHaveProperty("timestamps");
+    replyToActivity(discord.activities()[3]);
 
     player.applyDuration(60);
     player.applyPosition(2);
@@ -183,10 +196,58 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
     expect(discord.activities()[4].payload.args?.activity).toMatchObject({
       timestamps: { start: now - 2, end: now + 58 },
     });
+    replyToActivity(discord.activities()[4]);
 
     player.setTrack({ id: "3", title: "file:///home/example/music.flac", artist: "", album: "" });
     await waitFor(() => expect(discord.activities()).toHaveLength(6));
     expect(discord.activities()[5].payload.args?.activity).toBeNull();
+  });
+
+  it("发送被拒绝后只重试最新曲目，暂停清除被拒绝时重试清除", async () => {
+    player.setTrack({ id: "1", title: "第一首", artist: "", album: "" });
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true, applicationId);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    const { socket } = discord.handshakes()[0];
+    socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY" }));
+    await waitFor(() => expect(discord.activities()).toHaveLength(1));
+    replyToActivity(discord.activities()[0]);
+
+    player.setTrack({ id: "2", title: "第二首", artist: "", album: "" });
+    await waitFor(() => expect(discord.activities()).toHaveLength(2));
+    player.setTrack({ id: "3", title: "第三首", artist: "", album: "" });
+    replyToActivity(discord.activities()[1], "ERROR");
+    await waitFor(() => expect(discord.activities()).toHaveLength(3));
+    expect(discord.activities()[2].payload.args?.activity).toMatchObject({ details: "第三首" });
+    replyToActivity(discord.activities()[2]);
+
+    player.applyPlaybackChange(PlaybackChange.Paused);
+    await waitFor(() => expect(discord.activities()).toHaveLength(4));
+    expect(discord.activities()[3].payload.args?.activity).toBeNull();
+    replyToActivity(discord.activities()[3], "ERROR");
+    await waitFor(() => expect(discord.activities()).toHaveLength(5));
+    expect(discord.activities()[4].payload.args?.activity).toBeNull();
+    replyToActivity(discord.activities()[4]);
+  });
+
+  it("发布回执超时后可以清除可能已显示的活动", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      player.setTrack({ id: "1", title: "第一首", artist: "", album: "" });
+      player.applyPlaybackChange(PlaybackChange.Playing);
+      presence.configure(true, applicationId);
+      await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+      discord.handshakes()[0].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY" }));
+      await waitFor(() => expect(discord.activities()).toHaveLength(1));
+
+      player.applyPlaybackChange(PlaybackChange.Paused);
+      await vi.advanceTimersByTimeAsync(6000);
+      await waitFor(() => expect(discord.activities()).toHaveLength(2));
+      expect(discord.activities()[1].payload.args?.activity).toBeNull();
+      replyToActivity(discord.activities()[1]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("在 Discord 重启后发送当前曲目，更换应用或关闭功能时清除活动", async () => {
@@ -247,6 +308,27 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
       expect(other.handshakes()).toHaveLength(0);
     } finally {
       await other.close();
+    }
+  });
+
+  it("跳过运行目录中的链接，直接连接 Flatpak Discord 的 socket", async () => {
+    const flatpak = await mockDiscord(join("app", "com.discordapp.Discord"));
+    try {
+      await symlink(flatpak.path, join(flatpak.dir, "discord-ipc-0"));
+      vi.stubEnv("XDG_RUNTIME_DIR", flatpak.dir);
+      // 如果没找到 Flatpak 的 socket，连接也只会落到测试服务。
+      vi.stubEnv("TMPDIR", discord.dir);
+      await presence.dispose();
+      presence = new DiscordPresence(player);
+      player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
+      player.applyPlaybackChange(PlaybackChange.Playing);
+      presence.configure(true, applicationId);
+
+      await waitFor(() => expect(flatpak.handshakes()).toHaveLength(1));
+      expect(discord.handshakes()).toHaveLength(0);
+    } finally {
+      await presence.dispose();
+      await flatpak.close();
     }
   });
 });

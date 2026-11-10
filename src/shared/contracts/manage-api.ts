@@ -7,6 +7,7 @@ export type { CacheGroupStats, AllCacheStats };
 export interface ManageContract {
   platform: NodeJS.Platform;
   versions: NodeJS.ProcessVersions;
+  discordPresenceSupported: boolean;
 
   events: {
     setFont(callback: (font: string | null) => void): void;

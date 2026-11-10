@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn<(key: string) => Promise<unknown>>(),
@@ -28,7 +28,12 @@ const applicationId = "1234567890123456789";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv("FLATPAK_ID", undefined);
   mocks.dispose.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("Discord 听歌状态设置", () => {
@@ -40,6 +45,23 @@ describe("Discord 听歌状态设置", () => {
     const disabled = { enabled: false, applicationId: "" };
     await expect(getDiscordPresenceSettings()).resolves.toEqual(disabled);
     await expect(getDiscordPresenceSettings()).resolves.toEqual(disabled);
+  });
+
+  it.skipIf(process.platform !== "linux")("Flatpak 版忽略已启用的设置并拒绝启用", async () => {
+    vi.stubEnv("FLATPAK_ID", "io.github.yucling.open-orpheus");
+    const enabled = { enabled: true, applicationId };
+    mocks.get.mockResolvedValue(enabled);
+
+    await expect(getDiscordPresenceSettings()).resolves.toEqual({
+      enabled: false,
+      applicationId: "",
+    });
+    await expect(setDiscordPresenceSettings(enabled)).resolves.toBe(false);
+    await createDiscordPresence(new PlaybackController());
+
+    expect(mocks.set).not.toHaveBeenCalled();
+    expect(mocks.configure).not.toHaveBeenCalled();
+    expect(mocks.registerShutdownTask).not.toHaveBeenCalled();
   });
 
   it.skipIf(process.platform !== "linux")("仅在设置写入成功后启用，并在退出时释放", async () => {

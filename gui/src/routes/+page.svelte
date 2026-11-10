@@ -91,7 +91,7 @@
           component: Tray,
         }
       : undefined,
-    api.platform === "linux"
+    api.discordPresenceSupported === true
       ? {
           id: "discord-presence",
           name: "Discord 听歌状态",

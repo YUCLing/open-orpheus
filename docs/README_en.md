@@ -121,6 +121,10 @@ If the automatic download fails, you can manually copy both folders from your of
 - [D-Bus services](./DBUS_SERVICES_en.md)
 - [Logging configuration](./LOGGING.md)
 
+### Discord listening status
+
+With a native Linux installation of Open Orpheus, including AppImage, go to **Manage Open Orpheus → Discord listening status**, enter your Discord Application ID, and enable sharing. Keep the Discord desktop client running with activity sharing enabled. The Flathub build of Discord is also supported. The Flatpak build of Open Orpheus does not have access to the host Discord socket by default, so it does not offer this setting.
+
 ## Disclaimer
 
 Open Orpheus is an independent open-source project aimed at **interoperability**. It is not affiliated with, authorized by, or endorsed by NetEase in any way.

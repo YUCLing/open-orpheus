@@ -1,4 +1,8 @@
-import { isDiscordApplicationId, type DiscordPresenceSettings } from "@shared/discordPresence";
+import {
+  isDiscordApplicationId,
+  isDiscordPresenceSupported,
+  type DiscordPresenceSettings,
+} from "@shared/discordPresence";
 import { registerShutdownTask } from "../lifecycle";
 import { kv } from "../settings";
 import type PlaybackController from "./PlaybackController";
@@ -27,11 +31,12 @@ function parseSettings(value: unknown): DiscordPresenceSettings | null {
 }
 
 export async function getDiscordPresenceSettings(): Promise<DiscordPresenceSettings> {
-  return parseSettings(await kv.get(settingsKey)) ?? { enabled: false, applicationId: "" };
+  const value = isDiscordPresenceSupported() ? await kv.get(settingsKey) : undefined;
+  return parseSettings(value) ?? { enabled: false, applicationId: "" };
 }
 
 export async function setDiscordPresenceSettings(value: unknown): Promise<boolean> {
-  if (process.platform !== "linux") return false;
+  if (!isDiscordPresenceSupported()) return false;
   const settings = parseSettings(value);
   if (!settings || !(await kv.set(settingsKey, settings))) return false;
   presence?.configure(settings.enabled, settings.applicationId);
@@ -39,6 +44,7 @@ export async function setDiscordPresenceSettings(value: unknown): Promise<boolea
 }
 
 export async function createDiscordPresence(playback: PlaybackController): Promise<void> {
+  if (!isDiscordPresenceSupported()) return;
   const settings = await getDiscordPresenceSettings();
   const adapter = new DiscordPresence(playback);
   presence = adapter;
