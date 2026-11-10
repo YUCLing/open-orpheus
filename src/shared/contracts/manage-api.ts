@@ -1,5 +1,6 @@
 import type { UpdateInfo } from "@shared/types/update";
 import type { CacheGroupStats, AllCacheStats } from "@shared/types/manage";
+import type { DiscordPresenceSettings } from "@shared/discordPresence";
 
 export type { CacheGroupStats, AllCacheStats };
 
@@ -15,6 +16,10 @@ export interface ManageContract {
   checkUpdate(ignoreCache?: boolean): Promise<UpdateInfo | null>;
   openLogFolder(): Promise<void>;
 
+  discordPresence: {
+    get(): Promise<DiscordPresenceSettings>;
+    set(settings: DiscordPresenceSettings): Promise<boolean>;
+  };
   pack: {
     getWebPackCommitHash(): Promise<string>;
     redownloadPackage(): Promise<void>;
