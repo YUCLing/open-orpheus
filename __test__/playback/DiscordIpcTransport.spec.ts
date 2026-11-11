@@ -140,6 +140,23 @@ describe.runIf(process.platform !== "win32")("Discord IPC 传输边界", () => {
     expect(sockets[0].destroyed).toBe(true);
   });
 
+  it("仅过滤通过安全校验的候选，跳过已尝试地址后继续搜索", async () => {
+    candidates.set(`${runtime}/discord-ipc-0`, {});
+    candidates.set(`${runtime}/discord-ipc-1`, { kind: "symlink" });
+    candidates.set(`${runtime}/discord-ipc-2`, { uid: process.getuid!() + 1 });
+    candidates.set(`${runtime}/discord-ipc-3`, {});
+    const ipcPathFilter = vi.fn((path: string) => !path.endsWith("discord-ipc-0"));
+    const client = new RPCClient({ ipcPathFilter });
+
+    await client.transport.connect();
+
+    expect(attempted).toEqual([`${runtime}/discord-ipc-3`]);
+    expect(ipcPathFilter.mock.calls).toEqual([
+      [`${runtime}/discord-ipc-0`],
+      [`${runtime}/discord-ipc-3`],
+    ]);
+  });
+
   it.each(["TMP", "TEMP"])("拒绝相对目录，并搜索 %s 下的 snap socket", async (name) => {
     vi.stubEnv("XDG_RUNTIME_DIR", "relative/runtime");
     vi.stubEnv(name, "/rpc-test/fallback");

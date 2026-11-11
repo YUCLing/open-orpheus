@@ -75,21 +75,8 @@ export default class DiscordIpc {
     let client = this.client;
     try {
       if (!client) {
-        if (this.desiredActivity === null) return;
-        client = new RPCClient();
-        this.client = client;
-        this.published = null;
-        client.transport.on("error", () => LOGGER.debug("Discord IPC connection error"));
-        client.on(Events.Disconnected, () => {
-          if (this.client !== client) return;
-          this.client = null;
-          this.published = null;
-          this.scheduleRetry();
-        });
-        await client.login(
-          { clientId: DISCORD_APPLICATION_ID },
-          { signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(CONNECT_TIMEOUT_MS)]) }
-        );
+        client = await this.connect();
+        if (!client) return;
       }
 
       while (!this.closed && this.client === client) {
@@ -122,6 +109,49 @@ export default class DiscordIpc {
       }
       this.scheduleRetry();
     }
+  }
+
+  private async connect(): Promise<RPCClient | null> {
+    const attemptedPaths = new Set<string>();
+    while (!this.closed && this.desiredActivity !== null) {
+      const previousSize = attemptedPaths.size;
+      const client = new RPCClient({
+        ipcPathFilter: (path) => {
+          if (this.closed || this.desiredActivity === null || attemptedPaths.has(path))
+            return false;
+          attemptedPaths.add(path);
+          return true;
+        },
+      });
+      this.client = client;
+      this.published = null;
+      let connected = false;
+      client.transport.on("error", () => LOGGER.debug("Discord IPC connection error"));
+      client.on(Events.Disconnected, () => {
+        // 握手失败由本轮扫描继续选址，建立连接后才走普通重连。
+        if (!connected || this.client !== client) return;
+        this.client = null;
+        this.published = null;
+        this.scheduleRetry();
+      });
+      try {
+        await client.login(
+          { clientId: DISCORD_APPLICATION_ID },
+          { signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(CONNECT_TIMEOUT_MS)]) }
+        );
+        if (!client.ready) throw new Error("Discord disconnected during login");
+        connected = true;
+        return client;
+      } catch (error) {
+        if (this.client === client) this.client = null;
+        await client.transport
+          .close({ signal: AbortSignal.timeout(CLOSE_TIMEOUT_MS) })
+          .catch(() => {});
+        // 没有新候选意味着本轮已耗尽，由调用方安排退避。
+        if (attemptedPaths.size === previousSize) throw error;
+      }
+    }
+    return null;
   }
 
   private scheduleRetry(): void {
