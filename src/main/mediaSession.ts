@@ -76,12 +76,6 @@ export async function createMediaSession(): Promise<void> {
       // Constructing it registers a D-Bus name and throws when the session bus
       // is unavailable — `loadAdapter` degrades gracefully instead of aborting.
       adapter = await loadAdapter(() => import("./playback/adapters/MprisAdapter"), "MPRIS");
-      try {
-        const { createDiscordPresence } = await import("./playback/discordPresenceSettings");
-        await createDiscordPresence(playbackController);
-      } catch (err) {
-        LOGGER.warn({ err: toError(err) }, "Failed to initialize Discord Rich Presence");
-      }
       break;
     case "win32":
       // `@open-orpheus/system-win32` is a Windows-only native module, so it is
@@ -97,6 +91,13 @@ export async function createMediaSession(): Promise<void> {
       break;
     default:
       LOGGER.warn("Media session is not available on this platform.");
+  }
+
+  try {
+    const { initializeDiscordPresence } = await import("./playback/discordPresence");
+    await initializeDiscordPresence(playbackController);
+  } catch (err) {
+    LOGGER.warn({ err: toError(err) }, "Failed to initialize Discord Rich Presence");
   }
 
   LOGGER.info({ platform: os.platform() }, "Media session initialized");

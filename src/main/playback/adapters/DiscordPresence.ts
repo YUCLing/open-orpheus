@@ -1,5 +1,3 @@
-import { isDiscordApplicationId } from "@shared/discordPresence";
-
 import type PlaybackController from "../PlaybackController";
 import { PlaybackStatus, type TrackInfo } from "../types";
 import DiscordIpc, { type DiscordActivity, type DiscordIpcOptions } from "./DiscordIpc";
@@ -29,7 +27,7 @@ export default class DiscordPresence {
   private readonly unsubscribe: Array<() => void>;
   private positionTrack: TrackInfo | null;
   private advancing: boolean;
-  private applicationId = "";
+  private enabled = false;
   private ipc: DiscordIpc | null = null;
   private closing = Promise.resolve();
   private disposed = false;
@@ -68,27 +66,25 @@ export default class DiscordPresence {
     ];
   }
 
-  configure(enabled: boolean, applicationId: string): void {
+  configure(enabled: boolean): void {
     if (this.disposed) return;
-    const id = applicationId.trim();
-    const next = enabled && isDiscordApplicationId(id) ? id : "";
-    if (this.applicationId === next) return;
-    this.applicationId = next;
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
     const previous = this.ipc;
     this.ipc = null;
     if (previous) this.closing = previous.close();
 
-    // 同一进程的旧活动必须先清除，再用新 ID 发布，防止误清除新活动。
+    // 重新开启前先清除旧连接的活动，避免迟到的清除影响新活动。
     void this.closing.then(() => {
-      if (!next || this.applicationId !== next || this.ipc) return;
-      this.ipc = new DiscordIpc(next, () => this.activity(), this.ipcOptions);
+      if (!this.enabled || this.disposed || this.ipc) return;
+      this.ipc = new DiscordIpc(() => this.activity(), this.ipcOptions);
       this.ipc.refresh();
     });
   }
 
   dispose(): Promise<void> {
     for (const unsubscribe of this.unsubscribe) unsubscribe();
-    this.configure(false, "");
+    this.configure(false);
     this.disposed = true;
     return this.closing;
   }

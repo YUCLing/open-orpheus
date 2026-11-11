@@ -18,10 +18,6 @@ import registerAsProtocolClient, {
   unregisterAsProtocolClient,
 } from "../protocol";
 import { registerSettingsHandlers } from "../bridge/modules/settings";
-import {
-  getDiscordPresenceSettings,
-  setDiscordPresenceSettings,
-} from "../playback/discordPresenceSettings";
 import { font } from "../gui";
 import { BasicManagedWindow, ManagedWindow } from "../window";
 
@@ -54,10 +50,6 @@ class ManageWindow extends ManagedWindow {
       checkUpdate: async (event, ignoreCache = false) => await checkUpdate(ignoreCache),
       openLogFolder: async () => shell.showItemInFolder(log),
 
-      discordPresence: {
-        get: getDiscordPresenceSettings,
-        set: (_event, settings) => setDiscordPresenceSettings(settings),
-      },
       pack: {
         getWebPackCommitHash: async () => {
           return packManager.getPack<WebPack>("web").getCommitHash();

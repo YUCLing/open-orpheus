@@ -28,7 +28,7 @@ vi.mock("keyv", () => {
   }
   return {
     Keyv,
-    KeyvHooks: { BEFORE_SET: "before:set", AFTER_DELETE: "after:delete" },
+    KeyvHooks: { AFTER_SET_MANY: "after:setMany", AFTER_DELETE: "after:delete" },
   };
 });
 
@@ -121,28 +121,105 @@ describe("initialize", () => {
     ]);
   });
 
-  it("emits a change event before a set", async () => {
+  it("emits the original key and value only after a successful set", async () => {
     initialize();
     const seen = recordEvents();
+    const write = Promise.withResolvers<boolean>();
+    const value = { enabled: true };
+    hoisted.store.set.mockReturnValueOnce(write.promise);
 
-    hoisted.store.hooks.get("before:set")?.({ key: "proxy", value: "x" });
+    const operation = kv.set("discordPresence", value, 1500);
+    await flush();
+    expect(seen).toEqual([]);
+    expect(hoisted.store.set).toHaveBeenLastCalledWith("discordPresence", value, 1500);
+
+    write.resolve(true);
+    await expect(operation).resolves.toBe(true);
     await flush();
 
-    expect(seen).toEqual([{ event: "change", data: { key: "proxy", value: "x" } }]);
+    expect(seen).toEqual([{ event: "change", data: { key: "discordPresence", value } }]);
   });
 
-  it("emits one delete event per key", async () => {
+  it("does not emit a change event when set returns false", async () => {
+    initialize();
+    const seen = recordEvents();
+    hoisted.store.set.mockResolvedValueOnce(false);
+
+    await expect(kv.set("discordPresence", { enabled: true })).resolves.toBe(false);
+    await flush();
+
+    expect(seen).toEqual([]);
+  });
+
+  it("preserves set errors without emitting a change event", async () => {
+    initialize();
+    const seen = recordEvents();
+    const error = new Error("write failed");
+    hoisted.store.set.mockRejectedValueOnce(error);
+
+    await expect(kv.set("discordPresence", { enabled: true })).rejects.toBe(error);
+    await flush();
+
+    expect(seen).toEqual([]);
+  });
+
+  it("emits changes only for successful bulk writes with the original key and value", async () => {
+    initialize();
+    const seen = recordEvents();
+    const entries = [
+      { key: "discordPresence", value: { enabled: true } },
+      { key: "proxy", value: "failed" },
+      { key: "desktopLyrics.opacity", value: 0.5 },
+    ];
+
+    hoisted.store.hooks.get("after:setMany")?.({ entries, values: [true, false, true] });
+    hoisted.store.hooks.get("after:setMany")?.({ entries, values: [false, false, false] });
+    await flush();
+
+    expect(seen).toEqual([
+      { event: "change", data: entries[0] },
+      { event: "change", data: entries[2] },
+    ]);
+  });
+
+  it("emits one delete event per successfully deleted key", async () => {
     initialize();
     const seen = recordEvents();
 
-    hoisted.store.hooks.get("after:delete")?.({ key: ["a", "b"] });
-    hoisted.store.hooks.get("after:delete")?.({ key: "c" });
+    hoisted.store.hooks.get("after:delete")?.({ key: ["a", "b"], value: [true, true] });
+    hoisted.store.hooks.get("after:delete")?.({ key: "c", value: true });
     await flush();
 
     expect(seen.map(({ event, data }) => [event, data.key as string])).toEqual([
       ["delete", "a"],
       ["delete", "b"],
       ["delete", "c"],
+    ]);
+  });
+
+  it("does not emit a delete event when the stored value could not be deleted", async () => {
+    initialize();
+    const seen = recordEvents();
+
+    hoisted.store.hooks.get("after:delete")?.({ key: "discordPresence", value: false });
+    await flush();
+
+    expect(seen).toEqual([]);
+  });
+
+  it("emits deletes only for successful entries in a partially failed bulk deletion", async () => {
+    initialize();
+    const seen = recordEvents();
+
+    hoisted.store.hooks.get("after:delete")?.({
+      key: ["proxy", "discordPresence", "desktopLyrics.opacity"],
+      value: [true, false, true],
+    });
+    await flush();
+
+    expect(seen).toEqual([
+      { event: "delete", data: { key: "proxy" } },
+      { event: "delete", data: { key: "desktopLyrics.opacity" } },
     ]);
   });
 });

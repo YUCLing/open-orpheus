@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import DiscordPresence from "../../src/main/playback/adapters/DiscordPresence";
-import PlaybackController from "../../src/main/playback/PlaybackController";
-import { PlaybackChange } from "../../src/main/playback/types";
+import DiscordPresence from "@main/playback/adapters/DiscordPresence";
+import PlaybackController from "@main/playback/PlaybackController";
+import { PlaybackChange } from "@main/playback/types";
 
-const applicationId = "123456789012345678";
+const applicationId = "1569539057950658691";
 const now = 1_760_000_000;
+const temporaryRoot = tmpdir();
 
 interface Message {
   client_id?: string;
@@ -28,11 +29,11 @@ function sendFrame(opcode: number, payload: object): Buffer {
   return Buffer.concat([header, json]);
 }
 
-async function mockDiscord(subdir?: string) {
-  const dir = await mkdtemp(join(tmpdir(), "oo-discord-"));
+async function mockDiscord(subdir?: string, index = 0) {
+  const dir = await mkdtemp(join(temporaryRoot, "oo-discord-"));
   const socketDir = subdir ? join(dir, subdir) : dir;
   if (subdir) await mkdir(socketDir, { recursive: true });
-  const path = join(socketDir, "discord-ipc-0");
+  const path = join(socketDir, `discord-ipc-${index}`);
   const sockets = new Set<Socket>();
   const messages: Array<{ socket: Socket; opcode: number; payload: Message }> = [];
   const server = createServer((socket) => {
@@ -74,7 +75,14 @@ function replyToActivity(
   { socket, payload }: { socket: Socket; payload: Message },
   evt: "ERROR" | null = null
 ): void {
-  socket.write(sendFrame(1, { cmd: "SET_ACTIVITY", evt, nonce: payload.nonce }));
+  socket.write(
+    sendFrame(1, {
+      cmd: "SET_ACTIVITY",
+      evt,
+      nonce: payload.nonce,
+      data: evt === "ERROR" ? { code: 4000, message: "rejected" } : {},
+    })
+  );
 }
 
 const waitFor = (assertion: () => void) => vi.waitFor(assertion, { interval: 5, timeout: 1000 });
@@ -87,8 +95,10 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
   beforeEach(async () => {
     vi.spyOn(Date, "now").mockReturnValue(now * 1000);
     discord = await mockDiscord();
+    vi.stubEnv("XDG_RUNTIME_DIR", discord.dir);
+    vi.stubEnv("TMPDIR", discord.dir);
     player = new PlaybackController();
-    presence = new DiscordPresence(player, { paths: [discord.path], retryDelay: 15 });
+    presence = new DiscordPresence(player, { retryDelay: 15 });
   });
 
   afterEach(async () => {
@@ -111,19 +121,19 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
     player.applyDuration(180);
     player.applyPosition(15);
     player.applyPlaybackChange(PlaybackChange.Playing);
-    presence.configure(true, "invalid");
     await player.emit("statuschanged", player.snapshot.status);
     expect(discord.messages).toHaveLength(0);
 
-    presence.configure(true, applicationId);
+    presence.configure(true);
     await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
     const [{ socket, payload }] = discord.handshakes();
     expect(payload).toEqual({ v: 1, client_id: applicationId });
     expect(discord.activities()).toHaveLength(0);
 
-    const ready = sendFrame(1, { cmd: "DISPATCH", evt: "READY" });
+    const ready = sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} });
     const ping = sendFrame(3, { value: "ping" });
     socket.write(ready.subarray(0, 5));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     socket.write(Buffer.concat([ready.subarray(5), ping]));
     await waitFor(() => expect(discord.messages).toHaveLength(3));
     expect(discord.messages.some(({ opcode, payload }) => opcode === 4 && "value" in payload)).toBe(
@@ -134,6 +144,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
       activity: {
         type: 2,
         status_display_type: 2,
+        instance: false,
         details: "第一首",
         assets: {
           large_image:
@@ -170,7 +181,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
 
     player.applyPlaybackChange(PlaybackChange.Paused);
     await waitFor(() => expect(discord.activities()).toHaveLength(3));
-    expect(discord.activities()[2].payload.args?.activity).toBeNull();
+    expect(discord.activities()[2].payload.args?.activity).toBeUndefined();
     socket.write(
       sendFrame(1, { cmd: "SET_ACTIVITY", evt: null, nonce: discord.activities()[2].payload.nonce })
     );
@@ -200,16 +211,16 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
 
     player.setTrack({ id: "3", title: "file:///home/example/music.flac", artist: "", album: "" });
     await waitFor(() => expect(discord.activities()).toHaveLength(6));
-    expect(discord.activities()[5].payload.args?.activity).toBeNull();
+    expect(discord.activities()[5].payload.args?.activity).toBeUndefined();
   });
 
   it("发送被拒绝后只重试最新曲目，暂停清除被拒绝时重试清除", async () => {
     player.setTrack({ id: "1", title: "第一首", artist: "", album: "" });
     player.applyPlaybackChange(PlaybackChange.Playing);
-    presence.configure(true, applicationId);
+    presence.configure(true);
     await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
     const { socket } = discord.handshakes()[0];
-    socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY" }));
+    socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
     await waitFor(() => expect(discord.activities()).toHaveLength(1));
     replyToActivity(discord.activities()[0]);
 
@@ -223,86 +234,114 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
 
     player.applyPlaybackChange(PlaybackChange.Paused);
     await waitFor(() => expect(discord.activities()).toHaveLength(4));
-    expect(discord.activities()[3].payload.args?.activity).toBeNull();
+    expect(discord.activities()[3].payload.args?.activity).toBeUndefined();
     replyToActivity(discord.activities()[3], "ERROR");
     await waitFor(() => expect(discord.activities()).toHaveLength(5));
-    expect(discord.activities()[4].payload.args?.activity).toBeNull();
+    expect(discord.activities()[4].payload.args?.activity).toBeUndefined();
     replyToActivity(discord.activities()[4]);
   });
 
   it("发布回执超时后可以清除可能已显示的活动", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      player.setTrack({ id: "1", title: "第一首", artist: "", album: "" });
-      player.applyPlaybackChange(PlaybackChange.Playing);
-      presence.configure(true, applicationId);
-      await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
-      discord.handshakes()[0].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY" }));
-      await waitFor(() => expect(discord.activities()).toHaveLength(1));
+    await presence.dispose();
+    presence = new DiscordPresence(player, { retryDelay: 15, requestTimeout: 50 });
+    player.setTrack({ id: "1", title: "第一首", artist: "", album: "" });
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    discord.handshakes()[0].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+    await waitFor(() => expect(discord.activities()).toHaveLength(1));
 
-      player.applyPlaybackChange(PlaybackChange.Paused);
-      await vi.advanceTimersByTimeAsync(6000);
-      await waitFor(() => expect(discord.activities()).toHaveLength(2));
-      expect(discord.activities()[1].payload.args?.activity).toBeNull();
-      replyToActivity(discord.activities()[1]);
-    } finally {
-      vi.useRealTimers();
-    }
+    player.applyPlaybackChange(PlaybackChange.Paused);
+    await waitFor(() => expect(discord.activities()).toHaveLength(2));
+    expect(discord.activities()[1].payload.args?.activity).toBeUndefined();
+    replyToActivity(discord.activities()[1]);
   });
 
-  it("在 Discord 重启后发送当前曲目，更换应用或关闭功能时清除活动", async () => {
+  it("在 Discord 重启后发送当前曲目，关闭后重新开启会先清除旧活动", async () => {
     player.setTrack({ id: "1", title: "旧曲", artist: "", album: "" });
     player.applyPlaybackChange(PlaybackChange.Playing);
-    presence.configure(true, applicationId);
+    presence.configure(true);
     await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
     const first = discord.handshakes()[0].socket;
-    first.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY" }));
+    first.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
     await waitFor(() => expect(discord.activities()).toHaveLength(1));
 
     first.destroy();
     player.setTrack({ id: "2", title: "新曲", artist: "", album: "" });
     await waitFor(() => expect(discord.handshakes()).toHaveLength(2));
     const second = discord.handshakes()[1].socket;
-    second.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY" }));
+    second.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
     await waitFor(() => {
       expect(
         discord.activities().find(({ socket }) => socket === second)?.payload.args?.activity
       ).toMatchObject({ details: "新曲" });
     });
 
-    const replacementId = "234567890123456789";
-    presence.configure(true, replacementId);
+    presence.configure(false);
+    presence.configure(true);
     await waitFor(() => expect(discord.handshakes()).toHaveLength(3));
     expect(
       discord
         .activities()
         .filter(({ socket }) => socket === second)
         .at(-1)?.payload.args?.activity
-    ).toBeNull();
+    ).toBeUndefined();
     const [{ socket: third, payload }] = discord.handshakes().slice(-1);
-    expect(payload.client_id).toBe(replacementId);
-    third.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY" }));
+    expect(payload.client_id).toBe(applicationId);
+    third.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
     await waitFor(() => {
       expect(
         discord.activities().find(({ socket }) => socket === third)?.payload.args?.activity
       ).toMatchObject({ details: "新曲" });
     });
 
-    presence.configure(false, replacementId);
+    presence.configure(false);
     await presence.dispose();
-    expect(discord.activities().at(-1)?.payload.args?.activity).toBeNull();
+    expect(discord.activities().at(-1)?.payload.args?.activity).toBeUndefined();
+  });
+
+  it("握手期间暂停并断开连接后保持空闲，再播放时可以恢复", async () => {
+    player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    player.applyPlaybackChange(PlaybackChange.Paused);
+    discord.handshakes()[0].socket.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(discord.handshakes()).toHaveLength(1);
+    expect(discord.activities()).toHaveLength(0);
+
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(2));
+    discord.handshakes()[1].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+    await waitFor(() => expect(discord.activities()).toHaveLength(1));
+    replyToActivity(discord.activities()[0]);
+  });
+
+  it("握手未完成时关闭功能会取消连接", async () => {
+    player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    await presence.dispose();
+    await waitFor(() => expect(discord.handshakes()[0].socket.destroyed).toBe(true));
+    expect(discord.activities()).toHaveLength(0);
   });
 
   it("跳过伪装为 Discord socket 的符号链接", async () => {
     const other = await mockDiscord();
     try {
-      const symlinkPath = join(dirname(discord.path), "discord-ipc-1");
-      await symlink(other.path, symlinkPath);
       await presence.dispose();
-      presence = new DiscordPresence(player, { paths: [symlinkPath, discord.path] });
+      await discord.close();
+      discord = await mockDiscord(undefined, 1);
+      vi.stubEnv("XDG_RUNTIME_DIR", discord.dir);
+      vi.stubEnv("TMPDIR", discord.dir);
+      const symlinkPath = join(dirname(discord.path), "discord-ipc-0");
+      await symlink(other.path, symlinkPath);
+      presence = new DiscordPresence(player);
       player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
       player.applyPlaybackChange(PlaybackChange.Playing);
-      presence.configure(true, applicationId);
+      presence.configure(true);
 
       await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
       expect(other.handshakes()).toHaveLength(0);
@@ -322,7 +361,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
       presence = new DiscordPresence(player);
       player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
       player.applyPlaybackChange(PlaybackChange.Playing);
-      presence.configure(true, applicationId);
+      presence.configure(true);
 
       await waitFor(() => expect(flatpak.handshakes()).toHaveLength(1));
       expect(discord.handshakes()).toHaveLength(0);

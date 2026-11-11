@@ -38,7 +38,7 @@ describe("window preload entry points", () => {
       manage: {
         platform: process.platform,
         versions: process.versions,
-        discordPresenceSupported: process.platform === "linux",
+        discordPresenceSupported: ["linux", "darwin", "win32"].includes(process.platform),
       },
       menu: {},
       miniPlayer: {},
