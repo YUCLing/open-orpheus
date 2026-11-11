@@ -23,7 +23,7 @@ jobs:
     name: Build ICU data
     runs-on: ubuntu-latest
     environment:
-      name: icu
+      name: bot
       deployment: false
     permissions:
       contents: read
