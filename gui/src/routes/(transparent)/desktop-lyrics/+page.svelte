@@ -223,11 +223,16 @@
     onpointerenter={() => {
       clearTimeout(disableTimer);
     }}
-    onpointerleave={() => {
+    onpointerleave={(e) => {
       clearTimeout(enableTimer);
-      disableTimer = setTimeout(() => {
-        enableFullInteraction = false;
-      }, 1000);
+      // For pointer devices that is not mouse, we provide more time for user to interact
+      // with the UI.
+      disableTimer = setTimeout(
+        () => {
+          enableFullInteraction = false;
+        },
+        e.pointerType === "mouse" ? 1000 : 8000
+      );
     }}
     onwheel={(e) => {
       e.preventDefault();
