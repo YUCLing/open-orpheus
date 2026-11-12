@@ -4,6 +4,25 @@
   import * as settings from "$lib/settings";
 
   let enabledPromise = $state(settings.get("discordPresence.enabled"));
+  let saving = $state(false);
+  let saveFailed = $state(false);
+
+  async function save(value: boolean) {
+    if (saving) return;
+    saving = true;
+    saveFailed = false;
+    try {
+      if (await settings.set("discordPresence.enabled", value)) {
+        enabledPromise = Promise.resolve(value);
+      } else {
+        saveFailed = true;
+      }
+    } catch {
+      saveFailed = true;
+    } finally {
+      saving = false;
+    }
+  }
 </script>
 
 <h1 class="text-2xl font-bold">Discord 听歌状态</h1>
@@ -20,13 +39,15 @@
         bind:checked={
           () => enabled === true,
           (value) => {
-            const checked = value === true;
-            settings.set("discordPresence.enabled", checked);
-            enabledPromise = Promise.resolve(checked);
+            void save(value === true);
           }
         }
+        disabled={saving}
       />
       <Label for="discord-presence-enabled">分享听歌状态</Label>
     </div>
+    {#if saveFailed}
+      <p role="alert" class="text-sm">未能保存设置，请重试。</p>
+    {/if}
   </div>
 {/await}
