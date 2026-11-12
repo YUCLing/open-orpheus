@@ -3,31 +3,7 @@
   import { Label } from "$lib/components/ui/label";
   import * as settings from "$lib/settings";
 
-  let enabled = $state(false);
-  let saving = $state(false);
-  let message = $state("");
-  const initialSettings = settings.get("discordPresence").then((value) => {
-    enabled =
-      typeof value === "object" && value !== null && "enabled" in value && value.enabled === true;
-  });
-
-  async function save(value: boolean) {
-    const previous = enabled;
-    enabled = value;
-    saving = true;
-    message = "";
-    try {
-      if (!(await settings.set("discordPresence", { enabled: value }))) {
-        enabled = previous;
-        message = "未能保存设置，请重试。";
-      }
-    } catch {
-      enabled = previous;
-      message = "未能保存设置，请重试。";
-    } finally {
-      saving = false;
-    }
-  }
+  let enabledPromise = $state(settings.get("discordPresence.enabled"));
 </script>
 
 <h1 class="text-2xl font-bold">Discord 听歌状态</h1>
@@ -36,18 +12,21 @@
   中启用活动分享。
 </p>
 
-{#await initialSettings then}
+{#await enabledPromise then enabled}
   <div class="mt-4 grid max-w-md gap-3">
     <div class="flex items-center gap-2">
       <Checkbox
         id="discord-presence-enabled"
-        bind:checked={() => enabled, save}
-        disabled={saving}
+        bind:checked={
+          () => enabled === true,
+          (value) => {
+            const checked = value === true;
+            settings.set("discordPresence.enabled", checked);
+            enabledPromise = Promise.resolve(checked);
+          }
+        }
       />
       <Label for="discord-presence-enabled">分享听歌状态</Label>
     </div>
-    <p role="status" class="text-sm">{message}</p>
   </div>
-{:catch}
-  <p role="alert" class="mt-4">未能读取 Discord 听歌状态设置。</p>
 {/await}

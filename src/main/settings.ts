@@ -3,7 +3,7 @@ const KV_ENTRIES: Record<string, unknown> = {
   "audio.currentDevice": undefined,
   "desktopLyrics.interpolatedLyricLine": true,
   "desktopLyrics.opacity": 1,
-  discordPresence: { enabled: false },
+  "discordPresence.enabled": false,
   "tray.clickBehavior": "always-show-menu",
   "window.overrideMainWindowSizeLimit": undefined,
   "window.lifecycle": "on-demand",
@@ -32,7 +32,7 @@ registerShutdownTask({
   },
 });
 
-export function initialize() {
+export async function initialize() {
   LOGGER.debug({ entries: Object.keys(KV_ENTRIES).length }, "Initializing the settings store");
 
   kv = new Keyv({
@@ -41,6 +41,24 @@ export function initialize() {
       driver: createKeyvSqliteDriver(nativeDb),
     }),
   });
+
+  const legacy = await kv.get("discordPresence");
+  if (
+    typeof legacy === "object" &&
+    legacy !== null &&
+    "enabled" in legacy &&
+    typeof legacy.enabled === "boolean"
+  ) {
+    // 新键（包括 false）优先；复制成功后清理旧键，重置时不会恢复旧开关。
+    if ((await kv.get("discordPresence.enabled")) === undefined) {
+      if (!(await kv.set("discordPresence.enabled", legacy.enabled))) {
+        throw new Error("无法迁移 Discord 听歌状态设置");
+      }
+    }
+    if (!(await kv.delete("discordPresence"))) {
+      throw new Error("无法清理旧 Discord 听歌状态设置");
+    }
+  }
 
   const get = kv.get.bind(kv);
   kv.get = async (keyOrKeys) => {

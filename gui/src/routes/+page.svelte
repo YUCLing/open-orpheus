@@ -91,14 +91,12 @@
           component: Tray,
         }
       : undefined,
-    api.discordPresenceSupported === true
-      ? {
-          id: "discord-presence",
-          name: "Discord 听歌状态",
-          icon: Headphones,
-          component: DiscordPresence,
-        }
-      : undefined,
+    {
+      id: "discord-presence",
+      name: "Discord 听歌状态",
+      icon: Headphones,
+      component: DiscordPresence,
+    },
     {
       id: "debug",
       name: "调试",

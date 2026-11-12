@@ -123,7 +123,7 @@ If the automatic download fails, you can manually copy both folders from your of
 
 ### Discord listening status
 
-With a native installation of Open Orpheus, including Linux AppImage, go to **Manage Open Orpheus → Discord listening status** and enable sharing. Changes take effect immediately. Keep the Discord desktop client running with activity sharing enabled. The Flathub build of Discord is also supported. The Flatpak build of Open Orpheus does not have access to the host Discord socket by default, so it does not offer this setting.
+Go to **Manage Open Orpheus → Discord listening status** and enable sharing. Changes take effect immediately. Keep the Discord desktop client running with activity sharing enabled. The Flathub build of Discord is also supported. The Flatpak sandbox of Open Orpheus may block access to Discord's socket by default; if it cannot connect, configure additional socket permissions for your Discord installation.
 
 ## Disclaimer
 

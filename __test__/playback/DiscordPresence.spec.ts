@@ -214,6 +214,87 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
     expect(discord.activities()[5].payload.args?.activity).toBeUndefined();
   });
 
+  it("按 UTF-8 字节截断标题，并省略本地路径元数据", async () => {
+    player.setTrack({
+      id: "/home/example/private/song.flac",
+      title: `${"🎵".repeat(31)}音乐`,
+      artist: "/home/example/private/artist",
+      album: "file:///home/example/private/album",
+    });
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    discord.handshakes()[0].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+    await waitFor(() => expect(discord.activities()).toHaveLength(1));
+
+    // 再加入一个汉字会超过 128 字节，不能从字符中间截断。
+    expect(discord.activities()[0].payload.args?.activity).toEqual({
+      type: 2,
+      status_display_type: 2,
+      instance: false,
+      details: `${"🎵".repeat(31)}音`,
+      assets: {
+        large_image:
+          "https://raw.githubusercontent.com/YUCLing/open-orpheus/v0.20.0/assets/icon_256.png",
+        large_text: "Open Orpheus",
+      },
+    });
+    replyToActivity(discord.activities()[0]);
+  });
+
+  it("按播放倍速计算进度时间戳，修改倍速后重新计算", async () => {
+    player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
+    player.applyDuration(180);
+    player.applyPosition(20);
+    player.applyRate(2);
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    discord.handshakes()[0].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+    await waitFor(() => expect(discord.activities()).toHaveLength(1));
+    expect(discord.activities()[0].payload.args?.activity).toMatchObject({
+      timestamps: { start: now - 10, end: now + 80 },
+    });
+    replyToActivity(discord.activities()[0]);
+
+    player.applyRate(0.5);
+    await waitFor(() => expect(discord.activities()).toHaveLength(2));
+    expect(discord.activities()[1].payload.args?.activity).toMatchObject({
+      timestamps: { start: now - 40, end: now + 320 },
+    });
+    replyToActivity(discord.activities()[1]);
+  });
+
+  it("卡顿时移除时间戳，恢复后根据最新进度和当前时间重算", async () => {
+    player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
+    player.applyDuration(180);
+    player.applyPosition(20);
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    discord.handshakes()[0].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+    await waitFor(() => expect(discord.activities()).toHaveLength(1));
+    expect(discord.activities()[0].payload.args?.activity).toMatchObject({
+      timestamps: { start: now - 20, end: now + 160 },
+    });
+    replyToActivity(discord.activities()[0]);
+
+    player.applyPlaybackChange(PlaybackChange.Stalled);
+    await waitFor(() => expect(discord.activities()).toHaveLength(2));
+    expect(discord.activities()[1].payload.args?.activity).toMatchObject({ details: "测试歌曲" });
+    expect(discord.activities()[1].payload.args?.activity).not.toHaveProperty("timestamps");
+    replyToActivity(discord.activities()[1]);
+
+    vi.mocked(Date.now).mockReturnValue((now + 10) * 1000);
+    player.applyPosition(25);
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    await waitFor(() => expect(discord.activities()).toHaveLength(3));
+    expect(discord.activities()[2].payload.args?.activity).toMatchObject({
+      timestamps: { start: now - 15, end: now + 165 },
+    });
+    replyToActivity(discord.activities()[2]);
+  });
+
   it("发送被拒绝后只重试最新曲目，暂停清除被拒绝时重试清除", async () => {
     player.setTrack({ id: "1", title: "第一首", artist: "", album: "" });
     player.applyPlaybackChange(PlaybackChange.Playing);

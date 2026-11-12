@@ -38,22 +38,21 @@ describe("window preload entry points", () => {
       manage: {
         platform: process.platform,
         versions: process.versions,
-        discordPresenceSupported: ["linux", "darwin", "win32"].includes(process.platform),
       },
       menu: {},
       miniPlayer: {},
     });
   });
 
-  it.skipIf(process.platform !== "linux")(
-    "reports Discord sharing as unavailable in Flatpak",
-    async () => {
-      vi.resetModules();
-      vi.stubEnv("FLATPAK_ID", "io.github.yucling.open-orpheus");
+  it("exposes the same manage API in Flatpak", async () => {
+    vi.resetModules();
+    vi.stubEnv("FLATPAK_ID", "io.github.yucling.open-orpheus");
 
-      await import("../../src/windows/manage");
+    await import("../../src/windows/manage");
 
-      expect(exposed().manage).toMatchObject({ discordPresenceSupported: false });
-    }
-  );
+    expect(exposed().manage).toEqual({
+      platform: process.platform,
+      versions: process.versions,
+    });
+  });
 });
