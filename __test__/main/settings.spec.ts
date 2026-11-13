@@ -87,108 +87,43 @@ type EmitteryLike = {
   ): void;
 };
 
-describe("Discord 开关迁移", () => {
-  it.each([true, false])("将旧开关 %j 迁移一次并清理旧键", async (enabled) => {
-    hoisted.values.set("discordPresence", { enabled, applicationId: "旧应用" });
-
-    await initialize();
-    await initialize();
-
-    await expect(kv.get("discordPresence.enabled")).resolves.toBe(enabled);
-    await expect(kv.getMany(["discordPresence.enabled"])).resolves.toEqual([enabled]);
-    expect(hoisted.values.has("discordPresence")).toBe(false);
-    expect(hoisted.store.set.mock.calls).toEqual([["discordPresence.enabled", enabled]]);
-    expect(hoisted.store.delete.mock.calls).toEqual([["discordPresence"]]);
-  });
-
-  it.each([true, false, null, "true"])("新键明确值 %j 优先，不被旧开关覆盖", async (value) => {
-    hoisted.values.set("discordPresence", { enabled: true });
-    hoisted.values.set("discordPresence.enabled", value);
-
-    await initialize();
-
-    await expect(kv.get("discordPresence.enabled")).resolves.toBe(value);
-    expect(hoisted.store.set).not.toHaveBeenCalled();
-    expect(hoisted.values.has("discordPresence")).toBe(false);
-  });
-
-  it.each([null, {}, { enabled: "true" }])("旧配置 %j 无效时保持默认关闭", async (legacy) => {
-    hoisted.values.set("discordPresence", legacy);
-
-    await initialize();
-
-    await expect(kv.get("discordPresence.enabled")).resolves.toBe(false);
-    expect(hoisted.store.set).not.toHaveBeenCalled();
-    expect(hoisted.store.delete).not.toHaveBeenCalled();
-  });
-
-  it("删除新键后重新初始化不会恢复旧的启用状态", async () => {
-    hoisted.values.set("discordPresence", { enabled: true });
-    await initialize();
-    await expect(kv.delete("discordPresence.enabled")).resolves.toBe(true);
-
-    await initialize();
-
-    await expect(kv.get("discordPresence.enabled")).resolves.toBe(false);
-    expect(hoisted.values.has("discordPresence")).toBe(false);
-    expect(hoisted.store.set).toHaveBeenCalledOnce();
-  });
-
-  it.each(["false", "throw"])("复制新开关返回 %s 时初始化失败且不删除旧值", async (failure) => {
-    const legacy = { enabled: true };
-    hoisted.values.set("discordPresence", legacy);
-    if (failure === "false") hoisted.store.set.mockResolvedValueOnce(false);
-    else hoisted.store.set.mockRejectedValueOnce(new Error("写入失败"));
-
-    await expect(initialize()).rejects.toThrow();
-
-    expect(hoisted.values.get("discordPresence")).toEqual(legacy);
-    expect(hoisted.values.has("discordPresence.enabled")).toBe(false);
-    expect(hoisted.store.delete).not.toHaveBeenCalled();
-  });
-
-  it("清理旧键失败时初始化失败、保留旧值，下次可以继续清理", async () => {
-    const legacy = { enabled: true };
-    hoisted.values.set("discordPresence", legacy);
-    hoisted.store.delete.mockResolvedValueOnce(false);
-
-    await expect(initialize()).rejects.toThrow("无法清理旧 Discord 听歌状态设置");
-    expect(hoisted.values.get("discordPresence")).toEqual(legacy);
-    expect(hoisted.values.get("discordPresence.enabled")).toBe(true);
-
-    await initialize();
-
-    await expect(kv.get("discordPresence.enabled")).resolves.toBe(true);
-    expect(hoisted.values.has("discordPresence")).toBe(false);
-    expect(hoisted.store.set).toHaveBeenCalledOnce();
-  });
-});
-
 describe("initialize", () => {
   it("applies the default value of a known key", async () => {
-    await initialize();
+    initialize();
 
     await expect(kv.get("tray.clickBehavior")).resolves.toBe("always-show-menu");
     await expect(kv.get("desktopLyrics.opacity")).resolves.toBe(1);
     await expect(kv.get("discordPresence.enabled")).resolves.toBe(false);
   });
 
+  it("旧对象配置不会启用分享或被修改", async () => {
+    const previous = { enabled: true };
+    hoisted.values.set("discordPresence", previous);
+
+    initialize();
+
+    await expect(kv.get("discordPresence.enabled")).resolves.toBe(false);
+    expect(hoisted.values.get("discordPresence")).toBe(previous);
+    expect(hoisted.store.set).not.toHaveBeenCalled();
+    expect(hoisted.store.delete).not.toHaveBeenCalled();
+  });
+
   it("keeps a stored value over the default", async () => {
     hoisted.values.set("tray.clickBehavior", "minimize");
-    await initialize();
+    initialize();
 
     await expect(kv.get("tray.clickBehavior")).resolves.toBe("minimize");
   });
 
   it("leaves keys without default as they are", async () => {
-    await initialize();
+    initialize();
 
     await expect(kv.get("proxy")).resolves.toBeUndefined();
     await expect(kv.get("nope.unknown")).resolves.toBeUndefined();
   });
 
   it("forwards an array request to keyv untouched", async () => {
-    await initialize();
+    initialize();
     hoisted.store.get.mockResolvedValueOnce(["stored"]);
     const keys = ["desktopLyrics.opacity", "proxy", "nope.unknown"];
 
@@ -198,7 +133,7 @@ describe("initialize", () => {
   });
 
   it("keeps stored values in the array form", async () => {
-    await initialize();
+    initialize();
     hoisted.store.get.mockResolvedValueOnce([0.5, "http://proxy", "kept"]);
 
     await expect(kv.get(["desktopLyrics.opacity", "proxy", "nope.unknown"])).resolves.toEqual([
@@ -209,7 +144,7 @@ describe("initialize", () => {
   });
 
   it("fills defaults when many keys are read at once", async () => {
-    await initialize();
+    initialize();
 
     await expect(kv.getMany(["desktopLyrics.opacity", "proxy", "nope.unknown"])).resolves.toEqual([
       1,
@@ -219,7 +154,7 @@ describe("initialize", () => {
   });
 
   it("emits the original key and value only after a successful set", async () => {
-    await initialize();
+    initialize();
     const seen = recordEvents();
     const write = Promise.withResolvers<boolean>();
     const value = true;
@@ -238,7 +173,7 @@ describe("initialize", () => {
   });
 
   it("does not emit a change event when set returns false", async () => {
-    await initialize();
+    initialize();
     const seen = recordEvents();
     hoisted.store.set.mockResolvedValueOnce(false);
 
@@ -249,7 +184,7 @@ describe("initialize", () => {
   });
 
   it("preserves set errors without emitting a change event", async () => {
-    await initialize();
+    initialize();
     const seen = recordEvents();
     const error = new Error("write failed");
     hoisted.store.set.mockRejectedValueOnce(error);
@@ -261,7 +196,7 @@ describe("initialize", () => {
   });
 
   it("emits changes only for successful bulk writes with the original key and value", async () => {
-    await initialize();
+    initialize();
     const seen = recordEvents();
     const entries = [
       { key: "discordPresence.enabled", value: true },
@@ -280,7 +215,7 @@ describe("initialize", () => {
   });
 
   it("emits one delete event per successfully deleted key", async () => {
-    await initialize();
+    initialize();
     const seen = recordEvents();
 
     hoisted.store.hooks.get("after:delete")?.({ key: ["a", "b"], value: [true, true] });
@@ -295,7 +230,7 @@ describe("initialize", () => {
   });
 
   it("does not emit a delete event when the stored value could not be deleted", async () => {
-    await initialize();
+    initialize();
     const seen = recordEvents();
 
     hoisted.store.hooks.get("after:delete")?.({ key: "discordPresence.enabled", value: false });
@@ -305,7 +240,7 @@ describe("initialize", () => {
   });
 
   it("emits deletes only for successful entries in a partially failed bulk deletion", async () => {
-    await initialize();
+    initialize();
     const seen = recordEvents();
 
     hoisted.store.hooks.get("after:delete")?.({

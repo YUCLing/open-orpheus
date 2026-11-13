@@ -1,5 +1,5 @@
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index c8db6de6e501469670fe267c8fdd90d99378244d..a898cb328a3fc649378f54f0ab634422ef454f1c 100644
+index c8db6de6e501469670fe267c8fdd90d99378244d..72d8b88dfd91697af54d4d94f1b9c7f31b19b925 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -193,7 +193,7 @@ declare class IPCTransport extends AsyncEventEmitter {
@@ -11,15 +11,8 @@ index c8db6de6e501469670fe267c8fdd90d99378244d..a898cb328a3fc649378f54f0ab634422
      private decode;
      onClose(data: unknown): void;
      onError(error: unknown): void;
-@@ -210,4 +210,6 @@ declare class IPCTransport extends AsyncEventEmitter {
- interface RPCClientOptions {
-+    /** 允许应用在握手失败后跳过本轮已尝试的地址。 */
-+    ipcPathFilter?: (path: string) => boolean;
-     /**
-      * https://discord.com/developers/docs/topics/oauth2#authorization-code-grant
-      *
 diff --git a/dist/index.js b/dist/index.js
-index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de186101fb76084 100644
+index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..31729ca9375f5cfd312d165cacaf449bd902de61 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -16,6 +16,7 @@ var Events = /* @__PURE__ */ ((Events2) => {
@@ -30,7 +23,7 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
  import fs from "fs/promises";
  import { createConnection, Socket } from "net";
  import path from "path";
-@@ -23,36 +24,49 @@ import process2 from "process";
+@@ -23,36 +24,48 @@ import process2 from "process";
  import { AsyncEventEmitter } from "@vladfrangu/async_event_emitter";
  async function canOpenFile(path2) {
    try {
@@ -80,11 +73,10 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
 -  socket.once("error", onError);
 -  return promise;
 +__name(getIPCPaths, "getIPCPaths");
-+async function getIPC(signal, pathFilter) {
++async function getIPC(signal) {
 +  for (const path2 of getIPCPaths()) {
 +    signal.throwIfAborted();
 +    if (process2.platform !== "win32" && !await canOpenFile(path2)) continue;
-+    if (pathFilter && !pathFilter(path2)) continue;
 +    signal.throwIfAborted();
 +    try {
 +      const socket = createConnection(path2);
@@ -103,7 +95,7 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
  }
  __name(getIPC, "getIPC");
  function encode(op, data) {
-@@ -82,14 +96,20 @@ var IPCTransport = class extends AsyncEventEmitter {
+@@ -82,14 +95,20 @@ var IPCTransport = class extends AsyncEventEmitter {
    }
    socket;
    working;
@@ -120,7 +112,7 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
 +    this.connectionAbort = controller;
 +    const signal = options?.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
 +    try {
-+      const socket = await getIPC(signal, this.client.options.ipcPathFilter);
++      const socket = await getIPC(signal);
 +      if (signal.aborted) {
 +        socket.destroy();
 +        signal.throwIfAborted();
@@ -131,7 +123,7 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
      }
      this.socket.on("close", this.onClose.bind(this));
      this.socket.on("error", this.onError.bind(this));
-@@ -103,46 +123,54 @@ var IPCTransport = class extends AsyncEventEmitter {
+@@ -103,46 +122,54 @@ var IPCTransport = class extends AsyncEventEmitter {
      this.socket.pause();
      this.socket.on("readable", this.decode.bind(this));
    }
@@ -215,7 +207,7 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
      this.socket = new Socket();
      this.working.buffer = Buffer2.from([]);
      const error = typeof data === "boolean" ? new Error("socket closed") : data;
-@@ -155,16 +183,32 @@ var IPCTransport = class extends AsyncEventEmitter {
+@@ -155,16 +182,32 @@ var IPCTransport = class extends AsyncEventEmitter {
      this.socket.write(encode(op, data));
    }
    async close(options) {
@@ -253,7 +245,7 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
      return promise;
    }
    /**
-@@ -277,10 +321,12 @@ var RPCClient = class extends AsyncEventEmitter2 {
+@@ -277,10 +320,12 @@ var RPCClient = class extends AsyncEventEmitter2 {
        return promise;
      }
      const signal = options?.signal ?? AbortSignal.timeout(1e4);
@@ -266,7 +258,7 @@ index c1bc0816abdd34895b959f0e9a21dee0e2609b1f..605bb277310ddd21909088c56de18610
        reject(reason);
      }, "onAbort");
      const onReady = /* @__PURE__ */ __name(() => {
-@@ -297,20 +343,18 @@ var RPCClient = class extends AsyncEventEmitter2 {
+@@ -297,20 +342,18 @@ var RPCClient = class extends AsyncEventEmitter2 {
        this.#expectedNonces.clear();
        this.readyTimestamp = null;
        this.emit("DISCONNECTED" /* Disconnected */);

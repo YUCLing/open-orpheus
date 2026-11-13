@@ -29,13 +29,18 @@ function sendFrame(opcode: number, payload: object): Buffer {
   return Buffer.concat([header, json]);
 }
 
-async function mockDiscord(subdir?: string, index = 0, directory?: string) {
-  const dir = directory ?? (await mkdtemp(join(temporaryRoot, "oo-discord-")));
+async function mockDiscord(subdir?: string, index = 0) {
+  const dir = await mkdtemp(join(temporaryRoot, "oo-discord-"));
   const socketDir = subdir ? join(dir, subdir) : dir;
   if (subdir) await mkdir(socketDir, { recursive: true });
   const path = join(socketDir, `discord-ipc-${index}`);
   const sockets = new Set<Socket>();
-  const messages: Array<{ socket: Socket; opcode: number; payload: Message }> = [];
+  const messages: Array<{
+    socket: Socket;
+    opcode: number;
+    payload: Message;
+    receivedAt: number;
+  }> = [];
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.once("close", () => sockets.delete(socket));
@@ -47,7 +52,7 @@ async function mockDiscord(subdir?: string, index = 0, directory?: string) {
         const length = pending.readUInt32LE(4);
         if (pending.length < 8 + length) break;
         const payload = JSON.parse(pending.subarray(8, 8 + length).toString()) as Message;
-        messages.push({ socket, opcode, payload });
+        messages.push({ socket, opcode, payload, receivedAt: performance.now() });
         pending = pending.subarray(8 + length);
       }
     });
@@ -66,7 +71,7 @@ async function mockDiscord(subdir?: string, index = 0, directory?: string) {
       const closed = once(server, "close");
       server.close();
       await closed;
-      if (!directory) await rm(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true });
     },
   };
 }
@@ -406,111 +411,55 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
     await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
     await presence.dispose();
     await waitFor(() => expect(discord.handshakes()[0].socket.destroyed).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(discord.handshakes()).toHaveLength(1);
     expect(discord.activities()).toHaveLength(0);
   });
 
   it.each(["timeout", "close", "disconnect"])(
-    "首地址握手 %s 后尝试后续地址，成功连接后仍同步最新曲目",
+    "握手 %s 后退避重试同一地址，并同步最新曲目",
     async (failure) => {
-      const next = await mockDiscord(undefined, 1, discord.dir);
-      try {
-        player.setTrack({ id: "1", title: "旧曲", artist: "", album: "" });
-        player.applyPlaybackChange(PlaybackChange.Playing);
-        presence.configure(true);
-        await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
-        const first = discord.handshakes()[0].socket;
-        if (failure === "close") first.write(sendFrame(2, { code: 4000, message: "rejected" }));
-        if (failure === "disconnect") first.destroy();
-        player.setTrack({ id: "2", title: "新曲", artist: "", album: "" });
+      player.setTrack({ id: "1", title: "旧曲", artist: "", album: "" });
+      player.applyPlaybackChange(PlaybackChange.Playing);
+      presence.configure(true);
+      await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+      const first = discord.handshakes()[0].socket;
+      if (failure === "close") first.write(sendFrame(2, { code: 4000, message: "rejected" }));
+      if (failure === "disconnect") first.destroy();
+      player.setTrack({ id: "2", title: "新曲", artist: "", album: "" });
 
-        await vi.waitFor(() => expect(next.handshakes()).toHaveLength(1), {
-          interval: 5,
-          timeout: 2000,
-        });
-        const second = next.handshakes()[0].socket;
-        second.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
-        await waitFor(() => expect(next.activities()).toHaveLength(1));
-        expect(next.activities()[0].payload.args?.activity).toMatchObject({ details: "新曲" });
-        replyToActivity(next.activities()[0]);
-        expect(discord.handshakes()).toHaveLength(1);
-        expect(discord.activities()).toHaveLength(0);
-        await waitFor(() => expect(first.destroyed).toBe(true));
-
-        // 已建立的连接断开后重新扫描，先前失败的地址也有机会恢复。
-        second.destroy();
-        await waitFor(() => expect(discord.handshakes()).toHaveLength(2));
-        discord
-          .handshakes()[1]
-          .socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
-        await waitFor(() => expect(discord.activities()).toHaveLength(1));
-        replyToActivity(discord.activities()[0]);
-      } finally {
-        await presence.dispose();
-        await next.close();
-      }
+      await vi.waitFor(() => expect(discord.handshakes()).toHaveLength(2), {
+        interval: 5,
+        timeout: 2000,
+      });
+      expect(first.destroyed).toBe(true);
+      expect(discord.activities()).toHaveLength(0);
+      const second = discord.handshakes()[1].socket;
+      second.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+      await waitFor(() => expect(discord.activities()).toHaveLength(1));
+      expect(discord.activities()[0].payload.args?.activity).toMatchObject({ details: "新曲" });
+      replyToActivity(discord.activities()[0]);
     }
   );
 
-  it("全部候选握手失败后等待重试，再从首地址恢复", async () => {
-    const next = await mockDiscord(undefined, 1, discord.dir);
-    try {
-      await presence.dispose();
-      presence = new DiscordPresence(player, { retryDelay: 200 });
-      player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
-      player.applyPlaybackChange(PlaybackChange.Playing);
-      presence.configure(true);
-      await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
-      discord.handshakes()[0].socket.destroy();
-      await waitFor(() => expect(next.handshakes()).toHaveLength(1));
-      next.handshakes()[0].socket.destroy();
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      expect(discord.handshakes()).toHaveLength(1);
-      expect(next.handshakes()).toHaveLength(1);
+  it("握手失败后等待退避，再重试连接", async () => {
+    await presence.dispose();
+    const retryDelay = 200;
+    presence = new DiscordPresence(player, { retryDelay });
+    player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
+    player.applyPlaybackChange(PlaybackChange.Playing);
+    presence.configure(true);
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
+    const disconnectedAt = performance.now();
+    discord.handshakes()[0].socket.destroy();
 
-      await waitFor(() => expect(discord.handshakes()).toHaveLength(2));
-      discord
-        .handshakes()[1]
-        .socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
-      await waitFor(() => expect(discord.activities()).toHaveLength(1));
-      replyToActivity(discord.activities()[0]);
-    } finally {
-      await presence.dispose();
-      await next.close();
-    }
-  });
-
-  it.each(["pause", "close"])("扫描中 %s 会停止后续候选连接", async (action) => {
-    const next = await mockDiscord(undefined, 1, discord.dir);
-    try {
-      player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
-      player.applyPlaybackChange(PlaybackChange.Playing);
-      presence.configure(true);
-      await waitFor(() => expect(discord.handshakes()).toHaveLength(1));
-
-      if (action === "pause") {
-        player.applyPlaybackChange(PlaybackChange.Paused);
-        discord.handshakes()[0].socket.destroy();
-      } else {
-        await presence.dispose();
-      }
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      expect(next.handshakes()).toHaveLength(0);
-      expect(discord.handshakes()).toHaveLength(1);
-      expect(discord.activities()).toHaveLength(0);
-
-      if (action === "pause") {
-        player.applyPlaybackChange(PlaybackChange.Playing);
-        await waitFor(() => expect(discord.handshakes()).toHaveLength(2));
-        discord
-          .handshakes()[1]
-          .socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
-        await waitFor(() => expect(discord.activities()).toHaveLength(1));
-        replyToActivity(discord.activities()[0]);
-      }
-    } finally {
-      await presence.dispose();
-      await next.close();
-    }
+    await waitFor(() => expect(discord.handshakes()).toHaveLength(2));
+    expect(discord.handshakes()[1].receivedAt - disconnectedAt).toBeGreaterThanOrEqual(
+      retryDelay - 10
+    );
+    discord.handshakes()[1].socket.write(sendFrame(1, { cmd: "DISPATCH", evt: "READY", data: {} }));
+    await waitFor(() => expect(discord.activities()).toHaveLength(1));
+    replyToActivity(discord.activities()[0]);
   });
 
   it("跳过伪装为 Discord socket 的符号链接", async () => {
