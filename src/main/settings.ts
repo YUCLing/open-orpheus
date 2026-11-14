@@ -7,6 +7,7 @@ const KV_ENTRIES: Record<string, unknown> = {
   "tray.clickBehavior": "always-show-menu",
   "window.overrideMainWindowSizeLimit": undefined,
   "window.lifecycle": "on-demand",
+  "plugins.enabled": {},
   proxy: undefined,
 };
 

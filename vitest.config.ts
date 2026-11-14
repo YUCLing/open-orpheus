@@ -1,8 +1,10 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
+import RegistryPlugin from "./plugins/RegistryPlugin.js";
 import { createAliases } from "./scripts/tsconfigAliases.js";
 
 export default defineConfig({
+  plugins: [RegistryPlugin({ realm: "main" }), RegistryPlugin({ realm: "preload" })],
   resolve: {
     alias: createAliases(),
   },
@@ -17,6 +19,8 @@ export default defineConfig({
         "src/{preload,worklets}/**/*.ts",
         // Type-only declarations
         "src/shared/types/**/*.ts",
+        // Generated plugin artifacts
+        "packages/plugin-api/dist/**",
         // Constants
         "packaging/resources/metadata.ts",
         "packaging/common/toolchain.ts",

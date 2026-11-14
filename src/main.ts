@@ -86,6 +86,15 @@ protocol.registerSchemesAsPrivileged([
       corsEnabled: true,
     },
   },
+  {
+    scheme: "assets",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
 ]);
 
 app.setPath("userData", userdataDir);
@@ -300,19 +309,22 @@ app.on("ready", async () => {
     LOGGER.debug("Enabled window.channel injection for default-session frames");
 
     // Initialize schemes and get registrars
-    const [registerOrpheusScheme, registerAudioScheme] = await Promise.all([
+    const [registerOrpheusScheme, registerAudioScheme, registerAssetsScheme] = await Promise.all([
       import("./main/orpheus").then((m) => m.default),
       import("./main/audio").then((m) => m.default),
+      import("./main/assets").then((m) => m.default),
     ]);
 
     // Register for default session
     registerOrpheusScheme(protocol);
     registerAudioScheme(protocol);
+    registerAssetsScheme(protocol);
 
     // Register for Open Orpheus session
     registerOrpheusScheme(openOrpheusSession.protocol);
+    registerAssetsScheme(openOrpheusSession.protocol);
 
-    LOGGER.info({ schemes: ["orpheus", "audio"] }, "Protocol schemes registered");
+    LOGGER.info({ schemes: ["orpheus", "audio", "assets"] }, "Protocol schemes registered");
 
     await import("./main/database").then(async (m) => {
       await m.initializeDatabases();
@@ -442,10 +454,18 @@ app.on("ready", async () => {
 
     LOGGER.info("Startup services initialized");
 
+    // Discover plugins and register preload IPC before creating the main window.
+    // Main-process plugins are activated after the main window is created.
+    const pluginSystem = await import("./main/plugin").then((m) => m.installPluginSystem());
+
     // Create main window
     await (await import("./main/windows/main")).default();
 
     LOGGER.info("Main window created");
+
+    void pluginSystem?.activateAll().catch((error: unknown) => {
+      LOGGER.error({ err: error }, "Plugin activation failed");
+    });
 
     // TODO: Maybe only do this on first launch?
     // Register as orpheus:// clent

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fork } from "node:child_process";
 
@@ -65,6 +65,12 @@ const config: ForgeConfig = {
           proc.on("error", resolve);
           proc.on("exit", resolve);
         });
+      },
+      // Copy built-in plugins into the app directory before asar packaging.
+      async ({ buildPath }) => {
+        const source = resolve(import.meta.dirname, "out", "builtin-plugins");
+        if (!existsSync(source)) return;
+        await cp(source, resolve(buildPath, "builtin-plugins"), { recursive: true });
       },
     ],
 
@@ -144,7 +150,7 @@ const config: ForgeConfig = {
     // generated-node-sources.json, so it's safe to skip checksum verification.
     ...(process.env.ELECTRON_OFFLINE_BUILD ? { download: { unsafelyDisableChecksums: true } } : {}),
 
-    // Override Vite Plugin's preferences, and with our preferences
+    // Override Vite Plugin's preferences, and with our preferences.
     ignore: (file: string) => {
       if (!file) return false;
 
@@ -223,6 +229,11 @@ const config: ForgeConfig = {
         },
         {
           entry: "src/windows/menu.ts",
+          config: "vite.preload.config.ts",
+          target: "preload",
+        },
+        {
+          entry: "src/windows/plugin-manager.ts",
           config: "vite.preload.config.ts",
           target: "preload",
         },

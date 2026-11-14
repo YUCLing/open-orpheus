@@ -99,6 +99,9 @@ jobs:
         if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
 
+      - name: Build plugin API
+        run: pnpm build:plugin-api
+
       - name: Run tests
         run: pnpm coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-report.junit.xml
 
@@ -216,6 +219,9 @@ jobs:
       - name: Build native modules
         if: steps.modules.outputs.cache-hit != 'true'
         run: pnpm build:modules
+
+      - name: Build plugin API
+        run: pnpm build:plugin-api
 
       - name: Restore cached NetEase installer
         id: installer

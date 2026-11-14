@@ -13,6 +13,7 @@ export interface ManageContract {
 
   getFont(): Promise<string | null>;
   checkUpdate(ignoreCache?: boolean): Promise<UpdateInfo | null>;
+  openPluginManager(): Promise<void>;
   openLogFolder(): Promise<void>;
 
   pack: {

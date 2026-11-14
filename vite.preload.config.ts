@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 
 import { createAliases } from "./scripts/tsconfigAliases.js";
 import LoggerPlugin from "./plugins/LoggerPlugin.js";
+import RegistryPlugin from "./plugins/RegistryPlugin.js";
 
 // https://vitejs.dev/config
 export default defineConfig({
@@ -12,5 +13,6 @@ export default defineConfig({
     LoggerPlugin({
       logger: "src/preload/logger.ts",
     }),
+    RegistryPlugin({ realm: "preload" }),
   ],
 });

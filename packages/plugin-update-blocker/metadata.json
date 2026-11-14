@@ -1,0 +1,11 @@
+{
+  "id": "io.github.yucling.update-blocker",
+  "name": "更新拦截",
+  "version": "1.0.0",
+  "description": "对网易云音乐的更新检查请求返回无更新。",
+  "author": "YUCLing",
+  "license": "MIT",
+  "realms": {
+    "main": "main/index.mjs"
+  }
+}
