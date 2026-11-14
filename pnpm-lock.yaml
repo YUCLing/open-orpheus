@@ -183,6 +183,7 @@ overrides:
   '@electron-forge/plugin-fuses>@electron/fuses': ^2.1.3
 
 patchedDependencies:
+  '@discordjs/rpc@0.2.0-dev.1794009739-5bb74922a': 141df1452d082410d3a4fa7542bb1a1a8cae832e21e101505c403eaf6ead76c5
   '@keyv/sqlite': 297fdf51d1b1b0beb0cccc20ea2ffad0f7cd163dcb26041bb99a845b14c9babf
   '@napi-rs/cross-toolchain': 9e81fb67fe8c01e147e979f9e7f570536a75913dfb4868cf03c35adc06b42211
 
@@ -215,6 +216,9 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
     devDependencies:
+      '@discordjs/rpc':
+        specifier: 0.2.0-dev.1794009739-5bb74922a
+        version: 0.2.0-dev.1794009739-5bb74922a(patch_hash=141df1452d082410d3a4fa7542bb1a1a8cae832e21e101505c403eaf6ead76c5)
       '@electron-forge/cli':
         specifier: ^8.0.1
         version: 8.0.1
@@ -689,6 +693,10 @@ packages:
   '@cto.af/wtf8@1.0.0':
     resolution: {integrity: sha512-qI0XnZxcj/FmASB8XXWqG49bSIzu0I/02deAjhnTni9IZ7KMRVlh8EFLE+mmJlMA169lET6rTCFhEsZSjOwlhA==}
     engines: {node: '>=22'}
+
+  '@discordjs/rpc@0.2.0-dev.1794009739-5bb74922a':
+    resolution: {integrity: sha512-k8reN/bU5K4picyNYekuzXcI0Wu784AG+jbGuFPA0nh/DM22iRJMyKc7+4lP3YaMr2yy7d3q9d8c7vqdDQskvA==}
+    engines: {node: '>=24.17.0'}
 
   '@electron-forge/cli@8.0.1':
     resolution: {integrity: sha512-zbkmgt7vtL8OBY7YDwVizhCfAHJLpmQtA35iOKGWPpLWRZbGADVyIUZz3QZrbc2V81/BkrBerURIBXdd/fnyhQ==}
@@ -2413,6 +2421,10 @@ packages:
   '@vitest/spy@5.1.0':
     resolution: {integrity: sha512-2DPO5OMHWKrBngC+fCmTQqemNF0gidRhp3lxbBmRhW+M1XJrfgPpqNqWVevXtn2f2ufD5ZaR1B6B641aAlcX5A==}
 
+  '@vladfrangu/async_event_emitter@2.4.7':
+    resolution: {integrity: sha512-Xfe6rpCTxSxfbswi/W/Pz7zp1WWSNn4A0eW4mLkQUewCrXXtMj31lCg+iQyTkh/CkusZSq9eDflu7tjEDXUY6g==}
+    engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
+
   '@webtoon/psd@0.4.0':
     resolution: {integrity: sha512-ztriE8oFOamRrV9opBURDy+JMiyhur2//vOXsC5CgdnYCB0L1Lnaag4NzP8N+NFCj7uNz9JRYtPmAbQMSDLIsQ==}
 
@@ -2812,6 +2824,9 @@ packages:
 
   devalue@5.9.4:
     resolution: {integrity: sha512-sPAT4pztbu6586/hrhOnMKS17IJrvg12mXiSPSS3W5qDeN2RGgvZ0diZCm31dBbnevfVmujNO3IM2wrS4Y2Rhg==}
+
+  discord-api-types@0.38.58:
+    resolution: {integrity: sha512-6utghVho47hBzmx8nIp+pKEDDNIlVk6On/J5Y1Q529payNLZjBsrw+mt+G5Y3NYRE3kgta6eBx5hRYVyfHGdOA==}
 
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
@@ -4604,6 +4619,11 @@ snapshots:
 
   '@cto.af/wtf8@1.0.0': {}
 
+  '@discordjs/rpc@0.2.0-dev.1794009739-5bb74922a(patch_hash=141df1452d082410d3a4fa7542bb1a1a8cae832e21e101505c403eaf6ead76c5)':
+    dependencies:
+      '@vladfrangu/async_event_emitter': 2.4.7
+      discord-api-types: 0.38.58
+
   '@electron-forge/cli@8.0.1':
     dependencies:
       '@electron-forge/core': 8.0.1
@@ -6154,6 +6174,8 @@ snapshots:
 
   '@vitest/spy@5.1.0': {}
 
+  '@vladfrangu/async_event_emitter@2.4.7': {}
+
   '@webtoon/psd@0.4.0': {}
 
   '@xmldom/xmldom@0.9.12': {}
@@ -6505,6 +6527,8 @@ snapshots:
   detect-libc@2.1.2: {}
 
   devalue@5.9.4: {}
+
+  discord-api-types@0.38.58: {}
 
   duplexer2@0.1.4:
     dependencies:

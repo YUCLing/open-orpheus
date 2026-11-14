@@ -35,9 +35,10 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.17.0"
   },
   "devDependencies": {
+    "@discordjs/rpc": "0.2.0-dev.1794009739-5bb74922a",
     "@electron-forge/cli": "^8.0.1",
     "@electron-forge/core": "^8.0.1",
     "@electron-forge/maker-squirrel": "^8.0.1",

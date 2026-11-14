@@ -124,6 +124,10 @@ Open Orpheus 在首次启动时如果检测到资源缺失，会自动从网易�
 - [D-Bus 服务文档](./docs/DBUS_SERVICES.md)
 - [日志配置文档](./docs/LOGGING.md)
 
+### Discord 听歌状态
+
+可以从「管理 Open Orpheus → Discord 听歌状态」开启分享，切换开关后立即生效。请保持 Discord 桌面端运行，并在 Discord 中开启活动分享。Discord 桌面端也可以使用 Flathub 版。Open Orpheus 的 Flatpak 沙盒默认可能无法访问 Discord 套接字；如无法连接，需要根据 Discord 的安装方式额外配置套接字访问权限。
+
 ## 免责声明
 
 Open Orpheus 是一个以**互操作性**为目的的独立开源项目，与网易公司没有任何关联、授权或认可关系。

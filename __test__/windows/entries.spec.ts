@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // `exposeApi` reaches for `contextBridge`/`ipcRenderer`, so the bridge is faked.
 const hoisted = vi.hoisted(() => ({
@@ -15,8 +15,11 @@ function exposed() {
   return Object.fromEntries(hoisted.exposeInMainWorld.mock.calls);
 }
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("window preload entry points", () => {
   it("exposes the API surface each window expects", async () => {
+    vi.stubEnv("FLATPAK_ID", undefined);
     // Importing these modules is what registers the API surface. They are
     // imported here rather than at file scope because Vitest clears mock call
     // history before every test, which would wipe registrations made on import.
@@ -32,9 +35,24 @@ describe("window preload entry points", () => {
       lyrics: {},
       settings: {},
       desktopLyricsPreview: {},
-      manage: { platform: process.platform, versions: process.versions },
+      manage: {
+        platform: process.platform,
+        versions: process.versions,
+      },
       menu: {},
       miniPlayer: {},
+    });
+  });
+
+  it("exposes the same manage API in Flatpak", async () => {
+    vi.resetModules();
+    vi.stubEnv("FLATPAK_ID", "io.github.yucling.open-orpheus");
+
+    await import("../../src/windows/manage");
+
+    expect(exposed().manage).toEqual({
+      platform: process.platform,
+      versions: process.versions,
     });
   });
 });

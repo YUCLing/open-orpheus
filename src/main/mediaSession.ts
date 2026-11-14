@@ -93,6 +93,13 @@ export async function createMediaSession(): Promise<void> {
       LOGGER.warn("Media session is not available on this platform.");
   }
 
+  try {
+    const { initializeDiscordPresence } = await import("./playback/discordPresence");
+    await initializeDiscordPresence(playbackController);
+  } catch (err) {
+    LOGGER.warn({ err: toError(err) }, "Failed to initialize Discord Rich Presence");
+  }
+
   LOGGER.info({ platform: os.platform() }, "Media session initialized");
 
   // OS media-session commands → renderer.

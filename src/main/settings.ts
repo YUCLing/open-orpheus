@@ -3,6 +3,7 @@ const KV_ENTRIES: Record<string, unknown> = {
   "audio.currentDevice": undefined,
   "desktopLyrics.interpolatedLyricLine": true,
   "desktopLyrics.opacity": 1,
+  "discordPresence.enabled": false,
   "tray.clickBehavior": "always-show-menu",
   "window.overrideMainWindowSizeLimit": undefined,
   "window.lifecycle": "on-demand",
@@ -61,12 +62,27 @@ export function initialize() {
   };
 
   events = new Emittery();
-  kv.onHook(KeyvHooks.BEFORE_SET, ({ key, value }) => {
-    LOGGER.debug({ key }, "Setting updated");
-    void events.emit("change", { key, value });
+  const set = kv.set.bind(kv);
+  kv.set = async (key, value, ttl) => {
+    const result = await set(key, value, ttl);
+    if (result) {
+      LOGGER.debug({ key }, "Setting updated");
+      void events.emit("change", { key, value });
+    }
+    return result;
+  };
+  kv.onHook(KeyvHooks.AFTER_SET_MANY, ({ entries, values }) => {
+    for (const [index, { key, value }] of entries.entries()) {
+      if (values[index] !== true) continue;
+      LOGGER.debug({ key }, "Setting updated");
+      void events.emit("change", { key, value });
+    }
   });
-  kv.onHook(KeyvHooks.AFTER_DELETE, ({ key }) => {
+  kv.onHook(KeyvHooks.AFTER_DELETE, ({ key, value }) => {
     const keys = Array.isArray(key) ? key : [key];
-    keys.forEach((key) => events.emit("delete", { key }));
+    const results = Array.isArray(value) ? value : [value];
+    keys.forEach((key, index) => {
+      if (results[index] === true) void events.emit("delete", { key });
+    });
   });
 }

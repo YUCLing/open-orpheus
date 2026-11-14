@@ -44,6 +44,9 @@
   import TableOfContents from "@lucide/svelte/icons/table-of-contents";
   import Tray from "./Tray.svelte";
 
+  import Headphones from "@lucide/svelte/icons/headphones";
+  import DiscordPresence from "./DiscordPresence.svelte";
+
   import Bug from "@lucide/svelte/icons/bug";
   import Debug from "./Debug.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -88,6 +91,12 @@
           component: Tray,
         }
       : undefined,
+    {
+      id: "discord-presence",
+      name: "Discord 听歌状态",
+      icon: Headphones,
+      component: DiscordPresence,
+    },
     {
       id: "debug",
       name: "调试",

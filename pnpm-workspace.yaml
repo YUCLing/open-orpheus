@@ -12,6 +12,9 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true
 patchedDependencies:
+  # 上游核心修复：IPC 分帧、连接取消和关闭清理
+  # 本地保留：套接字归属/类型校验、目录回退及异常帧限制
+  "@discordjs/rpc@0.2.0-dev.1794009739-5bb74922a": patches/@discordjs__rpc@0.2.0-dev.1794009739-5bb74922a.patch
   # Drop other adapter support, as we always use node:sqlite
   "@keyv/sqlite": patches/@keyv__sqlite.patch
   # Make it search for toolchain in node_modules too

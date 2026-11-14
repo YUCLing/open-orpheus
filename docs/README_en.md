@@ -121,6 +121,10 @@ If the automatic download fails, you can manually copy both folders from your of
 - [D-Bus services](./DBUS_SERVICES_en.md)
 - [Logging configuration](./LOGGING.md)
 
+### Discord listening status
+
+Go to **Manage Open Orpheus → Discord listening status** and enable sharing. Changes take effect immediately. Keep the Discord desktop client running with activity sharing enabled. The Flathub build of Discord is also supported. The Flatpak sandbox of Open Orpheus may block access to Discord's socket by default; if it cannot connect, configure additional socket permissions for your Discord installation.
+
 ## Disclaimer
 
 Open Orpheus is an independent open-source project aimed at **interoperability**. It is not affiliated with, authorized by, or endorsed by NetEase in any way.
