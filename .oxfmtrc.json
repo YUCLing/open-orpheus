@@ -9,6 +9,8 @@
   },
   "svelte": {},
   "ignorePatterns": [
+    // Generated plugin artifacts
+    "packages/plugin-api/dist/",
     // Package Managers
     "package-lock.json",
     "pnpm-lock.yaml",

@@ -14,7 +14,7 @@ Which tools you use, which model, how much of the work it did — none of that i
 
 AI has made it cheap to produce code that looks like it works. It has not made reviewing that code any cheaper.
 
-Take a two-thousand-line pull request with a thorough description and a green test suite. If the author cannot say *why the change is needed*, the entire cost of review shifts onto the maintainer: reconstructing the motivation, reproducing the problem, judging the edge cases, and then owning whatever happens after merge. That is not an efficiency problem, it is a sustainability problem — there is a finite amount of code one maintainer can read, and these pull requests exhaust it.
+Take a two-thousand-line pull request with a thorough description and a green test suite. If the author cannot say _why the change is needed_, the entire cost of review shifts onto the maintainer: reconstructing the motivation, reproducing the problem, judging the edge cases, and then owning whatever happens after merge. That is not an efficiency problem, it is a sustainability problem — there is a finite amount of code one maintainer can read, and these pull requests exhaust it.
 
 So what gets judged here is never "did you use AI." It is whether the person submitting the change understands it and can stand behind it. Code written by hand that the author doesn't understand fails the same standard.
 
@@ -88,12 +88,12 @@ One pull request, one problem. The larger the scope, the more the author has to 
 
 ## What Happens
 
-| Situation | Outcome |
-| --- | --- |
-| Explanation questions go unanswered, or answers don't match the diff | Stays in review; not merged |
-| The same question is dodged repeatedly, or scope won't be reduced | May be closed |
-| No substantive reply to explanation questions within 14 days | May be closed; reopen any time with answers, no new pull request needed |
-| No activity at all for 30 days | May be closed |
+| Situation                                                            | Outcome                                                                 |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Explanation questions go unanswered, or answers don't match the diff | Stays in review; not merged                                             |
+| The same question is dodged repeatedly, or scope won't be reduced    | May be closed                                                           |
+| No substantive reply to explanation questions within 14 days         | May be closed; reopen any time with answers, no new pull request needed |
+| No activity at all for 30 days                                       | May be closed                                                           |
 
 Closing isn't punishment. It moves an unfinished pull request out of the queue. Reopening needs no apology — only answers.
 

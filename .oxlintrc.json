@@ -4,7 +4,7 @@
     "typeAware": true,
     "typeCheck": true
   },
-  "ignorePatterns": ["gui/**"],
+  "ignorePatterns": ["gui/**", "packages/plugin-api/dist/**"],
   "rules": {
     // TODO: Maybe bring it back in the future?
     "typescript/no-redundant-type-constituents": "off"

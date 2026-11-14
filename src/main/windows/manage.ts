@@ -20,6 +20,7 @@ import registerAsProtocolClient, {
 import { registerSettingsHandlers } from "../bridge/modules/settings";
 import { font } from "../gui";
 import { BasicManagedWindow, ManagedWindow } from "../window";
+import showPluginManagerWindow from "./plugin-manager";
 
 let manageWndInstance: ManageWindow | null = null;
 
@@ -48,6 +49,7 @@ class ManageWindow extends ManagedWindow {
     registerIpcHandlers<ManageContract>(manageWnd.webContents, "manage", {
       getFont: async () => font,
       checkUpdate: async (event, ignoreCache = false) => await checkUpdate(ignoreCache),
+      openPluginManager: async () => showPluginManagerWindow(),
       openLogFolder: async () => shell.showItemInFolder(log),
 
       pack: {
