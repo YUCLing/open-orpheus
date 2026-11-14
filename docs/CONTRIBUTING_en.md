@@ -1,6 +1,6 @@
 # Contributing to Open Orpheus
 
-[中文版](./CONTRIBUTING.md)
+[中文版](../CONTRIBUTING.md)
 
 First off, thank you for taking the time to contribute to Open Orpheus! Whether it's filing a bug report, improving documentation, or submitting code, every contribution matters.
 
@@ -10,6 +10,7 @@ First off, thank you for taking the time to contribute to Open Orpheus! Whether 
 - [Project Overview](#project-overview)
 - [Submitting Issues](#submitting-issues)
 - [Submitting Pull Requests](#submitting-pull-requests)
+- [AI-Assisted Contributions](#ai-assisted-contributions)
 - [Development Setup](#development-setup)
 
 ## Code of Conduct
@@ -160,6 +161,14 @@ Note that the core goal of this project is **interoperability**. Features intend
 3. Write a clear PR description explaining what you changed and why.
 4. If your PR addresses an issue, reference it with `Closes #issue-number` in the description.
 5. Submit and wait for review. Both maintainers and the review AI may request changes — please be patient. If you believe a suggestion is wrong or unnecessary, feel free to push back and explain your reasoning.
+
+### AI-Assisted Contributions
+
+Using AI to draft code, write tests, or improve docs is fine. We don't ask you to declare which tools you used, and we don't judge a pull request by whether it "looks AI-written."
+
+There is one hard requirement: **you must be able to explain every line you submit.** A pull request that cannot answer "what breaks without this," "who runs into it," or "how did you verify it" will stall in review — and may be closed if it goes quiet.
+
+See the [AI-Assisted Contribution Policy](./AI_POLICY_en.md) for the full standard, how to answer in review, and when to discuss scope first.
 
 ### Codecov
 
