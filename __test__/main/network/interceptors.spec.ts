@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { anonymousRegisterInterceptor } from "@main/network/interceptors/anonymous";
-import { updateBlocker } from "@main/network/interceptors/update";
 import type { NetworkFetchRequest, RequestContext } from "@main/network/types";
 
 function createContext(url: string) {
@@ -24,42 +23,6 @@ function createContext(url: string) {
   };
   return { ctx, execute, respondWith };
 }
-
-describe("updateBlocker", () => {
-  it.each([
-    "https://music.163.com/api/pc/upgrade/get",
-    "https://music.163.com/eapi/pc/upgrade/get/",
-    "https://music.163.com/api/pc/upgrade/get?channel=pc",
-  ])("answers %s with a synthetic no-update response", async (url) => {
-    const { ctx, respondWith } = createContext(url);
-
-    await updateBlocker.onRequest?.(ctx);
-
-    expect(respondWith).toHaveBeenCalledTimes(1);
-    const [response] = respondWith.mock.calls[0];
-    // A synthetic response must look like a normal 200 JSON reply.
-    expect(response).toMatchObject({
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-    expect(JSON.parse(response.blob)).toEqual({ code: 200, data: {}, message: "" });
-  });
-
-  it.each([
-    "https://music.163.com/api/pc/upgrade/check",
-    "https://music.163.com/api/pc/upgrade/get/extra",
-    "https://example.com/api/pc/upgrade/get",
-    "https://notmusic.163.com/api/pc/upgrade/get",
-    "https://music.163.com.evil.example/api/pc/upgrade/get",
-    "not a url",
-  ])("leaves %s alone", async (url) => {
-    const { ctx, respondWith } = createContext(url);
-
-    await updateBlocker.onRequest?.(ctx);
-
-    expect(respondWith).not.toHaveBeenCalled();
-  });
-});
 
 describe("anonymousRegisterInterceptor", () => {
   it.each([

@@ -5,9 +5,11 @@
   import type { UpdateInfo } from "@shared/types/update";
   import UpdateIcon from "@lucide/svelte/icons/circle-fading-arrow-up";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import ToyBrick from "@lucide/svelte/icons/toy-brick";
 
   import Logo from "../../../assets/icon.svg";
 
+  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { getBridge } from "$lib/bridge";
   import type { ManageContract } from "@shared/contracts/manage-api";
 
@@ -228,10 +230,11 @@
         </Sidebar.GroupContent>
       </Sidebar.Group>
     </Sidebar.Content>
-    {#await updateInfoPromise then updateInfo}
-      {#if updateInfo}
-        <Sidebar.Footer>
-          <Sidebar.Menu>
+
+    <Sidebar.Footer>
+      <Sidebar.Menu>
+        {#await updateInfoPromise then updateInfo}
+          {#if updateInfo}
             <Sidebar.MenuItem>
               <Sidebar.MenuButton
                 class="cursor-pointer text-orange-600 hover:text-orange-800"
@@ -240,12 +243,17 @@
                 <UpdateIcon />有新版本
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
-          </Sidebar.Menu>
-        </Sidebar.Footer>
-      {/if}
-    {/await}
+          {/if}
+        {/await}
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton class="cursor-pointer" onclick={() => api.openPluginManager()}>
+            <ToyBrick />插件管理器
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+      </Sidebar.Menu>
+    </Sidebar.Footer>
   </Sidebar.Root>
-  <main class="h-screen flex-1 overflow-y-auto">
+  <ScrollArea class="h-screen flex-1">
     <div class="w-full p-4 xl:mx-auto xl:w-4xl">
       {#each shownItems as item, i (item.id)}
         <div class="my-4 scroll-mt-4" class:mt-0={i === 0} id={item.id}>
@@ -256,5 +264,5 @@
         {/if}
       {/each}
     </div>
-  </main>
+  </ScrollArea>
 </Sidebar.Provider>

@@ -1,0 +1,19 @@
+{
+  "name": "@open-orpheus/plugin-update-blocker",
+  "version": "0.20.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "check": "tsc --noEmit"
+  },
+  "openOrpheus": {
+    "builtinPlugin": true
+  },
+  "dependencies": {
+    "@open-orpheus/plugin-api": "workspace:*"
+  },
+  "devDependencies": {
+    "tsdown": "^0.23.7"
+  }
+}
