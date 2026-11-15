@@ -9,5 +9,7 @@ export default defineConfig({
   dts: false,
   clean: true,
   copy: ["metadata.json"],
-  external: ["@open-orpheus/plugin-api"],
+  deps: {
+    neverBundle: ["@open-orpheus/plugin-api"],
+  },
 });

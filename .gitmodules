@@ -1,0 +1,3 @@
+[submodule "packages/plugin-builtin-example-plugin"]
+	path = packages/plugin-builtin-example-plugin
+	url = https://github.com/open-orpheus/example-plugin.git

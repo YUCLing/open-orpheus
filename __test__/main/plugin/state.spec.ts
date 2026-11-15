@@ -33,4 +33,23 @@ describe("PluginState", () => {
     expect(state.isEnabled("b", PluginKind.User)).toBe(true);
     expect(writes.at(-1)).toEqual({ a: true, b: true });
   });
+
+  it("defaults every plugin off until a builtin default is registered", async () => {
+    const state = new PluginState();
+    await state.load();
+
+    expect(state.isEnabled("builtin", PluginKind.Builtin)).toBe(false);
+    expect(state.isEnabled("user", PluginKind.User)).toBe(false);
+
+    state.setDefault("builtin", true);
+
+    expect(state.isEnabled("builtin", PluginKind.Builtin)).toBe(true);
+    expect(state.isEnabled("user", PluginKind.User)).toBe(false);
+
+    await state.setEnabled("builtin", false);
+    expect(state.isEnabled("builtin", PluginKind.Builtin)).toBe(false);
+
+    await state.setEnabled("builtin", true);
+    expect(state.isEnabled("builtin", PluginKind.Builtin)).toBe(true);
+  });
 });

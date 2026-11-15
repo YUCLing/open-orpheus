@@ -52,6 +52,7 @@ jobs:
       - name: Checkout (bootstrap)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          submodules: recursive
           ref: main
           persist-credentials: false
 
@@ -67,6 +68,7 @@ jobs:
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          submodules: recursive
           ref: main
           token: ${{ steps.app.outputs.token }}
           # Explicit: the app token is used by `git push`, so the credential
@@ -198,6 +200,7 @@ jobs:
       - name: Checkout for git context
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          submodules: recursive
           ref: ${{ needs.prepare.outputs.commit-sha }}
           persist-credentials: false
 
@@ -282,6 +285,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          submodules: recursive
           ref: ${{ needs.prepare.outputs.commit-sha }}
           persist-credentials: false
 
@@ -338,6 +342,7 @@ jobs:
       - name: Checkout (bootstrap)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          submodules: recursive
           persist-credentials: false
 
       - name: Create app token
