@@ -1,8 +1,10 @@
+/** @internal */
 export enum PluginKind {
   Builtin = "builtin",
   User = "user",
 }
 
+/** @internal */
 export enum PluginActivationStatus {
   Active = "active",
   Inactive = "inactive",
@@ -10,6 +12,7 @@ export enum PluginActivationStatus {
   Failed = "failed",
 }
 
+/** @internal */
 export enum PluginPreloadStatus {
   Pending = "pending",
   Active = "active",
@@ -17,11 +20,13 @@ export enum PluginPreloadStatus {
   Failed = "failed",
 }
 
+/** @internal */
 export interface RealmRuntimeStatus {
   status: PluginPreloadStatus;
   error?: string;
 }
 
+/** @internal */
 export interface PluginManagerEntry {
   id: string;
   name: string;
@@ -44,12 +49,14 @@ export interface PluginManagerEntry {
   realmStatus?: Partial<Record<string, RealmRuntimeStatus>>;
 }
 
+/** @internal */
 export interface PluginManagerState {
   /** False when the plugin system itself is disabled. */
   available: boolean;
   plugins: PluginManagerEntry[];
 }
 
+/** @internal */
 export interface PluginManagerContract {
   platform: NodeJS.Platform;
   versions: NodeJS.ProcessVersions;

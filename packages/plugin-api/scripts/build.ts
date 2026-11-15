@@ -78,6 +78,7 @@ export function generateApi(): number {
   assertKeyvVersion();
   assertVersionConsistency();
   assertPackageExports();
+  assertInternalStripped();
   assertConsumable();
 
   return declarations;
@@ -93,6 +94,7 @@ function generateRealm(realm: RealmBuild): number {
     noEmit: false,
     outDir: realm.host,
     rootDir: ROOT,
+    stripInternal: true,
   };
 
   const rootNames = [
@@ -696,6 +698,34 @@ function addDeclarationExtensions(root: string): void {
   }
 }
 
+/** Fail if an @internal declaration leaked into the published SDK. */
+function assertInternalStripped(): void {
+  const samples = [
+    [
+      "lifecycle",
+      "shared/plugin/lifecycle.d.ts",
+      /\b(?:LifecyclePhase|RealmLifecycle|LifecycleSnapshot)\b/,
+    ],
+    [
+      "plugin-manager contract",
+      "shared/contracts/plugin-manager-api.d.ts",
+      /\b(?:PluginManagerEntry|PluginPreloadStatus|RealmRuntimeStatus)\b/,
+    ],
+  ] as const;
+  const hosts = ["host", "preload/host", "plugin-manager/host"];
+  for (const host of hosts) {
+    for (const [name, relative, pattern] of samples) {
+      const file = path.join(DIST, host, "src", relative);
+      if (!existsSync(file)) continue;
+      if (pattern.test(readFileSync(file, "utf8"))) {
+        throw new Error(
+          `@internal declaration leaked into the SDK: ${path.relative(ROOT, file)} (${name})`
+        );
+      }
+    }
+  }
+}
+
 /** Fail the build if a realm's SDK entry is not exposed by package.json. */
 function assertPackageExports(): void {
   const packageJson = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, "package.json"), "utf8")) as {
@@ -755,6 +785,9 @@ function assertConsumable(): void {
         "export type Main = typeof main;",
         "export type Preload = typeof preload;",
         "export type PluginManager = typeof pluginManager;",
+        "export type MainPluginModule = main.PluginModule;",
+        "export type PreloadPluginModule = preload.PluginModule;",
+        "export type PluginManagerPluginModule = pluginManager.PluginModule;",
         'export type Logger = LoadedModule<"@main/logger">;',
         'export type LoggerViaLoad = Awaited<ReturnType<RegistryLoad["@main/logger"]>>;',
         "type Assert<T extends true> = T;",

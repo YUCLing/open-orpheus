@@ -113,10 +113,11 @@ export class PluginManager {
 
   private toEntry(record: PluginRecord): PluginManagerEntry {
     const { metadata, kind } = record.plugin;
-    const realmStatus = this.realmStatusFor(record);
-    const realmFailed = Object.values(realmStatus).some(
-      (state) => state?.status === PluginPreloadStatus.Failed
-    );
+    const enabled = this.state.isEnabled(metadata.id, kind);
+    const realmStatus = enabled ? this.realmStatusFor(record) : undefined;
+    const realmFailed = realmStatus
+      ? Object.values(realmStatus).some((state) => state?.status === PluginPreloadStatus.Failed)
+      : false;
     const status =
       record.status === PluginStatus.Failed
         ? PluginActivationStatus.Failed
@@ -134,7 +135,7 @@ export class PluginManager {
       license: metadata.license,
       icon: metadata.icon ? pluginAssetsUrl(metadata.id, metadata.icon) : undefined,
       kind,
-      enabled: this.state.isEnabled(metadata.id, kind),
+      enabled,
       status,
       error: record.status === PluginStatus.Failed ? toError(record.error).message : undefined,
       realmStatus,

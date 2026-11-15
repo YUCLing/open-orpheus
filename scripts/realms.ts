@@ -76,12 +76,12 @@ export const REALMS = {
       reportStatus: false,
     },
     sdk: {
-      contract: "src/main/plugin/types.ts",
+      contract: "src/shared/plugin/realms/main/index.ts",
       host: "dist/host",
       registryMap: "dist/registry-map.d.ts",
       index: "dist/index.d.ts",
       indexExports: [
-        'export type { PluginModule, PluginRuntime } from "./host/src/main/plugin/types";',
+        'export type { PluginModule, PluginRuntime } from "./host/src/shared/plugin/realms/main/index";',
         'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
         'export type { RegistryLoad } from "./registry-map";',
       ],
@@ -104,12 +104,12 @@ export const REALMS = {
       reportStatus: true,
     },
     sdk: {
-      contract: "src/preload/plugin/types.ts",
+      contract: "src/shared/plugin/realms/preload/index.ts",
       host: "dist/preload/host",
       registryMap: "dist/preload/registry-map.d.ts",
       index: "dist/preload/index.d.ts",
       indexExports: [
-        'export type { PreloadPluginModule, PreloadPluginRuntime } from "./host/src/preload/plugin/types";',
+        'export type { PluginModule, PluginRuntime } from "./host/src/shared/plugin/realms/preload/index";',
         'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
         'export type { RegistryLoad } from "./registry-map";',
       ],
@@ -135,12 +135,13 @@ export const REALMS = {
       reportStatus: true,
     },
     sdk: {
-      contract: "src/preload/plugin/plugin-manager-types.ts",
+      contract: "src/shared/plugin/realms/plugin-manager/index.ts",
       host: "dist/plugin-manager/host",
       registryMap: "dist/plugin-manager/registry-map.d.ts",
       index: "dist/plugin-manager/index.d.ts",
       indexExports: [
-        'export type { PluginManagerPluginModule, PluginManagerPluginRuntime } from "./host/src/preload/plugin/plugin-manager-types";',
+        'export type { PluginModule, PluginRuntime } from "./host/src/shared/plugin/realms/plugin-manager/index";',
+        'export type { API, ManagerUIPlugin, MountFn } from "./host/src/shared/plugin/realms/plugin-manager/ui";',
         'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
         'export type { RegistryLoad } from "./registry-map";',
       ],

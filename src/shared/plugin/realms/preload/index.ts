@@ -1,7 +1,7 @@
 import type { PluginRegistry, Registry } from "@shared/plugin/registry";
 
 /** Everything a plugin's preload-realm module is handed. */
-export interface PreloadPluginRuntime {
+export interface PluginRuntime {
   /** The generated interface registry for the preload realm. */
   registry: Registry;
   /** The preload realm's plugin-contributed exports, keyed by plugin id. */
@@ -14,7 +14,7 @@ export interface PreloadPluginRuntime {
  * Preload entries are evaluated as CJS bundles; the plugin exposes the same
  * `activate`/`deactivate` lifecycle as the main realm.
  */
-export interface PreloadPluginModule {
-  activate(runtime: PreloadPluginRuntime): void | Promise<void>;
+export interface PluginModule {
+  activate(runtime: PluginRuntime): void | Promise<void>;
   deactivate?(): void | Promise<void>;
 }

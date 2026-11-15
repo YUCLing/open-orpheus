@@ -229,4 +229,15 @@ describe("PluginManager", () => {
       "plugin-manager": { status: PluginPreloadStatus.Pending },
     });
   });
+
+  it("does not report secondary realm status for a disabled plugin", async () => {
+    const state = createState();
+    const plugin = discovered("pre", PluginKind.User);
+    plugin.metadata.realms.preload = "preload/index.cjs";
+    plugin.metadata.realms["plugin-manager"] = "plugin-manager/index.cjs";
+    const loader = createLoader(state, [plugin]);
+    const manager = new PluginManager(loader, state);
+
+    expect(manager.list().plugins[0]?.realmStatus).toBeUndefined();
+  });
 });

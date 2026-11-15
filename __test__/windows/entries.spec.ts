@@ -7,12 +7,27 @@ const hoisted = vi.hoisted(() => ({
   pluginManagerRegistry: { load: {}, realm: "plugin-manager" },
 }));
 
+vi.mock("electron", () => ({
+  contextBridge: {
+    executeInMainWorld: vi.fn(({ func }: { func: () => void }) => func()),
+  },
+}));
+
 vi.mock("../../src/preload/bridge", () => ({
   exposeApi: (prefix: string, values: Record<string, unknown> = {}) =>
     hoisted.exposeInMainWorld(prefix, values),
 }));
 
+vi.mock("@preload/bridge", () => ({
+  exposeApi: (prefix: string, values: Record<string, unknown> = {}) =>
+    hoisted.exposeInMainWorld(prefix, values),
+}));
+
 vi.mock("@preload/plugin", () => ({
+  installPreloadPlugins: hoisted.installPreloadPlugins,
+}));
+
+vi.mock("../../src/preload/plugin/index", () => ({
   installPreloadPlugins: hoisted.installPreloadPlugins,
 }));
 
@@ -26,11 +41,15 @@ function exposed() {
   return Object.fromEntries(hoisted.exposeInMainWorld.mock.calls);
 }
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe("window preload entry points", () => {
   it("exposes the API surface each window expects", async () => {
     vi.stubEnv("FLATPAK_ID", undefined);
+    vi.stubGlobal("window", {});
     // Importing these modules is what registers the API surface. They are
     // imported here rather than at file scope because Vitest clears mock call
     // history before every test, which would wipe registrations made on import.
@@ -62,6 +81,7 @@ describe("window preload entry points", () => {
 
   it("installs plugins in the plugin-manager preload with its own registry", async () => {
     vi.resetModules();
+    vi.stubGlobal("window", {});
     hoisted.installPreloadPlugins.mockClear();
 
     await import("../../src/windows/plugin-manager");
@@ -70,6 +90,36 @@ describe("window preload entry points", () => {
       hoisted.pluginManagerRegistry.load,
       hoisted.pluginManagerRegistry.realm
     );
+  });
+
+  it("notifies plugin-manager configuration listeners", async () => {
+    vi.resetModules();
+    vi.stubGlobal("window", {});
+    await import("../../src/windows/plugin-manager");
+
+    const manager = (
+      globalThis as unknown as {
+        window: { pluginManager: import("@shared/plugin/realms/plugin-manager/ui").API };
+      }
+    ).window.pluginManager;
+    const changed = vi.fn();
+    const mount = vi.fn();
+
+    manager.addEventListener("changed", changed);
+    manager.register("p", { configuration: { mount } });
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(manager.plugins.p?.configuration?.mount).toBe(mount);
+
+    manager.unregister("p");
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(manager.plugins.p).toBeUndefined();
+
+    manager.unregister("missing");
+    expect(changed).toHaveBeenCalledTimes(2);
+
+    manager.removeEventListener("changed", changed);
+    manager.register("q", {});
+    expect(changed).toHaveBeenCalledTimes(2);
   });
 
   it("exposes the same manage API in Flatpak", async () => {

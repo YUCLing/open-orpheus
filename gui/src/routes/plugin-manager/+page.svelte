@@ -16,10 +16,12 @@
     type PluginManagerEntry,
     type PluginManagerState,
   } from "@shared/contracts/plugin-manager-api";
+  import type { API, ManagerUIPlugin, MountFn } from "@shared/plugin/realms/plugin-manager/ui";
   import { REALM_DISPLAY_NAMES } from "virtual:open-orpheus/realm-display";
 
   import Package from "@lucide/svelte/icons/package";
   import Wrench from "@lucide/svelte/icons/wrench";
+  import type { Attachment } from "svelte/attachments";
 
   const api = getBridge<PluginManagerContract>("plugin");
 
@@ -31,6 +33,11 @@
   let managerState = $state<PluginManagerState | null>(null);
   let busy = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let configPlugins = $state<Record<string, ManagerUIPlugin>>({});
+
+  const refreshConfigPlugins = () => {
+    configPlugins = { ...manager.plugins };
+  };
 
   const active = $derived(
     managerState?.plugins.filter(
@@ -44,8 +51,13 @@
   );
 
   onMount(() => {
+    refreshConfigPlugins();
+    manager.addEventListener("changed", refreshConfigPlugins);
+
     void load();
     api.events.changed(() => void load());
+
+    return () => manager.removeEventListener("changed", refreshConfigPlugins);
   });
 
   async function load() {
@@ -79,6 +91,18 @@
       busy = null;
     }
   }
+
+  const manager = (window as unknown as { pluginManager: API }).pluginManager;
+  const pluginConfigurationAttachment: (mount: MountFn) => Attachment = (mount) => {
+    return (element) => {
+      if (!(element instanceof HTMLDivElement)) return;
+      const unmount = mount(element);
+      if (!unmount) return;
+      return () => {
+        unmount();
+      };
+    };
+  };
 </script>
 
 <svelte:head>
@@ -96,10 +120,11 @@
 {/snippet}
 
 {#snippet pluginCard(plugin: PluginManagerEntry)}
+  {@const mount = configPlugins[plugin.id]?.configuration?.mount}
   <Card.Root class="shadow-md">
     <Card.Header class="flex items-center gap-2 drop-shadow-lg">
       <button
-        class="group/plugin-icon relative size-14 cursor-pointer overflow-hidden rounded-lg"
+        class="group/plugin-icon relative size-14 shrink-0 cursor-pointer overflow-hidden rounded-lg"
         onclick={() => (pluginDialog = plugin.id)}
       >
         {@render pluginIcon(plugin)}
@@ -201,7 +226,13 @@
           {/each}
         </Dialog.Description>
       </Dialog.Header>
-      <p class="text-center">暂不支持插件配置</p>
+      {#if mount}
+        {#key mount}
+          <div class="[all:initial]" {@attach pluginConfigurationAttachment(mount)}></div>
+        {/key}
+      {:else}
+        <p class="text-center">此插件暂无配置项</p>
+      {/if}
     </Dialog.Content>
   </Dialog.Root>
 {/snippet}
