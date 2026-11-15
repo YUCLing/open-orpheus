@@ -2,6 +2,8 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import { PLUGIN_REALM_IDS, REALM_RUNTIME } from "virtual:open-orpheus/realm-runtime";
+
 import { sanitizeRelativePath } from "../util/path";
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -57,10 +59,16 @@ function createMetadataSchema(base: string) {
     license: z.string().min(1, "must not be empty").optional(),
     /** Path relative to the plugin's `assets/` directory. */
     icon: safeAssetPath.optional(),
-    realms: z.object({
-      main: mainRealmEntry,
-      preload: preloadRealmEntry.optional(),
-    }),
+    realms: (() => {
+      const shape: Record<string, z.ZodType> = {};
+      for (const realm of PLUGIN_REALM_IDS) {
+        const entry = REALM_RUNTIME[realm]?.pluginEntry;
+        if (!entry) continue;
+        const schema = entry.extension === ".mjs" ? mainRealmEntry : preloadRealmEntry;
+        shape[entry.metadataKey] = entry.required ? schema : schema.optional();
+      }
+      return z.object(shape);
+    })(),
     /** Internal switch; only honored for built-in plugins. */
     builtin: z
       .object({
@@ -70,7 +78,14 @@ function createMetadataSchema(base: string) {
   });
 }
 
-export type PluginMetadata = z.infer<ReturnType<typeof createMetadataSchema>>;
+type ParsedPluginMetadata = z.infer<ReturnType<typeof createMetadataSchema>>;
+
+/** Plugin entry paths, keyed by realm. `main` is mandatory. */
+export type PluginMetadataRealms = { main: string } & Partial<Record<string, string>>;
+
+export type PluginMetadata = Omit<ParsedPluginMetadata, "realms"> & {
+  realms: PluginMetadataRealms;
+};
 
 /**
  * Validate a parsed `metadata.json`.
@@ -83,5 +98,5 @@ export function parsePluginMetadata(raw: unknown, source: string): PluginMetadat
   if (!result.success) {
     throw new Error(`Invalid metadata.json in ${source}:\n${z.prettifyError(result.error)}`);
   }
-  return result.data;
+  return result.data as PluginMetadata;
 }

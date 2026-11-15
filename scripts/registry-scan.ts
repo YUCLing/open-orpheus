@@ -14,48 +14,9 @@ import ts from "typescript";
  * aliases have exactly one source of truth. This module only reads; it never
  * writes generated artifacts.
  */
+import { REALMS, type RealmId, type RealmScanConfig } from "./realms.ts";
+
 export const IMPORT_EXTENSIONS = /\.(?:[cm]?[jt]sx?|mjs|cjs)$/;
-
-/**
- * Paths (relative to `src/`) that are part of the plugin framework rather than
- * the host surface, or that live in other build realms.
- */
-export type RealmId = "main" | "preload";
-
-export const REALM_IDS: RealmId[] = ["main", "preload"];
-
-interface HardcodedRegistryEntry {
-  /** Public registry key, independent of the alias that would derive it. */
-  key: string;
-  /** Source file, relative to `src/`. */
-  file: string;
-}
-
-interface RealmScanConfig {
-  /** Entry files relative to the project root. */
-  entries: string[];
-  /** Prefixes (relative to `src/`) to exclude from the surface. */
-  excludedPrefixes: string[];
-  /** Paths without extension (relative to `src/`) that are the entry itself. */
-  excludedFiles: Set<string>;
-  /** Modules that are public surface without an import edge from the entry. */
-  hardcoded: HardcodedRegistryEntry[];
-}
-
-const REALMS: Record<RealmId, RealmScanConfig> = {
-  main: {
-    entries: ["src/main.ts"],
-    excludedPrefixes: ["main/plugin/", "preload/", "worklets/"],
-    excludedFiles: new Set(["main"]),
-    hardcoded: [],
-  },
-  preload: {
-    entries: ["src/preload.ts"],
-    excludedPrefixes: ["main/", "preload/plugin/", "worklets/"],
-    excludedFiles: new Set(["preload"]),
-    hardcoded: [{ key: "@preload/logger", file: "preload/logger.ts" }],
-  },
-};
 
 export interface RegistryEntry {
   /** Canonical public key, e.g. `@main/lifecycle`. */
@@ -99,7 +60,7 @@ interface ImportScan {
  */
 export function collectRegistryEntries(options: RegistryScanOptions = {}): RegistryEntry[] {
   const { root, realm = "main" } = options;
-  const config = REALMS[realm];
+  const config = REALMS[realm].scan;
   const { compilerOptions, aliases, root: resolvedRoot } = readProjectConfig(root);
   const srcRoot = path.join(resolvedRoot, "src");
   const entries = config.entries.map((entry) => path.join(resolvedRoot, entry));
@@ -267,7 +228,7 @@ function isRegistryCandidate(file: string, srcRoot: string, config: RealmScanCon
   if (!IMPORT_EXTENSIONS.test(relativePath)) return false;
   if (config.excludedPrefixes.some((prefix) => relativePath.startsWith(prefix))) return false;
   const withoutExtension = relativePath.replace(IMPORT_EXTENSIONS, "");
-  return !config.excludedFiles.has(withoutExtension);
+  return !config.excludedFiles.includes(withoutExtension);
 }
 
 function toAliasKey(file: string, aliases: Alias[]): string | null {

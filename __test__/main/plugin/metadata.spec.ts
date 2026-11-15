@@ -55,6 +55,35 @@ describe("parsePluginMetadata", () => {
     expect(metadata.realms.preload).toBe("preload/index.cjs");
   });
 
+  it("accepts a plugin-manager realm with a .cjs entry", () => {
+    const metadata = parsePluginMetadata(
+      {
+        ...valid,
+        realms: {
+          main: "main/index.mjs",
+          "plugin-manager": "plugin-manager/index.cjs",
+        },
+      },
+      "test"
+    );
+    expect(metadata.realms["plugin-manager"]).toBe("plugin-manager/index.cjs");
+  });
+
+  it("rejects a plugin-manager realm that is not .cjs", () => {
+    expect(() =>
+      parsePluginMetadata(
+        {
+          ...valid,
+          realms: {
+            main: "main/index.mjs",
+            "plugin-manager": "plugin-manager/index.mjs",
+          },
+        },
+        "test"
+      )
+    ).toThrow(/\.cjs/);
+  });
+
   it("rejects a preload realm that is not .cjs", () => {
     expect(() =>
       parsePluginMetadata(

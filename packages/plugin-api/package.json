@@ -29,6 +29,9 @@
     },
     "./preload": {
       "types": "./dist/preload/index.d.ts"
+    },
+    "./plugin-manager": {
+      "types": "./dist/plugin-manager/index.d.ts"
     }
   },
   "files": [

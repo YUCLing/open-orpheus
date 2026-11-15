@@ -17,6 +17,11 @@ export enum PluginPreloadStatus {
   Failed = "failed",
 }
 
+export interface RealmRuntimeStatus {
+  status: PluginPreloadStatus;
+  error?: string;
+}
+
 export interface PluginManagerEntry {
   id: string;
   name: string;
@@ -32,9 +37,11 @@ export interface PluginManagerEntry {
   /** Runtime outcome from the plugin loader. */
   status: PluginActivationStatus;
   error?: string;
-  /** Preload-realm outcome reported by the window that evaluated it. */
-  preloadStatus?: PluginPreloadStatus;
-  preloadError?: string;
+  /**
+   * Secondary-realm outcomes, keyed by realm. Realms with `reportStatus` in the
+   * central manifest are included; realms without a plugin entry are omitted.
+   */
+  realmStatus?: Partial<Record<string, RealmRuntimeStatus>>;
 }
 
 export interface PluginManagerState {

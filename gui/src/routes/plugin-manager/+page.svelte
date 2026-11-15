@@ -11,15 +11,21 @@
   import {
     PluginActivationStatus,
     PluginKind,
+    PluginPreloadStatus,
     type PluginManagerContract,
     type PluginManagerEntry,
     type PluginManagerState,
   } from "@shared/contracts/plugin-manager-api";
+  import { REALM_DISPLAY_NAMES } from "virtual:open-orpheus/realm-display";
 
   import Package from "@lucide/svelte/icons/package";
   import Wrench from "@lucide/svelte/icons/wrench";
 
   const api = getBridge<PluginManagerContract>("plugin");
+
+  function realmLabel(realm: string): string {
+    return REALM_DISPLAY_NAMES[realm] ?? realm;
+  }
 
   let pluginDialog = $state<string | null>(null);
   let managerState = $state<PluginManagerState | null>(null);
@@ -116,6 +122,13 @@
         {:else if plugin.status === PluginActivationStatus.Partial}
           <Badge variant="destructive">部分激活</Badge>
         {/if}
+        {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
+          {#if state?.status === PluginPreloadStatus.Failed}
+            <Badge variant="destructive">{realmLabel(realm)}加载失败</Badge>
+          {:else if state?.status === PluginPreloadStatus.Pending}
+            <Badge variant="outline">{realmLabel(realm)}等待中</Badge>
+          {/if}
+        {/each}
       </div>
     </Card.Header>
     <Card.Content>
@@ -123,9 +136,11 @@
       {#if plugin.error}
         <p class="mt-2 text-sm text-red-700">{plugin.error}</p>
       {/if}
-      {#if plugin.preloadError}
-        <p class="mt-2 text-sm text-red-700">预加载: {plugin.preloadError}</p>
-      {/if}
+      {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
+        {#if state?.status === PluginPreloadStatus.Failed && state?.error}
+          <p class="mt-2 text-sm text-red-700">{realmLabel(realm)}：{state?.error}</p>
+        {/if}
+      {/each}
     </Card.Content>
     <Card.Footer class="flex content-end">
       <span class="flex-1 text-xs text-gray-500"
@@ -179,9 +194,11 @@
           {#if plugin.error}
             <p class="mt-2 text-sm text-red-700">{plugin.error}</p>
           {/if}
-          {#if plugin.preloadError}
-            <p class="mt-2 text-sm text-red-700">预加载: {plugin.preloadError}</p>
-          {/if}
+          {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
+            {#if state?.status === PluginPreloadStatus.Failed && state?.error}
+              <p class="mt-2 text-sm text-red-700">{realmLabel(realm)}：{state?.error}</p>
+            {/if}
+          {/each}
         </Dialog.Description>
       </Dialog.Header>
       <p class="text-center">暂不支持插件配置</p>

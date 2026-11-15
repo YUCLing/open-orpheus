@@ -3,7 +3,9 @@ import {
   PluginPreloadStatus,
   type PluginManagerEntry,
   type PluginManagerState,
+  type RealmRuntimeStatus,
 } from "@shared/contracts/plugin-manager-api";
+import { LOADED_REALM_IDS } from "virtual:open-orpheus/realm-runtime";
 import { toError } from "@shared/util";
 
 import { PluginStatus, type PluginLoader, type PluginRecord } from "./loader";
@@ -12,16 +14,13 @@ import type { PluginStateStore } from "./state";
 
 /** Combines the persisted enable intent with the loader's runtime status. */
 export class PluginManager {
-  private readonly preloadStates = new Map<
-    number,
-    Map<string, { status: PluginPreloadStatus; error?: string }>
-  >();
+  private readonly realmStates = new Map<number, Map<string, Map<string, RealmRuntimeStatus>>>();
 
   constructor(
     private readonly loader: PluginLoader,
     private readonly state: PluginStateStore,
-    /** Called after a preload-realm plugin's enable state is persisted and applied. */
-    private readonly onPreloadChanged?: (id: string, enabled: boolean) => void
+    /** Called after a secondary-realm plugin's enable state is persisted and applied. */
+    private readonly onRealmChanged?: (id: string, realm: string, enabled: boolean) => void
   ) {}
 
   list(): PluginManagerState {
@@ -41,8 +40,10 @@ export class PluginManager {
     } else {
       await this.loader.deactivate(id);
     }
-    if (record.plugin.metadata.realms.preload) {
-      this.onPreloadChanged?.(id, enabled);
+    for (const realm of LOADED_REALM_IDS) {
+      if (record.plugin.metadata.realms[realm]) {
+        this.onRealmChanged?.(id, realm, enabled);
+      }
     }
     return this.list();
   }
@@ -62,47 +63,64 @@ export class PluginManager {
     return this.loader.plugins.find((record) => record.plugin.metadata.id === id);
   }
 
-  /** Record a preload status report from one window. */
-  setPreloadStatus(
+  /** Record a secondary-realm status report from one window. */
+  setRealmStatus(
     webContentsId: number,
+    realm: string,
     id: string,
     status: PluginPreloadStatus,
     error?: string
   ): void {
-    let states = this.preloadStates.get(webContentsId);
-    if (!states) {
-      states = new Map();
-      this.preloadStates.set(webContentsId, states);
+    if (!LOADED_REALM_IDS.includes(realm)) return;
+    let realms = this.realmStates.get(webContentsId);
+    if (!realms) {
+      realms = new Map();
+      this.realmStates.set(webContentsId, realms);
     }
-    states.set(id, { status, error });
+    let plugins = realms.get(realm);
+    if (!plugins) {
+      plugins = new Map();
+      realms.set(realm, plugins);
+    }
+    plugins.set(id, { status, error });
   }
 
-  /** Drop all preload reports when their window goes away. */
-  clearPreloadStatus(webContentsId: number): void {
-    this.preloadStates.delete(webContentsId);
+  /** Drop all secondary-realm reports when their window goes away. */
+  clearRealmStatus(webContentsId: number): void {
+    this.realmStates.delete(webContentsId);
   }
 
-  private preloadStatusFor(
-    id: string
-  ): { status: PluginPreloadStatus; error?: string } | undefined {
-    let result: { status: PluginPreloadStatus; error?: string } | undefined;
-    for (const states of this.preloadStates.values()) {
-      const state = states.get(id);
-      if (!state) continue;
-      if (state.status === PluginPreloadStatus.Failed) return state;
-      if (state.status === PluginPreloadStatus.Active) result = state;
-      else if (!result) result = state;
+  private realmStatusFor(record: PluginRecord): Partial<Record<string, RealmRuntimeStatus>> {
+    const result: Partial<Record<string, RealmRuntimeStatus>> = {};
+    for (const realm of LOADED_REALM_IDS) {
+      if (!record.plugin.metadata.realms[realm]) continue;
+
+      let found: RealmRuntimeStatus | undefined;
+      for (const states of this.realmStates.values()) {
+        const state = states.get(realm)?.get(record.plugin.metadata.id);
+        if (!state) continue;
+        if (state.status === PluginPreloadStatus.Failed) {
+          found = state;
+          break;
+        }
+        if (state.status === PluginPreloadStatus.Active) found = state;
+        else if (!found) found = state;
+      }
+      result[realm] = found ?? { status: PluginPreloadStatus.Pending };
     }
     return result;
   }
 
   private toEntry(record: PluginRecord): PluginManagerEntry {
     const { metadata, kind } = record.plugin;
-    const preload = metadata.realms.preload ? this.preloadStatusFor(metadata.id) : undefined;
+    const realmStatus = this.realmStatusFor(record);
+    const realmFailed = Object.values(realmStatus).some(
+      (state) => state?.status === PluginPreloadStatus.Failed
+    );
     const status =
       record.status === PluginStatus.Failed
         ? PluginActivationStatus.Failed
-        : record.status === PluginStatus.Active && preload?.status === PluginPreloadStatus.Failed
+        : record.status === PluginStatus.Active && realmFailed
           ? PluginActivationStatus.Partial
           : record.status === PluginStatus.Active
             ? PluginActivationStatus.Active
@@ -119,9 +137,7 @@ export class PluginManager {
       enabled: this.state.isEnabled(metadata.id, kind),
       status,
       error: record.status === PluginStatus.Failed ? toError(record.error).message : undefined,
-      preloadStatus:
-        preload?.status ?? (metadata.realms.preload ? PluginPreloadStatus.Pending : undefined),
-      preloadError: preload?.error,
+      realmStatus,
     };
   }
 }

@@ -147,6 +147,8 @@ export const activate: PluginModule["activate"] = async (runtime: PluginRuntime)
 
 Preload 插件使用 `@open-orpheus/plugin-api/preload` 中的 `PreloadPluginModule` / `PreloadPluginRuntime`。
 
+插件管理窗口使用 `@open-orpheus/plugin-api/plugin-manager` 中的 `PluginManagerPluginModule` / `PluginManagerPluginRuntime`，并在 `metadata.json` 的 `realms` 中声明 `"plugin-manager"` 入口。该入口只在插件管理窗口中运行。
+
 ### 发布
 
 SDK 随 Release 工作流与 Open Orpheus 一同发布。

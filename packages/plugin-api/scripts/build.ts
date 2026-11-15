@@ -22,9 +22,9 @@ import {
   IMPORT_EXTENSIONS,
   readAliases,
   readCompilerOptions,
-  type RealmId,
   type RegistryEntry,
 } from "../../../scripts/registry-scan.ts";
+import { REALMS, REALM_IDS, type RealmId } from "../../../scripts/realms.ts";
 
 /**
  * Generate the self-contained `@open-orpheus/plugin-api` type package.
@@ -51,47 +51,33 @@ interface RealmBuild {
   index: string;
   /** Export lines for `index`. */
   indexExports: string[];
+  /** Package subpath declared in `package.json` exports. */
+  packageSubpath: string;
 }
-
-const REALM_BUILDS: RealmBuild[] = [
-  {
-    id: "main",
-    contract: path.join(ROOT, "src/main/plugin/types.ts"),
-    host: path.join(DIST, "host"),
-    registryMap: path.join(DIST, "registry-map.d.ts"),
-    index: path.join(DIST, "index.d.ts"),
-    indexExports: [
-      'export type { PluginModule, PluginRuntime } from "./host/src/main/plugin/types";',
-      'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
-      'export type { RegistryLoad } from "./registry-map";',
-    ],
-  },
-  {
-    id: "preload",
-    contract: path.join(ROOT, "src/preload/plugin/types.ts"),
-    host: path.join(DIST, "preload/host"),
-    registryMap: path.join(DIST, "preload/registry-map.d.ts"),
-    index: path.join(DIST, "preload/index.d.ts"),
-    indexExports: [
-      'export type { PreloadPluginModule, PreloadPluginRuntime } from "./host/src/preload/plugin/types";',
-      'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
-      'export type { RegistryLoad } from "./registry-map";',
-    ],
-  },
-];
 
 export function generateApi(): number {
   rmSync(DIST, { recursive: true, force: true });
 
   let declarations = 0;
-  for (const realm of REALM_BUILDS) {
-    declarations += generateRealm(realm);
+  for (const realmId of REALM_IDS) {
+    const sdk = REALMS[realmId].sdk;
+    if (!sdk) continue;
+    declarations += generateRealm({
+      id: realmId,
+      contract: path.join(ROOT, sdk.contract),
+      host: path.join(PACKAGE_ROOT, sdk.host),
+      registryMap: path.join(PACKAGE_ROOT, sdk.registryMap),
+      index: path.join(PACKAGE_ROOT, sdk.index),
+      indexExports: sdk.indexExports,
+      packageSubpath: sdk.packageSubpath,
+    });
   }
 
   addDeclarationExtensions(DIST);
 
   assertKeyvVersion();
   assertVersionConsistency();
+  assertPackageExports();
   assertConsumable();
 
   return declarations;
@@ -710,6 +696,24 @@ function addDeclarationExtensions(root: string): void {
   }
 }
 
+/** Fail the build if a realm's SDK entry is not exposed by package.json. */
+function assertPackageExports(): void {
+  const packageJson = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, "package.json"), "utf8")) as {
+    exports?: Record<string, { types?: string }>;
+  };
+  for (const realmId of REALM_IDS) {
+    const sdk = REALMS[realmId].sdk;
+    if (!sdk) continue;
+    const entry = packageJson.exports?.[sdk.packageSubpath];
+    const expected = `./${sdk.index}`;
+    if (!entry || entry.types !== expected) {
+      throw new Error(
+        `package.json exports["${sdk.packageSubpath}"].types must be "${expected}" for realm "${realmId}"`
+      );
+    }
+  }
+}
+
 /**
  * Type-check the packed SDK from outside the repository.
  *
@@ -746,9 +750,11 @@ function assertConsumable(): void {
       [
         'import type * as main from "@open-orpheus/plugin-api";',
         'import type * as preload from "@open-orpheus/plugin-api/preload";',
+        'import type * as pluginManager from "@open-orpheus/plugin-api/plugin-manager";',
         'import type { LoadedModule, RegistryLoad } from "@open-orpheus/plugin-api";',
         "export type Main = typeof main;",
         "export type Preload = typeof preload;",
+        "export type PluginManager = typeof pluginManager;",
         'export type Logger = LoadedModule<"@main/logger">;',
         'export type LoggerViaLoad = Awaited<ReturnType<RegistryLoad["@main/logger"]>>;',
         "type Assert<T extends true> = T;",

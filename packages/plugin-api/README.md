@@ -37,6 +37,19 @@ Preload realm:
 import type { PreloadPluginModule, PreloadPluginRuntime } from "@open-orpheus/plugin-api/preload";
 ```
 
+Plugin-manager realm:
+
+```ts
+import type {
+  PluginManagerPluginModule,
+  PluginManagerPluginRuntime,
+} from "@open-orpheus/plugin-api/plugin-manager";
+```
+
+The plugin-manager realm runs only in the plugin manager window. Declare it in
+`metadata.json` as a `plugin-manager` entry; it is optional and separate from
+the main and preload entries.
+
 ## Versioning
 
 The package version matches the Open Orpheus release it was generated from.
