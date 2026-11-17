@@ -18,12 +18,15 @@
     void hexColor;
     if (iroPicker && iroPicker.color.hexString !== hexColor) {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        if (!iroPicker) return;
-        iroPicker.color.hexString = hexColor;
-      }, 500);
+      debounceTimer = setTimeout(applyNow, 500);
     }
   });
+
+  function applyNow() {
+    clearTimeout(debounceTimer);
+    if (!iroPicker) return;
+    iroPicker.color.hexString = hexColor;
+  }
 
   onMount(async () => {
     const picker = (iroPicker = iro.ColorPicker(iroContainer!, {
@@ -43,9 +46,10 @@
 <div class="flex h-screen w-screen flex-col items-center justify-evenly p-4">
   <div bind:this={iroContainer}></div>
   <div class="mt-4 flex w-full gap-2">
-    <Input type="text" bind:value={hexColor} spellcheck={false} />
+    <Input type="text" bind:value={hexColor} onblur={applyNow} spellcheck={false} />
     <Button
       onclick={() => {
+        applyNow();
         const clr = iroPicker?.color;
         if (!clr) return;
         api.save({
