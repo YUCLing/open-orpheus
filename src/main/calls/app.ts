@@ -18,6 +18,8 @@ import { LifecycleState, setLifecycleState, startupTask } from "../lifecycle";
 import { DawnEntry, setStatisEndpoint, statisV2 } from "../dawn";
 import globalLogger from "../logger";
 import { parseLocalFile, parseMoveRun, parseWebCommand, raceArgument } from "../arguments";
+import pickColor from "@main/windows/color-picker";
+import { hexToRgb } from "@main/util/color";
 
 registerCallHandler<string[], void>("app.log", (_ev, ...args) => {
   const raw = args.map((v) => String(v)).join(" ");
@@ -401,6 +403,31 @@ registerCallHandler<[string, string, "", string], void>(
     );
   }
 );
+
+registerCallHandler<[string, string], void>("app.chooseColor", (event, type, initial) => {
+  const wc = event.sender;
+  if (wc.isDestroyed()) return;
+  void !(async () => {
+    const color = await pickColor(
+      initial as `#${string}`,
+      BrowserWindow.fromWebContents(wc) ?? undefined
+    );
+    if (color === null) {
+      const rgb = hexToRgb(initial);
+      sendIfAlive(wc, "channel.call", "app.onchooseColorResult", type, rgb.r, rgb.g, rgb.b);
+      return;
+    }
+    sendIfAlive(
+      wc,
+      "channel.call",
+      "app.onchooseColorResult",
+      type,
+      color.rgb.r,
+      color.rgb.g,
+      color.rgb.b
+    );
+  })();
+});
 
 registerCallHandler<[], [{ fullscreen: boolean; self: boolean }]>(
   "app.isAppFulllScreen",

@@ -227,6 +227,11 @@ const config: ForgeConfig = {
           target: "preload",
         },
         {
+          entry: "src/windows/color-picker.ts",
+          config: "vite.preload.config.ts",
+          target: "preload",
+        },
+        {
           entry: "src/worklets/pcm-honeypot.ts",
           config: "vite.worklets.config.ts",
           target: "preload",
