@@ -73,6 +73,10 @@ vi.mock("../../../src/main/util/image", () => ({
 vi.mock("../../../src/main/util/musicFile", () => ({
   isMusicFile: hoisted.isMusicFile,
 }));
+// Importing the real picker pulls in `../window`, whose module-level
+// `app.on(...)`/`app.whenReady()` need a fuller Electron mock than this test
+// provides. These handlers never open it.
+vi.mock("../../../src/main/windows/color-picker", () => ({ default: vi.fn() }));
 
 installLoggerStub();
 

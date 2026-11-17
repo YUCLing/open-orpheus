@@ -71,11 +71,14 @@ describe("resolvePrebuiltAppDir", () => {
   });
 
   it("looks only at the requested arch when one is given", async () => {
+    // Must differ from the host arch, or the "requested" arch would match the
+    // directory that exists and the assertion would fail on that host.
+    const otherArch = process.arch === "arm64" ? "x64" : "arm64";
     vol.fromJSON({
       [join(prebuilt(`open-orpheus-linux-${process.arch}`), "resources", "app.asar")]: "app",
     });
 
-    await expect(resolvePrebuiltAppDir(REPO, "open-orpheus", "arm64")).rejects.toThrow(
+    await expect(resolvePrebuiltAppDir(REPO, "open-orpheus", otherArch)).rejects.toThrow(
       /No packaged Electron app found/
     );
   });
