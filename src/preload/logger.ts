@@ -5,7 +5,7 @@ type Bindings = Record<string, unknown>;
 /** `child()` factory returned by the facade. */
 type ChildFactory = (bindings: Bindings) => Facade;
 /** The facade surface: a log method per level, plus `child(bindings)`. */
-type Facade = Record<string, LogFn | ChildFactory>;
+type Facade = Record<string, LogFn> & { child: ChildFactory };
 
 /**
  * Build a `LogFn` that forwards a log entry to the main process over IPC

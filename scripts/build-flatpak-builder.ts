@@ -18,6 +18,86 @@ const execFile = promisify(execFileCb);
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
+interface SubmoduleSource {
+  type: "git";
+  url: string;
+  commit: string;
+  dest: string;
+}
+
+/**
+ * The parent tag archive never contains submodule contents. Emit one pinned
+ * git source per submodule, at the commit recorded by the parent index.
+ */
+async function createPinnedSubmoduleSources(): Promise<SubmoduleSource[]> {
+  const { stdout: config } = await execFile("git", [
+    "-C",
+    projectRoot,
+    "config",
+    "-f",
+    ".gitmodules",
+    "--get-regexp",
+    "^submodule\\..*\\.path$",
+  ]);
+
+  const entries = config
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const space = line.indexOf(" ");
+      const key = line.slice(0, space);
+      return {
+        name: key.slice("submodule.".length, -".path".length),
+        path: line.slice(space + 1).trim(),
+      };
+    });
+
+  const sources: SubmoduleSource[] = [];
+  for (const entry of entries) {
+    const { stdout: tree } = await execFile("git", [
+      "-C",
+      projectRoot,
+      "ls-tree",
+      "HEAD",
+      "--",
+      entry.path,
+    ]);
+    const commit = tree.trim().split(/\s+/)[2];
+    if (!commit) {
+      throw new Error(`Cannot resolve the gitlink for submodule ${entry.path}`);
+    }
+
+    const { stdout: configUrl } = await execFile("git", [
+      "-C",
+      projectRoot,
+      "config",
+      "-f",
+      ".gitmodules",
+      "--get",
+      `submodule.${entry.name}.url`,
+    ]);
+    let url = configUrl.trim();
+    if (url.startsWith("./") || url.startsWith("../")) {
+      const { stdout: remoteUrl } = await execFile("git", [
+        "-C",
+        resolve(projectRoot, entry.path),
+        "config",
+        "--get",
+        "remote.origin.url",
+      ]);
+      url = remoteUrl.trim();
+    }
+    if (!url) {
+      throw new Error(`Cannot resolve the URL for submodule ${entry.path}`);
+    }
+
+    sources.push({ type: "git", url, commit, dest: entry.path });
+  }
+
+  return sources;
+}
+
 const outDir = resolve(projectRoot, "out/make/flatpak-builder");
 
 await mkdir(outDir, { recursive: true });
@@ -221,6 +301,7 @@ if (flatpakSource && !flatpakSourceMatch) {
 }
 
 let projectSource: Record<string, unknown>;
+let submoduleSources: SubmoduleSource[] = [];
 if (flatpakSourceMatch) {
   const [, sourceUrl, sourceSha256] = flatpakSourceMatch;
   console.log(`Using remote source: ${sourceUrl}`);
@@ -229,6 +310,7 @@ if (flatpakSourceMatch) {
     url: sourceUrl,
     sha256: sourceSha256,
   };
+  submoduleSources = await createPinnedSubmoduleSources();
 } else {
   const sourceTarballPath = resolve(outDir, sourceTarball);
   console.log(`Creating project source tarball: ${sourceTarball}`);
@@ -332,6 +414,7 @@ const appModule = {
     ...wasmBindgenSources,
     ...rustSources,
     projectSource,
+    ...submoduleSources,
   ],
 };
 

@@ -22,6 +22,15 @@ export const activate: PluginModule["activate"] = async (runtime: PluginRuntime)
 };
 ```
 
+Use `LoadedModule` when a host module's type is needed without loading it:
+
+```ts
+import type { LoadedModule } from "@open-orpheus/plugin-api";
+
+type Logger = LoadedModule<"@main/logger">;
+// same as Awaited<ReturnType<RegistryLoad["@main/logger"]>>
+```
+
 Preload realm:
 
 ```ts

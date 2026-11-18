@@ -24,6 +24,13 @@ export type RealmId = "main" | "preload";
 
 export const REALM_IDS: RealmId[] = ["main", "preload"];
 
+interface HardcodedRegistryEntry {
+  /** Public registry key, independent of the alias that would derive it. */
+  key: string;
+  /** Source file, relative to `src/`. */
+  file: string;
+}
+
 interface RealmScanConfig {
   /** Entry files relative to the project root. */
   entries: string[];
@@ -31,6 +38,8 @@ interface RealmScanConfig {
   excludedPrefixes: string[];
   /** Paths without extension (relative to `src/`) that are the entry itself. */
   excludedFiles: Set<string>;
+  /** Modules that are public surface without an import edge from the entry. */
+  hardcoded: HardcodedRegistryEntry[];
 }
 
 const REALMS: Record<RealmId, RealmScanConfig> = {
@@ -38,11 +47,13 @@ const REALMS: Record<RealmId, RealmScanConfig> = {
     entries: ["src/main.ts"],
     excludedPrefixes: ["main/plugin/", "preload/", "worklets/"],
     excludedFiles: new Set(["main"]),
+    hardcoded: [],
   },
   preload: {
     entries: ["src/preload.ts"],
     excludedPrefixes: ["main/", "preload/plugin/", "worklets/"],
     excludedFiles: new Set(["preload"]),
+    hardcoded: [{ key: "@preload/logger", file: "preload/logger.ts" }],
   },
 };
 
@@ -117,6 +128,14 @@ export function collectRegistryEntries(options: RegistryScanOptions = {}): Regis
     if (!isRegistryCandidate(file, srcRoot, config)) continue;
     const key = toAliasKey(file, aliases);
     if (key) byKey.set(key, file);
+  }
+
+  for (const entry of config.hardcoded) {
+    const file = path.join(srcRoot, entry.file);
+    if (!ts.sys.fileExists(file)) {
+      throw new Error(`Hardcoded registry entry ${entry.key} is missing: ${file}`);
+    }
+    byKey.set(entry.key, file);
   }
 
   return [...byKey.entries()]

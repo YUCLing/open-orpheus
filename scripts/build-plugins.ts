@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { access, cp, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,21 +8,14 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PACKAGES_DIR = path.join(ROOT, "packages");
 const OUTPUT_DIR = path.join(ROOT, "out", "builtin-plugins");
 
-interface PackageManifest {
-  openOrpheus?: {
-    builtinPlugin?: boolean;
-  };
-}
-
 interface BuiltinPlugin {
   dir: string;
   name: string;
 }
 
 /**
- * Discover built-in plugin packages by convention: a package under `packages/`
- * that marks itself with `openOrpheus.builtinPlugin` and ships a `metadata.json`
- * plus a `build` script producing `dist/main`.
+ * Discover built-in plugin packages by path convention: every directory under
+ * `packages/` named `plugin-builtin-*` is a built-in plugin.
  */
 async function discoverBuiltinPlugins(): Promise<BuiltinPlugin[]> {
   const entries = await readdir(PACKAGES_DIR, { withFileTypes: true });
@@ -30,19 +23,26 @@ async function discoverBuiltinPlugins(): Promise<BuiltinPlugin[]> {
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (!entry.name.startsWith("plugin-builtin-")) continue;
+
     const dir = path.join(PACKAGES_DIR, entry.name);
-    let manifest: PackageManifest;
-    try {
-      manifest = JSON.parse(
-        await readFile(path.join(dir, "package.json"), "utf8")
-      ) as PackageManifest;
-    } catch {
-      continue;
+    const required = ["package.json", "metadata.json"];
+    const missing: string[] = [];
+    for (const file of required) {
+      try {
+        await access(path.join(dir, file));
+      } catch {
+        missing.push(file);
+      }
     }
-    if (manifest.openOrpheus?.builtinPlugin !== true) continue;
+    if (missing.length > 0) {
+      console.error(`Built-in plugin ${entry.name} is missing ${missing.join(", ")}`);
+      process.exit(1);
+    }
+
     plugins.push({
       dir,
-      name: entry.name.replace(/^plugin-/, ""),
+      name: entry.name.slice("plugin-builtin-".length),
     });
   }
 

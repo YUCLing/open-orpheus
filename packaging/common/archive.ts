@@ -7,10 +7,10 @@ const execFile = promisify(execFileCb);
  * Create a gzipped tarball of the project source.
  *
  * The tarball contains exactly the files that are NOT ignored by `.gitignore`
- * — tracked files plus untracked-but-not-ignored files (via
- * `git ls-files --cached --others --exclude-standard`) — under a single
- * top-level directory `<name>-<version>/`. `excludePaths` may drop additional
- * directory prefixes (relative to `projectRoot`).
+ * — tracked files, including initialized submodule contents, plus
+ * untracked-but-not-ignored parent files — under a single top-level directory
+ * `<name>-<version>/`. `excludePaths` may drop additional directory prefixes
+ * (relative to `projectRoot`).
  */
 export async function createProjectTarball(
   projectRoot: string,
@@ -22,22 +22,52 @@ export async function createProjectTarball(
   // Files that are tracked in the index but deleted from the working tree
   // without being staged (`git rm`) still show up in `--cached` yet no longer
   // exist on disk — drop them or tar fails with "Cannot stat".
-  const [{ stdout: nullSeparatedFiles }, { stdout: deletedFiles }] = await Promise.all([
-    execFile(
-      "git",
-      ["-C", projectRoot, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-      { maxBuffer: 10 * 1024 * 1024 }
-    ),
-    execFile("git", ["-C", projectRoot, "ls-files", "--deleted", "-z"], {
-      maxBuffer: 10 * 1024 * 1024,
-    }),
-  ]);
-  const deleted = new Set(deletedFiles.split("\0").filter(Boolean));
+  //
+  // `--recurse-submodules` is required here: a submodule is only a gitlink in
+  // the parent index, and `--no-recursion` would archive that empty directory
+  // instead of the plugin files it contains. Untracked parent files are listed
+  // separately because `--others` is incompatible with `--recurse-submodules`.
+  const [{ stdout: trackedFiles }, { stdout: untrackedFiles }, { stdout: deletedFiles }] =
+    await Promise.all([
+      execFile("git", ["-C", projectRoot, "ls-files", "--cached", "--recurse-submodules", "-z"], {
+        maxBuffer: 10 * 1024 * 1024,
+      }),
+      execFile("git", ["-C", projectRoot, "ls-files", "--others", "--exclude-standard", "-z"], {
+        maxBuffer: 10 * 1024 * 1024,
+      }),
+      execFile("git", ["-C", projectRoot, "ls-files", "--deleted", "-z"], {
+        maxBuffer: 10 * 1024 * 1024,
+      }),
+    ]);
+  const { stdout: submoduleStatus } = await execFile(
+    "git",
+    ["-C", projectRoot, "submodule", "status", "--recursive"],
+    { maxBuffer: 10 * 1024 * 1024 }
+  );
+  const taintedSubmodule = submoduleStatus.split("\n").find((line) => /^[-+U]/.test(line));
+  if (taintedSubmodule) {
+    throw new Error(
+      `Cannot archive source with an uninitialized or mismatched submodule: ${taintedSubmodule}`
+    );
+  }
 
-  const filtered = nullSeparatedFiles
-    .split("\0")
+  const { stdout: submoduleChanges } = await execFile(
+    "git",
+    ["-C", projectRoot, "submodule", "foreach", "--quiet", "--recursive", "git status --porcelain"],
+    { maxBuffer: 10 * 1024 * 1024 }
+  );
+  if (submoduleChanges.trim()) {
+    throw new Error(`Cannot archive source with a dirty submodule:\n${submoduleChanges.trim()}`);
+  }
+
+  const deleted = new Set(deletedFiles.split("\0").filter(Boolean));
+  const files = new Set(
+    [...trackedFiles.split("\0"), ...untrackedFiles.split("\0")].filter(Boolean)
+  );
+
+  const filtered = [...files]
     .filter((f) => {
-      if (!f || deleted.has(f)) return false;
+      if (deleted.has(f)) return false;
       return !excludePaths.some((p) => f === p || f.startsWith(p + "/"));
     })
     .join("\0");

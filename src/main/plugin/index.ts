@@ -75,6 +75,12 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
     }
   }
 
+  for (const plugin of plugins) {
+    if (plugin.kind === PluginKind.Builtin) {
+      state.setDefault(plugin.metadata.id, plugin.metadata.builtin?.defaultEnabled === true);
+    }
+  }
+
   const notifyPluginManager = () => {
     for (const contents of webContents.getAllWebContents()) {
       contents.send("plugin.changed");

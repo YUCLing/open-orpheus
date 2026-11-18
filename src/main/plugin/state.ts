@@ -13,11 +13,12 @@ export interface PluginStateStore {
 /**
  * Persisted enable overrides.
  *
- * Built-in plugins default to enabled, user plugins to disabled; only explicit
- * toggles are stored.
+ * Every plugin defaults to disabled; a built-in may opt in through its own
+ * metadata. Only explicit toggles are stored.
  */
 export class PluginState implements PluginStateStore {
   private overrides: Record<string, boolean> = {};
+  private defaults = new Map<string, boolean>();
   private pendingWrite: Promise<void> = Promise.resolve();
 
   async load(): Promise<void> {
@@ -31,9 +32,15 @@ export class PluginState implements PluginStateStore {
     }
   }
 
+  /** Register the metadata default for a built-in plugin. */
+  setDefault(id: string, enabled: boolean): void {
+    this.defaults.set(id, enabled);
+  }
+
   isEnabled(id: string, kind: PluginKind): boolean {
     const override = this.overrides[id];
-    return typeof override === "boolean" ? override : kind === PluginKind.Builtin;
+    if (typeof override === "boolean") return override;
+    return kind === PluginKind.Builtin && this.defaults.get(id) === true;
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<void> {

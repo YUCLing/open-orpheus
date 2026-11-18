@@ -70,4 +70,25 @@ describe("plugin discovery", () => {
 
     await expect(loadDiscoveredPlugin(broken)).rejects.toThrow(/missing its main entry/);
   });
+
+  it("accepts builtin metadata only for builtin plugins", async () => {
+    const plugin = path.join(pluginsDir, "org.example.builtin-flag");
+    await mkdir(path.join(plugin, "main"), { recursive: true });
+    await writeFile(
+      path.join(plugin, "metadata.json"),
+      JSON.stringify({
+        id: "org.example.builtin-flag",
+        name: "Flagged",
+        version: "1.0.0",
+        realms: { main: "main/index.mjs" },
+        builtin: { defaultEnabled: true },
+      })
+    );
+    await writeFile(path.join(plugin, "main/index.mjs"), "export function activate() {}\n");
+
+    await expect(loadDiscoveredPlugin(plugin, PluginKind.User)).rejects.toThrow(/builtin metadata/);
+
+    const builtin = await loadDiscoveredPlugin(plugin, PluginKind.Builtin);
+    expect(builtin.metadata.builtin?.defaultEnabled).toBe(true);
+  });
 });
