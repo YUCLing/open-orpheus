@@ -7,6 +7,7 @@
  * cannot resurrect a plugin that is no longer desired.
  */
 
+/** @internal */
 export enum LifecyclePhase {
   Disabled = "disabled",
   Enabling = "enabling",
@@ -15,6 +16,7 @@ export enum LifecyclePhase {
   Failed = "failed",
 }
 
+/** @internal */
 export class LifecycleTimeoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -22,12 +24,14 @@ export class LifecycleTimeoutError extends Error {
   }
 }
 
+/** @internal */
 export interface LifecycleAdapter<Module> {
   load(): Promise<Module>;
   activate(module: Module): void | Promise<void>;
   deactivate(module: Module): void | Promise<void>;
 }
 
+/** @internal */
 export interface LifecycleSnapshot<Module> {
   phase: LifecyclePhase;
   desired: boolean;
@@ -39,6 +43,7 @@ export interface LifecycleSnapshot<Module> {
   error?: unknown;
 }
 
+/** @internal */
 export interface LifecycleOptions<Module> {
   adapter: LifecycleAdapter<Module>;
   /** Soft activation deadline. The activation is retained after this expires. */
@@ -48,6 +53,7 @@ export interface LifecycleOptions<Module> {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/** @internal */
 export class RealmLifecycle<Module> {
   private phase = LifecyclePhase.Disabled;
   private desired = false;

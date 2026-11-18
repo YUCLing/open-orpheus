@@ -34,8 +34,18 @@ type Logger = LoadedModule<"@main/logger">;
 Preload realm:
 
 ```ts
-import type { PreloadPluginModule, PreloadPluginRuntime } from "@open-orpheus/plugin-api/preload";
+import type { PluginModule, PluginRuntime } from "@open-orpheus/plugin-api/preload";
 ```
+
+Plugin-manager realm:
+
+```ts
+import type { PluginModule, PluginRuntime } from "@open-orpheus/plugin-api/plugin-manager";
+```
+
+The plugin-manager realm runs only in the plugin manager window. Declare it in
+`metadata.json` as a `plugin-manager` entry; it is optional and separate from
+the main and preload entries.
 
 ## Versioning
 

@@ -11,20 +11,33 @@
   import {
     PluginActivationStatus,
     PluginKind,
+    PluginPreloadStatus,
     type PluginManagerContract,
     type PluginManagerEntry,
     type PluginManagerState,
   } from "@shared/contracts/plugin-manager-api";
+  import type { API, ManagerUIPlugin, MountFn } from "@shared/plugin/realms/plugin-manager/ui";
+  import { REALM_DISPLAY_NAMES } from "virtual:open-orpheus/realm-display";
 
   import Package from "@lucide/svelte/icons/package";
   import Wrench from "@lucide/svelte/icons/wrench";
+  import type { Attachment } from "svelte/attachments";
 
   const api = getBridge<PluginManagerContract>("plugin");
+
+  function realmLabel(realm: string): string {
+    return REALM_DISPLAY_NAMES[realm] ?? realm;
+  }
 
   let pluginDialog = $state<string | null>(null);
   let managerState = $state<PluginManagerState | null>(null);
   let busy = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let configPlugins = $state<Record<string, ManagerUIPlugin>>({});
+
+  const refreshConfigPlugins = () => {
+    configPlugins = { ...manager.plugins };
+  };
 
   const active = $derived(
     managerState?.plugins.filter(
@@ -38,8 +51,13 @@
   );
 
   onMount(() => {
+    refreshConfigPlugins();
+    manager.addEventListener("changed", refreshConfigPlugins);
+
     void load();
     api.events.changed(() => void load());
+
+    return () => manager.removeEventListener("changed", refreshConfigPlugins);
   });
 
   async function load() {
@@ -73,6 +91,18 @@
       busy = null;
     }
   }
+
+  const manager = (window as unknown as { pluginManager: API }).pluginManager;
+  const pluginConfigurationAttachment: (mount: MountFn) => Attachment = (mount) => {
+    return (element) => {
+      if (!(element instanceof HTMLDivElement)) return;
+      const unmount = mount(element);
+      if (!unmount) return;
+      return () => {
+        unmount();
+      };
+    };
+  };
 </script>
 
 <svelte:head>
@@ -90,10 +120,11 @@
 {/snippet}
 
 {#snippet pluginCard(plugin: PluginManagerEntry)}
+  {@const mount = configPlugins[plugin.id]?.configuration?.mount}
   <Card.Root class="shadow-md">
     <Card.Header class="flex items-center gap-2 drop-shadow-lg">
       <button
-        class="group/plugin-icon relative size-14 cursor-pointer overflow-hidden rounded-lg"
+        class="group/plugin-icon relative size-14 shrink-0 cursor-pointer overflow-hidden rounded-lg"
         onclick={() => (pluginDialog = plugin.id)}
       >
         {@render pluginIcon(plugin)}
@@ -116,6 +147,13 @@
         {:else if plugin.status === PluginActivationStatus.Partial}
           <Badge variant="destructive">部分激活</Badge>
         {/if}
+        {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
+          {#if state?.status === PluginPreloadStatus.Failed}
+            <Badge variant="destructive">{realmLabel(realm)}加载失败</Badge>
+          {:else if state?.status === PluginPreloadStatus.Pending}
+            <Badge variant="outline">{realmLabel(realm)}等待中</Badge>
+          {/if}
+        {/each}
       </div>
     </Card.Header>
     <Card.Content>
@@ -123,9 +161,11 @@
       {#if plugin.error}
         <p class="mt-2 text-sm text-red-700">{plugin.error}</p>
       {/if}
-      {#if plugin.preloadError}
-        <p class="mt-2 text-sm text-red-700">预加载: {plugin.preloadError}</p>
-      {/if}
+      {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
+        {#if state?.status === PluginPreloadStatus.Failed && state?.error}
+          <p class="mt-2 text-sm text-red-700">{realmLabel(realm)}：{state?.error}</p>
+        {/if}
+      {/each}
     </Card.Content>
     <Card.Footer class="flex content-end">
       <span class="flex-1 text-xs text-gray-500"
@@ -179,12 +219,20 @@
           {#if plugin.error}
             <p class="mt-2 text-sm text-red-700">{plugin.error}</p>
           {/if}
-          {#if plugin.preloadError}
-            <p class="mt-2 text-sm text-red-700">预加载: {plugin.preloadError}</p>
-          {/if}
+          {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
+            {#if state?.status === PluginPreloadStatus.Failed && state?.error}
+              <p class="mt-2 text-sm text-red-700">{realmLabel(realm)}：{state?.error}</p>
+            {/if}
+          {/each}
         </Dialog.Description>
       </Dialog.Header>
-      <p class="text-center">暂不支持插件配置</p>
+      {#if mount}
+        {#key mount}
+          <div class="[all:initial]" {@attach pluginConfigurationAttachment(mount)}></div>
+        {/key}
+      {:else}
+        <p class="text-center">此插件暂无配置项</p>
+      {/if}
     </Dialog.Content>
   </Dialog.Root>
 {/snippet}

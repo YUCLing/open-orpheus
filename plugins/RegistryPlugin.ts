@@ -1,52 +1,47 @@
 import type { Plugin } from "vite";
 
-import {
-  collectRegistryEntries,
-  type RealmId,
-  type RegistryEntry,
-} from "../scripts/registry-scan.js";
+import { collectRegistryEntries, type RegistryEntry } from "../scripts/registry-scan.js";
+import { REALMS, REALM_IDS, type RealmId } from "../scripts/realms.js";
 
-const VIRTUAL_IDS: Record<RealmId, string> = {
-  main: "virtual:open-orpheus/registry",
-  preload: "virtual:open-orpheus/registry/preload",
-};
-
-export interface RegistryPluginOptions {
-  /** Realm to generate. Defaults to `main`. */
-  realm?: RealmId;
-}
+const VIRTUAL_TO_REALM = new Map<string, RealmId>(
+  REALM_IDS.map((realm) => [REALMS[realm].virtualId, realm])
+);
 
 /**
  * Build-time registry module.
  *
- * Each realm imports its own virtual module; this plugin resolves it to a lazy
- * `load` map generated from that realm's real module graph. Nothing is written
- * to disk, and the type surface for plugin authors is generated separately by
- * `packages/plugin-api`.
+ * Every realm imports its own virtual module; a single plugin instance handles
+ * all of them, resolving each ID to a lazy `load` map generated from that
+ * realm's real module graph. Nothing is written to disk, and the plugin-facing
+ * type surface is generated separately by `packages/plugin-api`.
  */
-export default function RegistryPlugin(options: RegistryPluginOptions = {}): Plugin {
-  const realm = options.realm ?? "main";
-  const virtualId = VIRTUAL_IDS[realm];
-  let generated: string | null = null;
+export default function RegistryPlugin(): Plugin {
+  const generated = new Map<RealmId, string>();
 
   return {
-    name: `open-orpheus-registry-${realm}`,
+    name: "open-orpheus-registry",
 
     resolveId(id) {
-      return id === virtualId ? virtualId : null;
+      return VIRTUAL_TO_REALM.has(id) ? id : null;
     },
 
     load(id) {
-      if (id !== virtualId) return null;
-      generated ??= renderRegistry(collectRegistryEntries({ root: process.cwd(), realm }));
-      return generated;
+      const realm = VIRTUAL_TO_REALM.get(id);
+      if (!realm) return null;
+      let rendered = generated.get(realm);
+      if (!rendered) {
+        rendered = renderRegistry(collectRegistryEntries({ root: process.cwd(), realm }), realm);
+        generated.set(realm, rendered);
+      }
+      return rendered;
     },
   };
 }
 
-function renderRegistry(entries: RegistryEntry[]): string {
+function renderRegistry(entries: RegistryEntry[], realm: RealmId): string {
   const lines: string[] = [];
   lines.push("// GENERATED at build time by plugins/RegistryPlugin.ts.");
+  lines.push(`export const realm = ${JSON.stringify(realm)};`);
   lines.push("export const load = {");
   for (const entry of entries) {
     lines.push(`  ${JSON.stringify(entry.key)}: () => import(${JSON.stringify(entry.key)}),`);

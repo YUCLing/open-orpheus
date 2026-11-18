@@ -6,6 +6,7 @@ import NoS3Plugin from "./plugins/NoS3Plugin.js";
 import LoggerPlugin from "./plugins/LoggerPlugin.js";
 import ForceESPlugin from "./plugins/ForceESPlugin.js";
 import RegistryPlugin from "./plugins/RegistryPlugin.js";
+import RealmRuntimePlugin from "./plugins/RealmRuntimePlugin.js";
 import BuiltinPluginsPlugin from "./plugins/BuiltinPluginsPlugin.js";
 
 // https://vitejs.dev/config
@@ -49,6 +50,7 @@ export default defineConfig({
     ForceESPlugin(),
     LoggerPlugin(),
     PinoWorkerPlugin(),
-    RegistryPlugin({ realm: "main" }),
+    RegistryPlugin(),
+    RealmRuntimePlugin(),
   ],
 });

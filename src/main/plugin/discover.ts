@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs";
 import path from "node:path";
 
 import { PluginKind } from "@shared/contracts/plugin-manager-api";
+import { PLUGIN_REALM_IDS } from "virtual:open-orpheus/realm-runtime";
 import { toError } from "@shared/util";
 
 import { parsePluginMetadata, type PluginMetadata } from "./metadata";
@@ -28,10 +29,7 @@ export interface DiscoveredPlugin {
   /** Whether this plugin ships with the app or was installed by the user. */
   kind: PluginKind;
   /** Absolute paths to each declared realm's entry. */
-  entryPaths: {
-    main: string;
-    preload?: string;
-  };
+  entryPaths: Record<string, string>;
   tree: PluginTree;
 }
 
@@ -85,18 +83,20 @@ export async function loadDiscoveredPlugin(
     throw new Error(`Plugin ${metadata.id} declares builtin metadata but is not a built-in plugin`);
   }
 
-  const entryPaths: DiscoveredPlugin["entryPaths"] = {
-    main: path.join(source, metadata.realms.main),
-  };
-  if (metadata.realms.preload) {
-    entryPaths.preload = path.join(source, metadata.realms.preload);
-  }
-
-  for (const [realm, entryPath] of Object.entries(entryPaths)) {
+  const entryPaths: Record<string, string> = {};
+  for (const realm of PLUGIN_REALM_IDS) {
+    const relative = metadata.realms[realm];
+    if (!relative) continue;
+    const entryPath = path.join(source, relative);
     const entry = await stat(entryPath).catch(() => null);
     if (!entry?.isFile()) {
       throw new Error(`Plugin ${metadata.id} is missing its ${realm} entry "${entryPath}"`);
     }
+    entryPaths[realm] = entryPath;
+  }
+
+  if (!entryPaths.main) {
+    throw new Error(`Plugin ${metadata.id} is missing its main entry`);
   }
 
   return { metadata, source, kind, entryPaths, tree };

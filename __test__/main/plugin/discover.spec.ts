@@ -91,4 +91,32 @@ describe("plugin discovery", () => {
     const builtin = await loadDiscoveredPlugin(plugin, PluginKind.Builtin);
     expect(builtin.metadata.builtin?.defaultEnabled).toBe(true);
   });
+
+  it("resolves a plugin-manager entry", async () => {
+    const plugin = path.join(pluginsDir, "org.example.plugin-manager");
+    await mkdir(path.join(plugin, "main"), { recursive: true });
+    await mkdir(path.join(plugin, "plugin-manager"), { recursive: true });
+    await writeFile(
+      path.join(plugin, "metadata.json"),
+      JSON.stringify({
+        id: "org.example.plugin-manager",
+        name: "Plugin Manager",
+        version: "1.0.0",
+        realms: {
+          main: "main/index.mjs",
+          "plugin-manager": "plugin-manager/index.cjs",
+        },
+      })
+    );
+    await writeFile(path.join(plugin, "main/index.mjs"), "export function activate() {}\n");
+    await writeFile(
+      path.join(plugin, "plugin-manager/index.cjs"),
+      "module.exports = { activate() {} };\n"
+    );
+
+    const discovered = await loadDiscoveredPlugin(plugin, PluginKind.User);
+    expect(discovered.entryPaths["plugin-manager"]).toBe(
+      path.join(plugin, "plugin-manager/index.cjs")
+    );
+  });
 });

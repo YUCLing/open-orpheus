@@ -9,7 +9,7 @@ import {
 import { toError } from "@shared/util";
 
 import type { DiscoveredPlugin } from "./discover";
-import type { PluginModule, PluginRuntime } from "./types";
+import type { PluginModule, PluginRuntime } from "@shared/plugin/realms/main/index";
 
 export enum PluginStatus {
   Pending = "pending",

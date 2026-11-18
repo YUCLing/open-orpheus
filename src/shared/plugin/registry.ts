@@ -29,6 +29,7 @@ export type Registry<Load extends RegistryLoad = RegistryLoad> = {
   keys(): Array<keyof Load>;
 };
 
+/** @internal */
 export function createRegistry<Load extends RegistryLoad>(lazyModules: Load): Registry<Load> {
   return {
     load<Key extends keyof Load>(key: Key): ReturnType<Extract<Load[Key], RegistryLoader>> {
@@ -51,11 +52,13 @@ export interface PluginRegistry {
   keys(): string[];
 }
 
+/** @internal */
 export interface MutablePluginRegistry extends PluginRegistry {
   /** Forget the cached evaluation for a plugin that has been removed. */
   forget(id: string): void;
 }
 
+/** @internal */
 export function createPluginRegistry(
   loaders: ReadonlyMap<string, () => Promise<unknown>>
 ): MutablePluginRegistry {
