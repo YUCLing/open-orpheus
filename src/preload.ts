@@ -10,6 +10,7 @@ import { fireNativeCall } from "./preload/channel";
 
 import "./preload/calls/index";
 import "./preload/playbackMode";
+import { installPreloadPlugins } from "./preload/plugin";
 
 async function getSCFonts(): Promise<string[]> {
   const fonts = (await ipcRenderer.invoke("fonts.getSCFonts")) as string[];
@@ -235,3 +236,5 @@ contextBridge.executeInMainWorld({
   },
   args: [channel, mainWorldInterface],
 });
+
+void installPreloadPlugins();

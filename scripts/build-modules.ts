@@ -1,24 +1,7 @@
 import { resolve } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
-import { spawn } from "node:child_process";
 
-async function runBuildCommand(modulePath: string, script: string) {
-  return new Promise<{ status: number | null }>((resolve, reject) => {
-    const buildProcess = spawn("pnpm", ["run", script], {
-      cwd: modulePath,
-      stdio: "inherit",
-      shell: true,
-    });
-
-    buildProcess.on("error", (err) => {
-      reject(err);
-    });
-
-    buildProcess.on("exit", (code) => {
-      resolve({ status: code });
-    });
-  });
-}
+import { runBuildCommand } from "./utils/run.ts";
 
 interface ModuleInfo {
   dirName: string;

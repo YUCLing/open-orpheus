@@ -77,6 +77,7 @@ jobs:
               - "modules/**/package.json"
               - "modules/**/tsconfig.json"
               - "modules/**/tsdown.config.ts"
+              - "packages/**"
               - "packaging/**/*.ts"
               - "packaging/**/*.d.ts"
               - "scripts/**/*.ts"
@@ -109,6 +110,7 @@ jobs:
               - "src/**"
               - "gui/**"
               - "modules/**"
+              - "packages/**"
               - "plugins/**"
               - "scripts/**"
               - "packaging/**"
@@ -127,6 +129,7 @@ jobs:
               - "Cargo.lock"
               - "forge.config.ts"
               - "modules/**"
+              - "packages/**"
               - "plugins/**"
               - "scripts/**"
               - "packaging/**"
@@ -147,6 +150,7 @@ jobs:
               - "Cargo.toml"
               - "Cargo.lock"
               - "packaging/**"
+              - "packages/**"
               - "scripts/build-flatpak-builder.ts"
             # The subset that warrants the real sandbox build: dependency-only
             # bumps still generate and lint the manifest, but skip the build.
@@ -156,4 +160,5 @@ jobs:
               - ".github/workflows/flathub.yml"
               - ".github/flatpak-lint-exceptions.json"
               - "packaging/**"
+              - "packages/**"
               - "scripts/build-flatpak-builder.ts"

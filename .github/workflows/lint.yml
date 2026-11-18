@@ -49,6 +49,12 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      - name: Build plugin API
+        run: pnpm build:plugin-api
+
+      - name: Type-check built-in plugins
+        run: pnpm check:plugins
+
       - name: Run Oxlint
         run: pnpm lint:oxlint
 

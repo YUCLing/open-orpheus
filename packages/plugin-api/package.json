@@ -1,0 +1,62 @@
+{
+  "name": "@open-orpheus/plugin-api",
+  "version": "0.20.0",
+  "description": "Type surface for Open Orpheus plugins (generated from the host).",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "YUCLing",
+    "email": "luotianyi@luotianyi.me"
+  },
+  "homepage": "https://github.com/YUCLing/open-orpheus",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YUCLing/open-orpheus.git",
+    "directory": "packages/plugin-api"
+  },
+  "bugs": {
+    "url": "https://github.com/YUCLing/open-orpheus/issues"
+  },
+  "keywords": [
+    "open-orpheus",
+    "plugin",
+    "types"
+  ],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    },
+    "./preload": {
+      "types": "./dist/preload/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@keyv/sqlite": "6.1.0",
+    "@silvia-odwyer/photon-node": "^0.3.4",
+    "@types/cookie": "^0.6.0",
+    "@types/node": "^25.9.9",
+    "@types/unzipper": "^0.10.11",
+    "cookie": "^2.0.1",
+    "emittery": "^2.2.0",
+    "got": "^16.2.0",
+    "keyv": "6.1.0",
+    "music-tag-native": "^1.2.0",
+    "pino": "^10.4.0",
+    "unzipper": "^0.12.5",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "electron": ">=45"
+  }
+}
