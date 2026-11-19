@@ -108,6 +108,13 @@ export function createPluginRegistry(
     options.onWait?.(owner, target);
   }
 
+  function removeEdge(owner: string, target: string): void {
+    const targets = edges.get(owner);
+    if (!targets) return;
+    targets.delete(target);
+    if (targets.size === 0) edges.delete(owner);
+  }
+
   function findCycle(owner: string, target: string): string[] | null {
     const stack: string[] = [];
     const visiting = new Set<string>();
@@ -149,22 +156,36 @@ export function createPluginRegistry(
     if (owner === id) {
       return Promise.reject(new PluginReadinessCycleError([owner, owner]));
     }
+
+    const tracked = Boolean(owner);
     if (owner) {
       const cycle = findCycle(owner, id);
       if (cycle) return Promise.reject(new PluginReadinessCycleError([owner, ...cycle]));
       addEdge(owner, id);
     }
 
+    // Readiness edges describe waits that are still pending. Remove this
+    // caller's edge on every completion path, or later unrelated waits look
+    // like a cycle after both plugins have already started.
+    const track = <T>(promise: Promise<T>): Promise<T> => {
+      if (!owner || !tracked) return promise;
+      return promise.finally(() => removeEdge(owner, id));
+    };
+
     const cached = readiness.get(id);
-    if (cached) return cached;
+    if (cached) return track(cached);
+
     const source = sourceFor(id);
-    if (!source) return Promise.reject(new Error(`Unknown plugin "${id}"`));
+    if (!source) {
+      if (owner) removeEdge(owner, id);
+      return Promise.reject(new Error(`Unknown plugin "${id}"`));
+    }
     const pending = source.whenActive();
     readiness.set(id, pending);
     void pending.catch(() => {
       if (readiness.get(id) === pending) readiness.delete(id);
     });
-    return pending;
+    return track(pending);
   }
 
   const shared: MutablePluginRegistry = {

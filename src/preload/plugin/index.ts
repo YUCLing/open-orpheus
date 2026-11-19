@@ -54,6 +54,13 @@ export async function installPreloadPlugins(load: RegistryLoad, realm: string): 
   const pending: PluginRealmDesiredChange[] = [];
   let initializing = true;
 
+  electron.ipcRenderer.on("plugins.realmRetry", (_event, payload: unknown) => {
+    if (payload === null || typeof payload !== "object") return;
+    const { realm: payloadRealm, id } = payload as { realm?: unknown; id?: unknown };
+    if (payloadRealm !== realm || typeof id !== "string") return;
+    current.retry(id);
+  });
+
   electron.ipcRenderer.on("plugins.realmChanged", (_event, payload: unknown) => {
     const change = parseChange(payload, realm);
     if (!change) return;
@@ -90,23 +97,32 @@ export async function installPreloadPlugins(load: RegistryLoad, realm: string): 
     const folded = foldChanges(pending);
     pending.length = 0;
 
-    for (const [id, desired] of latest) {
-      const change = folded.get(id);
-      if (change && change.revision >= desired.revision) latest.set(id, change);
-    }
-
-    for (const change of folded.values()) {
-      if (change.enabled) {
-        await applyChange(current, realm, latest, change);
-      } else {
-        await current.remove(change.id, { enabled: false, revision: change.revision });
-        latest.set(change.id, { enabled: false, revision: change.revision });
+    for (const [id, change] of folded) {
+      const previous = latest.get(id);
+      if (!previous || change.revision >= previous.revision) {
+        latest.set(id, { enabled: change.enabled, revision: change.revision });
       }
     }
-  }
 
-  for (const [id, desired] of latest) {
-    if (current.has(id)) current.applyDesiredState(id, desired);
+    // Publish every pending enable before any plugin can start depending on
+    // another one. Waiting for one activation here can deadlock the batch:
+    // the dependency's desired state has not been applied yet, so it still
+    // rejects as "not enabled" or "unknown".
+    for (const [id, desired] of latest) {
+      if (!desired.enabled || current.has(id)) continue;
+      current.start(id, () => fetchRealmSource(id, realm), desired);
+    }
+
+    for (const [id, desired] of latest) {
+      if (current.has(id)) current.applyDesiredState(id, desired);
+    }
+
+    // Disabled plugins that were registered still need cleanup and removal.
+    const removals: Promise<void>[] = [];
+    for (const [id, desired] of latest) {
+      if (!desired.enabled && current.has(id)) removals.push(current.remove(id, desired));
+    }
+    await Promise.all(removals);
   }
 
   await current.waitForAll();

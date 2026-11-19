@@ -65,6 +65,18 @@ describe("PluginState", () => {
     expect(kv.set).toHaveBeenCalledTimes(1);
   });
 
+  it("migrates legacy boolean overrides instead of dropping them", async () => {
+    kv.get.mockResolvedValue({ enabled: true, disabled: false });
+    const state = new PluginState();
+    await state.load();
+
+    expect(state.desired("enabled", PluginKind.User)).toEqual({ enabled: true, revision: 0 });
+    expect(state.desired("disabled", PluginKind.Builtin)).toEqual({
+      enabled: false,
+      revision: 0,
+    });
+  });
+
   it("defaults every plugin off until a builtin default is registered", async () => {
     const state = new PluginState();
     await state.load();

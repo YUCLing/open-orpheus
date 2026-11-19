@@ -186,6 +186,70 @@ describe("PreloadPluginLoader", () => {
     expect(loader.plugins.find((record) => record.id === "a")?.status).toBe("active");
   });
 
+  it("shares one evaluation between activation and cross-plugin load", async () => {
+    const evaluations = new Map<string, number>();
+    let runtimeA: { plugins: { load(id: string): Promise<unknown> } } | undefined;
+    let loadedByA: unknown;
+    const loader = new PreloadPluginLoader({
+      sources: new Map(),
+      registry: createRegistry(),
+      evaluate: (_source, id) => {
+        evaluations.set(id, (evaluations.get(id) ?? 0) + 1);
+        if (id === "b") return { activate() {}, engine: "b" };
+        return {
+          async activate(runtime: typeof runtimeA) {
+            runtimeA = runtime;
+            loadedByA = await runtime!.plugins.load("b");
+          },
+        };
+      },
+    });
+    loader.registerAll(
+      new Map([
+        ["a", "ignored"],
+        ["b", "ignored"],
+      ])
+    );
+
+    await loader.activateAll();
+
+    const moduleB = loader.plugins.find((record) => record.id === "b")?.module;
+    expect(evaluations.get("b")).toBe(1);
+    expect(loadedByA).toBe(moduleB);
+    expect(loader.plugins.find((record) => record.id === "b")?.status).toBe(
+      PreloadPluginStatus.Active
+    );
+
+    // Even if the evaluation cache is discarded, dependency loads still see
+    // the instance owned by the active lifecycle.
+    loader.start("b", async () => "ignored", { enabled: true, revision: 2 });
+    await expect(runtimeA?.plugins.load("b")).resolves.toBe(moduleB);
+    expect(evaluations.get("b")).toBe(1);
+  });
+
+  it("keeps a hung record until its load settles, then removes it", async () => {
+    let release!: (source: string) => void;
+    const gate = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const loader = new PreloadPluginLoader({
+      sources: new Map(),
+      registry: createRegistry(),
+      activationTimeoutMs: 10,
+      evaluate: () => ({ activate() {}, deactivate() {} }),
+    });
+
+    await loader.enable("slow", () => gate, { enabled: true, revision: 1 });
+    await loader.remove("slow", { enabled: false, revision: 2 });
+
+    // The source fetch is still running; a re-enable must not create a second
+    // instance behind it.
+    expect(loader.has("slow")).toBe(true);
+
+    release("ignored");
+    await vi.waitFor(() => expect(loader.has("slow")).toBe(false));
+  });
+
   it("deactivates a partially activated preload module after activation throws", async () => {
     const deactivate = vi.fn();
     const loader = new PreloadPluginLoader({

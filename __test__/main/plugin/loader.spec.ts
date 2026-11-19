@@ -526,6 +526,33 @@ describe("PluginLoader", () => {
     await shuttingDown;
   });
 
+  it("invalidates readiness when the manager disables via setDesiredState", async () => {
+    let runtime: PluginRuntime | undefined;
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryPath) => ({
+        activate(value: PluginRuntime) {
+          if (entryPath.includes("/b/")) runtime = value;
+        },
+        deactivate() {},
+      }),
+    });
+
+    await loader.activate("a");
+    await loader.activate("b");
+    await expect(runtime?.plugins.whenActive("a")).resolves.toBeDefined();
+
+    loader.setDesiredState("a", { enabled: false, revision: 1 });
+    await vi.waitFor(() =>
+      expect(loader.plugins.find((record) => record.plugin.metadata.id === "a")?.status).toBe(
+        PluginStatus.Disabled
+      )
+    );
+
+    await expect(runtime?.plugins.whenActive("a")).rejects.toThrow();
+  });
+
   it("clears the exports cache before waiting for deactivation", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {

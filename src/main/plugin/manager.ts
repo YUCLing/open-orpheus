@@ -2,6 +2,7 @@ import path from "node:path";
 
 import {
   PluginAvailabilityKind,
+  PluginFailureStage,
   PluginKind,
   PluginLayer,
   PluginPresentationStatus,
@@ -38,6 +39,8 @@ export interface PluginManagerOptions {
   onChanged?: () => void;
   /** Called with committed desired state for realms this plugin declares. */
   onDesiredChanged?: (id: string, realm: string, desired: PluginDesiredState) => void;
+  /** Called to retry the plugin in each realm window it declares. */
+  onRetryRequested?: (id: string, realm: string) => void;
 }
 
 /**
@@ -54,6 +57,7 @@ export class PluginManager {
     realm: string,
     desired: PluginDesiredState
   ) => void;
+  private readonly onRetryRequested?: (id: string, realm: string) => void;
 
   /** realm host windows, keyed by webContents id. */
   private readonly hosts = new Map<number, string>();
@@ -68,6 +72,7 @@ export class PluginManager {
     this.catalog = options.catalog;
     this.onChanged = options.onChanged;
     this.onDesiredChanged = options.onDesiredChanged;
+    this.onRetryRequested = options.onRetryRequested;
   }
 
   list(): PluginManagerState {
@@ -106,6 +111,11 @@ export class PluginManager {
         throw new Error(`Plugin "${id}" is disabled; enable it instead of retrying`);
       }
       this.loader.requestRetry(id);
+      // The main realm may already be healthy; the failed instances usually
+      // live in window realms, so forward the retry there as well.
+      for (const realm of LOADED_REALM_IDS) {
+        if (plugin.metadata.realms[realm]) this.onRetryRequested?.(id, realm);
+      }
       this.onChanged?.();
       return this.list();
     });
@@ -340,16 +350,29 @@ function presentationFor(
   }
 
   const instances = Object.values(realms).flatMap((summary) => summary.instances);
-  const hasCleanupFailure =
-    (main.kind === PluginRuntimeStateKind.Failed || main.kind === PluginRuntimeStateKind.Hung) &&
-    main.stage === "deactivate" &&
-    instances.every((instance) => instance.state.kind !== PluginRuntimeStateKind.Running);
+  const isCleanupFailure = (state: SerializablePluginRuntimeState) =>
+    (state.kind === PluginRuntimeStateKind.Failed || state.kind === PluginRuntimeStateKind.Hung) &&
+    state.stage === PluginFailureStage.Deactivate;
+
+  const cleanupFailed =
+    isCleanupFailure(main) || instances.some((instance) => isCleanupFailure(instance.state));
+  const busyInstance = instances.some(
+    (instance) =>
+      instance.state.kind === PluginRuntimeStateKind.Running ||
+      instance.state.kind === PluginRuntimeStateKind.Starting ||
+      instance.state.kind === PluginRuntimeStateKind.Stopping ||
+      instance.state.kind === PluginRuntimeStateKind.Hung
+  );
 
   if (!desired.enabled) {
-    if (hasCleanupFailure) return PluginPresentationStatus.CleanupFailed;
+    if (cleanupFailed) return PluginPresentationStatus.CleanupFailed;
+    // A hung activation still owns the operation; cleanup has not started.
+    // Do not claim the plugin is disabled while it may still have effects.
     if (
       main.kind === PluginRuntimeStateKind.Stopping ||
-      main.kind === PluginRuntimeStateKind.Starting
+      main.kind === PluginRuntimeStateKind.Starting ||
+      main.kind === PluginRuntimeStateKind.Hung ||
+      busyInstance
     ) {
       return PluginPresentationStatus.Stopping;
     }

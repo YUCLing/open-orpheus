@@ -68,6 +68,27 @@ describe("createPluginRegistry", () => {
     );
   });
 
+  it("removes readiness edges once a wait resolves", async () => {
+    let release!: (value: unknown) => void;
+    const gate = new Promise<unknown>((resolve) => {
+      release = resolve;
+    });
+    const registry = createPluginRegistry(
+      sources({
+        a: { load: async () => ({}), whenActive: () => gate },
+        b: { load: async () => ({}), whenActive: async () => ({}) },
+      })
+    );
+
+    // a waits for b and finishes; the edge must not linger.
+    await registry.forPlugin("a").whenActive("b");
+
+    // b waiting for a is not a cycle just because a previously waited for b.
+    const second = registry.forPlugin("b").whenActive("a");
+    release({});
+    await expect(second).resolves.toEqual({});
+  });
+
   it("rejects a plugin waiting on its own readiness", async () => {
     const registry = createPluginRegistry(
       sources({ a: { load: async () => ({}), whenActive: () => new Promise(() => {}) } })

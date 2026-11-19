@@ -514,15 +514,14 @@ export class RealmLifecycle<Module> {
         desiredRevision: this.desired.revision,
       });
 
-      const outcome = await settlesWithinValue(
-        Promise.resolve()
-          .then(() => this.adapter.deactivate(module))
-          .then(
-            () => ({ kind: "done" as const }),
-            (error: unknown) => ({ kind: "error" as const, error })
-          ),
-        this.timeoutMs
-      );
+      const deactivation = Promise.resolve()
+        .then(() => this.adapter.deactivate(module))
+        .then(
+          () => ({ kind: "done" as const }),
+          (error: unknown) => ({ kind: "error" as const, error })
+        );
+
+      const outcome = await settlesWithinValue(deactivation, this.timeoutMs);
 
       if (outcome === "timeout") {
         this.retryRequested = false;
@@ -537,17 +536,21 @@ export class RealmLifecycle<Module> {
           module,
           desiredRevision: this.desired.revision,
         });
-        return;
       }
 
-      if (outcome.kind === "error") {
+      // A timed-out cleanup is still running. Keep the task (and its module)
+      // until the real deactivate settles, otherwise the plugin is stuck in
+      // `hung` forever and a later re-enable or retry can overlap it.
+      const finalOutcome = outcome === "timeout" ? await deactivation : outcome;
+
+      if (finalOutcome.kind === "error") {
         this.retryRequested = false;
-        this.error = outcome.error;
+        this.error = finalOutcome.error;
         this.setState({
           kind: LifecycleStateKind.Failed,
           attempt: this.attempt,
           stage: LifecycleFailureStage.Deactivate,
-          error: outcome.error,
+          error: finalOutcome.error,
           module,
           retryable: this.desired.enabled,
           desiredRevision: this.desired.revision,
@@ -608,7 +611,13 @@ function delay(ms: number): Promise<void> {
 
 async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
   if (ms <= 0) return false;
-  return Promise.race([promise.then(() => true), delay(ms).then(() => false)]);
+  // A rejection is still settlement. Disposal must continue to the cleanup
+  // that `settleActivation()` starts instead of aborting the shutdown wait.
+  const settled = promise.then(
+    () => true,
+    () => true
+  );
+  return Promise.race([settled, delay(ms).then(() => false)]);
 }
 
 async function settlesWithinValue<T extends object | "timeout">(

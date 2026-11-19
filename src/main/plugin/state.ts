@@ -31,6 +31,12 @@ export class PluginState implements PluginStateStore {
       const stored = await kv.get(KEY);
       if (!stored || typeof stored !== "object" || Array.isArray(stored)) return;
       for (const [id, value] of Object.entries(stored as Record<string, unknown>)) {
+        // Earlier builds stored a bare boolean per plugin. Treat that as
+        // revision 0 instead of dropping the user's explicit choice.
+        if (typeof value === "boolean") {
+          this.overrides.set(id, { enabled: value, revision: 0 });
+          continue;
+        }
         if (value === null || typeof value !== "object") continue;
         const { enabled, revision } = value as {
           enabled?: unknown;

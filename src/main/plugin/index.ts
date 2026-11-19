@@ -76,8 +76,16 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
   await state.load();
 
   // Make the user plugin drop location exist even when it is empty, so plugins
-  // can be installed without creating the directory by hand.
-  await mkdir(pluginsDir, { recursive: true });
+  // can be installed without creating the directory by hand. This directory
+  // is optional; a failure here must not prevent the application from starting.
+  try {
+    await mkdir(pluginsDir, { recursive: true });
+  } catch (error) {
+    LOGGER.warn(
+      { dir: pluginsDir, err: toError(error) },
+      "Failed to create the plugin directory; continuing without it"
+    );
+  }
 
   const sources = await discoverPluginSources(pluginLocations());
   const candidates: PluginCandidate[] = [];
@@ -143,6 +151,11 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
     catalog,
     onChanged: notifyPluginManager,
     onDesiredChanged: publishDesired,
+    onRetryRequested: (id, realm) => {
+      for (const webContentsId of pluginManager?.hostsForRealm(realm) ?? []) {
+        webContents.fromId(webContentsId)?.send("plugins.realmRetry", { realm, id });
+      }
+    },
   });
 
   const isLoadedRealmId = (value: unknown): value is string =>

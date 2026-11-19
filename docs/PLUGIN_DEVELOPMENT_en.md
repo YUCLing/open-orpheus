@@ -320,12 +320,16 @@ User plugin directory:
 - Override the data directory with `OPEN_ORPHEUS_CUSTOM_DATA_DIR`.
 
 The plugin manager has no installer. Copy the tree into the plugin directory,
-open the plugin manager, and enable it.
+then restart the application — plugin discovery runs at startup. After that,
+open the plugin manager and enable the plugin.
 
 ### Duplicate ids
 
-Two plugins with the same id are both rejected and shown as an unavailable
+Two user plugins with the same id are both rejected and shown as an unavailable
 conflict in the plugin manager. Remove one and restart.
+
+If a plugin reuses an id that a plugin shipped with the application already owns,
+the shipped plugin keeps the id and the other copy is ignored with a warning.
 
 ## Debugging
 

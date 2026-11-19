@@ -143,6 +143,12 @@ export class PluginLoader {
     const known = this.revisions.get(id) ?? 0;
     if (desired.revision < known) return;
     this.revisions.set(id, desired.revision);
+    if (!desired.enabled) {
+      // This is the path the manager uses, so it must invalidate exports and
+      // readiness exactly like `deactivate` does. Otherwise a cached
+      // `whenActive` result would bypass the enabled check after cleanup.
+      this.pluginRegistry.forget(id);
+    }
     record.lifecycle.applyDesiredState(desired);
   }
 
@@ -180,6 +186,7 @@ export class PluginLoader {
 
   /** Start a retry without waiting for convergence. */
   requestRetry(id: string): void {
+    this.pluginRegistry.forget(id);
     this.require(id).lifecycle.retry();
   }
 

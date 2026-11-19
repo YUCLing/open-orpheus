@@ -58,9 +58,10 @@ deadline the plugin is reported as hung; cleanup starts only after activation
 settles. A disable received during activation is applied immediately after that
 activation finishes.
 
-Re-enabling reactivates the same evaluated module instance. Top-level module
-side effects are not guaranteed to run again, and editing plugin files requires
-restarting the realm or application.
+Re-enabling a main-realm plugin reactivates the same cached ESM module instance;
+top-level side effects are not guaranteed to run again. Preload and
+plugin-manager bundles are re-evaluated after a full disable. Editing plugin
+files requires restarting the realm or application.
 
 ## Cross-plugin exports
 

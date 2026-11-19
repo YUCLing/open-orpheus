@@ -274,7 +274,9 @@
         </p>
       {/if}
       {#each realmEntries(plugin) as [realm, summary] (realm)}
-        {#if summary.instances.length > 0 || summary.hostCount > 0}
+        {@const showRealm =
+          summary.instances.length > 0 || (plugin.desired.enabled && summary.hostCount > 0)}
+        {#if showRealm}
           <div class="mt-2 text-sm text-gray-600">
             <span class="font-medium">{realmLabel(realm)}</span>
             <span class="ml-2">窗口 {summary.hostCount}，实例 {summary.instances.length}</span>
@@ -284,7 +286,15 @@
                 {stateLabel(instance.state)}
               </span>
             {/each}
-            {#if summary.hostCount > summary.instances.length}
+            {#each summary.instances as instance (instance.webContentsId)}
+              {#if instance.state.error}
+                <p class="mt-1 text-xs text-red-700">
+                  #{instance.webContentsId}
+                  {instance.state.error}
+                </p>
+              {/if}
+            {/each}
+            {#if plugin.desired.enabled && summary.hostCount > summary.instances.length}
               <span class="ml-2">等待上报</span>
             {/if}
           </div>

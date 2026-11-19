@@ -367,6 +367,85 @@ describe("PluginManager", () => {
     await expect(manager.setEnabled("dup", true)).rejects.toThrow(/duplicate id/);
   });
 
+  it("reports cleanup failure from a window instance", async () => {
+    const state = createState();
+    const plugin = discovered("pre", PluginKind.User);
+    plugin.metadata.realms.preload = "preload/index.cjs";
+    const loader = createLoader(state, [plugin]);
+    const manager = createManager(loader, state, [plugin]);
+
+    await manager.setEnabled("pre", true);
+    manager.registerHost(5, "preload");
+    await manager.setEnabled("pre", false);
+
+    manager.setRealmReport(
+      5,
+      report("pre", "preload", 2, {
+        kind: PluginRuntimeStateKind.Failed,
+        desiredRevision: 2,
+        attempt: 1,
+        stage: PluginFailureStage.Deactivate,
+        error: "cleanup boom",
+        retryable: false,
+      })
+    );
+
+    expect(manager.list().plugins[0]?.presentation).toBe(PluginPresentationStatus.CleanupFailed);
+  });
+
+  it("keeps a hung activation as stopping after disable", async () => {
+    const state = createState();
+    const plugin = discovered("slow", PluginKind.User);
+    const catalog = resolvePluginCatalog([
+      { layer: PluginLayer.User, source: plugin.source, plugin },
+    ]);
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [plugin],
+      isEnabled: (id) => state.isEnabled(id, PluginKind.User),
+      importModule: async () => ({
+        activate: () => new Promise<void>(() => {}),
+      }),
+      activationTimeoutMs: 10,
+    });
+    const manager = new PluginManager({ loader, state, catalog });
+
+    await manager.setEnabled("slow", true);
+    await vi.waitFor(() =>
+      expect(manager.list().plugins[0]?.main.kind).toBe(PluginRuntimeStateKind.Hung)
+    );
+
+    await manager.setEnabled("slow", false);
+
+    expect(manager.list().plugins[0]?.presentation).toBe(PluginPresentationStatus.Stopping);
+  });
+
+  it("forwards retry to every declared window realm", async () => {
+    const state = createState();
+    const plugin = discovered("pre", PluginKind.User);
+    plugin.metadata.realms.preload = "preload/index.cjs";
+    plugin.metadata.realms["plugin-manager"] = "plugin-manager/index.cjs";
+    const catalog = resolvePluginCatalog([
+      { layer: PluginLayer.User, source: plugin.source, plugin },
+    ]);
+    const loader = createLoader(state, [plugin]);
+    const retries: Array<[string, string]> = [];
+    const manager = new PluginManager({
+      loader,
+      state,
+      catalog,
+      onRetryRequested: (id, realm) => retries.push([id, realm]),
+    });
+
+    await manager.setEnabled("pre", true);
+    await manager.retry("pre");
+
+    expect(retries).toEqual([
+      ["pre", "preload"],
+      ["pre", "plugin-manager"],
+    ]);
+  });
+
   it("retries without changing desired state", async () => {
     const state = createState();
     const plugins = [discovered("flaky", PluginKind.User)];
