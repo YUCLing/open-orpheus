@@ -28,6 +28,11 @@ export class PluginManagerWindow extends ManagedWindow {
         if (!manager) throw new Error("Plugin system is disabled");
         return manager.setEnabled(id, enabled);
       },
+      retry: async (_event, id: string) => {
+        const manager = getPluginManager();
+        if (!manager) throw new Error("Plugin system is disabled");
+        return manager.retry(id);
+      },
     });
   }
 }

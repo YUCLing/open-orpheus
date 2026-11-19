@@ -1,146 +1,399 @@
+import path from "node:path";
+
 import {
-  PluginActivationStatus,
-  PluginPreloadStatus,
+  PluginAvailabilityKind,
+  PluginKind,
+  PluginLayer,
+  PluginPresentationStatus,
+  PluginRuntimeStateKind,
+  type PluginAvailability,
+  type PluginDesiredState,
   type PluginManagerEntry,
   type PluginManagerState,
-  type RealmRuntimeStatus,
+  type PluginRealmReport,
+  type PluginRealmSummary,
+  type PluginShadowedSource,
+  type SerializablePluginRuntimeState,
 } from "@shared/contracts/plugin-manager-api";
+import { serializeRuntimeState } from "@shared/plugin/runtime-state";
 import { LOADED_REALM_IDS } from "virtual:open-orpheus/realm-runtime";
 import { toError } from "@shared/util";
 
-import { PluginStatus, type PluginLoader, type PluginRecord } from "./loader";
+import {
+  PluginCatalogEntryKind,
+  type PluginCatalog,
+  type PluginCatalogEntry,
+} from "./catalog";
 import type { DiscoveredPlugin } from "./discover";
+import type { PluginLoader, PluginRecord } from "./loader";
 import type { PluginStateStore } from "./state";
 
-/** Combines the persisted enable intent with the loader's runtime status. */
+interface StoredRealmReport {
+  desiredRevision: number;
+  attempt: number;
+  state: SerializablePluginRuntimeState;
+}
+
+export interface PluginManagerOptions {
+  loader: PluginLoader;
+  state: PluginStateStore;
+  catalog: PluginCatalog;
+  /** Called after any desired state or runtime state change. */
+  onChanged?: () => void;
+  /** Called with committed desired state for realms this plugin declares. */
+  onDesiredChanged?: (id: string, realm: string, desired: PluginDesiredState) => void;
+}
+
+/**
+ * Combines the resolved plugin catalog, persisted intent, and per-window
+ * runtime reports into the facts the manager UI renders.
+ */
 export class PluginManager {
-  private readonly realmStates = new Map<number, Map<string, Map<string, RealmRuntimeStatus>>>();
+  private readonly loader: PluginLoader;
+  private readonly state: PluginStateStore;
+  private readonly catalog: PluginCatalog;
+  private readonly onChanged?: () => void;
+  private readonly onDesiredChanged?: (
+    id: string,
+    realm: string,
+    desired: PluginDesiredState
+  ) => void;
 
-  constructor(
-    private readonly loader: PluginLoader,
-    private readonly state: PluginStateStore,
-    /** Called after a secondary-realm plugin's enable state is persisted and applied. */
-    private readonly onRealmChanged?: (id: string, realm: string, enabled: boolean) => void
-  ) {}
+  /** realm host windows, keyed by webContents id. */
+  private readonly hosts = new Map<number, string>();
+  /** runtime reports, keyed by webContents id then plugin id. */
+  private readonly reports = new Map<number, Map<string, StoredRealmReport>>();
+  /** Serialized commands per plugin. */
+  private readonly commands = new Map<string, Promise<unknown>>();
 
-  list(): PluginManagerState {
-    return {
-      available: true,
-      plugins: this.loader.plugins.map((record) => this.toEntry(record)),
-    };
+  constructor(options: PluginManagerOptions) {
+    this.loader = options.loader;
+    this.state = options.state;
+    this.catalog = options.catalog;
+    this.onChanged = options.onChanged;
+    this.onDesiredChanged = options.onDesiredChanged;
   }
 
-  async setEnabled(id: string, enabled: boolean): Promise<PluginManagerState> {
-    const record = this.find(id);
-    if (!record) throw new Error(`Unknown plugin "${id}"`);
+  list(): PluginManagerState {
+    const entries: PluginManagerEntry[] = [];
 
-    await this.state.setEnabled(id, enabled);
-    if (enabled) {
-      await this.loader.activate(id);
-    } else {
-      await this.loader.deactivate(id);
+    for (const entry of this.catalog.entries) {
+      entries.push(
+        entry.kind === PluginCatalogEntryKind.Selected
+          ? this.selectedEntry(entry.id, entry.plugin, entry.shadowed)
+          : this.conflictEntry(entry)
+      );
     }
-    for (const realm of LOADED_REALM_IDS) {
-      if (record.plugin.metadata.realms[realm]) {
-        this.onRealmChanged?.(id, realm, enabled);
+
+    for (const candidate of this.catalog.invalid) {
+      entries.push(this.invalidEntry(candidate.source, candidate.layer, candidate.error));
+    }
+
+    return { available: true, plugins: entries };
+  }
+
+  setEnabled(id: string, enabled: boolean): Promise<PluginManagerState> {
+    return this.enqueue(id, async () => {
+      const plugin = this.requireSelected(id);
+      const desired = await this.state.setEnabled(id, plugin.kind, enabled);
+      this.loader.setDesiredState(id, desired);
+      this.publishDesired(id, plugin, desired);
+      this.onChanged?.();
+      return this.list();
+    });
+  }
+
+  retry(id: string): Promise<PluginManagerState> {
+    return this.enqueue(id, async () => {
+      const plugin = this.requireSelected(id);
+      if (!this.state.isEnabled(id, plugin.kind)) {
+        throw new Error(`Plugin "${id}" is disabled; enable it instead of retrying`);
       }
-    }
-    return this.list();
+      this.loader.requestRetry(id);
+      this.onChanged?.();
+      return this.list();
+    });
   }
 
   /** Whether the plugin should be activated (used for the preload manifest). */
   isEnabled(id: string): boolean {
-    const record = this.find(id);
-    return record ? this.state.isEnabled(id, record.plugin.kind) : false;
+    const plugin = this.catalog.selected.get(id);
+    return plugin ? this.state.isEnabled(id, plugin.kind) : false;
   }
 
-  /** The discovered plugin tree, if it exists. Also serves disabled plugins' assets. */
+  /** The selected plugin tree, if it exists. Also serves disabled plugins' assets. */
   getPlugin(id: string): DiscoveredPlugin | undefined {
-    return this.find(id)?.plugin;
+    return this.catalog.selected.get(id);
   }
 
-  private find(id: string): PluginRecord | undefined {
+  /** Register a window as the host of a plugin realm. */
+  registerHost(webContentsId: number, realm: string): void {
+    if (!LOADED_REALM_IDS.includes(realm)) return;
+    if (this.hosts.get(webContentsId) === realm) return;
+    this.hosts.set(webContentsId, realm);
+    this.onChanged?.();
+  }
+
+  /** Drop a destroyed window's host registration and reports. */
+  unregisterHost(webContentsId: number): void {
+    this.hosts.delete(webContentsId);
+    this.reports.delete(webContentsId);
+    this.onChanged?.();
+  }
+
+  isHostFor(webContentsId: number, realm: string): boolean {
+    return this.hosts.get(webContentsId) === realm;
+  }
+
+  /** Live windows hosting a realm. */
+  hostsForRealm(realm: string): number[] {
+    const ids: number[] = [];
+    for (const [webContentsId, hostRealm] of this.hosts) {
+      if (hostRealm === realm) ids.push(webContentsId);
+    }
+    return ids;
+  }
+
+  /** Record a revisioned runtime report from one window. */
+  setRealmReport(webContentsId: number, report: PluginRealmReport): void {
+    if (this.hosts.get(webContentsId) !== report.realm) return;
+    const plugin = this.catalog.selected.get(report.id);
+    if (!plugin || !plugin.metadata.realms[report.realm]) return;
+
+    const current = this.state.desired(report.id, plugin.kind);
+    if (report.desiredRevision < current.revision) return;
+
+    let byPlugin = this.reports.get(webContentsId);
+    if (!byPlugin) {
+      byPlugin = new Map();
+      this.reports.set(webContentsId, byPlugin);
+    }
+    byPlugin.set(report.id, {
+      desiredRevision: report.desiredRevision,
+      attempt: report.attempt,
+      state: report.state,
+    });
+    this.onChanged?.();
+  }
+
+  /** Desired state for a selected plugin, or undefined when unavailable. */
+  desiredFor(id: string): PluginDesiredState | undefined {
+    const plugin = this.catalog.selected.get(id);
+    return plugin ? this.state.desired(id, plugin.kind) : undefined;
+  }
+
+  private selectedEntry(
+    id: string,
+    plugin: DiscoveredPlugin,
+    shadowed: ReadonlyArray<{ layer: PluginLayer; source: string }>
+  ): PluginManagerEntry {
+    const record = this.loaderRecord(id);
+    const desired = this.state.desired(id, plugin.kind);
+    const main: SerializablePluginRuntimeState = record
+      ? serializeRuntimeState(record.snapshot.state)
+      : { kind: PluginRuntimeStateKind.Stopped, desiredRevision: desired.revision };
+
+    const realms: Record<string, PluginRealmSummary> = {};
+    for (const realm of LOADED_REALM_IDS) {
+      if (!plugin.metadata.realms[realm]) continue;
+      realms[realm] = this.realmSummary(id, realm);
+    }
+
+    const shadowedSources: PluginShadowedSource[] = shadowed.map((candidate) => ({
+      layer: candidate.layer,
+      path: candidate.source,
+    }));
+
+    const availability: PluginAvailability = { kind: PluginAvailabilityKind.Available };
+    return {
+      id,
+      name: plugin.metadata.name,
+      version: plugin.metadata.version,
+      description: plugin.metadata.description,
+      author: plugin.metadata.author,
+      license: plugin.metadata.license,
+      icon: plugin.metadata.icon ? pluginAssetsUrl(id, plugin.metadata.icon) : undefined,
+      kind: plugin.kind,
+      layer: layerOf(plugin.kind),
+      desired,
+      enabled: desired.enabled,
+      availability,
+      shadowed: shadowedSources,
+      main,
+      realms,
+      presentation: presentationFor(desired, availability, main, realms),
+      error: main.error,
+    };
+  }
+
+  private conflictEntry(
+    entry: Extract<PluginCatalogEntry, { kind: PluginCatalogEntryKind.Conflict }>
+  ): PluginManagerEntry {
+    const first = entry.candidates.find((candidate) => candidate.plugin)?.plugin;
+    const desired: PluginDesiredState = { enabled: false, revision: 0 };
+    return {
+      id: entry.id,
+      name: first?.metadata.name ?? entry.id,
+      version: first?.metadata.version ?? "",
+      description: first?.metadata.description,
+      author: first?.metadata.author,
+      kind: entry.layer === PluginLayer.Builtin ? PluginKind.Builtin : PluginKind.User,
+      layer: entry.layer,
+      desired,
+      enabled: false,
+      availability: {
+        kind: PluginAvailabilityKind.Conflict,
+        paths: entry.candidates.map((candidate) => candidate.source),
+      },
+      shadowed: [],
+      main: { kind: PluginRuntimeStateKind.Stopped, desiredRevision: 0 },
+      realms: {},
+      presentation: PluginPresentationStatus.Unavailable,
+      error: `Conflicting plugin id "${entry.id}" in the ${entry.layer} layer`,
+    };
+  }
+
+  private invalidEntry(id: string, layer: PluginLayer, error: unknown): PluginManagerEntry {
+    const desired: PluginDesiredState = { enabled: false, revision: 0 };
+    return {
+      id,
+      name: path.basename(id),
+      version: "",
+      kind: layer === PluginLayer.Builtin ? PluginKind.Builtin : PluginKind.User,
+      layer,
+      desired,
+      enabled: false,
+      availability: {
+        kind: PluginAvailabilityKind.Invalid,
+        path: id,
+        error: toError(error).message,
+      },
+      shadowed: [],
+      main: { kind: PluginRuntimeStateKind.Stopped, desiredRevision: 0 },
+      realms: {},
+      presentation: PluginPresentationStatus.Unavailable,
+      error: toError(error).message,
+    };
+  }
+
+  private realmSummary(id: string, realm: string): PluginRealmSummary {
+    let hostCount = 0;
+    for (const hostRealm of this.hosts.values()) {
+      if (hostRealm === realm) hostCount++;
+    }
+
+    const instances: PluginRealmSummary["instances"] = [];
+    const counts: Partial<Record<PluginRuntimeStateKind, number>> = {};
+    for (const [webContentsId, byPlugin] of this.reports) {
+      if (this.hosts.get(webContentsId) !== realm) continue;
+      const report = byPlugin.get(id);
+      if (!report) continue;
+      instances.push({ webContentsId, state: report.state });
+      counts[report.state.kind] = (counts[report.state.kind] ?? 0) + 1;
+    }
+
+    return { declared: true, hostCount, instances, counts };
+  }
+
+  private loaderRecord(id: string): PluginRecord | undefined {
     return this.loader.plugins.find((record) => record.plugin.metadata.id === id);
   }
 
-  /** Record a secondary-realm status report from one window. */
-  setRealmStatus(
-    webContentsId: number,
-    realm: string,
-    id: string,
-    status: PluginPreloadStatus,
-    error?: string
-  ): void {
-    if (!LOADED_REALM_IDS.includes(realm)) return;
-    let realms = this.realmStates.get(webContentsId);
-    if (!realms) {
-      realms = new Map();
-      this.realmStates.set(webContentsId, realms);
-    }
-    let plugins = realms.get(realm);
-    if (!plugins) {
-      plugins = new Map();
-      realms.set(realm, plugins);
-    }
-    plugins.set(id, { status, error });
-  }
-
-  /** Drop all secondary-realm reports when their window goes away. */
-  clearRealmStatus(webContentsId: number): void {
-    this.realmStates.delete(webContentsId);
-  }
-
-  private realmStatusFor(record: PluginRecord): Partial<Record<string, RealmRuntimeStatus>> {
-    const result: Partial<Record<string, RealmRuntimeStatus>> = {};
-    for (const realm of LOADED_REALM_IDS) {
-      if (!record.plugin.metadata.realms[realm]) continue;
-
-      let found: RealmRuntimeStatus | undefined;
-      for (const states of this.realmStates.values()) {
-        const state = states.get(realm)?.get(record.plugin.metadata.id);
-        if (!state) continue;
-        if (state.status === PluginPreloadStatus.Failed) {
-          found = state;
-          break;
-        }
-        if (state.status === PluginPreloadStatus.Active) found = state;
-        else if (!found) found = state;
+  private requireSelected(id: string): DiscoveredPlugin {
+    const plugin = this.catalog.selected.get(id);
+    if (!plugin) {
+      const entry = this.catalog.entries.find((candidate) => candidate.id === id);
+      if (entry?.kind === PluginCatalogEntryKind.Conflict) {
+        throw new Error(`Plugin "${id}" is unavailable because of a duplicate id`);
       }
-      result[realm] = found ?? { status: PluginPreloadStatus.Pending };
+      throw new Error(`Unknown plugin "${id}"`);
     }
-    return result;
+    return plugin;
   }
 
-  private toEntry(record: PluginRecord): PluginManagerEntry {
-    const { metadata, kind } = record.plugin;
-    const enabled = this.state.isEnabled(metadata.id, kind);
-    const realmStatus = enabled ? this.realmStatusFor(record) : undefined;
-    const realmFailed = realmStatus
-      ? Object.values(realmStatus).some((state) => state?.status === PluginPreloadStatus.Failed)
-      : false;
-    const status =
-      record.status === PluginStatus.Failed
-        ? PluginActivationStatus.Failed
-        : record.status === PluginStatus.Active && realmFailed
-          ? PluginActivationStatus.Partial
-          : record.status === PluginStatus.Active
-            ? PluginActivationStatus.Active
-            : PluginActivationStatus.Inactive;
-    return {
-      id: metadata.id,
-      name: metadata.name,
-      version: metadata.version,
-      description: metadata.description,
-      author: metadata.author,
-      license: metadata.license,
-      icon: metadata.icon ? pluginAssetsUrl(metadata.id, metadata.icon) : undefined,
-      kind,
-      enabled,
-      status,
-      error: record.status === PluginStatus.Failed ? toError(record.error).message : undefined,
-      realmStatus,
-    };
+  private publishDesired(id: string, plugin: DiscoveredPlugin, desired: PluginDesiredState): void {
+    for (const realm of LOADED_REALM_IDS) {
+      if (!plugin.metadata.realms[realm]) continue;
+      this.onDesiredChanged?.(id, realm, desired);
+    }
   }
+
+  private enqueue<T>(id: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.commands.get(id) ?? Promise.resolve();
+    const next = previous.then(task, task);
+    this.commands.set(
+      id,
+      next.catch(() => {})
+    );
+    return next;
+  }
+}
+
+function layerOf(kind: PluginKind): PluginLayer {
+  return kind === PluginKind.Builtin ? PluginLayer.Builtin : PluginLayer.User;
+}
+
+function presentationFor(
+  desired: PluginDesiredState,
+  availability: PluginAvailability,
+  main: SerializablePluginRuntimeState,
+  realms: Record<string, PluginRealmSummary>
+): PluginPresentationStatus {
+  if (availability.kind !== PluginAvailabilityKind.Available) {
+    return PluginPresentationStatus.Unavailable;
+  }
+
+  const instances = Object.values(realms).flatMap((summary) => summary.instances);
+  const hasCleanupFailure =
+    (main.kind === PluginRuntimeStateKind.Failed ||
+      main.kind === PluginRuntimeStateKind.Hung) &&
+    main.stage === "deactivate" &&
+    instances.every((instance) => instance.state.kind !== PluginRuntimeStateKind.Running);
+
+  if (!desired.enabled) {
+    if (hasCleanupFailure) return PluginPresentationStatus.CleanupFailed;
+    if (
+      main.kind === PluginRuntimeStateKind.Stopping ||
+      main.kind === PluginRuntimeStateKind.Starting
+    ) {
+      return PluginPresentationStatus.Stopping;
+    }
+    return PluginPresentationStatus.Disabled;
+  }
+
+  if (
+    main.kind === PluginRuntimeStateKind.Failed ||
+    main.kind === PluginRuntimeStateKind.Hung ||
+    main.kind === PluginRuntimeStateKind.Abandoned
+  ) {
+    return PluginPresentationStatus.Failed;
+  }
+  if (
+    main.kind === PluginRuntimeStateKind.Stopped ||
+    main.kind === PluginRuntimeStateKind.Starting ||
+    main.kind === PluginRuntimeStateKind.Stopping
+  ) {
+    return PluginPresentationStatus.Starting;
+  }
+
+  const instantiated = Object.values(realms).filter((summary) => summary.hostCount > 0);
+  const degraded = instances.some(
+    (instance) =>
+      instance.state.kind === PluginRuntimeStateKind.Failed ||
+      instance.state.kind === PluginRuntimeStateKind.Hung ||
+      instance.state.kind === PluginRuntimeStateKind.Abandoned
+  );
+  if (degraded) return PluginPresentationStatus.Degraded;
+
+  const missing = instantiated.some((summary) => summary.instances.length < summary.hostCount);
+  const starting = instances.some(
+    (instance) =>
+      instance.state.kind === PluginRuntimeStateKind.Starting ||
+      instance.state.kind === PluginRuntimeStateKind.Stopping
+  );
+  if (missing || starting) return PluginPresentationStatus.Starting;
+
+  return PluginPresentationStatus.Running;
 }
 
 function pluginAssetsUrl(id: string, assetPath: string): string {

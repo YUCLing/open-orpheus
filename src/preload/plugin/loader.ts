@@ -1,8 +1,14 @@
-import { LifecyclePhase, RealmLifecycle, type LifecycleSnapshot } from "@shared/plugin/lifecycle";
-import { PluginPreloadStatus } from "@shared/contracts/plugin-manager-api";
+import type { PluginDesiredState } from "@shared/contracts/plugin-manager-api";
+import {
+  LifecycleFailureStage,
+  LifecycleStateKind,
+  RealmLifecycle,
+  type LifecycleSnapshot,
+} from "@shared/plugin/lifecycle";
 import {
   createPluginRegistry,
   type MutablePluginRegistry,
+  type PluginRegistrySource,
   type Registry,
 } from "@shared/plugin/registry";
 import { toError } from "@shared/util";
@@ -48,18 +54,25 @@ export interface PreloadPluginLoaderOptions {
   evaluate?: (source: string, id: string) => unknown;
   /** Injectable for tests; defaults to the restricted Electron-only require. */
   requireModule?: PreloadRequire;
-  /** Report per-plugin preload status back to the main process. */
-  onStatus?: (id: string, status: PluginPreloadStatus, error?: string) => void;
-  /** Soft per-plugin activation deadline. */
+  /** Report per-plugin lifecycle snapshots back to the main process. */
+  onStatus?: (id: string, snapshot: LifecycleSnapshot<PluginModule>) => void;
+  /** Soft per-plugin activation and cleanup deadline. */
   activationTimeoutMs?: number;
+}
+
+export enum PreloadPluginStatus {
+  Pending = "pending",
+  Active = "active",
+  Failed = "failed",
 }
 
 export interface PreloadPluginRecord {
   id: string;
   lifecycle: RealmLifecycle<PluginModule>;
-  readonly status: "pending" | "active" | "failed";
+  readonly status: PreloadPluginStatus;
   readonly module: PluginModule | undefined;
   readonly error: unknown;
+  readonly snapshot: LifecycleSnapshot<PluginModule>;
 }
 
 /**
@@ -72,12 +85,13 @@ export interface PreloadPluginRecord {
  */
 export class PreloadPluginLoader {
   private readonly records: PreloadPluginRecord[] = [];
-  private readonly runtime: PluginRuntime;
+  private readonly recordsById = new Map<string, PreloadPluginRecord>();
+  private readonly runtimeBase: { registry: Registry };
   private readonly pluginRegistry: MutablePluginRegistry;
   private readonly evaluate: (source: string, id: string) => unknown;
-  private readonly loaders = new Map<string, () => Promise<unknown>>();
   private readonly sourceProviders = new Map<string, () => Promise<string | null>>();
-  private readonly onStatus?: (id: string, status: PluginPreloadStatus, error?: string) => void;
+  private readonly registrySourceMap = new Map<string, PluginRegistrySource>();
+  private readonly onStatus?: (id: string, snapshot: LifecycleSnapshot<PluginModule>) => void;
   private readonly activationTimeoutMs?: number;
 
   constructor(options: PreloadPluginLoaderOptions) {
@@ -92,12 +106,16 @@ export class PreloadPluginLoader {
       this.registerSource(id, async () => source);
     }
 
-    this.pluginRegistry = createPluginRegistry(this.loaders);
-    this.runtime = { registry: options.registry, plugins: this.pluginRegistry };
+    this.pluginRegistry = createPluginRegistry(this.registrySourceMap);
+    this.runtimeBase = { registry: options.registry };
   }
 
   get plugins(): ReadonlyArray<PreloadPluginRecord> {
     return this.records;
+  }
+
+  has(id: string): boolean {
+    return this.recordsById.has(id);
   }
 
   /**
@@ -110,60 +128,72 @@ export class PreloadPluginLoader {
     }
   }
 
-  enableAll(): void {
-    for (const record of this.records) record.lifecycle.enable();
+  /** Apply desired state to every already-registered plugin. */
+  enableAll(revision = 0): void {
+    for (const record of this.records) {
+      record.lifecycle.applyDesiredState({ enabled: true, revision });
+    }
   }
 
   waitForAll(): Promise<void> {
     return Promise.all(this.records.map((record) => this.waitForDecision(record))).then(() => {});
   }
 
-  async activateAll(): Promise<void> {
-    this.enableAll();
+  async activateAll(revision = 0): Promise<void> {
+    this.enableAll(revision);
     await this.waitForAll();
+  }
+
+  /** Apply a committed desired state to one plugin. */
+  applyDesiredState(id: string, desired: PluginDesiredState): void {
+    const record = this.recordsById.get(id);
+    if (!record) return;
+    record.lifecycle.applyDesiredState(desired);
   }
 
   /** Evaluate and activate one plugin; used for tests and live enables. */
   add(id: string, source: string): Promise<void> {
-    // A new instance must not inherit the old exports cache.
     this.pluginRegistry.forget(id);
     this.registerSource(id, async () => source);
-    return this.enableRecord(id);
+    return this.enableRecord(id, { enabled: true, revision: 1 });
   }
 
   /** Fetch and activate one plugin. Source fetch is inside its lifecycle. */
-  enable(id: string, getSource: () => Promise<string | null>): Promise<void> {
+  enable(
+    id: string,
+    getSource: () => Promise<string | null>,
+    desired: PluginDesiredState = { enabled: true, revision: 1 }
+  ): Promise<void> {
     this.pluginRegistry.forget(id);
     this.registerSource(id, getSource);
-    return this.enableRecord(id);
+    return this.enableRecord(id, desired);
   }
 
   /** Deactivate and forget one plugin; used for live disables. */
-  async remove(id: string): Promise<void> {
-    const record = this.records.find((candidate) => candidate.id === id);
+  async remove(
+    id: string,
+    desired: PluginDesiredState = { enabled: false, revision: 1 }
+  ): Promise<void> {
+    const record = this.recordsById.get(id);
     if (!record) return;
 
     // Drop the exports cache now. A re-enable can return early below, but the
     // new instance must never be shadowed by the old module.
     this.pluginRegistry.forget(id);
-    record.lifecycle.disable();
-    await record.lifecycle.waitFor(
-      (snapshot) =>
-        snapshot.desired ||
-        snapshot.phase === LifecyclePhase.Disabled ||
-        (snapshot.phase === LifecyclePhase.Failed && !snapshot.cleanupPending)
-    );
+    record.lifecycle.applyDesiredState(desired);
+    await this.waitForSettled(record);
 
-    // A re-enable may have happened while the cleanup was running. The latest
+    // A re-enable may have happened while cleanup was running. The latest
     // intent wins; do not delete the record/source/loader it now owns.
     const latest = record.lifecycle.snapshot;
-    if (latest.desired || latest.cleanupPending) return;
+    if (latest.desired.enabled || latest.module) return;
     if (!this.records.includes(record)) return;
 
     const index = this.records.indexOf(record);
     if (index !== -1) this.records.splice(index, 1);
+    this.recordsById.delete(id);
     this.sourceProviders.delete(id);
-    this.loaders.delete(id);
+    this.registrySourceMap.delete(id);
   }
 
   async deactivateAll(): Promise<void> {
@@ -172,7 +202,13 @@ export class PreloadPluginLoader {
       records.map(async (record) => {
         this.pluginRegistry.forget(record.id);
         try {
-          await record.lifecycle.dispose(2000);
+          const result = await record.lifecycle.dispose(2000);
+          if (result.status !== "stopped") {
+            LOGGER.warn(
+              { pluginId: record.id, status: result.status },
+              "Preload plugin shutdown cleanup did not complete cleanly"
+            );
+          }
         } catch (error) {
           LOGGER.error(
             { pluginId: record.id, err: toError(error) },
@@ -183,44 +219,72 @@ export class PreloadPluginLoader {
     );
   }
 
-  private enableRecord(id: string): Promise<void> {
-    const record = this.records.find((candidate) => candidate.id === id);
+  private runtimeFor(id: string): PluginRuntime {
+    return { registry: this.runtimeBase.registry, plugins: this.pluginRegistry.forPlugin(id) };
+  }
+
+  private async loadPluginModule(id: string): Promise<PluginModule> {
+    const record = this.recordsById.get(id);
+    if (!record) throw new Error(`Unknown plugin "${id}"`);
+    if (!record.lifecycle.desiredState.enabled) {
+      throw new Error(`Plugin "${id}" is not enabled`);
+    }
+    const provider = this.sourceProviders.get(id);
+    if (!provider) throw new Error(`Plugin "${id}" has no source`);
+    const source = await provider();
+    if (source === null) throw new Error(`Plugin "${id}" source is unavailable`);
+    return toPluginModule(this.evaluate(source, id), id);
+  }
+
+  private async whenActive(id: string): Promise<PluginModule> {
+    const record = this.recordsById.get(id);
+    if (!record) throw new Error(`Unknown plugin "${id}"`);
+    if (!record.lifecycle.desiredState.enabled) {
+      throw new Error(`Plugin "${id}" is not enabled`);
+    }
+    const snapshot = await record.lifecycle.waitFor(
+      (current) =>
+        current.state.kind === LifecycleStateKind.Running ||
+        current.state.kind === LifecycleStateKind.Failed ||
+        current.state.kind === LifecycleStateKind.Hung ||
+        current.state.kind === LifecycleStateKind.Abandoned ||
+        !current.desired.enabled
+    );
+    if (snapshot.state.kind !== LifecycleStateKind.Running || !snapshot.module) {
+      throw new Error(`Plugin "${id}" is not active`);
+    }
+    return snapshot.module;
+  }
+
+  private enableRecord(id: string, desired: PluginDesiredState): Promise<void> {
+    const record = this.recordsById.get(id);
     if (!record) return Promise.reject(new Error(`Unknown plugin "${id}"`));
-    record.lifecycle.enable();
+    record.lifecycle.applyDesiredState(desired);
     return this.waitForDecision(record);
   }
 
   private registerSource(id: string, provider: () => Promise<string | null>): void {
     this.sourceProviders.set(id, provider);
-    if (this.loaders.has(id)) return;
+    if (this.recordsById.has(id)) return;
 
-    let lastStatus: PluginPreloadStatus | undefined;
     const lifecycle = new RealmLifecycle<PluginModule>({
       timeoutMs: this.activationTimeoutMs,
       adapter: {
-        load: () => this.loadSourceModule(id),
-        activate: (module) => module.activate(this.runtime),
+        load: () => this.loadPluginModule(id),
+        activate: (module) => module.activate(this.runtimeFor(id)),
         deactivate: (module) => module.deactivate?.(),
       },
       onChange: (snapshot) => {
-        if (snapshot.phase === LifecyclePhase.Enabling && !snapshot.timedOut) {
-          lastStatus = undefined;
-          return;
-        }
-        const next = reportableStatus(snapshot);
-        if (next === undefined || next === lastStatus) return;
-        lastStatus = next;
-        if (next === PluginPreloadStatus.Failed) {
+        if (
+          snapshot.state.kind === LifecycleStateKind.Failed &&
+          snapshot.state.stage !== LifecycleFailureStage.Deactivate
+        ) {
           LOGGER.error(
-            { pluginId: id, err: toError(snapshot.error) },
+            { pluginId: id, err: toError(snapshot.state.error) },
             "Preload plugin activation failed"
           );
         }
-        this.onStatus?.(
-          id,
-          next,
-          next === PluginPreloadStatus.Failed ? toError(snapshot.error).message : undefined
-        );
+        this.onStatus?.(id, snapshot);
       },
     });
 
@@ -236,74 +300,57 @@ export class PreloadPluginLoader {
       get error() {
         return lifecycle.snapshot.error;
       },
+      get snapshot() {
+        return lifecycle.snapshot;
+      },
     };
     this.records.push(record);
-
-    this.loaders.set(id, async () => {
-      if (!lifecycle.snapshot.desired) {
-        throw new Error(`Plugin "${id}" is not enabled`);
-      }
-      const snapshot = await lifecycle.waitFor(
-        (current) =>
-          current.phase === LifecyclePhase.Active ||
-          current.phase === LifecyclePhase.Failed ||
-          current.timedOut ||
-          !current.desired
-      );
-      if (snapshot.phase !== LifecyclePhase.Active || !snapshot.module) {
-        throw new Error(`Plugin "${id}" is not active`);
-      }
-      return snapshot.module;
+    this.recordsById.set(id, record);
+    this.registrySourceMap.set(id, {
+      load: () => this.loadPluginModule(id),
+      whenActive: () => this.whenActive(id),
     });
-  }
-
-  private async loadSourceModule(id: string): Promise<PluginModule> {
-    const provider = this.sourceProviders.get(id);
-    if (!provider) throw new Error(`Plugin "${id}" has no source`);
-    const source = await provider();
-    if (source === null) throw new Error(`Plugin "${id}" source is unavailable`);
-    return toPluginModule(this.evaluate(source, id), id);
   }
 
   private waitForDecision(record: PreloadPluginRecord): Promise<void> {
     return record.lifecycle
       .waitFor(
         (snapshot) =>
-          snapshot.phase === LifecyclePhase.Active ||
-          snapshot.phase === LifecyclePhase.Failed ||
-          snapshot.timedOut ||
-          (snapshot.phase === LifecyclePhase.Disabled && !snapshot.desired)
+          snapshot.state.kind === LifecycleStateKind.Running ||
+          snapshot.state.kind === LifecycleStateKind.Failed ||
+          snapshot.state.kind === LifecycleStateKind.Hung ||
+          snapshot.state.kind === LifecycleStateKind.Abandoned ||
+          (snapshot.state.kind === LifecycleStateKind.Stopped && !snapshot.desired.enabled)
+      )
+      .then(() => {});
+  }
+
+  private waitForSettled(record: PreloadPluginRecord): Promise<void> {
+    return record.lifecycle
+      .waitFor(
+        (snapshot) =>
+          snapshot.state.kind === LifecycleStateKind.Stopped ||
+          snapshot.state.kind === LifecycleStateKind.Failed ||
+          snapshot.state.kind === LifecycleStateKind.Hung ||
+          snapshot.state.kind === LifecycleStateKind.Abandoned ||
+          snapshot.state.kind === LifecycleStateKind.Disposed
       )
       .then(() => {});
   }
 }
 
-function reportableStatus(
-  snapshot: LifecycleSnapshot<PluginModule>
-): PluginPreloadStatus | undefined {
-  if (snapshot.phase === LifecyclePhase.Active) return PluginPreloadStatus.Active;
-  if (
-    snapshot.phase === LifecyclePhase.Failed ||
-    (snapshot.phase === LifecyclePhase.Enabling && snapshot.timedOut)
-  ) {
-    return PluginPreloadStatus.Failed;
-  }
-  if (snapshot.phase === LifecyclePhase.Disabled && !snapshot.desired) {
-    return PluginPreloadStatus.Inactive;
-  }
-  return undefined;
-}
-
-function toPreloadStatus(lifecycle: RealmLifecycle<PluginModule>): "pending" | "active" | "failed" {
+function toPreloadStatus(lifecycle: RealmLifecycle<PluginModule>): PreloadPluginStatus {
   const snapshot = lifecycle.snapshot;
-  if (snapshot.phase === LifecyclePhase.Active) return "active";
-  if (
-    snapshot.phase === LifecyclePhase.Failed ||
-    (snapshot.phase === LifecyclePhase.Enabling && snapshot.timedOut)
-  ) {
-    return "failed";
+  switch (snapshot.state.kind) {
+    case LifecycleStateKind.Running:
+      return PreloadPluginStatus.Active;
+    case LifecycleStateKind.Failed:
+    case LifecycleStateKind.Hung:
+    case LifecycleStateKind.Abandoned:
+      return PreloadPluginStatus.Failed;
+    default:
+      return PreloadPluginStatus.Pending;
   }
-  return "pending";
 }
 
 function toPluginModule(imported: unknown, id: string): PluginModule {

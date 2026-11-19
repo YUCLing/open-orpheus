@@ -1,9 +1,18 @@
 import { pathToFileURL } from "node:url";
 
-import { LifecyclePhase, RealmLifecycle, type LifecycleSnapshot } from "@shared/plugin/lifecycle";
+import type { PluginDesiredState } from "@shared/contracts/plugin-manager-api";
+import {
+  LifecycleFailureStage,
+  LifecycleStateKind,
+  PluginDisposeStatus,
+  RealmLifecycle,
+  type LifecycleSnapshot,
+  type PluginDisposeResult,
+} from "@shared/plugin/lifecycle";
 import {
   createPluginRegistry,
   type MutablePluginRegistry,
+  type PluginRegistrySource,
   type Registry,
 } from "@shared/plugin/registry";
 import { toError } from "@shared/util";
@@ -24,63 +33,68 @@ export interface PluginRecord {
   readonly status: PluginStatus;
   readonly module: PluginModule | undefined;
   readonly error: unknown;
+  readonly snapshot: LifecycleSnapshot<PluginModule>;
 }
 
 export interface PluginLoaderOptions {
   registry: Registry;
   plugins: DiscoveredPlugin[];
-  /** Only plugins for which this returns true are activated by `activateAll`. */
+  /** Initial desired state for `activateAll`. */
   isEnabled?: (id: string) => boolean;
   /** Injectable for tests; defaults to a dynamic ESM import. */
   importModule?: (entryPath: string) => Promise<unknown>;
-  /** Soft per-plugin activation deadline. */
+  /** Soft per-plugin activation and cleanup deadline. */
   activationTimeoutMs?: number;
   /** Called when a plugin's lifecycle snapshot changes. */
   onChanged?: () => void;
 }
 
 /**
- * Loads, activates and deactivates plugin trees.
+ * Loads, activates, and deactivates main-realm plugin modules.
  *
- * Each plugin has one `RealmLifecycle`: desired state, actual phase, soft
- * timeout ownership, generation-checked async results, and cleanup-before-retry
- * all live in that state machine. This class is only the main-realm adapter.
+ * Each plugin has one `RealmLifecycle` that serializes activation and cleanup.
+ * This class adapts discovered plugins to that state machine and exposes
+ * module exports separately from activation readiness.
  */
 export class PluginLoader {
   private readonly records: PluginRecord[] = [];
-  private readonly ids = new Set<string>();
-  private readonly runtime: PluginRuntime;
+  private readonly recordsById = new Map<string, PluginRecord>();
   private readonly importModule: (entryPath: string) => Promise<unknown>;
   private readonly isEnabled: (id: string) => boolean;
+  private readonly revisions = new Map<string, number>();
   private readonly pluginRegistry: MutablePluginRegistry;
+  private readonly registry: Registry;
 
   constructor(options: PluginLoaderOptions) {
     this.importModule =
       options.importModule ?? ((entryPath) => import(pathToFileURL(entryPath).href));
     this.isEnabled = options.isEnabled ?? (() => true);
+    this.registry = options.registry;
     const onChanged = options.onChanged;
 
-    const loaders = new Map<string, () => Promise<unknown>>();
+    const sources = new Map<string, PluginRegistrySource>();
+
     for (const plugin of options.plugins) {
       const id = plugin.metadata.id;
-      if (this.ids.has(id)) {
-        LOGGER.warn({ pluginId: id }, "Ignoring duplicate plugin id");
-        continue;
+      if (this.recordsById.has(id)) {
+        throw new Error(`Duplicate plugin id "${id}" in the resolved catalog`);
       }
-      this.ids.add(id);
 
       const lifecycle = new RealmLifecycle<PluginModule>({
         timeoutMs: options.activationTimeoutMs,
         adapter: {
           load: async () => toPluginModule(await this.importModule(plugin.entryPaths.main), id),
-          activate: (module) => module.activate(this.runtime),
+          activate: (module) => module.activate(this.runtimeFor(id)),
           deactivate: (module) => module.deactivate?.(),
         },
         onChange: (snapshot) => {
           onChanged?.();
-          if (snapshot.phase === LifecyclePhase.Failed && snapshot.error) {
+          if (
+            snapshot.state.kind === LifecycleStateKind.Failed &&
+            snapshot.state.stage !== LifecycleFailureStage.Deactivate
+          ) {
             LOGGER.error(
-              { pluginId: id, err: toError(snapshot.error) },
+              { pluginId: id, err: toError(snapshot.state.error) },
               "Plugin activation failed"
             );
           }
@@ -99,120 +113,185 @@ export class PluginLoader {
         get error() {
           return lifecycle.snapshot.error;
         },
+        get snapshot() {
+          return lifecycle.snapshot;
+        },
       };
       this.records.push(record);
+      this.recordsById.set(id, record);
 
-      loaders.set(id, async () => {
-        const initial = lifecycle.snapshot;
-        if (!initial.desired) {
-          if (this.isEnabled(id) && initial.phase === LifecyclePhase.Disabled) {
-            lifecycle.enable();
-          } else {
-            throw new Error(`Plugin "${id}" is not enabled`);
-          }
-        }
-        const snapshot = await lifecycle.waitFor(
-          (current) =>
-            current.phase === LifecyclePhase.Active ||
-            current.phase === LifecyclePhase.Failed ||
-            current.timedOut ||
-            !current.desired
-        );
-        if (snapshot.phase !== LifecyclePhase.Active || !snapshot.module) {
-          throw new Error(`Plugin "${id}" is not active`);
-        }
-        return snapshot.module;
+      sources.set(id, {
+        load: () => this.loadModule(id),
+        whenActive: () => this.whenActive(id),
       });
     }
 
-    this.pluginRegistry = createPluginRegistry(loaders);
-    this.runtime = { registry: options.registry, plugins: this.pluginRegistry };
+    this.pluginRegistry = createPluginRegistry(sources);
+  }
+
+  private runtimeFor(id: string): PluginRuntime {
+    return { registry: this.registry, plugins: this.pluginRegistry.forPlugin(id) };
   }
 
   get plugins(): ReadonlyArray<PluginRecord> {
     return this.records;
   }
 
+  /** Apply a committed desired state to one plugin. */
+  setDesiredState(id: string, desired: PluginDesiredState): void {
+    const record = this.require(id);
+    const known = this.revisions.get(id) ?? 0;
+    if (desired.revision < known) return;
+    this.revisions.set(id, desired.revision);
+    record.lifecycle.applyDesiredState(desired);
+  }
+
   async activateAll(): Promise<void> {
     const targets = this.records.filter((record) => this.isEnabled(record.plugin.metadata.id));
-    for (const record of targets) record.lifecycle.enable();
+    for (const record of targets) {
+      const id = record.plugin.metadata.id;
+      record.lifecycle.applyDesiredState({ enabled: true, revision: this.revisions.get(id) ?? 0 });
+    }
     await Promise.all(targets.map((record) => this.waitForDecision(record)));
   }
 
   async activate(id: string): Promise<void> {
-    const record = this.records.find((candidate) => candidate.plugin.metadata.id === id);
-    if (!record) throw new Error(`Unknown plugin "${id}"`);
+    const record = this.require(id);
     if (!this.isEnabled(id)) throw new Error(`Plugin "${id}" is not enabled`);
-    record.lifecycle.enable();
+    this.setDesiredState(id, { enabled: true, revision: this.nextRevision(id) });
     await this.waitForDecision(record);
   }
 
   async deactivate(id: string): Promise<void> {
-    const record = this.records.find((candidate) => candidate.plugin.metadata.id === id);
-    if (!record) throw new Error(`Unknown plugin "${id}"`);
-    // Clear the exports cache when stopping begins. The wait may time out, but
-    // no caller may receive the already-deactivated module from the cache.
+    const record = this.require(id);
+    // Clear the exports cache when stopping begins; no caller may receive the
+    // already-deactivated module from a stale evaluation.
     this.pluginRegistry.forget(id);
-    record.lifecycle.disable();
+    this.setDesiredState(id, { enabled: false, revision: this.nextRevision(id) });
     await this.waitForSettled(record);
   }
 
-  async deactivateAll(): Promise<void> {
+  /** Request a fresh attempt without changing desired state. */
+  async retry(id: string): Promise<void> {
+    const record = this.require(id);
+    record.lifecycle.retry();
+    await this.waitForDecision(record);
+  }
+
+  /** Start a retry without waiting for convergence. */
+  requestRetry(id: string): void {
+    this.require(id).lifecycle.retry();
+  }
+
+  async deactivateAll(): Promise<PluginDisposeResult[]> {
     // Start every cleanup within the same shutdown deadline. Awaiting each
     // dispose sequentially would let the first slow plugin consume the host's
-    // shared 2s budget before the later cleanup even starts.
+    // shared budget before later cleanup even starts.
     const records = [...this.records].reverse();
-    await Promise.all(
+    return Promise.all(
       records.map(async (record) => {
         this.pluginRegistry.forget(record.plugin.metadata.id);
         try {
-          await record.lifecycle.dispose(2000);
+          const result = await record.lifecycle.dispose(2000);
+          if (result.status !== "stopped") {
+            LOGGER.warn(
+              { pluginId: record.plugin.metadata.id, status: result.status },
+              "Plugin shutdown cleanup did not complete cleanly"
+            );
+          }
+          return result;
         } catch (error) {
           LOGGER.error(
             { pluginId: record.plugin.metadata.id, err: toError(error) },
             "Plugin shutdown cleanup failed"
           );
+          return { status: PluginDisposeStatus.Abandoned };
         }
       })
     );
   }
 
-  private async waitForDecision(record: PluginRecord): Promise<void> {
-    await record.lifecycle.waitFor(
-      (snapshot) =>
-        snapshot.phase === LifecyclePhase.Active ||
-        snapshot.phase === LifecyclePhase.Failed ||
-        snapshot.timedOut ||
-        (snapshot.phase === LifecyclePhase.Disabled && !snapshot.desired)
+  private nextRevision(id: string): number {
+    const next = (this.revisions.get(id) ?? 0) + 1;
+    this.revisions.set(id, next);
+    return next;
+  }
+
+  private require(id: string): PluginRecord {
+    const record = this.recordsById.get(id);
+    if (!record) throw new Error(`Unknown plugin "${id}"`);
+    return record;
+  }
+
+  private async loadModule(id: string): Promise<PluginModule> {
+    const record = this.require(id);
+    if (!this.isEnabled(id)) throw new Error(`Plugin "${id}" is not enabled`);
+    return toPluginModule(
+      await this.importModule(record.plugin.entryPaths.main),
+      record.plugin.metadata.id
     );
   }
 
-  private async waitForSettled(record: PluginRecord): Promise<void> {
-    await record.lifecycle.waitFor(
-      (snapshot) =>
-        snapshot.phase === LifecyclePhase.Disabled ||
-        snapshot.phase === LifecyclePhase.Failed ||
-        snapshot.timedOut
+  private async whenActive(id: string): Promise<PluginModule> {
+    const record = this.require(id);
+    if (!this.isEnabled(id)) throw new Error(`Plugin "${id}" is not enabled`);
+    const snapshot = await record.lifecycle.waitFor(
+      (current) =>
+        current.state.kind === LifecycleStateKind.Running ||
+        current.state.kind === LifecycleStateKind.Failed ||
+        current.state.kind === LifecycleStateKind.Hung ||
+        current.state.kind === LifecycleStateKind.Abandoned ||
+        !current.desired.enabled
     );
+    if (snapshot.state.kind !== LifecycleStateKind.Running || !snapshot.module) {
+      throw new Error(`Plugin "${id}" is not active`);
+    }
+    return snapshot.module;
+  }
+
+  private waitForDecision(record: PluginRecord): Promise<void> {
+    return record.lifecycle
+      .waitFor(
+        (snapshot) =>
+          snapshot.state.kind === LifecycleStateKind.Running ||
+          snapshot.state.kind === LifecycleStateKind.Failed ||
+          snapshot.state.kind === LifecycleStateKind.Hung ||
+          snapshot.state.kind === LifecycleStateKind.Abandoned ||
+          (snapshot.state.kind === LifecycleStateKind.Stopped && !snapshot.desired.enabled)
+      )
+      .then(() => {});
+  }
+
+  private waitForSettled(record: PluginRecord): Promise<void> {
+    return record.lifecycle
+      .waitFor(
+        (snapshot) =>
+          snapshot.state.kind === LifecycleStateKind.Stopped ||
+          snapshot.state.kind === LifecycleStateKind.Failed ||
+          snapshot.state.kind === LifecycleStateKind.Hung ||
+          snapshot.state.kind === LifecycleStateKind.Abandoned ||
+          snapshot.state.kind === LifecycleStateKind.Disposed
+      )
+      .then(() => {});
   }
 }
 
 function toPluginStatus(lifecycle: RealmLifecycle<PluginModule>): PluginStatus {
   const snapshot = lifecycle.snapshot;
-  if (snapshot.phase === LifecyclePhase.Active) return PluginStatus.Active;
-  if (
-    snapshot.phase === LifecyclePhase.Failed ||
-    (snapshot.phase === LifecyclePhase.Enabling && snapshot.timedOut)
-  ) {
-    return PluginStatus.Failed;
+  switch (snapshot.state.kind) {
+    case LifecycleStateKind.Running:
+      return PluginStatus.Active;
+    case LifecycleStateKind.Failed:
+    case LifecycleStateKind.Hung:
+    case LifecycleStateKind.Abandoned:
+      return PluginStatus.Failed;
+    case LifecycleStateKind.Stopped:
+    case LifecycleStateKind.Disposed:
+      return snapshot.desired.enabled ? PluginStatus.Pending : PluginStatus.Disabled;
+    default:
+      return PluginStatus.Pending;
   }
-  if (snapshot.phase === LifecyclePhase.Disabled && !snapshot.desired) {
-    return PluginStatus.Disabled;
-  }
-  return PluginStatus.Pending;
 }
-
-export type { LifecycleSnapshot };
 
 function toPluginModule(imported: unknown, id: string): PluginModule {
   if (imported === null || typeof imported !== "object") {
@@ -227,3 +306,5 @@ function toPluginModule(imported: unknown, id: string): PluginModule {
   }
   return candidate as PluginModule;
 }
+
+export type { LifecycleSnapshot };

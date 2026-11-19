@@ -16,6 +16,9 @@ contextBridge.executeInMainWorld({
       plugins: Record<string, ManagerUIPlugin> = {};
 
       register(id: string, plugin: ManagerUIPlugin): void {
+        if (Object.prototype.hasOwnProperty.call(this.plugins, id)) {
+          throw new Error(`Plugin "${id}" already registered a plugin-manager contribution`);
+        }
         this.plugins[id] = plugin;
         this.dispatchEvent(new Event("changed"));
       }

@@ -2,7 +2,13 @@ import path from "node:path";
 
 import { app, ipcMain, webContents } from "electron";
 
-import { PluginKind, PluginPreloadStatus } from "@shared/contracts/plugin-manager-api";
+import {
+  PluginKind,
+  PluginLayer,
+  PluginRuntimeStateKind,
+  type PluginRealmBootstrap,
+  type PluginRealmReport,
+} from "@shared/contracts/plugin-manager-api";
 import { LOADED_REALM_IDS } from "virtual:open-orpheus/realm-runtime";
 import { toError } from "@shared/util";
 import { load } from "virtual:open-orpheus/registry";
@@ -11,10 +17,10 @@ import { plugins as pluginsDir } from "../folders";
 import { registerShutdownTask } from "../lifecycle";
 import { checkEnvFlagPresent } from "../util/env";
 
+import { resolvePluginCatalog, type PluginCandidate, type PluginCatalog } from "./catalog";
 import {
   discoverPluginSources,
   loadDiscoveredPlugin,
-  type DiscoveredPlugin,
   type PluginLocation,
 } from "./discover";
 import { PluginLoader } from "./loader";
@@ -23,10 +29,16 @@ import { PluginState } from "./state";
 import { createRegistry } from "@shared/plugin/registry";
 
 let pluginManager: PluginManager | null = null;
+let pluginCatalog: PluginCatalog | null = null;
 
 /** The installed plugin manager, or `null` when the plugin system is disabled. */
 export function getPluginManager(): PluginManager | null {
   return pluginManager;
+}
+
+/** The resolved plugin catalog, or `null` when the plugin system is disabled. */
+export function getPluginCatalog(): PluginCatalog | null {
+  return pluginCatalog;
 }
 
 /**
@@ -65,21 +77,30 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
   const registry = createRegistry(load);
   const state = new PluginState();
   await state.load();
-  const sources = await discoverPluginSources(pluginLocations());
 
-  const plugins: DiscoveredPlugin[] = [];
+  const sources = await discoverPluginSources(pluginLocations());
+  const candidates: PluginCandidate[] = [];
   for (const source of sources) {
+    const layer =
+      source.kind === PluginKind.Builtin ? PluginLayer.Builtin : PluginLayer.User;
     try {
-      plugins.push(await loadDiscoveredPlugin(source.source, source.kind));
+      candidates.push({
+        layer,
+        source: source.source,
+        plugin: await loadDiscoveredPlugin(source.source, source.kind),
+      });
     } catch (error) {
       LOGGER.error({ source: source.source, err: toError(error) }, "Failed to load plugin");
+      candidates.push({ layer, source: source.source, error });
     }
   }
 
-  for (const plugin of plugins) {
-    if (plugin.kind === PluginKind.Builtin) {
-      state.setDefault(plugin.metadata.id, plugin.metadata.builtin?.defaultEnabled === true);
-    }
+  const catalog = resolvePluginCatalog(candidates);
+  pluginCatalog = catalog;
+
+  for (const plugin of catalog.selected.values()) {
+    if (plugin.kind !== PluginKind.Builtin) continue;
+    state.setDefault(plugin.metadata.id, plugin.metadata.builtin?.defaultEnabled === true);
   }
 
   const notifyPluginManager = () => {
@@ -88,74 +109,80 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
     }
   };
 
+  const selected = [...catalog.selected.values()];
   const loader = new PluginLoader({
     registry,
-    plugins,
+    plugins: selected,
     isEnabled: (id) => {
-      const plugin = plugins.find((candidate) => candidate.metadata.id === id);
+      const plugin = catalog.selected.get(id);
       return plugin ? state.isEnabled(id, plugin.kind) : false;
     },
     onChanged: notifyPluginManager,
   });
-  pluginManager = new PluginManager(loader, state, (id, realm, enabled) => {
-    for (const contents of webContents.getAllWebContents()) {
-      contents.send("plugins.realmChanged", { realm, id, enabled });
-    }
-  });
 
-  const watchedRealmSenders = new Set<number>();
+  const publishDesired = (
+    id: string,
+    realm: string,
+    desired: { enabled: boolean; revision: number }
+  ) => {
+    const manager = pluginManager;
+    if (!manager) return;
+    for (const webContentsId of manager.hostsForRealm(realm)) {
+      webContents.fromId(webContentsId)?.send("plugins.realmChanged", {
+        realm,
+        id,
+        enabled: desired.enabled,
+        revision: desired.revision,
+      });
+    }
+  };
+
+  pluginManager = new PluginManager({
+    loader,
+    state,
+    catalog,
+    onChanged: notifyPluginManager,
+    onDesiredChanged: publishDesired,
+  });
 
   const isLoadedRealmId = (value: unknown): value is string =>
     typeof value === "string" && LOADED_REALM_IDS.includes(value);
 
-  ipcMain.on("plugins.realmStatus", (event, payload: unknown) => {
-    if (payload === null || typeof payload !== "object") return;
-    const { realm, id, status, error } = payload as {
-      realm?: unknown;
-      id?: unknown;
-      status?: unknown;
-      error?: unknown;
-    };
-    if (
-      !isLoadedRealmId(realm) ||
-      typeof id !== "string" ||
-      !Object.values(PluginPreloadStatus).includes(status as PluginPreloadStatus)
-    ) {
-      return;
-    }
+  const watchedHosts = new Set<number>();
+  const watchHost = (webContentsId: number) => {
+    if (watchedHosts.has(webContentsId)) return;
+    watchedHosts.add(webContentsId);
+    const sender = webContents.fromId(webContentsId);
+    sender?.once("destroyed", () => {
+      watchedHosts.delete(webContentsId);
+      pluginManager?.unregisterHost(webContentsId);
+      notifyPluginManager();
+    });
+  };
 
-    const senderId = event.sender.id;
-    pluginManager?.setRealmStatus(
-      senderId,
-      realm,
-      id,
-      status as PluginPreloadStatus,
-      typeof error === "string" ? error : undefined
-    );
-    if (!watchedRealmSenders.has(senderId)) {
-      watchedRealmSenders.add(senderId);
-      event.sender.once("destroyed", () => {
-        watchedRealmSenders.delete(senderId);
-        pluginManager?.clearRealmStatus(senderId);
-        notifyPluginManager();
-      });
-    }
-    notifyPluginManager();
-  });
+  // A realm window asks for one revisioned snapshot containing only enabled
+  // plugins that declare it. Disabled sources are never read.
+  ipcMain.handle("plugins.realmBootstrap", async (event, realm: unknown) => {
+    if (!isLoadedRealmId(realm)) return null;
+    const manager = pluginManager;
+    if (!manager) return null;
 
-  // Plugins are evaluated by each preload itself; only their discovered
-  // sources cross IPC, keyed by realm and plugin id.
-  const realmSources = new Map<string, Map<string, string>>();
-  for (const realm of LOADED_REALM_IDS) {
-    const sourcesForRealm = new Map<string, string>();
-    for (const { plugin } of loader.plugins) {
+    const webContentsId = event.sender.id;
+    manager.registerHost(webContentsId, realm);
+    watchHost(webContentsId);
+
+    const bootstrap: PluginRealmBootstrap = { realm, plugins: [] };
+    for (const plugin of catalog.selected.values()) {
       const entry = plugin.metadata.realms[realm];
       if (!entry) continue;
+      const desired = manager.desiredFor(plugin.metadata.id);
+      if (!desired?.enabled) continue;
       try {
-        sourcesForRealm.set(
-          plugin.metadata.id,
-          (await plugin.tree.readFile(entry)).toString("utf8")
-        );
+        bootstrap.plugins.push({
+          id: plugin.metadata.id,
+          desired,
+          source: (await plugin.tree.readFile(entry)).toString("utf8"),
+        });
       } catch (error) {
         LOGGER.error(
           { pluginId: plugin.metadata.id, realm, err: toError(error) },
@@ -163,31 +190,83 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
         );
       }
     }
-    realmSources.set(realm, sourcesForRealm);
-  }
-
-  ipcMain.handle("plugins.realm", (_event, realm: unknown) => {
-    if (!isLoadedRealmId(realm)) return [];
-    return [...(realmSources.get(realm)?.keys() ?? [])].filter(
-      (id) => pluginManager?.isEnabled(id) ?? false
-    );
+    return bootstrap;
   });
-  ipcMain.handle("plugins.realmSource", (_event, realm: unknown, id: unknown) => {
-    if (!isLoadedRealmId(realm) || typeof id !== "string" || !pluginManager?.isEnabled(id)) {
+
+  // Live enables fetch a single bundle on demand.
+  ipcMain.handle("plugins.realmSource", async (event, realm: unknown, id: unknown) => {
+    if (!isLoadedRealmId(realm) || typeof id !== "string") return null;
+    const manager = pluginManager;
+    if (!manager || !manager.isHostFor(event.sender.id, realm)) return null;
+    if (!manager.isEnabled(id)) return null;
+
+    const plugin = catalog.selected.get(id);
+    const entry = plugin?.metadata.realms[realm];
+    if (!plugin || !entry) return null;
+    try {
+      return (await plugin.tree.readFile(entry)).toString("utf8");
+    } catch (error) {
+      LOGGER.error(
+        { pluginId: id, realm, err: toError(error) },
+        "Failed to read plugin realm source"
+      );
       return null;
     }
-    return realmSources.get(realm)?.get(id) ?? null;
+  });
+
+  const runtimeKinds = Object.values(PluginRuntimeStateKind);
+
+  ipcMain.on("plugins.realmReport", (event, payload: unknown) => {
+    const report = parseRealmReport(payload, isLoadedRealmId, runtimeKinds);
+    if (!report) return;
+    pluginManager?.setRealmReport(event.sender.id, report);
   });
 
   registerShutdownTask({
     name: "plugins",
     timeoutMs: 2000,
-    run: () => loader.deactivateAll(),
+    run: async () => {
+      await loader.deactivateAll();
+    },
   });
 
   LOGGER.info(
-    { plugins: loader.plugins.length, sources: sources.length },
+    {
+      plugins: loader.plugins.length,
+      sources: sources.length,
+      conflicts: catalog.entries.filter((entry) => entry.kind === "conflict").length,
+      invalid: catalog.invalid.length,
+    },
     "Plugin system installed"
   );
   return loader;
+}
+
+function parseRealmReport(
+  payload: unknown,
+  isLoadedRealmId: (value: unknown) => value is string,
+  runtimeKinds: readonly PluginRuntimeStateKind[]
+): PluginRealmReport | null {
+  if (payload === null || typeof payload !== "object") return null;
+  const { realm, id, desiredRevision, attempt, state } = payload as {
+    realm?: unknown;
+    id?: unknown;
+    desiredRevision?: unknown;
+    attempt?: unknown;
+    state?: unknown;
+  };
+  if (!isLoadedRealmId(realm) || typeof id !== "string") return null;
+  if (typeof desiredRevision !== "number" || typeof attempt !== "number") return null;
+  if (state === null || typeof state !== "object") return null;
+  const kind = (state as { kind?: unknown }).kind;
+  if (typeof kind !== "string" || !runtimeKinds.includes(kind as PluginRuntimeStateKind)) {
+    return null;
+  }
+  return {
+    realm,
+    id,
+    desiredRevision,
+    attempt,
+    state: state as PluginRealmReport["state"],
+  };
 }

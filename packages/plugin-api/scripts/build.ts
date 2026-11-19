@@ -704,12 +704,12 @@ function assertInternalStripped(): void {
     [
       "lifecycle",
       "shared/plugin/lifecycle.d.ts",
-      /\b(?:LifecyclePhase|RealmLifecycle|LifecycleSnapshot)\b/,
+      /\b(?:RealmLifecycle|LifecycleSnapshot|LifecycleRuntimeState)\b/,
     ],
     [
       "plugin-manager contract",
       "shared/contracts/plugin-manager-api.d.ts",
-      /\b(?:PluginManagerEntry|PluginPreloadStatus|RealmRuntimeStatus)\b/,
+      /\b(?:PluginManagerEntry|SerializablePluginRuntimeState|PluginRealmReport)\b/,
     ],
   ] as const;
   const hosts = ["host", "preload/host", "plugin-manager/host"];

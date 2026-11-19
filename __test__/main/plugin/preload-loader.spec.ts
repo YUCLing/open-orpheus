@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PluginPreloadStatus } from "@shared/contracts/plugin-manager-api";
-
-import { evaluatePreloadModule, PreloadPluginLoader } from "../../../src/preload/plugin/loader";
+import {
+  evaluatePreloadModule,
+  PreloadPluginLoader,
+  PreloadPluginStatus,
+} from "../../../src/preload/plugin/loader";
+import { LifecycleStateKind } from "../../../src/shared/plugin/lifecycle";
 import type { Registry } from "@shared/plugin/registry";
 import { installLoggerStub } from "../../helpers/globals";
 
@@ -86,7 +89,7 @@ describe("PreloadPluginLoader", () => {
 
     await loader.activateAll();
 
-    expect(loader.plugins[0].status).toBe("failed");
+    expect(loader.plugins[0].status).toBe(PreloadPluginStatus.Failed);
     expect(loader.plugins[0].error).toBeInstanceOf(Error);
     expect(logger.error).toHaveBeenCalled();
   });
@@ -199,27 +202,29 @@ describe("PreloadPluginLoader", () => {
 
     await loader.activateAll();
 
-    expect(loader.plugins[0].status).toBe("failed");
+    expect(loader.plugins[0].status).toBe(PreloadPluginStatus.Failed);
     expect(deactivate).toHaveBeenCalledTimes(1);
   });
 
-  it("reports activation and removal status", async () => {
-    const statuses: Array<[string, PluginPreloadStatus, string | undefined]> = [];
+  it("reports lifecycle states with revisions", async () => {
+    const statuses: Array<[string, string, number]> = [];
     const loader = new PreloadPluginLoader({
       sources: new Map(),
       registry: createRegistry(),
       evaluate: () => ({ activate() {}, deactivate() {} }),
-      onStatus: (id, status, error) => statuses.push([id, status, error]),
+      onStatus: (id, snapshot) =>
+        statuses.push([id, snapshot.state.kind, snapshot.desired.revision]),
     });
     loader.registerAll(new Map([["a", "ignored"]]));
 
     await loader.activateAll();
-    await loader.remove("a");
+    await loader.remove("a", { enabled: false, revision: 1 });
 
-    expect(statuses).toEqual([
-      ["a", PluginPreloadStatus.Active, undefined],
-      ["a", PluginPreloadStatus.Inactive, undefined],
-    ]);
+    const kinds = statuses.filter(([id]) => id === "a").map(([, kind]) => kind);
+    expect(kinds[0]).toBe(LifecycleStateKind.Starting);
+    expect(kinds).toContain(LifecycleStateKind.Running);
+    expect(kinds.at(-1)).toBe(LifecycleStateKind.Stopped);
+    expect(statuses.every(([, , revision]) => typeof revision === "number")).toBe(true);
   });
 
   it("does not delete a plugin re-enabled during cleanup", async () => {

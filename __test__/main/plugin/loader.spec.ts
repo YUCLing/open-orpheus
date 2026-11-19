@@ -118,7 +118,7 @@ describe("PluginLoader", () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
-  it("retries a failed plugin on activate", async () => {
+  it("retries a failed plugin only through an explicit retry", async () => {
     let attempts = 0;
     const loader = new PluginLoader({
       registry: createRegistry(),
@@ -134,6 +134,10 @@ describe("PluginLoader", () => {
     expect(loader.plugins[0].status).toBe(PluginStatus.Failed);
 
     await loader.activate("flaky");
+    expect(loader.plugins[0].status).toBe(PluginStatus.Failed);
+    expect(attempts).toBe(1);
+
+    await loader.retry("flaky");
     expect(loader.plugins[0].status).toBe(PluginStatus.Active);
     expect(attempts).toBe(2);
   });
@@ -171,18 +175,18 @@ describe("PluginLoader", () => {
     await expect(runtime?.plugins.load("missing")).rejects.toThrow(/Unknown plugin/);
   });
 
-  it("keeps the first plugin for a duplicate id", () => {
+  it("rejects duplicate ids because the catalog must resolve them first", () => {
     const first = discovered("dup");
     const second = discovered("dup", "/plugins/dup-2/main/index.mjs");
-    const loader = new PluginLoader({
-      registry: createRegistry(),
-      plugins: [first, second],
-      importModule: async () => ({ activate() {} }),
-    });
 
-    expect(loader.plugins).toHaveLength(1);
-    expect(loader.plugins[0].plugin).toBe(first);
-    expect(logger.warn).toHaveBeenCalled();
+    expect(
+      () =>
+        new PluginLoader({
+          registry: createRegistry(),
+          plugins: [first, second],
+          importModule: async () => ({ activate() {} }),
+        })
+    ).toThrow(/Duplicate plugin id/);
   });
 
   it("deactivates active plugins in reverse order", async () => {
@@ -398,6 +402,12 @@ describe("PluginLoader", () => {
     await loader.activate("slow");
     expect(loader.plugins[0].status).toBe(PluginStatus.Failed);
 
+    // The disable waits for the still-running activation; cleanup only starts
+    // once that activation settles.
+    void loader.deactivate("slow");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(deactivate).not.toHaveBeenCalled();
+
     release();
     await vi.waitFor(() => expect(deactivate).toHaveBeenCalledTimes(1));
     expect(loader.plugins[0].module).toBeUndefined();
@@ -468,7 +478,7 @@ describe("PluginLoader", () => {
         }
         return {
           async activate(runtime: PluginRuntime) {
-            await runtime.plugins.load("b");
+            await runtime.plugins.whenActive("b");
             sawActivatedDependency = dependencyActivated;
           },
         };
@@ -538,7 +548,7 @@ describe("PluginLoader", () => {
           return {
             async activate(runtime: PluginRuntime) {
               try {
-                await runtime.plugins.load("b");
+                await runtime.plugins.whenActive("b");
                 loadedOldModule = true;
               } catch {
                 loadedOldModule = false;
@@ -548,7 +558,7 @@ describe("PluginLoader", () => {
         }
         return {
           async activate(runtime: PluginRuntime) {
-            await runtime.plugins.load("b");
+            await runtime.plugins.whenActive("b");
           },
         };
       },
