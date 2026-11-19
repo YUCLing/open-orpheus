@@ -1,4 +1,5 @@
 import path from "node:path";
+import { mkdir } from "node:fs/promises";
 
 import { app, ipcMain, webContents } from "electron";
 
@@ -73,6 +74,10 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
   const registry = createRegistry(load);
   const state = new PluginState();
   await state.load();
+
+  // Make the user plugin drop location exist even when it is empty, so plugins
+  // can be installed without creating the directory by hand.
+  await mkdir(pluginsDir, { recursive: true });
 
   const sources = await discoverPluginSources(pluginLocations());
   const candidates: PluginCandidate[] = [];
