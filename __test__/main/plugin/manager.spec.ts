@@ -45,15 +45,19 @@ function createState(defaults: Record<string, boolean> = {}): PluginStateStore {
   const overrides = new Map<string, PluginDesiredState>();
   return {
     desired: (id, kind) =>
-      overrides.get(id) ?? { enabled: kind === PluginKind.Builtin && defaults[id] === true, revision: 0 },
+      overrides.get(id) ?? {
+        enabled: kind === PluginKind.Builtin && defaults[id] === true,
+        revision: 0,
+      },
     isEnabled: (id, kind) => {
       const override = overrides.get(id);
       return override ? override.enabled : kind === PluginKind.Builtin && defaults[id] === true;
     },
     setEnabled: async (id, kind, enabled) => {
-      const current =
-        overrides.get(id) ??
-        { enabled: kind === PluginKind.Builtin && defaults[id] === true, revision: 0 };
+      const current = overrides.get(id) ?? {
+        enabled: kind === PluginKind.Builtin && defaults[id] === true,
+        revision: 0,
+      };
       if (current.enabled === enabled) return current;
       const next = { enabled, revision: current.revision + 1 };
       overrides.set(id, next);

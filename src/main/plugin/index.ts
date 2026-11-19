@@ -18,11 +18,7 @@ import { registerShutdownTask } from "../lifecycle";
 import { checkEnvFlagPresent } from "../util/env";
 
 import { resolvePluginCatalog, type PluginCandidate, type PluginCatalog } from "./catalog";
-import {
-  discoverPluginSources,
-  loadDiscoveredPlugin,
-  type PluginLocation,
-} from "./discover";
+import { discoverPluginSources, loadDiscoveredPlugin, type PluginLocation } from "./discover";
 import { PluginLoader } from "./loader";
 import { PluginManager } from "./manager";
 import { PluginState } from "./state";
@@ -81,8 +77,7 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
   const sources = await discoverPluginSources(pluginLocations());
   const candidates: PluginCandidate[] = [];
   for (const source of sources) {
-    const layer =
-      source.kind === PluginKind.Builtin ? PluginLayer.Builtin : PluginLayer.User;
+    const layer = source.kind === PluginKind.Builtin ? PluginLayer.Builtin : PluginLayer.User;
     try {
       candidates.push({
         layer,

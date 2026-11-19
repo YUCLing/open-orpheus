@@ -19,11 +19,7 @@ import { serializeRuntimeState } from "@shared/plugin/runtime-state";
 import { LOADED_REALM_IDS } from "virtual:open-orpheus/realm-runtime";
 import { toError } from "@shared/util";
 
-import {
-  PluginCatalogEntryKind,
-  type PluginCatalog,
-  type PluginCatalogEntry,
-} from "./catalog";
+import { PluginCatalogEntryKind, type PluginCatalog, type PluginCatalogEntry } from "./catalog";
 import type { DiscoveredPlugin } from "./discover";
 import type { PluginLoader, PluginRecord } from "./loader";
 import type { PluginStateStore } from "./state";
@@ -345,8 +341,7 @@ function presentationFor(
 
   const instances = Object.values(realms).flatMap((summary) => summary.instances);
   const hasCleanupFailure =
-    (main.kind === PluginRuntimeStateKind.Failed ||
-      main.kind === PluginRuntimeStateKind.Hung) &&
+    (main.kind === PluginRuntimeStateKind.Failed || main.kind === PluginRuntimeStateKind.Hung) &&
     main.stage === "deactivate" &&
     instances.every((instance) => instance.state.kind !== PluginRuntimeStateKind.Running);
 

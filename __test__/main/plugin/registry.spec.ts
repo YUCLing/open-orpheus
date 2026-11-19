@@ -45,9 +45,7 @@ describe("createPluginRegistry", () => {
 
   it("waits for readiness only through whenActive", async () => {
     const whenActive = vi.fn(async () => ({ engine: "active" }));
-    const registry = createPluginRegistry(
-      sources({ a: { load: async () => ({}), whenActive } })
-    );
+    const registry = createPluginRegistry(sources({ a: { load: async () => ({}), whenActive } }));
 
     await expect(registry.whenActive("a")).resolves.toEqual({ engine: "active" });
     expect(whenActive).toHaveBeenCalledTimes(1);
@@ -61,7 +59,10 @@ describe("createPluginRegistry", () => {
       })
     );
 
-    void registry.forPlugin("a").whenActive("b").catch(() => {});
+    void registry
+      .forPlugin("a")
+      .whenActive("b")
+      .catch(() => {});
     await expect(registry.forPlugin("b").whenActive("a")).rejects.toBeInstanceOf(
       PluginReadinessCycleError
     );
@@ -78,9 +79,7 @@ describe("createPluginRegistry", () => {
   it("forgets a cached evaluation", async () => {
     let version = 1;
     const load = vi.fn(async () => ({ version }));
-    const registry = createPluginRegistry(
-      sources({ a: { load, whenActive: load } })
-    );
+    const registry = createPluginRegistry(sources({ a: { load, whenActive: load } }));
 
     await expect(registry.load("a")).resolves.toEqual({ version: 1 });
     version = 2;

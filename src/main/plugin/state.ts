@@ -59,11 +59,7 @@ export class PluginState implements PluginStateStore {
     return this.desired(id, kind).enabled;
   }
 
-  async setEnabled(
-    id: string,
-    kind: PluginKind,
-    enabled: boolean
-  ): Promise<PluginDesiredState> {
+  async setEnabled(id: string, kind: PluginKind, enabled: boolean): Promise<PluginDesiredState> {
     // Serialize the whole read-merge-write, not just per plugin: two toggles
     // for different plugins must not save from the same stale snapshot.
     const operation = this.pendingWrite.then(async () => {

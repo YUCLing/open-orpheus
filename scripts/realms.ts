@@ -65,12 +65,7 @@ export const REALMS = {
     displayName: "Main",
     scan: {
       entries: ["src/main.ts"],
-      excludedPrefixes: [
-        "main/plugin/",
-        "preload/",
-        "shared/plugin/runtime-state",
-        "worklets/",
-      ],
+      excludedPrefixes: ["main/plugin/", "preload/", "shared/plugin/runtime-state", "worklets/"],
       excludedFiles: ["main"],
       hardcoded: [],
     },
@@ -98,12 +93,7 @@ export const REALMS = {
     displayName: "Preload",
     scan: {
       entries: ["src/preload.ts"],
-      excludedPrefixes: [
-        "main/",
-        "preload/plugin/",
-        "shared/plugin/runtime-state",
-        "worklets/",
-      ],
+      excludedPrefixes: ["main/", "preload/plugin/", "shared/plugin/runtime-state", "worklets/"],
       excludedFiles: ["preload"],
       hardcoded: [{ key: "@preload/logger", file: "preload/logger.ts" }],
     },
@@ -131,12 +121,7 @@ export const REALMS = {
     displayName: "Plugin Manager",
     scan: {
       entries: ["src/windows/plugin-manager.ts"],
-      excludedPrefixes: [
-        "main/",
-        "preload/plugin/",
-        "shared/plugin/runtime-state",
-        "worklets/",
-      ],
+      excludedPrefixes: ["main/", "preload/plugin/", "shared/plugin/runtime-state", "worklets/"],
       excludedFiles: ["windows/plugin-manager"],
       hardcoded: [
         { key: "@preload/logger", file: "preload/logger.ts" },

@@ -24,6 +24,7 @@
 
   import Package from "@lucide/svelte/icons/package";
   import Wrench from "@lucide/svelte/icons/wrench";
+  import ToyBrick from "@lucide/svelte/icons/toy-brick";
   import type { Attachment } from "svelte/attachments";
 
   const api = getBridge<PluginManagerContract>("plugin");
@@ -279,7 +280,8 @@
             <span class="ml-2">窗口 {summary.hostCount}，实例 {summary.instances.length}</span>
             {#each summary.instances as instance (instance.webContentsId)}
               <span class="ml-2 rounded bg-gray-100 px-1">
-                #{instance.webContentsId} {stateLabel(instance.state)}
+                #{instance.webContentsId}
+                {stateLabel(instance.state)}
               </span>
             {/each}
             {#if summary.hostCount > summary.instances.length}
@@ -380,9 +382,15 @@
 {/snippet}
 
 <ScrollArea class="h-screen p-6">
-  <p class="mb-4 text-gray-700">
-    插件允许你扩展 Open Orpheus 的功能，但<b>插件可以获得你系统的完整权限</b>。
-  </p>
+  <div class="mb-4 flex items-center">
+    <p class="flex-1 text-gray-700">
+      插件允许你扩展 Open Orpheus 的功能，但<b>插件可以获得你系统的完整权限</b
+      >，请只安装你所信任的插件。
+    </p>
+    <Button class="cursor-pointer" onclick={() => api.openPluginsFolder()}
+      ><ToyBrick />打开插件目录</Button
+    >
+  </div>
 
   {#if error}
     <p class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

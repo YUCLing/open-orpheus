@@ -155,7 +155,9 @@ describe("RealmLifecycle", () => {
 
     lifecycle.enable();
     await lifecycle.waitFor(
-      (snapshot) => snapshot.state.kind === LifecycleStateKind.Failed && snapshot.state.stage === LifecycleFailureStage.Activate
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Activate
     );
     expect(attempts).toBe(1);
 
@@ -183,7 +185,9 @@ describe("RealmLifecycle", () => {
 
     lifecycle.enable();
     const failed = await lifecycle.waitFor(
-      (snapshot) => snapshot.state.kind === LifecycleStateKind.Failed && snapshot.state.stage === LifecycleFailureStage.Activate
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Activate
     );
 
     expect(failed.error).toBeInstanceOf(Error);
@@ -209,7 +213,9 @@ describe("RealmLifecycle", () => {
 
     lifecycle.disable();
     const failed = await lifecycle.waitFor(
-      (snapshot) => snapshot.state.kind === LifecycleStateKind.Failed && snapshot.state.stage === LifecycleFailureStage.Deactivate
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Deactivate
     );
     expect(failed.module).toBe("module");
 
@@ -234,7 +240,9 @@ describe("RealmLifecycle", () => {
     lifecycle.disable();
 
     await lifecycle.waitFor(
-      (snapshot) => snapshot.state.kind === LifecycleStateKind.Failed && snapshot.state.stage === LifecycleFailureStage.Deactivate
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Deactivate
     );
     // No hot retry loop: cleanup failure is terminal until the next command.
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -260,7 +268,9 @@ describe("RealmLifecycle", () => {
     lifecycle.disable();
 
     const hung = await lifecycle.waitFor(
-      (snapshot) => snapshot.state.kind === LifecycleStateKind.Hung && snapshot.state.stage === LifecycleFailureStage.Deactivate
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Hung &&
+        snapshot.state.stage === LifecycleFailureStage.Deactivate
     );
     expect(hung.error).toBeInstanceOf(LifecycleTimeoutError);
     expect(lifecycle.snapshot.module).toBe("module");

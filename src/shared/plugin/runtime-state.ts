@@ -5,11 +5,7 @@ import {
 } from "@shared/contracts/plugin-manager-api";
 import { toError } from "@shared/util";
 
-import {
-  LifecycleFailureStage,
-  LifecycleStateKind,
-  type LifecycleRuntimeState,
-} from "./lifecycle";
+import { LifecycleFailureStage, LifecycleStateKind, type LifecycleRuntimeState } from "./lifecycle";
 
 const KIND: Record<LifecycleStateKind, PluginRuntimeStateKind> = {
   [LifecycleStateKind.Stopped]: PluginRuntimeStateKind.Stopped,

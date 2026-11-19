@@ -67,7 +67,7 @@ restarting the realm or application.
 `runtime.plugins` exposes two distinct operations:
 
 ```ts
-await runtime.plugins.load("other-plugin");      // evaluate and return exports
+await runtime.plugins.load("other-plugin"); // evaluate and return exports
 await runtime.plugins.whenActive("other-plugin"); // wait until it is running
 ```
 
@@ -83,7 +83,11 @@ object injected into the window:
 
 ```ts
 pluginManager.register("my-plugin-id", {
-  configuration: { mount: (element) => { /* ... */ return unmount; } },
+  configuration: {
+    mount: (element) => {
+      /* ... */ return unmount;
+    },
+  },
 });
 ```
 

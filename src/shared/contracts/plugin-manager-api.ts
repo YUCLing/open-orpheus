@@ -169,6 +169,8 @@ export interface PluginManagerContract {
   setEnabled(id: string, enabled: boolean): Promise<PluginManagerState>;
   retry(id: string): Promise<PluginManagerState>;
 
+  openPluginsFolder(): Promise<void>;
+
   events: {
     /** Fired when a plugin's desired state or runtime state changes. */
     changed(callback: () => void): void;

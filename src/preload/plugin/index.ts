@@ -139,7 +139,12 @@ async function applyChange(
 
 function parseChange(payload: unknown, realm: string): PluginRealmDesiredChange | null {
   if (payload === null || typeof payload !== "object") return null;
-  const { realm: payloadRealm, id, enabled, revision } = payload as {
+  const {
+    realm: payloadRealm,
+    id,
+    enabled,
+    revision,
+  } = payload as {
     realm?: unknown;
     id?: unknown;
     enabled?: unknown;

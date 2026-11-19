@@ -183,8 +183,7 @@ export class RealmLifecycle<Module> {
       state: this.state,
       attempt: this.attempt,
       module: this.module,
-      error:
-        this.state.kind === LifecycleStateKind.Failed ? this.state.error : this.error,
+      error: this.state.kind === LifecycleStateKind.Failed ? this.state.error : this.error,
     };
   }
 
@@ -261,8 +260,7 @@ export class RealmLifecycle<Module> {
     }
 
     const cleanup =
-      this.cleanupTask ??
-      (this.module ? this.runCleanup(PluginCleanupReason.Shutdown) : undefined);
+      this.cleanupTask ?? (this.module ? this.runCleanup(PluginCleanupReason.Shutdown) : undefined);
     if (cleanup) {
       if (!(await settlesWithin(cleanup, remaining()))) {
         this.abandon(LifecycleFailureStage.Deactivate);
@@ -327,10 +325,7 @@ export class RealmLifecycle<Module> {
 
       // Desired disabled. Activation and cleanup are serialized, so a state
       // with an in-flight operation only waits for that operation to settle.
-      if (
-        state.kind === LifecycleStateKind.Starting ||
-        state.kind === LifecycleStateKind.Hung
-      ) {
+      if (state.kind === LifecycleStateKind.Starting || state.kind === LifecycleStateKind.Hung) {
         return;
       }
       if (state.kind === LifecycleStateKind.Stopping) {
@@ -402,9 +397,7 @@ export class RealmLifecycle<Module> {
     if (this.state.kind !== LifecycleStateKind.Starting) return;
 
     this.timeout = null;
-    this.error = new LifecycleTimeoutError(
-      `Plugin activation timed out after ${this.timeoutMs}ms`
-    );
+    this.error = new LifecycleTimeoutError(`Plugin activation timed out after ${this.timeoutMs}ms`);
     this.setState({
       kind: LifecycleStateKind.Hung,
       attempt,
@@ -565,9 +558,7 @@ export class RealmLifecycle<Module> {
       this.module = undefined;
       this.error = undefined;
       this.setState({
-        kind: this.disposed
-          ? LifecycleStateKind.Disposed
-          : LifecycleStateKind.Stopped,
+        kind: this.disposed ? LifecycleStateKind.Disposed : LifecycleStateKind.Stopped,
         desiredRevision: this.desired.revision,
       });
     })();
