@@ -304,6 +304,39 @@ describe("RealmLifecycle", () => {
     expect(lifecycle.snapshot.module).toBeUndefined();
   });
 
+  it("honours a re-enable that arrives during failure cleanup", async () => {
+    let attempts = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const deactivate = vi.fn(async () => {
+      await gate;
+    });
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 1000,
+      adapter: {
+        load: async () => "module",
+        activate: async () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("boom");
+        },
+        deactivate,
+      },
+    });
+
+    lifecycle.enable();
+    await vi.waitFor(() => expect(deactivate).toHaveBeenCalledTimes(1));
+
+    // Disable and enable while the failed activation is still cleaning up.
+    lifecycle.disable();
+    lifecycle.enable();
+    release();
+
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+    expect(attempts).toBe(2);
+  });
+
   it("runs one cleanup when disposed while loading", async () => {
     const gate = deferred();
     const activate = vi.fn();

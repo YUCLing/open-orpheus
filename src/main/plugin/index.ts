@@ -197,6 +197,9 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
           source: (await plugin.tree.readFile(entry)).toString("utf8"),
         });
       } catch (error) {
+        // Keep the plugin in the snapshot so the window creates a failed record
+        // that can be retried, instead of waiting for a report forever.
+        bootstrap.plugins.push({ id: plugin.metadata.id, desired });
         LOGGER.error(
           { pluginId: plugin.metadata.id, realm, err: toError(error) },
           "Failed to read plugin realm source"

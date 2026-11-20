@@ -89,6 +89,33 @@ describe("createPluginRegistry", () => {
     await expect(second).resolves.toEqual({});
   });
 
+  it("allows waiting on a ready plugin despite a pending edge", async () => {
+    let release!: (value: unknown) => void;
+    const gate = new Promise<unknown>((resolve) => {
+      release = resolve;
+    });
+    const registry = createPluginRegistry(
+      sources({
+        a: {
+          load: async () => ({}),
+          whenActive: () => gate,
+          isReady: () => true,
+        },
+        b: { load: async () => ({}), whenActive: async () => ({}) },
+      })
+    );
+
+    // a is already running but still has a pending (fire-and-forget) wait on b.
+    void registry
+      .forPlugin("a")
+      .whenActive("b")
+      .catch(() => {});
+
+    const waiting = registry.forPlugin("b").whenActive("a");
+    release({});
+    await expect(waiting).resolves.toEqual({});
+  });
+
   it("rejects a plugin waiting on its own readiness", async () => {
     const registry = createPluginRegistry(
       sources({ a: { load: async () => ({}), whenActive: () => new Promise(() => {}) } })

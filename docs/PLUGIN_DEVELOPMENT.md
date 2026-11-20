@@ -226,29 +226,58 @@ const ready = await runtime.plugins.whenActive("com.example.other");
 
 ## 配置界面
 
-插件管理窗口的主世界暴露 `window.pluginManager`：
+`window.pluginManager` 只存在于插件管理窗口的**主世界**，不在 plugin-manager
+realm 运行的 preload 环境中。因此需要从 `assets/` 注入渲染脚本，在脚本中注册。
+
+`src/plugin-manager/preload.ts`：
 
 ```ts
-import type { API } from "@open-orpheus/plugin-api/plugin-manager";
-
-const manager = (window as unknown as { pluginManager: API }).pluginManager;
+import type { PluginModule } from "@open-orpheus/plugin-api/plugin-manager";
+import { contextBridge } from "electron";
 
 export const activate: PluginModule["activate"] = () => {
-  manager.register("com.example.my-plugin", {
-    configuration: {
-      mount(element) {
-        element.textContent = "设置";
-        return () => {
-          // 面板卸载时的可选清理。
-        };
-      },
+  contextBridge.executeInMainWorld({
+    func: function () {
+      const script = document.createElement("script");
+      script.src = "assets://plugins/com.example.my-plugin/ui.cjs";
+      document.body.append(script);
     },
   });
 };
 
 export const deactivate: PluginModule["deactivate"] = () => {
-  manager.unregister("com.example.my-plugin");
+  contextBridge.executeInMainWorld({
+    func: function () {
+      (
+        window as unknown as {
+          pluginManager?: { unregister(id: string): void };
+        }
+      ).pluginManager?.unregister("com.example.my-plugin");
+    },
+  });
 };
+```
+
+`src/plugin-manager/ui.ts`（构建到 `assets/ui.cjs`）：
+
+```ts
+import type { API } from "@open-orpheus/plugin-api/plugin-manager";
+
+const manager = (window as unknown as { pluginManager: API }).pluginManager;
+const id = "com.example.my-plugin";
+
+// 重新启用后脚本可能再次注入，先注销是幂等的。
+manager.unregister(id);
+manager.register(id, {
+  configuration: {
+    mount(element) {
+      element.textContent = "设置";
+      return () => {
+        // 面板卸载时的可选清理。
+      };
+    },
+  },
+});
 ```
 
 规则：

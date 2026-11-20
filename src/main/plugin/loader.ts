@@ -2,7 +2,6 @@ import { pathToFileURL } from "node:url";
 
 import type { PluginDesiredState } from "@shared/contracts/plugin-manager-api";
 import {
-  LifecycleFailureStage,
   LifecycleStateKind,
   PluginDisposeStatus,
   RealmLifecycle,
@@ -89,13 +88,14 @@ export class PluginLoader {
         },
         onChange: (snapshot) => {
           onChanged?.();
-          if (
-            snapshot.state.kind === LifecycleStateKind.Failed &&
-            snapshot.state.stage !== LifecycleFailureStage.Deactivate
-          ) {
+          if (snapshot.state.kind === LifecycleStateKind.Failed) {
             LOGGER.error(
-              { pluginId: id, err: toError(snapshot.state.error) },
-              "Plugin activation failed"
+              {
+                pluginId: id,
+                stage: snapshot.state.stage,
+                err: toError(snapshot.state.error),
+              },
+              "Plugin lifecycle failed"
             );
           }
         },
@@ -123,6 +123,7 @@ export class PluginLoader {
       sources.set(id, {
         load: () => this.loadModule(id),
         whenActive: () => this.whenActive(id),
+        isReady: () => lifecycle.snapshot.state.kind === LifecycleStateKind.Running,
       });
     }
 

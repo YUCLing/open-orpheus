@@ -420,6 +420,31 @@ describe("PluginManager", () => {
     expect(manager.list().plugins[0]?.presentation).toBe(PluginPresentationStatus.Stopping);
   });
 
+  it("clears stale reports when the same host bootstraps again", async () => {
+    const state = createState();
+    const plugin = discovered("pre", PluginKind.User);
+    plugin.metadata.realms.preload = "preload/index.cjs";
+    const loader = createLoader(state, [plugin]);
+    const manager = createManager(loader, state, [plugin]);
+
+    manager.registerHost(5, "preload");
+    manager.setRealmReport(
+      5,
+      report("pre", "preload", 0, {
+        kind: PluginRuntimeStateKind.Failed,
+        desiredRevision: 0,
+        attempt: 1,
+        stage: PluginFailureStage.Deactivate,
+        error: "cleanup boom",
+      })
+    );
+    expect(manager.list().plugins[0]?.realms.preload.instances).toHaveLength(1);
+
+    // A page reload reuses the webContents id and starts from a new bootstrap.
+    manager.registerHost(5, "preload");
+    expect(manager.list().plugins[0]?.realms.preload.instances).toHaveLength(0);
+  });
+
   it("forwards retry to every declared window realm", async () => {
     const state = createState();
     const plugin = discovered("pre", PluginKind.User);

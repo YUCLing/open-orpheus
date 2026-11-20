@@ -58,6 +58,8 @@ export interface PluginRegistry {
 export interface PluginRegistrySource {
   load(): Promise<unknown>;
   whenActive(): Promise<unknown>;
+  /** Whether `whenActive` can resolve without waiting for another operation. */
+  isReady?(): boolean;
 }
 
 /** @internal */
@@ -153,15 +155,25 @@ export function createPluginRegistry(
   }
 
   function whenActiveShared(owner: string | null, id: string): Promise<unknown> {
-    if (owner === id) {
-      return Promise.reject(new PluginReadinessCycleError([owner, owner]));
-    }
+    const source = sourceFor(id);
+    if (!source) return Promise.reject(new Error(`Unknown plugin "${id}"`));
 
-    const tracked = Boolean(owner);
-    if (owner) {
-      const cycle = findCycle(owner, id);
-      if (cycle) return Promise.reject(new PluginReadinessCycleError([owner, ...cycle]));
-      addEdge(owner, id);
+    // An already-running target resolves immediately and cannot deadlock, so
+    // it must not be rejected just because some stale/pending wait edge points
+    // back at this plugin.
+    const ready = source.isReady?.() === true;
+    let tracked = false;
+
+    if (!ready) {
+      if (owner === id) {
+        return Promise.reject(new PluginReadinessCycleError([owner, owner]));
+      }
+      if (owner) {
+        const cycle = findCycle(owner, id);
+        if (cycle) return Promise.reject(new PluginReadinessCycleError([owner, ...cycle]));
+        addEdge(owner, id);
+        tracked = true;
+      }
     }
 
     // Readiness edges describe waits that are still pending. Remove this
@@ -175,11 +187,6 @@ export function createPluginRegistry(
     const cached = readiness.get(id);
     if (cached) return track(cached);
 
-    const source = sourceFor(id);
-    if (!source) {
-      if (owner) removeEdge(owner, id);
-      return Promise.reject(new Error(`Unknown plugin "${id}"`));
-    }
     const pending = source.whenActive();
     readiness.set(id, pending);
     void pending.catch(() => {

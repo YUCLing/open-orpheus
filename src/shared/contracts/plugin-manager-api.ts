@@ -146,7 +146,8 @@ export interface PluginRealmBootstrap {
   plugins: Array<{
     id: string;
     desired: PluginDesiredState;
-    source: string;
+    /** Omitted when the source could not be read; the window fetches it. */
+    source?: string;
   }>;
 }
 

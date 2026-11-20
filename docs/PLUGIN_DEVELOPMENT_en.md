@@ -252,29 +252,59 @@ Desired state (enabled/disabled) is persisted separately from runtime state.
 
 ## Configuration UI
 
-The plugin manager main world exposes `window.pluginManager`:
+`window.pluginManager` exists only in the plugin manager window's **main world**,
+not in the preload context where the plugin-manager realm runs. Inject a renderer
+script from `assets/` and register there.
+
+`src/plugin-manager/preload.ts`:
 
 ```ts
-import type { API } from "@open-orpheus/plugin-api/plugin-manager";
-
-const manager = (window as unknown as { pluginManager: API }).pluginManager;
+import type { PluginModule } from "@open-orpheus/plugin-api/plugin-manager";
+import { contextBridge } from "electron";
 
 export const activate: PluginModule["activate"] = () => {
-  manager.register("com.example.my-plugin", {
-    configuration: {
-      mount(element) {
-        element.textContent = "Settings";
-        return () => {
-          // Optional cleanup when the panel unmounts.
-        };
-      },
+  contextBridge.executeInMainWorld({
+    func: function () {
+      const script = document.createElement("script");
+      script.src = "assets://plugins/com.example.my-plugin/ui.cjs";
+      document.body.append(script);
     },
   });
 };
 
 export const deactivate: PluginModule["deactivate"] = () => {
-  manager.unregister("com.example.my-plugin");
+  contextBridge.executeInMainWorld({
+    func: function () {
+      (
+        window as unknown as {
+          pluginManager?: { unregister(id: string): void };
+        }
+      ).pluginManager?.unregister("com.example.my-plugin");
+    },
+  });
 };
+```
+
+`src/plugin-manager/ui.ts` (built to `assets/ui.cjs`):
+
+```ts
+import type { API } from "@open-orpheus/plugin-api/plugin-manager";
+
+const manager = (window as unknown as { pluginManager: API }).pluginManager;
+const id = "com.example.my-plugin";
+
+// Safe to re-run when the script is injected again after a re-enable.
+manager.unregister(id);
+manager.register(id, {
+  configuration: {
+    mount(element) {
+      element.textContent = "Settings";
+      return () => {
+        // Optional cleanup when the panel unmounts.
+      };
+    },
+  },
+});
 ```
 
 Rules:

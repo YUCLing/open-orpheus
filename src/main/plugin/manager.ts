@@ -135,8 +135,11 @@ export class PluginManager {
   /** Register a window as the host of a plugin realm. */
   registerHost(webContentsId: number, realm: string): void {
     if (!LOADED_REALM_IDS.includes(realm)) return;
-    if (this.hosts.get(webContentsId) === realm) return;
     this.hosts.set(webContentsId, realm);
+    // A page reload reuses the same webContents id. Reports from the previous
+    // document are stale; the new bootstrap only covers currently enabled
+    // plugins, so they would otherwise never be overwritten.
+    this.reports.delete(webContentsId);
     this.onChanged?.();
   }
 

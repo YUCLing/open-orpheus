@@ -1,6 +1,5 @@
 import type { PluginDesiredState } from "@shared/contracts/plugin-manager-api";
 import {
-  LifecycleFailureStage,
   LifecycleStateKind,
   RealmLifecycle,
   type LifecycleSnapshot,
@@ -367,13 +366,14 @@ export class PreloadPluginLoader {
         deactivate: (module) => module.deactivate?.(),
       },
       onChange: (snapshot) => {
-        if (
-          snapshot.state.kind === LifecycleStateKind.Failed &&
-          snapshot.state.stage !== LifecycleFailureStage.Deactivate
-        ) {
+        if (snapshot.state.kind === LifecycleStateKind.Failed) {
           LOGGER.error(
-            { pluginId: id, err: toError(snapshot.state.error) },
-            "Preload plugin activation failed"
+            {
+              pluginId: id,
+              stage: snapshot.state.stage,
+              err: toError(snapshot.state.error),
+            },
+            "Preload plugin lifecycle failed"
           );
         }
         this.onStatus?.(id, snapshot);
@@ -409,6 +409,7 @@ export class PreloadPluginLoader {
     this.registrySourceMap.set(id, {
       load: () => this.ensureModule(id),
       whenActive: () => this.whenActive(id),
+      isReady: () => lifecycle.snapshot.state.kind === LifecycleStateKind.Running,
     });
   }
 

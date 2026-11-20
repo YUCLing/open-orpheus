@@ -86,8 +86,11 @@ export async function installPreloadPlugins(load: RegistryLoad, realm: string): 
 
     const sources = new Map<string, string>();
     for (const entry of bootstrap.plugins) {
-      if (typeof entry.id !== "string" || typeof entry.source !== "string") continue;
-      sources.set(entry.id, entry.source);
+      if (typeof entry.id !== "string") continue;
+      // A missing source means the host could not read it. Keep the desired
+      // state so the selection pass below fetches it and reports a real,
+      // retryable load failure.
+      if (typeof entry.source === "string") sources.set(entry.id, entry.source);
       latest.set(entry.id, entry.desired);
     }
 

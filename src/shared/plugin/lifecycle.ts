@@ -434,16 +434,31 @@ export class RealmLifecycle<Module> {
       const stage: LifecycleFailureStage = this.module
         ? LifecycleFailureStage.Activate
         : LifecycleFailureStage.Load;
+      const revisionBeforeCleanup = this.desired.revision;
+
       if (this.module) {
         await this.runCleanup(PluginCleanupReason.Disabled);
         if (this.module) {
           // Cleanup failed; keep that failure, which owns the retained module.
+          // If the user re-enabled while cleanup ran, honour that request once
+          // cleanup can run again instead of dropping it.
+          if (this.desired.enabled && this.desired.revision !== revisionBeforeCleanup) {
+            this.retryRequested = true;
+          }
           this.kick();
           return;
         }
       }
+
       this.error = error;
       if (!this.desired.enabled) {
+        this.setState({
+          kind: LifecycleStateKind.Stopped,
+          desiredRevision: this.desired.revision,
+        });
+      } else if (this.desired.revision !== revisionBeforeCleanup) {
+        // A disable/re-enable arrived during cleanup. The old activation
+        // failure must not overwrite the newer enabled request.
         this.setState({
           kind: LifecycleStateKind.Stopped,
           desiredRevision: this.desired.revision,
