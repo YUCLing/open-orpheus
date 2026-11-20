@@ -123,37 +123,11 @@ Open Orpheus 在首次启动时如果检测到资源缺失，会自动从网易�
 - [Wayland 窗口规则配置文档](./docs/WM_RULES.md)
 - [D-Bus 服务文档](./docs/DBUS_SERVICES.md)
 - [日志配置文档](./docs/LOGGING.md)
+- [插件开发文档](./docs/PLUGIN_DEVELOPMENT.md)
 
 ### Discord 听歌状态
 
 可以从「管理 Open Orpheus → Discord 听歌状态」开启分享，切换开关后立即生效。请保持 Discord 桌面端运行，并在 Discord 中开启活动分享。Discord 桌面端也可以使用 Flathub 版。Open Orpheus 的 Flatpak 沙盒默认可能无法访问 Discord 套接字；如无法连接，需要根据 Discord 的安装方式额外配置套接字访问权限。
-
-## 插件 API
-
-`@open-orpheus/plugin-api` 是插件的类型包，由主程序根据实际导出生成，不包含运行时代码。
-
-```sh
-npm install --save-dev @open-orpheus/plugin-api
-```
-
-```ts
-import type { PluginModule, PluginRuntime } from "@open-orpheus/plugin-api";
-
-export const activate: PluginModule["activate"] = async (runtime: PluginRuntime) => {
-  const { default: logger } = await runtime.registry.load("@main/logger");
-  logger.info("plugin activated");
-};
-```
-
-Preload 插件使用 `@open-orpheus/plugin-api/preload` 中的 `PluginModule` / `PluginRuntime`。
-
-插件管理窗口使用 `@open-orpheus/plugin-api/plugin-manager` 中的 `PluginModule` / `PluginRuntime`，并在 `metadata.json` 的 `realms` 中声明 `"plugin-manager"` 入口。该入口只在插件管理窗口中运行。
-
-### 发布
-
-SDK 随 Release 工作流与 Open Orpheus 一同发布。
-
-本地生成类型：`pnpm build:plugin-api`。
 
 ## 免责声明
 

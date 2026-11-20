@@ -4,6 +4,8 @@ import { ManagedWindow } from "@main/window";
 import { registerIpcHandlers } from "@main/bridge/register";
 import { getPluginManager } from "@main/plugin";
 import type { PluginManagerContract } from "@shared/contracts/plugin-manager-api";
+import { shell } from "electron";
+import { plugins } from "@main/folders";
 
 export class PluginManagerWindow extends ManagedWindow {
   constructor() {
@@ -28,6 +30,12 @@ export class PluginManagerWindow extends ManagedWindow {
         if (!manager) throw new Error("Plugin system is disabled");
         return manager.setEnabled(id, enabled);
       },
+      retry: async (_event, id: string) => {
+        const manager = getPluginManager();
+        if (!manager) throw new Error("Plugin system is disabled");
+        return manager.retry(id);
+      },
+      openPluginsFolder: async () => shell.showItemInFolder(plugins),
     });
   }
 }

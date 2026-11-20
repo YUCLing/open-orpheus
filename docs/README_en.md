@@ -120,6 +120,7 @@ If the automatic download fails, you can manually copy both folders from your of
 
 - [D-Bus services](./DBUS_SERVICES_en.md)
 - [Logging configuration](./LOGGING.md)
+- [Plugin development](./PLUGIN_DEVELOPMENT_en.md)
 
 ### Discord listening status
 
