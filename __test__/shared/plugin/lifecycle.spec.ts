@@ -304,6 +304,33 @@ describe("RealmLifecycle", () => {
     expect(lifecycle.snapshot.module).toBeUndefined();
   });
 
+  it("runs one cleanup when disposed while loading", async () => {
+    const gate = deferred();
+    const activate = vi.fn();
+    const deactivate = vi.fn(async () => {});
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 1000,
+      adapter: {
+        load: async () => {
+          await gate.promise;
+          return "module";
+        },
+        activate,
+        deactivate,
+      },
+    });
+
+    lifecycle.enable();
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Starting);
+
+    const disposing = lifecycle.dispose(1000);
+    gate.resolve();
+
+    await expect(disposing).resolves.toEqual({ status: PluginDisposeStatus.Stopped });
+    expect(activate).not.toHaveBeenCalled();
+    expect(deactivate).toHaveBeenCalledTimes(1);
+  });
+
   it("waits for cleanup when activation fails during disposal", async () => {
     const gate = deferred();
     const deactivate = vi.fn(async () => {});

@@ -373,7 +373,17 @@ export class RealmLifecycle<Module> {
 
     const activation = (async () => {
       const module = await this.adapter.load();
-      if (this.disposed || attempt !== this.attempt) {
+
+      if (this.disposed) {
+        // Disposal owns cleanup. Register the loaded module and hand it to the
+        // shared cleanup task so `dispose()` and `settleActivation()` cannot
+        // both run a second, independent deactivate.
+        this.module = module;
+        void this.runCleanup(PluginCleanupReason.Shutdown);
+        return;
+      }
+
+      if (attempt !== this.attempt) {
         try {
           await this.adapter.deactivate(module);
         } catch {
@@ -381,6 +391,7 @@ export class RealmLifecycle<Module> {
         }
         return;
       }
+
       this.module = module;
       await this.adapter.activate(module);
     })();
