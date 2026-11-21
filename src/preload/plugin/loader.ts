@@ -238,17 +238,18 @@ export class PreloadPluginLoader {
     // A re-enable may have happened while cleanup was running. The latest
     // intent wins; do not delete the record/source/loader it now owns.
     const latest = record.lifecycle.snapshot;
-    if (latest.desired.enabled || latest.module) return;
+    if (latest.desired.enabled) return;
 
     if (latest.state.kind === LifecycleStateKind.Stopped) {
       this.dropRecord(id);
       return;
     }
 
-    // A hung load or cleanup is still running. Removing the record now would
-    // let a re-enable create a second instance while the old operation is
-    // still alive; wait until it actually settles.
-    if (latest.state.kind === LifecycleStateKind.Hung) {
+    // A retained module means cleanup failed or is still running; a hung state
+    // may still be executing. Removing the record now would let a re-enable
+    // start a second instance, but leaving it unmarked keeps the captured
+    // source forever. Mark it so it is dropped once the lifecycle truly stops.
+    if (latest.module || latest.state.kind === LifecycleStateKind.Hung) {
       this.pendingRemovals.add(id);
     }
   }

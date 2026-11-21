@@ -53,6 +53,11 @@ interface ConfigurationRecord {
    * abort it immediately instead of waiting for the serialized queue.
    */
   pendingController?: AbortController;
+  /**
+   * Resolves a pending `waitForRealm()` early. Cleanup must never queue behind
+   * a realm wait: the realm's own deactivation may be waiting on that cleanup.
+   */
+  cancelWait?: () => void;
   queue: Promise<unknown>;
 }
 
@@ -103,6 +108,7 @@ export class PluginConfigurationLoader extends EventTarget {
 
     // A new mount request supersedes a previous one that is still awaiting.
     record.pendingController?.abort();
+    record.cancelWait?.();
     const epoch = record.epoch;
     const generation = ++record.mountGeneration;
     await this.enqueue(record, () => this.openNow(record, request, epoch, generation));
@@ -112,6 +118,7 @@ export class PluginConfigurationLoader extends EventTarget {
   async close(pluginId: string): Promise<void> {
     const record = this.record(pluginId);
     record.pendingController?.abort();
+    record.cancelWait?.();
     record.mountGeneration++;
     await this.enqueue(record, async () => {
       const unmounted = await this.unmountMounted(record, record.revision, false);
@@ -141,6 +148,7 @@ export class PluginConfigurationLoader extends EventTarget {
     record.mountGeneration++;
     record.module = undefined;
     record.pendingController?.abort();
+    record.cancelWait?.();
 
     await this.enqueue(record, async () => {
       const unmounted = await this.unmountMounted(record, record.revision, true);
@@ -182,8 +190,23 @@ export class PluginConfigurationLoader extends EventTarget {
         desiredRevision: request.revision,
         attempt: record.attempt,
       });
-      const outcome = await this.waitForRealm(request.pluginId);
-      if (this.isStale(record, epoch, generation)) return;
+
+      // Let close()/dispose() break this wait. The realm's deactivation may be
+      // waiting for renderer cleanup, and cleanup is queued behind this task.
+      let cancelWait!: () => void;
+      const cancelled = new Promise<"cancelled">((resolve) => {
+        cancelWait = () => resolve("cancelled");
+      });
+      record.cancelWait = cancelWait;
+
+      let outcome: PluginRealmActivationOutcome | "cancelled";
+      try {
+        outcome = await Promise.race([this.waitForRealm(request.pluginId), cancelled]);
+      } finally {
+        if (record.cancelWait === cancelWait) record.cancelWait = undefined;
+      }
+
+      if (outcome === "cancelled" || this.isStale(record, epoch, generation)) return;
       if (outcome.kind !== "running") {
         const detail = outcome.kind === "failed" ? outcome.error : undefined;
         this.fail(

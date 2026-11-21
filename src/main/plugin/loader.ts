@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import type { PluginDesiredState } from "@shared/contracts/plugin-manager-api";
 import { cacheBustUrl } from "@shared/plugin/cache-bust";
 import {
+  LifecycleFailureStage,
   LifecycleStateKind,
   PluginDisposeStatus,
   RealmLifecycle,
@@ -152,12 +153,24 @@ export class PluginLoader {
     const known = this.revisions.get(id) ?? 0;
     if (desired.revision < known) return;
     this.revisions.set(id, desired.revision);
+
+    const state = record.lifecycle.snapshot.state;
+    // An activation that is still running will commit the module it already
+    // loaded. Dropping that evaluation now would let cross-plugin `load()`
+    // import a second instance while `whenActive()` later returns the first.
+    // A hung *cleanup* is not an activation; a re-enable there starts fresh.
+    const activationInFlight =
+      state.kind === LifecycleStateKind.Starting ||
+      (state.kind === LifecycleStateKind.Hung && state.stage !== LifecycleFailureStage.Deactivate);
+
     if (!desired.enabled) {
       // This is the path the manager uses, so it must invalidate exports and
       // readiness exactly like `deactivate` does. Otherwise a cached
       // `whenActive` result would bypass the enabled check after cleanup.
       this.pluginRegistry.forget(id);
-      // The next enable starts a new evaluation epoch.
+      if (!activationInFlight) this.moduleCache.delete(id);
+    } else if (!activationInFlight && state.kind !== LifecycleStateKind.Running) {
+      // A new enable after a stop starts a fresh evaluation epoch.
       this.moduleCache.delete(id);
     }
     record.lifecycle.applyDesiredState(desired);

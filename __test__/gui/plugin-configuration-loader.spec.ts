@@ -311,6 +311,27 @@ describe("PluginConfigurationLoader", () => {
     expect(loader.snapshot().p.kind).toBe(PluginConfigurationStateKind.Unloaded);
   });
 
+  it("breaks a preload wait when the plugin is disposed", async () => {
+    const loader = createLoader(
+      async () => ({ mount: () => () => {} }),
+      () => new Promise<PluginRealmActivationOutcome>(() => {})
+    );
+
+    const opening = loader.open(request({ requiresPreload: true }));
+    await vi.waitFor(() =>
+      expect(loader.snapshot().p.kind).toBe(PluginConfigurationStateKind.WaitingForPreload)
+    );
+
+    const disposing = loader.dispose("p");
+    const settled = await Promise.race([
+      Promise.all([opening, disposing]).then(() => "done" as const),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 250)),
+    ]);
+
+    expect(settled).toBe("done");
+    expect(loader.snapshot().p.kind).toBe(PluginConfigurationStateKind.Unloaded);
+  });
+
   it("retains cleanup whose unmount fails after its mount became stale", async () => {
     let resolveMount!: (value: unknown) => void;
     const unmount = vi

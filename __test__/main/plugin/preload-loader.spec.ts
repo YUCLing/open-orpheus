@@ -430,4 +430,26 @@ describe("PreloadPluginLoader", () => {
     expect(order).toEqual(["before", "after-before", "deactivate"]);
     expect(loader.plugins).toHaveLength(0);
   });
+
+  it("drops a record after a hung cleanup finally stops", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const loader = new PreloadPluginLoader({
+      sources: new Map([["p", "ignored"]]),
+      registry: createRegistry(),
+      evaluate: () => ({ activate() {}, deactivate: () => gate }),
+      activationTimeoutMs: 20,
+    });
+
+    await loader.activateAll();
+    await loader.remove("p");
+
+    expect(loader.plugins).toHaveLength(1);
+    expect(loader.plugins[0]?.snapshot.state.kind).toBe(LifecycleStateKind.Hung);
+
+    release();
+    await vi.waitFor(() => expect(loader.plugins).toHaveLength(0));
+  });
 });

@@ -636,6 +636,53 @@ describe("PluginLoader", () => {
     expect(imports.get("b")).toBe(1);
   });
 
+  it("keeps an in-flight activation's module through a disable/enable cycle", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let activations = 0;
+    let activateStarted = false;
+    let runtimeA: PluginRuntime | undefined;
+
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
+        if (id === "a") {
+          return {
+            activate(runtime: PluginRuntime) {
+              runtimeA = runtime;
+            },
+          };
+        }
+        activations += 1;
+        return {
+          async activate() {
+            activateStarted = true;
+            await gate;
+          },
+          engine: `b-${activations}`,
+        };
+      },
+    });
+
+    await loader.activate("a");
+    const activating = loader.activate("b");
+    await vi.waitFor(() => expect(activateStarted).toBe(true));
+
+    loader.setDesiredState("b", { enabled: false, revision: 1 });
+    loader.setDesiredState("b", { enabled: true, revision: 2 });
+
+    const loadedDuringActivation = await runtimeA!.plugins.load("b");
+    release();
+    await activating;
+
+    expect(loadedDuringActivation).toBe(await runtimeA!.plugins.whenActive("b"));
+    expect(activations).toBe(1);
+  });
+
   it("clears the exports cache before waiting for deactivation", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
