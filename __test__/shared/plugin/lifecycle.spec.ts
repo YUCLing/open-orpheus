@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  LifecyclePhase,
+  LifecycleFailureStage,
+  LifecycleStateKind,
   LifecycleTimeoutError,
+  PluginDisposeStatus,
   RealmLifecycle,
+  type LifecycleSnapshot,
 } from "../../../src/shared/plugin/lifecycle";
 
 function deferred() {
@@ -12,6 +15,10 @@ function deferred() {
     resolve = r;
   });
   return { promise, resolve };
+}
+
+function kind(snapshot: LifecycleSnapshot<unknown>): LifecycleStateKind {
+  return snapshot.state.kind;
 }
 
 describe("RealmLifecycle", () => {
@@ -26,15 +33,15 @@ describe("RealmLifecycle", () => {
     });
 
     lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Active);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
     expect(lifecycle.snapshot.module).toBe("module");
 
     lifecycle.disable();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Disabled);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Stopped);
     expect(deactivate).toHaveBeenCalledTimes(1);
   });
 
-  it("rolls back a timed-out activation and requires retry", async () => {
+  it("reports a timed-out activation as hung without starting cleanup", async () => {
     const gate = deferred();
     const deactivate = vi.fn();
     const lifecycle = new RealmLifecycle({
@@ -49,25 +56,24 @@ describe("RealmLifecycle", () => {
     });
 
     lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.timedOut);
-    expect(lifecycle.snapshot.error).toBeInstanceOf(LifecycleTimeoutError);
-    expect(lifecycle.snapshot.retryRequired).toBe(true);
-
-    gate.resolve();
-    await lifecycle.waitFor(
-      (snapshot) => snapshot.phase === LifecyclePhase.Failed && snapshot.cleanupPending === false
+    const hung = await lifecycle.waitFor(
+      (snapshot) => snapshot.state.kind === LifecycleStateKind.Hung
     );
+    expect(hung.error).toBeInstanceOf(LifecycleTimeoutError);
+    // activate() is still running; cleanup must not overlap it.
+    expect(deactivate).not.toHaveBeenCalled();
 
-    expect(deactivate).toHaveBeenCalled();
-    expect(lifecycle.snapshot.module).toBeUndefined();
-    expect(lifecycle.snapshot.retryRequired).toBe(true);
+    lifecycle.disable();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(lifecycle.snapshot.state.kind).toBe(LifecycleStateKind.Hung);
+    expect(deactivate).not.toHaveBeenCalled();
   });
 
-  it("cleans up when disabled during activation", async () => {
+  it("cleans up a timed-out activation once it settles and is disabled", async () => {
     const gate = deferred();
     const deactivate = vi.fn();
     const lifecycle = new RealmLifecycle({
-      timeoutMs: 1000,
+      timeoutMs: 10,
       adapter: {
         load: async () => "module",
         activate: async () => {
@@ -78,17 +84,64 @@ describe("RealmLifecycle", () => {
     });
 
     lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Enabling);
+    await lifecycle.waitFor((snapshot) => snapshot.state.kind === LifecycleStateKind.Hung);
     lifecycle.disable();
     gate.resolve();
 
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Disabled);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Stopped);
     expect(deactivate).toHaveBeenCalledTimes(1);
+    expect(lifecycle.snapshot.module).toBeUndefined();
   });
 
-  it("retries after a failed activation", async () => {
+  it("becomes running when a timed-out activation eventually succeeds", async () => {
+    const gate = deferred();
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 10,
+      adapter: {
+        load: async () => "module",
+        activate: async () => {
+          await gate.promise;
+        },
+        deactivate: vi.fn(),
+      },
+    });
+
+    lifecycle.enable();
+    await lifecycle.waitFor((snapshot) => snapshot.state.kind === LifecycleStateKind.Hung);
+    gate.resolve();
+
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+  });
+
+  it("waits for an in-flight activation before cleaning up on disable", async () => {
+    const gate = deferred();
+    const calls: string[] = [];
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 1000,
+      adapter: {
+        load: async () => "module",
+        activate: async () => {
+          calls.push("activate:start");
+          await gate.promise;
+          calls.push("activate:end");
+        },
+        deactivate: () => {
+          calls.push("deactivate");
+        },
+      },
+    });
+
+    lifecycle.enable();
+    await lifecycle.waitFor((snapshot) => snapshot.state.kind === LifecycleStateKind.Starting);
+    lifecycle.disable();
+    gate.resolve();
+
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Stopped);
+    expect(calls).toEqual(["activate:start", "activate:end", "deactivate"]);
+  });
+
+  it("requires explicit retry after a failed activation", async () => {
     let attempts = 0;
-    const deactivate = vi.fn();
     const lifecycle = new RealmLifecycle({
       adapter: {
         load: async () => "module",
@@ -96,22 +149,53 @@ describe("RealmLifecycle", () => {
           attempts += 1;
           if (attempts === 1) throw new Error("boom");
         },
-        deactivate,
+        deactivate: vi.fn(),
       },
     });
 
     lifecycle.enable();
     await lifecycle.waitFor(
-      (snapshot) => snapshot.phase === LifecyclePhase.Failed && snapshot.cleanupPending === false
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Activate
     );
-    expect(lifecycle.snapshot.retryRequired).toBe(true);
+    expect(attempts).toBe(1);
+
+    // Enabling again is idempotent and does not retry.
+    lifecycle.enable();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(attempts).toBe(1);
 
     lifecycle.retry();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Active);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
     expect(attempts).toBe(2);
   });
 
-  it("retains a module when cleanup fails and retries cleanup on enable", async () => {
+  it("cleans a partially activated module after activation throws", async () => {
+    const deactivate = vi.fn();
+    const lifecycle = new RealmLifecycle({
+      adapter: {
+        load: async () => "module",
+        activate: async () => {
+          throw new Error("boom");
+        },
+        deactivate,
+      },
+    });
+
+    lifecycle.enable();
+    const failed = await lifecycle.waitFor(
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Activate
+    );
+
+    expect(failed.error).toBeInstanceOf(Error);
+    expect(deactivate).toHaveBeenCalledTimes(1);
+    expect(lifecycle.snapshot.module).toBeUndefined();
+  });
+
+  it("retains a module when cleanup fails and cleans it on retry", async () => {
     const deactivate = vi
       .fn()
       .mockRejectedValueOnce(new Error("cleanup failed"))
@@ -125,65 +209,187 @@ describe("RealmLifecycle", () => {
     });
 
     lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Active);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+
     lifecycle.disable();
-    await lifecycle.waitFor(
-      (snapshot) => snapshot.phase === LifecyclePhase.Failed && snapshot.cleanupPending === true
+    const failed = await lifecycle.waitFor(
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Deactivate
     );
-    expect(lifecycle.snapshot.module).toBe("module");
+    expect(failed.module).toBe("module");
 
     lifecycle.enable();
     lifecycle.retry();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Active);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
     expect(deactivate).toHaveBeenCalledTimes(2);
   });
 
-  it("does not auto-retry a timed-out activation that produced no module", async () => {
-    const gate = deferred();
-    let attempts = 0;
-    const lifecycle = new RealmLifecycle({
-      timeoutMs: 10,
-      adapter: {
-        load: async () => {
-          attempts += 1;
-          await gate.promise;
-          throw new Error("late load failure");
-        },
-        activate: vi.fn(),
-        deactivate: vi.fn(),
-      },
-    });
-
-    lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.timedOut);
-    gate.resolve();
-    await lifecycle.waitFor(
-      (snapshot) => snapshot.phase === LifecyclePhase.Failed && snapshot.cleanupPending === false
-    );
-
-    expect(attempts).toBe(1);
-    expect(lifecycle.snapshot.retryRequired).toBe(true);
-  });
-
-  it("resolves dispose when deactivate throws synchronously", async () => {
+  it("keeps a failed cleanup visible while disabled", async () => {
+    const deactivate = vi.fn().mockRejectedValue(new Error("cleanup failed"));
     const lifecycle = new RealmLifecycle({
       adapter: {
         load: async () => "module",
         activate: vi.fn(),
-        deactivate: () => {
-          throw new Error("sync cleanup failure");
+        deactivate,
+      },
+    });
+
+    lifecycle.enable();
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+    lifecycle.disable();
+
+    await lifecycle.waitFor(
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Failed &&
+        snapshot.state.stage === LifecycleFailureStage.Deactivate
+    );
+    // No hot retry loop: cleanup failure is terminal until the next command.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(deactivate).toHaveBeenCalledTimes(1);
+    expect(lifecycle.snapshot.module).toBe("module");
+  });
+
+  it("reports cleanup timeout as hung and never claims stopped", async () => {
+    const gate = deferred();
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 10,
+      adapter: {
+        load: async () => "module",
+        activate: vi.fn(),
+        deactivate: async () => {
+          await gate.promise;
         },
       },
     });
 
     lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Active);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+    lifecycle.disable();
 
-    await expect(lifecycle.dispose(10)).resolves.toBeUndefined();
-    expect(lifecycle.snapshot.cleanupPending).toBe(true);
+    const hung = await lifecycle.waitFor(
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Hung &&
+        snapshot.state.stage === LifecycleFailureStage.Deactivate
+    );
+    expect(hung.error).toBeInstanceOf(LifecycleTimeoutError);
+    expect(lifecycle.snapshot.module).toBe("module");
   });
 
-  it("does not deactivate twice when disposed during cleanup", async () => {
+  it("finishes a timed-out cleanup when deactivate eventually settles", async () => {
+    const gate = deferred();
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 10,
+      adapter: {
+        load: async () => "module",
+        activate: vi.fn(),
+        deactivate: async () => {
+          await gate.promise;
+        },
+      },
+    });
+
+    lifecycle.enable();
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+    lifecycle.disable();
+    await lifecycle.waitFor(
+      (snapshot) =>
+        snapshot.state.kind === LifecycleStateKind.Hung &&
+        snapshot.state.stage === LifecycleFailureStage.Deactivate
+    );
+    expect(lifecycle.snapshot.module).toBe("module");
+
+    gate.resolve();
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Stopped);
+    expect(lifecycle.snapshot.module).toBeUndefined();
+  });
+
+  it("honours a re-enable that arrives during failure cleanup", async () => {
+    let attempts = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const deactivate = vi.fn(async () => {
+      await gate;
+    });
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 1000,
+      adapter: {
+        load: async () => "module",
+        activate: async () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("boom");
+        },
+        deactivate,
+      },
+    });
+
+    lifecycle.enable();
+    await vi.waitFor(() => expect(deactivate).toHaveBeenCalledTimes(1));
+
+    // Disable and enable while the failed activation is still cleaning up.
+    lifecycle.disable();
+    lifecycle.enable();
+    release();
+
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+    expect(attempts).toBe(2);
+  });
+
+  it("runs one cleanup when disposed while loading", async () => {
+    const gate = deferred();
+    const activate = vi.fn();
+    const deactivate = vi.fn(async () => {});
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 1000,
+      adapter: {
+        load: async () => {
+          await gate.promise;
+          return "module";
+        },
+        activate,
+        deactivate,
+      },
+    });
+
+    lifecycle.enable();
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Starting);
+
+    const disposing = lifecycle.dispose(1000);
+    gate.resolve();
+
+    await expect(disposing).resolves.toEqual({ status: PluginDisposeStatus.Stopped });
+    expect(activate).not.toHaveBeenCalled();
+    expect(deactivate).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for cleanup when activation fails during disposal", async () => {
+    const gate = deferred();
+    const deactivate = vi.fn(async () => {});
+    const lifecycle = new RealmLifecycle({
+      timeoutMs: 1000,
+      adapter: {
+        load: async () => "module",
+        activate: async () => {
+          await gate.promise;
+          throw new Error("activation failed");
+        },
+        deactivate,
+      },
+    });
+
+    lifecycle.enable();
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Starting);
+
+    const disposing = lifecycle.dispose(1000);
+    gate.resolve();
+
+    await expect(disposing).resolves.toEqual({ status: PluginDisposeStatus.Stopped });
+    expect(deactivate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call deactivate twice when disposed during cleanup", async () => {
     const gate = deferred();
     const deactivate = vi.fn(async () => {
       await gate.promise;
@@ -198,7 +404,7 @@ describe("RealmLifecycle", () => {
     });
 
     lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Active);
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
     lifecycle.disable();
     await vi.waitFor(() => expect(deactivate).toHaveBeenCalledTimes(1));
 
@@ -209,9 +415,8 @@ describe("RealmLifecycle", () => {
     expect(deactivate).toHaveBeenCalledTimes(1);
   });
 
-  it("allows disabling a plugin whose timed-out activation never settles", async () => {
+  it("abandons work that outlives the dispose deadline", async () => {
     const never = new Promise<void>(() => {});
-    const deactivate = vi.fn();
     const lifecycle = new RealmLifecycle({
       timeoutMs: 10,
       adapter: {
@@ -219,15 +424,30 @@ describe("RealmLifecycle", () => {
         activate: async () => {
           await never;
         },
-        deactivate,
+        deactivate: vi.fn(),
       },
     });
 
     lifecycle.enable();
-    await lifecycle.waitFor((snapshot) => snapshot.timedOut);
-    lifecycle.disable();
-    await lifecycle.waitFor((snapshot) => snapshot.phase === LifecyclePhase.Disabled);
+    await lifecycle.waitFor((snapshot) => snapshot.state.kind === LifecycleStateKind.Hung);
 
-    expect(deactivate).toHaveBeenCalled();
+    const result = await lifecycle.dispose(10);
+    expect(result.status).toBe(PluginDisposeStatus.Abandoned);
+    expect(lifecycle.snapshot.state.kind).toBe(LifecycleStateKind.Abandoned);
+  });
+
+  it("ignores desired states older than the current revision", async () => {
+    const activate = vi.fn();
+    const lifecycle = new RealmLifecycle({
+      adapter: { load: async () => "module", activate, deactivate: vi.fn() },
+    });
+
+    lifecycle.applyDesiredState({ enabled: true, revision: 5 });
+    await lifecycle.waitFor((snapshot) => kind(snapshot) === LifecycleStateKind.Running);
+    lifecycle.applyDesiredState({ enabled: false, revision: 4 });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(lifecycle.snapshot.desired.enabled).toBe(true);
+    expect(lifecycle.snapshot.state.kind).toBe(LifecycleStateKind.Running);
   });
 });

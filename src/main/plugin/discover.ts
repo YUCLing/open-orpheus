@@ -99,5 +99,15 @@ export async function loadDiscoveredPlugin(
     throw new Error(`Plugin ${metadata.id} is missing its main entry`);
   }
 
+  if (metadata.configuration) {
+    const configurationPath = path.join(source, "assets", metadata.configuration);
+    const configuration = await stat(configurationPath).catch(() => null);
+    if (!configuration?.isFile()) {
+      throw new Error(
+        `Plugin ${metadata.id} is missing its configuration entry "${configurationPath}"`
+      );
+    }
+  }
+
   return { metadata, source, kind, entryPaths, tree };
 }

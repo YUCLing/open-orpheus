@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { SvelteMap } from "svelte/reactivity";
 
   import * as Accordion from "$lib/components/ui/accordion/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
@@ -9,18 +10,28 @@
   import { getBridge } from "$lib/bridge";
   import { Button } from "$lib/components/ui/button";
   import {
-    PluginActivationStatus,
+    PluginAvailabilityKind,
     PluginKind,
-    PluginPreloadStatus,
+    PluginPresentationStatus,
+    PluginRuntimeStateKind,
     type PluginManagerContract,
     type PluginManagerEntry,
     type PluginManagerState,
+    type PluginRealmSummary,
+    type SerializablePluginRuntimeState,
   } from "@shared/contracts/plugin-manager-api";
-  import type { API, ManagerUIPlugin, MountFn } from "@shared/plugin/realms/plugin-manager/ui";
+  import {
+    PluginConfigurationFailureStage,
+    PluginConfigurationStateKind,
+    type PluginConfigurationState,
+    type PluginManagerHostBridge,
+  } from "@shared/contracts/plugin-configuration";
+  import { PluginConfigurationLoader } from "$lib/plugin-configuration/loader";
   import { REALM_DISPLAY_NAMES } from "virtual:open-orpheus/realm-display";
 
   import Package from "@lucide/svelte/icons/package";
   import Wrench from "@lucide/svelte/icons/wrench";
+  import ToyBrick from "@lucide/svelte/icons/toy-brick";
   import type { Attachment } from "svelte/attachments";
 
   const api = getBridge<PluginManagerContract>("plugin");
@@ -29,40 +40,116 @@
     return REALM_DISPLAY_NAMES[realm] ?? realm;
   }
 
+  const PRESENTATION_LABELS: Record<PluginPresentationStatus, string> = {
+    [PluginPresentationStatus.Unavailable]: "不可用",
+    [PluginPresentationStatus.Disabled]: "已停用",
+    [PluginPresentationStatus.Starting]: "启动中",
+    [PluginPresentationStatus.Running]: "运行中",
+    [PluginPresentationStatus.Degraded]: "部分异常",
+    [PluginPresentationStatus.Failed]: "加载失败",
+    [PluginPresentationStatus.Stopping]: "停止中",
+    [PluginPresentationStatus.CleanupFailed]: "清理失败",
+  };
+
+  const PRESENTATION_VARIANTS: Partial<
+    Record<PluginPresentationStatus, "destructive" | "outline" | "secondary">
+  > = {
+    [PluginPresentationStatus.Unavailable]: "destructive",
+    [PluginPresentationStatus.Failed]: "destructive",
+    [PluginPresentationStatus.Degraded]: "destructive",
+    [PluginPresentationStatus.CleanupFailed]: "destructive",
+    [PluginPresentationStatus.Starting]: "outline",
+    [PluginPresentationStatus.Stopping]: "outline",
+  };
+
+  const STATE_LABELS: Record<PluginRuntimeStateKind, string> = {
+    [PluginRuntimeStateKind.Stopped]: "已停止",
+    [PluginRuntimeStateKind.Starting]: "启动中",
+    [PluginRuntimeStateKind.Running]: "运行中",
+    [PluginRuntimeStateKind.Stopping]: "停止中",
+    [PluginRuntimeStateKind.Failed]: "失败",
+    [PluginRuntimeStateKind.Hung]: "无响应",
+    [PluginRuntimeStateKind.Abandoned]: "已放弃",
+    [PluginRuntimeStateKind.Disposed]: "已释放",
+  };
+
+  const ACTIVE_PRESENTATIONS = [
+    PluginPresentationStatus.Running,
+    PluginPresentationStatus.Degraded,
+    PluginPresentationStatus.Starting,
+  ];
+
+  const STOPPED_PRESENTATIONS = [
+    PluginPresentationStatus.Disabled,
+    PluginPresentationStatus.CleanupFailed,
+    PluginPresentationStatus.Stopping,
+  ];
+
+  const BLOCKED_PRESENTATIONS = [
+    PluginPresentationStatus.Unavailable,
+    PluginPresentationStatus.Failed,
+  ];
+
   let pluginDialog = $state<string | null>(null);
   let managerState = $state<PluginManagerState | null>(null);
   let busy = $state<string | null>(null);
   let error = $state<string | null>(null);
-  let configPlugins = $state<Record<string, ManagerUIPlugin>>({});
+  let configurationStates = $state<Record<string, PluginConfigurationState>>({});
 
-  const refreshConfigPlugins = () => {
-    configPlugins = { ...manager.plugins };
+  const hostBridge = (window as unknown as { pluginManagerHost?: PluginManagerHostBridge })
+    .pluginManagerHost;
+
+  const configurationLoader = new PluginConfigurationLoader({
+    waitForRealm: async (pluginId) =>
+      (await hostBridge?.waitForRealm(pluginId)) ?? { kind: "missing" },
+  });
+
+  hostBridge?.setConfigurationHost({
+    dispose: (pluginId, revision) => configurationLoader.dispose(pluginId, revision),
+  });
+
+  const configurationRoots = new SvelteMap<string, HTMLDivElement>();
+
+  const plugins = $derived(managerState?.plugins ?? []);
+  const running = $derived(
+    plugins.filter((plugin) => ACTIVE_PRESENTATIONS.includes(plugin.presentation))
+  );
+  const stopped = $derived(
+    plugins.filter((plugin) => STOPPED_PRESENTATIONS.includes(plugin.presentation))
+  );
+  const blocked = $derived(
+    plugins.filter((plugin) => BLOCKED_PRESENTATIONS.includes(plugin.presentation))
+  );
+
+  const refreshConfigurationStates = () => {
+    configurationStates = configurationLoader.snapshot();
   };
 
-  const active = $derived(
-    managerState?.plugins.filter(
-      (plugin: PluginManagerEntry) => plugin.status === PluginActivationStatus.Active
-    ) ?? []
-  );
-  const inactive = $derived(
-    managerState?.plugins.filter(
-      (plugin: PluginManagerEntry) => plugin.status !== PluginActivationStatus.Active
-    ) ?? []
-  );
-
   onMount(() => {
-    refreshConfigPlugins();
-    manager.addEventListener("changed", refreshConfigPlugins);
+    refreshConfigurationStates();
+    configurationLoader.addEventListener("changed", refreshConfigurationStates);
 
     void load();
     api.events.changed(() => void load());
 
-    return () => manager.removeEventListener("changed", refreshConfigPlugins);
+    return () => {
+      configurationLoader.removeEventListener("changed", refreshConfigurationStates);
+      void configurationLoader.disposeAll();
+    };
   });
+
+  function applyManagerState(state: PluginManagerState) {
+    managerState = state;
+    for (const plugin of state.plugins) {
+      if (!plugin.desired.enabled) {
+        void configurationLoader.dispose(plugin.id, plugin.desired.revision);
+      }
+    }
+  }
 
   async function load() {
     try {
-      managerState = await api.list();
+      applyManagerState(await api.list());
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     }
@@ -72,7 +159,7 @@
     busy = plugin.id;
     error = null;
     try {
-      managerState = await api.setEnabled(plugin.id, !plugin.enabled);
+      applyManagerState(await api.setEnabled(plugin.id, !plugin.desired.enabled));
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -84,7 +171,7 @@
     busy = plugin.id;
     error = null;
     try {
-      managerState = await api.setEnabled(plugin.id, true);
+      applyManagerState(await api.retry(plugin.id));
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -92,17 +179,119 @@
     }
   }
 
-  const manager = (window as unknown as { pluginManager: API }).pluginManager;
-  const pluginConfigurationAttachment: (mount: MountFn) => Attachment = (mount) => {
-    return (element) => {
+  async function retryConfiguration(plugin: PluginManagerEntry) {
+    const root = configurationRoots.get(plugin.id);
+    const entryUrl = plugin.configuration.url;
+    if (!root || !entryUrl) return;
+    await configurationLoader.retry({
+      pluginId: plugin.id,
+      entryUrl,
+      revision: plugin.desired.revision,
+      requiresPreload: plugin.realms["plugin-manager"]?.declared === true,
+      root,
+    });
+  }
+
+  /** Retry only the cleanup of a disabled plugin's retained panel. */
+  async function retryConfigurationCleanup(plugin: PluginManagerEntry) {
+    await configurationLoader.dispose(plugin.id, plugin.desired.revision);
+  }
+
+  function retryable(plugin: PluginManagerEntry): boolean {
+    if (!plugin.desired.enabled || plugin.availability.kind !== PluginAvailabilityKind.Available) {
+      return false;
+    }
+    if (
+      plugin.main.retryable ||
+      plugin.main.kind === PluginRuntimeStateKind.Failed ||
+      plugin.main.kind === PluginRuntimeStateKind.Hung
+    ) {
+      return true;
+    }
+    return Object.values(plugin.realms).some((summary) =>
+      summary.instances.some(
+        (instance) =>
+          instance.state.retryable ||
+          instance.state.kind === PluginRuntimeStateKind.Failed ||
+          instance.state.kind === PluginRuntimeStateKind.Hung
+      )
+    );
+  }
+
+  function stateLabel(state: SerializablePluginRuntimeState): string {
+    const stage = state.stage ? ` (${state.stage})` : "";
+    return `${STATE_LABELS[state.kind]}${stage}`;
+  }
+
+  function realmEntries(entry: PluginManagerEntry): Array<[string, PluginRealmSummary]> {
+    return Object.entries(entry.realms);
+  }
+
+  const configurationAttachments = new SvelteMap<string, { key: string; attachment: Attachment }>();
+
+  function configurationAttachment(plugin: PluginManagerEntry): Attachment {
+    const requiresPreload = plugin.realms["plugin-manager"]?.declared === true;
+    const key = [
+      plugin.id,
+      plugin.desired.revision,
+      plugin.configuration.url ?? "",
+      requiresPreload,
+    ].join("\0");
+    const cached = configurationAttachments.get(plugin.id);
+    if (cached?.key === key) return cached.attachment;
+
+    const attachment: Attachment = (element) => {
       if (!(element instanceof HTMLDivElement)) return;
-      const unmount = mount(element);
-      if (!unmount) return;
+      const entryUrl = plugin.configuration.url;
+      if (!plugin.configuration.declared || !entryUrl || !plugin.desired.enabled) return;
+
+      configurationRoots.set(plugin.id, element);
+      void configurationLoader.open({
+        pluginId: plugin.id,
+        entryUrl,
+        revision: plugin.desired.revision,
+        requiresPreload,
+        root: element,
+      });
+
       return () => {
-        unmount();
+        configurationRoots.delete(plugin.id);
+        void configurationLoader.close(plugin.id);
       };
     };
+
+    configurationAttachments.set(plugin.id, { key, attachment });
+    return attachment;
+  }
+
+  const CONFIGURATION_LABELS: Record<PluginConfigurationStateKind, string> = {
+    [PluginConfigurationStateKind.Unloaded]: "未加载",
+    [PluginConfigurationStateKind.WaitingForPreload]: "正在等待插件管理器运行环境...",
+    [PluginConfigurationStateKind.Loading]: "正在加载配置界面...",
+    [PluginConfigurationStateKind.Ready]: "就绪",
+    [PluginConfigurationStateKind.Mounting]: "正在挂载配置界面...",
+    [PluginConfigurationStateKind.Mounted]: "已挂载",
+    [PluginConfigurationStateKind.Unmounting]: "正在卸载配置界面...",
+    [PluginConfigurationStateKind.Failed]: "配置界面加载失败",
   };
+
+  const CONFIGURATION_STAGE_LABELS: Record<PluginConfigurationFailureStage, string> = {
+    [PluginConfigurationFailureStage.Preload]: "运行环境",
+    [PluginConfigurationFailureStage.Import]: "加载模块",
+    [PluginConfigurationFailureStage.Validate]: "校验模块",
+    [PluginConfigurationFailureStage.Mount]: "挂载",
+    [PluginConfigurationFailureStage.Unmount]: "卸载",
+  };
+
+  function configurationBusy(state: PluginConfigurationState | undefined): boolean {
+    if (!state) return false;
+    return (
+      state.kind === PluginConfigurationStateKind.WaitingForPreload ||
+      state.kind === PluginConfigurationStateKind.Loading ||
+      state.kind === PluginConfigurationStateKind.Mounting ||
+      state.kind === PluginConfigurationStateKind.Unmounting
+    );
+  }
 </script>
 
 <svelte:head>
@@ -120,7 +309,7 @@
 {/snippet}
 
 {#snippet pluginCard(plugin: PluginManagerEntry)}
-  {@const mount = configPlugins[plugin.id]?.configuration?.mount}
+  {@const configuration = configurationStates[plugin.id]}
   <Card.Root class="shadow-md">
     <Card.Header class="flex items-center gap-2 drop-shadow-lg">
       <button
@@ -142,28 +331,68 @@
         {#if plugin.kind === PluginKind.Builtin}
           <Badge>内置</Badge>
         {/if}
-        {#if plugin.status === PluginActivationStatus.Failed}
-          <Badge variant="destructive">加载失败</Badge>
-        {:else if plugin.status === PluginActivationStatus.Partial}
-          <Badge variant="destructive">部分激活</Badge>
-        {/if}
-        {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
-          {#if state?.status === PluginPreloadStatus.Failed}
-            <Badge variant="destructive">{realmLabel(realm)}加载失败</Badge>
-          {:else if state?.status === PluginPreloadStatus.Pending}
-            <Badge variant="outline">{realmLabel(realm)}等待中</Badge>
-          {/if}
-        {/each}
+        <Badge variant={PRESENTATION_VARIANTS[plugin.presentation] ?? "secondary"}>
+          {PRESENTATION_LABELS[plugin.presentation]}
+        </Badge>
       </div>
     </Card.Header>
     <Card.Content>
       <p>{plugin.description}</p>
+      {#if plugin.availability.kind === PluginAvailabilityKind.Conflict}
+        <div class="mt-2 text-sm text-red-700">
+          <p>存在重复的插件 ID，以下插件均未加载：</p>
+          <ul class="list-disc pl-5">
+            {#each plugin.availability.paths as source (source)}
+              <li><code>{source}</code></li>
+            {/each}
+          </ul>
+        </div>
+      {:else if plugin.availability.kind === PluginAvailabilityKind.Invalid}
+        <p class="mt-2 text-sm text-red-700">{plugin.availability.error}</p>
+      {/if}
+      {#if plugin.shadowed.length > 0}
+        <div class="mt-2 text-sm text-amber-700">
+          <p>内置插件优先，以下同名第三方插件已被忽略：</p>
+          <ul class="list-disc pl-5">
+            {#each plugin.shadowed as source (source.path)}
+              <li><code>{source.path}</code></li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
       {#if plugin.error}
         <p class="mt-2 text-sm text-red-700">{plugin.error}</p>
       {/if}
-      {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
-        {#if state?.status === PluginPreloadStatus.Failed && state?.error}
-          <p class="mt-2 text-sm text-red-700">{realmLabel(realm)}：{state?.error}</p>
+      {#if plugin.presentation === PluginPresentationStatus.CleanupFailed}
+        <p class="mt-2 text-sm text-amber-700">
+          插件已停用，但清理未完成；其影响可能持续到清理成功或应用退出。
+        </p>
+      {/if}
+      {#each realmEntries(plugin) as [realm, summary] (realm)}
+        {@const showRealm =
+          summary.instances.length > 0 || (plugin.desired.enabled && summary.hostCount > 0)}
+        {#if showRealm}
+          <div class="mt-2 text-sm text-gray-600">
+            <span class="font-medium">{realmLabel(realm)}</span>
+            <span class="ml-2">窗口 {summary.hostCount}，实例 {summary.instances.length}</span>
+            {#each summary.instances as instance (instance.webContentsId)}
+              <span class="ml-2 rounded bg-gray-100 px-1">
+                #{instance.webContentsId}
+                {stateLabel(instance.state)}
+              </span>
+            {/each}
+            {#each summary.instances as instance (instance.webContentsId)}
+              {#if instance.state.error}
+                <p class="mt-1 text-xs text-red-700">
+                  #{instance.webContentsId}
+                  {instance.state.error}
+                </p>
+              {/if}
+            {/each}
+            {#if plugin.desired.enabled && summary.hostCount > summary.instances.length}
+              <span class="ml-2">等待上报</span>
+            {/if}
+          </div>
         {/if}
       {/each}
     </Card.Content>
@@ -172,7 +401,7 @@
         >v{plugin.version}<br /><code>{plugin.id}</code></span
       >
       <div class="flex gap-2">
-        {#if plugin.status === PluginActivationStatus.Failed || plugin.status === PluginActivationStatus.Partial}
+        {#if retryable(plugin)}
           <Button
             variant="outline"
             size="sm"
@@ -182,14 +411,16 @@
             重试
           </Button>
         {/if}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy === plugin.id}
-          onclick={() => toggle(plugin)}
-        >
-          {busy === plugin.id ? "处理中..." : plugin.enabled ? "停用" : "启用"}
-        </Button>
+        {#if plugin.availability.kind === PluginAvailabilityKind.Available}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy === plugin.id}
+            onclick={() => toggle(plugin)}
+          >
+            {busy === plugin.id ? "处理中..." : plugin.desired.enabled ? "停用" : "启用"}
+          </Button>
+        {/if}
       </div>
     </Card.Footer>
   </Card.Root>
@@ -219,39 +450,81 @@
           {#if plugin.error}
             <p class="mt-2 text-sm text-red-700">{plugin.error}</p>
           {/if}
-          {#each Object.entries(plugin.realmStatus ?? {}) as [realm, state] (realm)}
-            {#if state?.status === PluginPreloadStatus.Failed && state?.error}
-              <p class="mt-2 text-sm text-red-700">{realmLabel(realm)}：{state?.error}</p>
-            {/if}
-          {/each}
         </Dialog.Description>
       </Dialog.Header>
-      {#if mount}
-        {#key mount}
-          <div class="[all:initial]" {@attach pluginConfigurationAttachment(mount)}></div>
-        {/key}
-      {:else}
+      {#if !plugin.configuration.declared}
         <p class="text-center">此插件暂无配置项</p>
+      {:else if !plugin.desired.enabled && configuration?.kind === PluginConfigurationStateKind.Failed && configuration.stage === PluginConfigurationFailureStage.Unmount}
+        <div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p>
+            {CONFIGURATION_STAGE_LABELS[
+              PluginConfigurationFailureStage.Unmount
+            ]}失败：{configuration.error}
+          </p>
+          <p class="mt-1 text-xs">
+            插件已停用，但配置面板的清理未完成；其监听器或定时器可能仍在运行。
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            class="mt-2"
+            onclick={() => void retryConfigurationCleanup(plugin)}
+          >
+            重试清理
+          </Button>
+        </div>
+      {:else if !plugin.desired.enabled}
+        <p class="text-center">启用插件后可配置</p>
+      {:else}
+        <div class="space-y-2">
+          {#if configuration?.kind === PluginConfigurationStateKind.Failed}
+            <div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p>
+                {CONFIGURATION_STAGE_LABELS[
+                  configuration.stage ?? PluginConfigurationFailureStage.Import
+                ]}失败：{configuration.error}
+              </p>
+              {#if configuration.retryable}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="mt-2"
+                  onclick={() => void retryConfiguration(plugin)}
+                >
+                  重试配置
+                </Button>
+              {/if}
+            </div>
+          {:else if configurationBusy(configuration)}
+            <p class="text-sm text-gray-600">{CONFIGURATION_LABELS[configuration!.kind]}</p>
+          {/if}
+          <div
+            class="[all:initial]"
+            data-plugin-configuration
+            data-plugin-id={plugin.id}
+            {@attach configurationAttachment(plugin)}
+          ></div>
+        </div>
       {/if}
     </Dialog.Content>
   </Dialog.Root>
 {/snippet}
 
-{#snippet pluginSection(value: string, title: string, plugins: PluginManagerEntry[])}
+{#snippet pluginSection(value: string, title: string, entries: PluginManagerEntry[])}
   <Accordion.Item {value} class="border-b-0!">
     <Accordion.Trigger class="cursor-pointer no-underline!">
       <div class="flex w-full pr-2">
         <h2 class="text-lg font-semibold">{title}</h2>
         <div class="flex-1"></div>
-        <Badge variant="outline">{plugins.length}个插件</Badge>
+        <Badge variant="outline">{entries.length}个插件</Badge>
       </div>
     </Accordion.Trigger>
     <Accordion.Content class="px-2 pt-2 pb-6">
-      {#if plugins.length === 0}
+      {#if entries.length === 0}
         <p class="my-8 text-center text-gray-700">没有{title}插件。</p>
       {:else}
         <div class="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-4">
-          {#each plugins as plugin (plugin.id)}
+          {#each entries as plugin (plugin.id)}
             {@render pluginCard(plugin)}
           {/each}
         </div>
@@ -261,9 +534,15 @@
 {/snippet}
 
 <ScrollArea class="h-screen p-6">
-  <p class="mb-4 text-gray-700">
-    插件允许你扩展 Open Orpheus 的功能，但<b>插件可以获得你系统的完整权限</b>。
-  </p>
+  <div class="mb-4 flex items-center">
+    <p class="flex-1 text-gray-700">
+      插件允许你扩展 Open Orpheus 的功能，但<b>插件可以获得你系统的完整权限</b
+      >，请只安装你所信任的插件。
+    </p>
+    <Button class="cursor-pointer" onclick={() => api.openPluginsFolder()}
+      ><ToyBrick />打开插件目录</Button
+    >
+  </div>
 
   {#if error}
     <p class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -276,9 +555,10 @@
   {:else if !managerState.available}
     <p class="text-gray-700">插件系统已禁用。</p>
   {:else}
-    <Accordion.Root type="multiple" value={["active", "inactive"]}>
-      {@render pluginSection("active", "已激活", active)}
-      {@render pluginSection("inactive", "未激活", inactive)}
+    <Accordion.Root type="multiple" value={["running", "stopped", "blocked"]}>
+      {@render pluginSection("running", "运行中", running)}
+      {@render pluginSection("stopped", "已停用", stopped)}
+      {@render pluginSection("blocked", "不可用", blocked)}
     </Accordion.Root>
   {/if}
 </ScrollArea>

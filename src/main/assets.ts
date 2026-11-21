@@ -40,6 +40,9 @@ async function servePluginAsset(url: URL): Promise<Response> {
     return new Response(new Uint8Array(content), {
       headers: {
         "Content-Type": mime.getType(assetPath) ?? "application/octet-stream",
+        // Plugin configuration modules are native ESM imports from the GUI
+        // origin, so their cross-origin asset response must be CORS-readable.
+        "Access-Control-Allow-Origin": "*",
       },
     });
   } catch (error) {

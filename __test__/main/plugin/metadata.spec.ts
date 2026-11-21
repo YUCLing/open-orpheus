@@ -96,6 +96,32 @@ describe("parsePluginMetadata", () => {
     ).toThrow(/\.cjs/);
   });
 
+  it("accepts a configuration module inside the assets directory", () => {
+    const metadata = parsePluginMetadata(
+      { ...valid, configuration: "configuration/index.mjs" },
+      "test"
+    );
+    expect(metadata.configuration).toBe("configuration/index.mjs");
+  });
+
+  it("rejects a configuration module that is not .mjs", () => {
+    expect(() =>
+      parsePluginMetadata({ ...valid, configuration: "configuration/index.cjs" }, "test")
+    ).toThrow(/\.mjs/);
+  });
+
+  it("rejects a configuration module escaping the assets directory", () => {
+    expect(() => parsePluginMetadata({ ...valid, configuration: "../index.mjs" }, "test")).toThrow(
+      /assets directory/
+    );
+  });
+
+  it("rejects an absolute configuration module path", () => {
+    expect(() =>
+      parsePluginMetadata({ ...valid, configuration: "/configuration/index.mjs" }, "test")
+    ).toThrow(/assets directory/);
+  });
+
   it("accepts an icon relative to the assets directory", () => {
     const metadata = parsePluginMetadata({ ...valid, icon: "icons/plugin.png" }, "test");
     expect(metadata.icon).toBe("icons/plugin.png");

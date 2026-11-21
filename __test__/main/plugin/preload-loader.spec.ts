@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PluginPreloadStatus } from "@shared/contracts/plugin-manager-api";
-
-import { evaluatePreloadModule, PreloadPluginLoader } from "../../../src/preload/plugin/loader";
+import {
+  evaluatePreloadModule,
+  PreloadPluginLoader,
+  PreloadPluginStatus,
+} from "../../../src/preload/plugin/loader";
+import { LifecycleStateKind } from "../../../src/shared/plugin/lifecycle";
 import type { Registry } from "@shared/plugin/registry";
 import { installLoggerStub } from "../../helpers/globals";
 
@@ -86,7 +89,7 @@ describe("PreloadPluginLoader", () => {
 
     await loader.activateAll();
 
-    expect(loader.plugins[0].status).toBe("failed");
+    expect(loader.plugins[0].status).toBe(PreloadPluginStatus.Failed);
     expect(loader.plugins[0].error).toBeInstanceOf(Error);
     expect(logger.error).toHaveBeenCalled();
   });
@@ -183,6 +186,70 @@ describe("PreloadPluginLoader", () => {
     expect(loader.plugins.find((record) => record.id === "a")?.status).toBe("active");
   });
 
+  it("shares one evaluation between activation and cross-plugin load", async () => {
+    const evaluations = new Map<string, number>();
+    let runtimeA: { plugins: { load(id: string): Promise<unknown> } } | undefined;
+    let loadedByA: unknown;
+    const loader = new PreloadPluginLoader({
+      sources: new Map(),
+      registry: createRegistry(),
+      evaluate: (_source, id) => {
+        evaluations.set(id, (evaluations.get(id) ?? 0) + 1);
+        if (id === "b") return { activate() {}, engine: "b" };
+        return {
+          async activate(runtime: typeof runtimeA) {
+            runtimeA = runtime;
+            loadedByA = await runtime!.plugins.load("b");
+          },
+        };
+      },
+    });
+    loader.registerAll(
+      new Map([
+        ["a", "ignored"],
+        ["b", "ignored"],
+      ])
+    );
+
+    await loader.activateAll();
+
+    const moduleB = loader.plugins.find((record) => record.id === "b")?.module;
+    expect(evaluations.get("b")).toBe(1);
+    expect(loadedByA).toBe(moduleB);
+    expect(loader.plugins.find((record) => record.id === "b")?.status).toBe(
+      PreloadPluginStatus.Active
+    );
+
+    // Even if the evaluation cache is discarded, dependency loads still see
+    // the instance owned by the active lifecycle.
+    loader.start("b", async () => "ignored", { enabled: true, revision: 2 });
+    await expect(runtimeA?.plugins.load("b")).resolves.toBe(moduleB);
+    expect(evaluations.get("b")).toBe(1);
+  });
+
+  it("keeps a hung record until its load settles, then removes it", async () => {
+    let release!: (source: string) => void;
+    const gate = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const loader = new PreloadPluginLoader({
+      sources: new Map(),
+      registry: createRegistry(),
+      activationTimeoutMs: 10,
+      evaluate: () => ({ activate() {}, deactivate() {} }),
+    });
+
+    await loader.enable("slow", () => gate, { enabled: true, revision: 1 });
+    await loader.remove("slow", { enabled: false, revision: 2 });
+
+    // The source fetch is still running; a re-enable must not create a second
+    // instance behind it.
+    expect(loader.has("slow")).toBe(true);
+
+    release("ignored");
+    await vi.waitFor(() => expect(loader.has("slow")).toBe(false));
+  });
+
   it("deactivates a partially activated preload module after activation throws", async () => {
     const deactivate = vi.fn();
     const loader = new PreloadPluginLoader({
@@ -199,27 +266,29 @@ describe("PreloadPluginLoader", () => {
 
     await loader.activateAll();
 
-    expect(loader.plugins[0].status).toBe("failed");
+    expect(loader.plugins[0].status).toBe(PreloadPluginStatus.Failed);
     expect(deactivate).toHaveBeenCalledTimes(1);
   });
 
-  it("reports activation and removal status", async () => {
-    const statuses: Array<[string, PluginPreloadStatus, string | undefined]> = [];
+  it("reports lifecycle states with revisions", async () => {
+    const statuses: Array<[string, string, number]> = [];
     const loader = new PreloadPluginLoader({
       sources: new Map(),
       registry: createRegistry(),
       evaluate: () => ({ activate() {}, deactivate() {} }),
-      onStatus: (id, status, error) => statuses.push([id, status, error]),
+      onStatus: (id, snapshot) =>
+        statuses.push([id, snapshot.state.kind, snapshot.desired.revision]),
     });
     loader.registerAll(new Map([["a", "ignored"]]));
 
     await loader.activateAll();
-    await loader.remove("a");
+    await loader.remove("a", { enabled: false, revision: 1 });
 
-    expect(statuses).toEqual([
-      ["a", PluginPreloadStatus.Active, undefined],
-      ["a", PluginPreloadStatus.Inactive, undefined],
-    ]);
+    const kinds = statuses.filter(([id]) => id === "a").map(([, kind]) => kind);
+    expect(kinds[0]).toBe(LifecycleStateKind.Starting);
+    expect(kinds).toContain(LifecycleStateKind.Running);
+    expect(kinds.at(-1)).toBe(LifecycleStateKind.Stopped);
+    expect(statuses.every(([, , revision]) => typeof revision === "number")).toBe(true);
   });
 
   it("does not delete a plugin re-enabled during cleanup", async () => {
@@ -327,5 +396,60 @@ describe("PreloadPluginLoader", () => {
 
     releaseB();
     await Promise.all([removing, loader.waitForAll()]);
+  });
+
+  it("runs beforeDeactivate before the module's deactivate", async () => {
+    const order: string[] = [];
+    (globalThis as { __preloadOrder?: string[] }).__preloadOrder = order;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const loader = new PreloadPluginLoader({
+      sources: new Map([
+        [
+          "p",
+          "module.exports = { activate() {}, deactivate() { globalThis.__preloadOrder.push('deactivate'); } };",
+        ],
+      ]),
+      registry: createRegistry(),
+      evaluate: (source, id) => evaluatePreloadModule(source, id, () => ({})),
+      beforeDeactivate: async () => {
+        order.push("before");
+        await gate;
+        order.push("after-before");
+      },
+    });
+
+    await loader.activateAll();
+    const removing = loader.remove("p");
+    await vi.waitFor(() => expect(order).toEqual(["before"]));
+    release();
+    await removing;
+
+    expect(order).toEqual(["before", "after-before", "deactivate"]);
+    expect(loader.plugins).toHaveLength(0);
+  });
+
+  it("drops a record after a hung cleanup finally stops", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const loader = new PreloadPluginLoader({
+      sources: new Map([["p", "ignored"]]),
+      registry: createRegistry(),
+      evaluate: () => ({ activate() {}, deactivate: () => gate }),
+      activationTimeoutMs: 20,
+    });
+
+    await loader.activateAll();
+    await loader.remove("p");
+
+    expect(loader.plugins).toHaveLength(1);
+    expect(loader.plugins[0]?.snapshot.state.kind).toBe(LifecycleStateKind.Hung);
+
+    release();
+    await vi.waitFor(() => expect(loader.plugins).toHaveLength(0));
   });
 });

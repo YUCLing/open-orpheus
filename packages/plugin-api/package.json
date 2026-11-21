@@ -32,6 +32,9 @@
     },
     "./plugin-manager": {
       "types": "./dist/plugin-manager/index.d.ts"
+    },
+    "./configuration": {
+      "types": "./dist/configuration/index.d.ts"
     }
   },
   "files": [

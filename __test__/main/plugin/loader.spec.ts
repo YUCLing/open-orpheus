@@ -6,6 +6,7 @@ import type { Registry } from "@shared/plugin/registry";
 import type { DiscoveredPlugin } from "../../../src/main/plugin/discover";
 import { PluginLoader, PluginStatus } from "../../../src/main/plugin/loader";
 import type { PluginModule, PluginRuntime } from "@shared/plugin/realms/main/index";
+import { LifecycleStateKind } from "@shared/plugin/lifecycle";
 import { installLoggerStub } from "../../helpers/globals";
 
 const logger = installLoggerStub();
@@ -40,16 +41,18 @@ describe("PluginLoader", () => {
     const loader = new PluginLoader({
       registry,
       plugins: [discovered("a"), discovered("b")],
-      importModule: async (entryPath) => ({
+      importModule: async (entryUrl) => ({
         activate(runtime: { registry: Registry }) {
-          calls.push(`${entryPath}:${String(runtime.registry === registry)}`);
+          calls.push(`${entryUrl}:${String(runtime.registry === registry)}`);
         },
       }),
     });
 
     await loader.activateAll();
 
-    expect(calls).toEqual(["/plugins/a/main/index.mjs:true", "/plugins/b/main/index.mjs:true"]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatch(/^file:\/\/\/plugins\/a\/main\/index\.mjs\?t=\d+-[a-z0-9]+:true$/);
+    expect(calls[1]).toMatch(/^file:\/\/\/plugins\/b\/main\/index\.mjs\?t=\d+-[a-z0-9]+:true$/);
     expect(loader.plugins.map((record) => record.status)).toEqual([
       PluginStatus.Active,
       PluginStatus.Active,
@@ -118,7 +121,7 @@ describe("PluginLoader", () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
-  it("retries a failed plugin on activate", async () => {
+  it("retries a failed plugin only through an explicit retry", async () => {
     let attempts = 0;
     const loader = new PluginLoader({
       registry: createRegistry(),
@@ -134,6 +137,10 @@ describe("PluginLoader", () => {
     expect(loader.plugins[0].status).toBe(PluginStatus.Failed);
 
     await loader.activate("flaky");
+    expect(loader.plugins[0].status).toBe(PluginStatus.Failed);
+    expect(attempts).toBe(1);
+
+    await loader.retry("flaky");
     expect(loader.plugins[0].status).toBe(PluginStatus.Active);
     expect(attempts).toBe(2);
   });
@@ -171,18 +178,18 @@ describe("PluginLoader", () => {
     await expect(runtime?.plugins.load("missing")).rejects.toThrow(/Unknown plugin/);
   });
 
-  it("keeps the first plugin for a duplicate id", () => {
+  it("rejects duplicate ids because the catalog must resolve them first", () => {
     const first = discovered("dup");
     const second = discovered("dup", "/plugins/dup-2/main/index.mjs");
-    const loader = new PluginLoader({
-      registry: createRegistry(),
-      plugins: [first, second],
-      importModule: async () => ({ activate() {} }),
-    });
 
-    expect(loader.plugins).toHaveLength(1);
-    expect(loader.plugins[0].plugin).toBe(first);
-    expect(logger.warn).toHaveBeenCalled();
+    expect(
+      () =>
+        new PluginLoader({
+          registry: createRegistry(),
+          plugins: [first, second],
+          importModule: async () => ({ activate() {} }),
+        })
+    ).toThrow(/Duplicate plugin id/);
   });
 
   it("deactivates active plugins in reverse order", async () => {
@@ -190,8 +197,8 @@ describe("PluginLoader", () => {
     const loader = new PluginLoader({
       registry: createRegistry(),
       plugins: [discovered("a"), discovered("b")],
-      importModule: async (entryPath) => {
-        const id = entryPath.split("/")[2];
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
         const module: PluginModule = {
           activate() {},
           deactivate() {
@@ -398,6 +405,12 @@ describe("PluginLoader", () => {
     await loader.activate("slow");
     expect(loader.plugins[0].status).toBe(PluginStatus.Failed);
 
+    // The disable waits for the still-running activation; cleanup only starts
+    // once that activation settles.
+    void loader.deactivate("slow");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(deactivate).not.toHaveBeenCalled();
+
     release();
     await vi.waitFor(() => expect(deactivate).toHaveBeenCalledTimes(1));
     expect(loader.plugins[0].module).toBeUndefined();
@@ -468,7 +481,7 @@ describe("PluginLoader", () => {
         }
         return {
           async activate(runtime: PluginRuntime) {
-            await runtime.plugins.load("b");
+            await runtime.plugins.whenActive("b");
             sawActivatedDependency = dependencyActivated;
           },
         };
@@ -516,6 +529,212 @@ describe("PluginLoader", () => {
     await shuttingDown;
   });
 
+  it("invalidates readiness when the manager disables via setDesiredState", async () => {
+    let runtime: PluginRuntime | undefined;
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryPath) => ({
+        activate(value: PluginRuntime) {
+          if (entryPath.includes("/b/")) runtime = value;
+        },
+        deactivate() {},
+      }),
+    });
+
+    await loader.activate("a");
+    await loader.activate("b");
+    await expect(runtime?.plugins.whenActive("a")).resolves.toBeDefined();
+
+    loader.setDesiredState("a", { enabled: false, revision: 1 });
+    await vi.waitFor(() =>
+      expect(loader.plugins.find((record) => record.plugin.metadata.id === "a")?.status).toBe(
+        PluginStatus.Disabled
+      )
+    );
+
+    await expect(runtime?.plugins.whenActive("a")).rejects.toThrow();
+  });
+
+  it("evaluates once per activation epoch and re-evaluates after re-enable", async () => {
+    const urls: string[] = [];
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a")],
+      importModule: async (entryUrl) => {
+        urls.push(entryUrl);
+        return { activate() {} };
+      },
+    });
+
+    await loader.activate("a");
+    expect(urls).toHaveLength(1);
+
+    // Cross-plugin reads share the epoch's evaluation.
+    await loader.activate("a");
+    expect(urls).toHaveLength(1);
+
+    await loader.deactivate("a");
+    await loader.activate("a");
+
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).not.toBe(urls[1]);
+  });
+
+  it("shares one cache-busted evaluation between activation and cross-plugin load", async () => {
+    const urls: string[] = [];
+    let loadedByA: unknown;
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        urls.push(entryUrl);
+        if (entryUrl.includes("/b/")) return { activate() {}, engine: "b" };
+        return {
+          async activate(runtime: PluginRuntime) {
+            loadedByA = await runtime.plugins.load("b");
+          },
+        };
+      },
+    });
+
+    await loader.activateAll();
+
+    const moduleB = loader.plugins.find((record) => record.plugin.metadata.id === "b")?.module;
+    expect(urls.filter((url) => url.includes("/b/"))).toHaveLength(1);
+    expect(loadedByA).toBe(moduleB);
+  });
+
+  it("keeps the running module for cross-plugin load after a retry request", async () => {
+    const imports = new Map<string, number>();
+    let runtimeA: PluginRuntime | undefined;
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
+        imports.set(id, (imports.get(id) ?? 0) + 1);
+        if (id === "a") {
+          return {
+            activate(runtime: PluginRuntime) {
+              runtimeA = runtime;
+            },
+          };
+        }
+        return { activate() {}, engine: "b" };
+      },
+    });
+
+    await loader.activateAll();
+
+    const first = await runtimeA!.plugins.load("b");
+    const recordB = loader.plugins.find((record) => record.plugin.metadata.id === "b")!;
+    expect(first).toBe(recordB.module);
+
+    loader.requestRetry("b");
+
+    expect(await runtimeA!.plugins.load("b")).toBe(first);
+    expect(imports.get("b")).toBe(1);
+  });
+
+  it("keeps an in-flight activation's module through a disable/enable cycle", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let activations = 0;
+    let activateStarted = false;
+    let runtimeA: PluginRuntime | undefined;
+
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
+        if (id === "a") {
+          return {
+            activate(runtime: PluginRuntime) {
+              runtimeA = runtime;
+            },
+          };
+        }
+        activations += 1;
+        return {
+          async activate() {
+            activateStarted = true;
+            await gate;
+          },
+          engine: `b-${activations}`,
+        };
+      },
+    });
+
+    await loader.activate("a");
+    const activating = loader.activate("b");
+    await vi.waitFor(() => expect(activateStarted).toBe(true));
+
+    loader.setDesiredState("b", { enabled: false, revision: 1 });
+    loader.setDesiredState("b", { enabled: true, revision: 2 });
+
+    const loadedDuringActivation = await runtimeA!.plugins.load("b");
+    release();
+    await activating;
+
+    expect(loadedDuringActivation).toBe(await runtimeA!.plugins.whenActive("b"));
+    expect(activations).toBe(1);
+  });
+
+  it("keeps one evaluation when an enable request repeats during cleanup", async () => {
+    let releaseDeactivate!: () => void;
+    const deactivation = new Promise<void>((resolve) => {
+      releaseDeactivate = resolve;
+    });
+    let runtimeA: PluginRuntime | undefined;
+    let activations = 0;
+
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
+        if (id === "a") {
+          return {
+            activate(runtime: PluginRuntime) {
+              runtimeA = runtime;
+            },
+          };
+        }
+        activations += 1;
+        return {
+          activate() {},
+          deactivate: () => deactivation,
+          engine: `b-${activations}`,
+        };
+      },
+    });
+
+    await loader.activate("a");
+    await loader.activate("b");
+
+    const recordB = () => loader.plugins.find((record) => record.plugin.metadata.id === "b")!;
+
+    loader.setDesiredState("b", { enabled: false, revision: 2 });
+    await vi.waitFor(() => expect(recordB().snapshot.state.kind).toBe(LifecycleStateKind.Stopping));
+
+    loader.setDesiredState("b", { enabled: true, revision: 3 });
+    const early = await runtimeA!.plugins.load("b");
+
+    // A repeated enable must not invalidate the evaluation this epoch owns.
+    loader.setDesiredState("b", { enabled: true, revision: 4 });
+
+    releaseDeactivate();
+    await vi.waitFor(() => expect(recordB().status).toBe(PluginStatus.Active));
+
+    expect(await runtimeA!.plugins.load("b")).toBe(early);
+    expect(await runtimeA!.plugins.whenActive("b")).toBe(early);
+    expect(activations).toBe(2);
+  });
+
   it("clears the exports cache before waiting for deactivation", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -538,7 +757,7 @@ describe("PluginLoader", () => {
           return {
             async activate(runtime: PluginRuntime) {
               try {
-                await runtime.plugins.load("b");
+                await runtime.plugins.whenActive("b");
                 loadedOldModule = true;
               } catch {
                 loadedOldModule = false;
@@ -548,7 +767,7 @@ describe("PluginLoader", () => {
         }
         return {
           async activate(runtime: PluginRuntime) {
-            await runtime.plugins.load("b");
+            await runtime.plugins.whenActive("b");
           },
         };
       },
