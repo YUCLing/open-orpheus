@@ -155,6 +155,7 @@ export class PluginLoader {
     this.revisions.set(id, desired.revision);
 
     const state = record.lifecycle.snapshot.state;
+    const wasEnabled = record.lifecycle.desiredState.enabled;
     // An activation that is still running will commit the module it already
     // loaded. Dropping that evaluation now would let cross-plugin `load()`
     // import a second instance while `whenActive()` later returns the first.
@@ -169,8 +170,13 @@ export class PluginLoader {
       // `whenActive` result would bypass the enabled check after cleanup.
       this.pluginRegistry.forget(id);
       if (!activationInFlight) this.moduleCache.delete(id);
-    } else if (!activationInFlight && state.kind !== LifecycleStateKind.Running) {
-      // A new enable after a stop starts a fresh evaluation epoch.
+    } else if (!wasEnabled && !activationInFlight && state.kind !== LifecycleStateKind.Running) {
+      // Entering a new enable epoch: invalidate both caches together. A
+      // concurrent `load()` may already have evaluated the entry (the state
+      // store flips before this call), and keeping that export while the
+      // lifecycle re-imports would split `load()` from `whenActive()`.
+      // Repeated enable requests keep the evaluation this epoch already owns.
+      this.pluginRegistry.forget(id);
       this.moduleCache.delete(id);
     }
     record.lifecycle.applyDesiredState(desired);

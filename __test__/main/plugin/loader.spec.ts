@@ -6,6 +6,7 @@ import type { Registry } from "@shared/plugin/registry";
 import type { DiscoveredPlugin } from "../../../src/main/plugin/discover";
 import { PluginLoader, PluginStatus } from "../../../src/main/plugin/loader";
 import type { PluginModule, PluginRuntime } from "@shared/plugin/realms/main/index";
+import { LifecycleStateKind } from "@shared/plugin/lifecycle";
 import { installLoggerStub } from "../../helpers/globals";
 
 const logger = installLoggerStub();
@@ -681,6 +682,57 @@ describe("PluginLoader", () => {
 
     expect(loadedDuringActivation).toBe(await runtimeA!.plugins.whenActive("b"));
     expect(activations).toBe(1);
+  });
+
+  it("keeps one evaluation when an enable request repeats during cleanup", async () => {
+    let releaseDeactivate!: () => void;
+    const deactivation = new Promise<void>((resolve) => {
+      releaseDeactivate = resolve;
+    });
+    let runtimeA: PluginRuntime | undefined;
+    let activations = 0;
+
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
+        if (id === "a") {
+          return {
+            activate(runtime: PluginRuntime) {
+              runtimeA = runtime;
+            },
+          };
+        }
+        activations += 1;
+        return {
+          activate() {},
+          deactivate: () => deactivation,
+          engine: `b-${activations}`,
+        };
+      },
+    });
+
+    await loader.activate("a");
+    await loader.activate("b");
+
+    const recordB = () => loader.plugins.find((record) => record.plugin.metadata.id === "b")!;
+
+    loader.setDesiredState("b", { enabled: false, revision: 2 });
+    await vi.waitFor(() => expect(recordB().snapshot.state.kind).toBe(LifecycleStateKind.Stopping));
+
+    loader.setDesiredState("b", { enabled: true, revision: 3 });
+    const early = await runtimeA!.plugins.load("b");
+
+    // A repeated enable must not invalidate the evaluation this epoch owns.
+    loader.setDesiredState("b", { enabled: true, revision: 4 });
+
+    releaseDeactivate();
+    await vi.waitFor(() => expect(recordB().status).toBe(PluginStatus.Active));
+
+    expect(await runtimeA!.plugins.load("b")).toBe(early);
+    expect(await runtimeA!.plugins.whenActive("b")).toBe(early);
+    expect(activations).toBe(2);
   });
 
   it("clears the exports cache before waiting for deactivation", async () => {
