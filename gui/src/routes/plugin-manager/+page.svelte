@@ -192,6 +192,11 @@
     });
   }
 
+  /** Retry only the cleanup of a disabled plugin's retained panel. */
+  async function retryConfigurationCleanup(plugin: PluginManagerEntry) {
+    await configurationLoader.dispose(plugin.id, plugin.desired.revision);
+  }
+
   function retryable(plugin: PluginManagerEntry): boolean {
     if (!plugin.desired.enabled || plugin.availability.kind !== PluginAvailabilityKind.Available) {
       return false;
@@ -449,6 +454,25 @@
       </Dialog.Header>
       {#if !plugin.configuration.declared}
         <p class="text-center">此插件暂无配置项</p>
+      {:else if !plugin.desired.enabled && configuration?.kind === PluginConfigurationStateKind.Failed && configuration.stage === PluginConfigurationFailureStage.Unmount}
+        <div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p>
+            {CONFIGURATION_STAGE_LABELS[
+              PluginConfigurationFailureStage.Unmount
+            ]}失败：{configuration.error}
+          </p>
+          <p class="mt-1 text-xs">
+            插件已停用，但配置面板的清理未完成；其监听器或定时器可能仍在运行。
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            class="mt-2"
+            onclick={() => void retryConfigurationCleanup(plugin)}
+          >
+            重试清理
+          </Button>
+        </div>
       {:else if !plugin.desired.enabled}
         <p class="text-center">启用插件后可配置</p>
       {:else}

@@ -80,7 +80,7 @@ export const TYPE_ONLY_SDKS = {
     host: "dist/configuration/host",
     index: "dist/configuration/index.d.ts",
     indexExports: [
-      'export type { ConfigurationContext, ConfigurationInstance, ConfigurationModule } from "./host/src/shared/plugin/configuration/index";',
+      'export type { ConfigurationContext, ConfigurationModule, ConfigurationUnmount } from "./host/src/shared/plugin/configuration/index";',
     ],
     packageSubpath: "./configuration",
   },

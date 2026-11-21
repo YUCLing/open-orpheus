@@ -7,10 +7,8 @@ export interface ConfigurationContext {
   readonly signal: AbortSignal;
 }
 
-/** A mounted configuration view owned by the host. */
-export interface ConfigurationInstance {
-  unmount(): void | Promise<void>;
-}
+/** Cleanup returned by `mount()`, if the plugin needs one. */
+export type ConfigurationUnmount = () => void | Promise<void>;
 
 /**
  * The named exports a plugin's configuration entry must provide.
@@ -24,5 +22,5 @@ export interface ConfigurationModule {
   mount(
     root: HTMLDivElement,
     context: ConfigurationContext
-  ): ConfigurationInstance | Promise<ConfigurationInstance>;
+  ): void | ConfigurationUnmount | Promise<void | ConfigurationUnmount>;
 }

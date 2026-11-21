@@ -604,6 +604,38 @@ describe("PluginLoader", () => {
     expect(loadedByA).toBe(moduleB);
   });
 
+  it("keeps the running module for cross-plugin load after a retry request", async () => {
+    const imports = new Map<string, number>();
+    let runtimeA: PluginRuntime | undefined;
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
+        imports.set(id, (imports.get(id) ?? 0) + 1);
+        if (id === "a") {
+          return {
+            activate(runtime: PluginRuntime) {
+              runtimeA = runtime;
+            },
+          };
+        }
+        return { activate() {}, engine: "b" };
+      },
+    });
+
+    await loader.activateAll();
+
+    const first = await runtimeA!.plugins.load("b");
+    const recordB = loader.plugins.find((record) => record.plugin.metadata.id === "b")!;
+    expect(first).toBe(recordB.module);
+
+    loader.requestRetry("b");
+
+    expect(await runtimeA!.plugins.load("b")).toBe(first);
+    expect(imports.get("b")).toBe(1);
+  });
+
   it("clears the exports cache before waiting for deactivation", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {

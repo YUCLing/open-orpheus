@@ -5,7 +5,7 @@ import {
   type PluginRealmActivationOutcome,
 } from "@shared/contracts/plugin-configuration";
 import { cacheBustUrl } from "@shared/plugin/cache-bust";
-import type { ConfigurationInstance, ConfigurationModule } from "@shared/plugin/configuration";
+import type { ConfigurationModule, ConfigurationUnmount } from "@shared/plugin/configuration";
 import { toError } from "@shared/util";
 
 export interface PluginConfigurationRequest {
@@ -32,7 +32,8 @@ interface CachedModule {
 interface MountedConfiguration {
   epoch: number;
   generation: number;
-  instance: ConfigurationInstance;
+  /** Cleanup returned by `mount()`, when the plugin provided one. */
+  unmount?: ConfigurationUnmount;
   controller: AbortController;
 }
 
@@ -47,6 +48,11 @@ interface ConfigurationRecord {
   attempt: number;
   module?: CachedModule;
   mounted?: MountedConfiguration;
+  /**
+   * Controller for a `mount()` that is still awaiting, so close/dispose can
+   * abort it immediately instead of waiting for the serialized queue.
+   */
+  pendingController?: AbortController;
   queue: Promise<unknown>;
 }
 
@@ -95,6 +101,8 @@ export class PluginConfigurationLoader extends EventTarget {
     }
     record.revision = request.revision;
 
+    // A new mount request supersedes a previous one that is still awaiting.
+    record.pendingController?.abort();
     const epoch = record.epoch;
     const generation = ++record.mountGeneration;
     await this.enqueue(record, () => this.openNow(record, request, epoch, generation));
@@ -103,6 +111,7 @@ export class PluginConfigurationLoader extends EventTarget {
   /** Unmount the current configuration view, keeping the module cached. */
   async close(pluginId: string): Promise<void> {
     const record = this.record(pluginId);
+    record.pendingController?.abort();
     record.mountGeneration++;
     await this.enqueue(record, async () => {
       const unmounted = await this.unmountMounted(record, record.revision, false);
@@ -126,10 +135,12 @@ export class PluginConfigurationLoader extends EventTarget {
     }
 
     // Invalidate synchronously so an import or mount already in flight cannot
-    // install itself after cleanup has been requested.
+    // install itself after cleanup has been requested. Abort an awaiting
+    // mount() now; otherwise it could block this cleanup indefinitely.
     record.epoch++;
     record.mountGeneration++;
     record.module = undefined;
+    record.pendingController?.abort();
 
     await this.enqueue(record, async () => {
       const unmounted = await this.unmountMounted(record, record.revision, true);
@@ -220,36 +231,50 @@ export class PluginConfigurationLoader extends EventTarget {
     }
 
     const controller = new AbortController();
+    // Store the controller before awaiting mount so close()/dispose() can
+    // abort it immediately rather than waiting behind the serialized queue.
+    record.pendingController = controller;
     this.setState(record, {
       kind: PluginConfigurationStateKind.Mounting,
       desiredRevision: request.revision,
       attempt: record.attempt,
     });
 
-    let instance: ConfigurationInstance;
+    let unmount: ConfigurationUnmount | undefined;
     try {
-      instance = validateInstance(
+      unmount = validateUnmount(
         await module.mount(request.root, {
           pluginId: request.pluginId,
-          assetsBaseUrl: assetsBaseUrl(request.entryUrl),
+          assetsBaseUrl: pluginAssetsBaseUrl(request.pluginId),
           signal: controller.signal,
         }),
         request.pluginId
       );
     } catch (error) {
+      if (record.pendingController === controller) record.pendingController = undefined;
       if (!this.isStale(record, epoch, generation)) {
         this.fail(record, PluginConfigurationFailureStage.Mount, error);
       }
       return;
     }
+    if (record.pendingController === controller) record.pendingController = undefined;
 
     if (this.isStale(record, epoch, generation)) {
       controller.abort();
-      await settleUnmount(instance);
+      // Retain cleanup that refuses to run, so the queued cleanup can retry it
+      // instead of reporting a clean shutdown it did not achieve.
+      if (unmount) {
+        try {
+          await unmount();
+        } catch (error) {
+          record.mounted = { epoch, generation, unmount, controller };
+          this.fail(record, PluginConfigurationFailureStage.Unmount, error);
+        }
+      }
       return;
     }
 
-    record.mounted = { epoch, generation, instance, controller };
+    record.mounted = { epoch, generation, unmount, controller };
     this.setState(record, {
       kind: PluginConfigurationStateKind.Mounted,
       desiredRevision: request.revision,
@@ -278,9 +303,9 @@ export class PluginConfigurationLoader extends EventTarget {
       attempt: record.attempt,
     });
     try {
-      await mounted.instance.unmount();
-      // Keep the instance on failure so a later retry can attempt cleanup
-      // again instead of claiming success with effects still mounted.
+      await mounted.unmount?.();
+      // Keep the cleanup on failure so a later retry can attempt it again
+      // instead of claiming success with effects still mounted.
       if (record.mounted === mounted) record.mounted = undefined;
       return true;
     } catch (error) {
@@ -356,30 +381,22 @@ function validateModule(imported: unknown, pluginId: string): ConfigurationModul
   return candidate as ConfigurationModule;
 }
 
-function validateInstance(instance: unknown, pluginId: string): ConfigurationInstance {
-  if (instance === null || typeof instance !== "object") {
-    throw new Error(`Plugin ${pluginId} configuration mount() did not return an instance`);
+function validateUnmount(result: unknown, pluginId: string): ConfigurationUnmount | undefined {
+  if (result === undefined) return undefined;
+  if (typeof result !== "function") {
+    throw new Error(
+      `Plugin ${pluginId} configuration mount() must return an unmount function or nothing`
+    );
   }
-  const candidate = instance as Partial<ConfigurationInstance>;
-  if (typeof candidate.unmount !== "function") {
-    throw new Error(`Plugin ${pluginId} configuration instance does not expose unmount()`);
-  }
-  return candidate as ConfigurationInstance;
+  return result as ConfigurationUnmount;
 }
 
-function assetsBaseUrl(entryUrl: string): string {
-  try {
-    return new URL(".", entryUrl).href;
-  } catch {
-    return entryUrl;
-  }
-}
-
-async function settleUnmount(instance: ConfigurationInstance): Promise<void> {
-  try {
-    await instance.unmount();
-  } catch {
-    // A stale mount result is best-effort cleanup; its failure must not
-    // overwrite the current epoch's state.
-  }
+/**
+ * Root of the plugin's `assets/` directory.
+ *
+ * The configuration entry lives somewhere beneath `assets/`, so its own
+ * directory is not the documented base (`assets://plugins/<id>/`).
+ */
+function pluginAssetsBaseUrl(pluginId: string): string {
+  return `assets://plugins/${encodeURIComponent(pluginId)}/`;
 }

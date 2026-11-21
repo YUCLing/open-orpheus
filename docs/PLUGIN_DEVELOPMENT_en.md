@@ -52,9 +52,9 @@ configuration panel.
    pnpm check
    ```
 
-3. Change `metadata.json` (`id`, `name`, and realm entries) and update the plugin
-   id used by the configuration panel in `src/plugin-manager/ui.ts` and
-   `src/plugin-manager/preload.ts`.
+3. Change `metadata.json` (`id`, `name`, realm entries, and `configuration`).
+   Also update any plugin id you hardcoded yourself, such as in IPC channel names
+   or `assets://` URLs.
 
 4. Copy `dist/` (or `dist.asar`) into the host's plugin directory and enable the
    plugin in **Manage Open Orpheus → Plugin Manager**.
@@ -246,8 +246,9 @@ Desired state (enabled/disabled) is persisted separately from runtime state.
   therefore scoped to one activation epoch: disabling and re-enabling the
   plugin re-evaluates the entry instead of reusing the previous module
   instance. Within one epoch, main activation and cross-plugin `load()` share a
-  single evaluation, so both observe the same exports. Main-realm retries also
-  start a new epoch.
+  single evaluation, so both observe the same exports. Retrying a failed
+  main-realm plugin also starts a new epoch; retrying a running one is a no-op
+  and keeps its module.
 - Preload and plugin-manager bundles are CommonJS evaluated by the host rather
   than imported by URL. The host already re-evaluates them after a full
   disable; a retry reuses the current evaluation.
@@ -289,7 +290,8 @@ an `.mjs` file:
 "configuration": "configuration/index.mjs"
 ```
 
-Export `mount(root, context)` and return an instance with `unmount()`:
+Export `mount(root, context)`. Return a cleanup function if the panel needs one,
+or nothing:
 
 ```ts
 import type { ConfigurationModule } from "@open-orpheus/plugin-api/configuration";
@@ -297,10 +299,8 @@ import type { ConfigurationModule } from "@open-orpheus/plugin-api/configuration
 export const mount: ConfigurationModule["mount"] = (root, context) => {
   root.textContent = "Settings";
 
-  return {
-    unmount() {
-      root.replaceChildren();
-    },
+  return () => {
+    root.replaceChildren();
   };
 };
 ```
@@ -313,14 +313,14 @@ Rules:
 - The host creates and owns the root element and decides when the panel mounts.
   There is no registration API and no plugin id to repeat.
 - The host appends a `?t=<timestamp>-<rand>` query to the module URL. Evaluation
-  follows the enable/disable cycle, and closing the panel only unmounts the
-  instance. Keep module top level declarative; put all behavior in `mount()`.
+  follows the enable/disable cycle, and closing the panel only runs the returned
+  cleanup. Keep module top level declarative; put all behavior in `mount()`.
 - Only that entry is cache-busted. Modules it imports are shared for the life of
   the window document, so helper-module state persists across panels and no
   top-level helper code reruns. Keep per-panel state in `mount()` and clean it up
-  in `unmount()`.
-- `mount()` may be async and `unmount()` may return a promise. The host awaits
-  cleanup and reports failures as configuration diagnostics.
+  in the returned callback.
+- `mount()` may be async, and the cleanup it returns may return a promise. The
+  host awaits cleanup and reports failures as configuration diagnostics.
 - The panel runs as browser ESM. It has no direct Node or Electron access. To
   expose host data, use the plugin-manager preload realm and
   `contextBridge`; the host activates that realm before mounting the panel when
@@ -414,12 +414,12 @@ after any host release; the generated types are the source of truth.
 
 ## Cheat sheet
 
-| Task                               | API                                                               |
-| ---------------------------------- | ----------------------------------------------------------------- |
-| Load a host module                 | `await runtime.registry.load("@main/...")`                        |
-| Get another plugin's exports       | `await runtime.plugins.load(id)`                                  |
-| Wait for another plugin's services | `await runtime.plugins.whenActive(id)`                            |
-| Register settings UI               | `window.pluginManager.register(id, { configuration: { mount } })` |
-| Remove settings UI                 | `window.pluginManager.unregister(id)`                             |
-| Reference an asset                 | `assets://plugins/<id>/<path>`                                    |
-| Disable the plugin system          | `OPEN_ORPHEUS_DISABLE_PLUGINS=1`                                  |
+| Task                               | API                                                             |
+| ---------------------------------- | --------------------------------------------------------------- |
+| Load a host module                 | `await runtime.registry.load("@main/...")`                      |
+| Get another plugin's exports       | `await runtime.plugins.load(id)`                                |
+| Wait for another plugin's services | `await runtime.plugins.whenActive(id)`                          |
+| Declare settings UI                | `"configuration": "configuration/index.mjs"` in `metadata.json` |
+| Implement settings UI              | export `mount(root, context)` from that module                  |
+| Reference an asset                 | `assets://plugins/<id>/<path>`                                  |
+| Disable the plugin system          | `OPEN_ORPHEUS_DISABLE_PLUGINS=1`                                |

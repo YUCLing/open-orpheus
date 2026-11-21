@@ -101,24 +101,32 @@ out.
 
 ## Configuration UI
 
-A plugin-manager realm plugin registers its configuration panel with the host
-object injected into the window:
+Declare the panel in `metadata.json`, relative to the plugin's `assets/`
+directory and as an `.mjs` file:
 
-```ts
-pluginManager.register("my-plugin-id", {
-  configuration: {
-    mount: (element) => {
-      /* ... */ return unmount;
-    },
-  },
-});
+```json
+"configuration": "configuration/index.mjs"
 ```
 
-`register` throws if the id is already registered. Unregister in `deactivate`:
+That module is browser ESM the host imports and owns. Export `mount()` and return
+a cleanup function, or nothing:
 
 ```ts
-pluginManager.unregister("my-plugin-id");
+import type { ConfigurationModule } from "@open-orpheus/plugin-api/configuration";
+
+export const mount: ConfigurationModule["mount"] = (root, context) => {
+  root.textContent = "Settings";
+  return () => {
+    root.replaceChildren();
+  };
+};
 ```
+
+There is no registration API. `context` provides `pluginId`, `assetsBaseUrl`
+(the plugin's `assets/` root), and an `AbortSignal`. The host awaits the returned
+cleanup and reports failures per plugin. If you need host data, expose it from the
+plugin-manager preload realm through `contextBridge`; the host activates that
+realm before mounting the panel.
 
 ## Versioning
 

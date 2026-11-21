@@ -44,8 +44,8 @@
    pnpm check
    ```
 
-3. 修改 `metadata.json`（`id`、`name` 与 realm 入口），并同步修改配置面板使用的
-   插件 id：`src/plugin-manager/ui.ts` 与 `src/plugin-manager/preload.ts`。
+3. 修改 `metadata.json`（`id`、`name`、realm 入口与 `configuration`），并同步你自己
+   硬编码的 id，例如 IPC 频道名或 `assets://` URL。
 
 4. 将 `dist/`（或 `dist.asar`）复制到宿主插件目录，并在
    「管理 Open Orpheus → 插件管理」中启用。
@@ -221,7 +221,8 @@ const ready = await runtime.plugins.whenActive("com.example.other");
 - main realm 入口与渲染进程配置模块通过缓存破除参数 `?t=<时间戳>-<随机数>`
   导入。其求值作用域因此限定在一次激活纪元内：禁用后重新启用会重新求值入口，
   而不是复用上一个模块实例。同一纪元内，main 激活与跨插件 `load()` 共享同一次
-  求值，因此观察到相同的导出；main realm 的重试也会开启新纪元。
+  求值，因此观察到相同的导出；重试失败的 main realm 插件会开启新纪元，重试正在运行的
+  插件则是空操作并保留其模块。
 - preload 与 plugin-manager 包是由宿主直接求值的 CommonJS，而不是通过 URL 导入。
   宿主本来就会在完整禁用后重新求值；重试则复用当前求值。
 - 由于求值跟随启用/禁用周期，入口的顶层代码会在每次启用时再次执行。请只把声明放在
@@ -251,7 +252,7 @@ const ready = await runtime.plugins.whenActive("com.example.other");
 "configuration": "configuration/index.mjs"
 ```
 
-导出 `mount(root, context)`，并返回带 `unmount()` 的实例：
+导出 `mount(root, context)`。需要清理时返回一个清理函数，否则可以不返回：
 
 ```ts
 import type { ConfigurationModule } from "@open-orpheus/plugin-api/configuration";
@@ -259,10 +260,8 @@ import type { ConfigurationModule } from "@open-orpheus/plugin-api/configuration
 export const mount: ConfigurationModule["mount"] = (root, context) => {
   root.textContent = "设置";
 
-  return {
-    unmount() {
-      root.replaceChildren();
-    },
+  return () => {
+    root.replaceChildren();
   };
 };
 ```
@@ -275,12 +274,12 @@ export const mount: ConfigurationModule["mount"] = (root, context) => {
 - 根元素由宿主创建与持有，面板的挂载时机也由宿主决定。没有注册 API，也无需重复
   插件 id。
 - 宿主会在模块 URL 后追加 `?t=<时间戳>-<随机数>`。求值跟随启用/禁用周期；关闭面板
-  只会卸载实例。模块顶层保持声明式，把行为放进 `mount()`。
+  只会执行返回的清理函数。模块顶层保持声明式，把行为放进 `mount()`。
 - 只有该入口会被缓存破除。它导入的模块在窗口文档的整个生命周期内共享，因此 helper
   模块的状态会跨面板保留，helper 的顶层代码也不会再次执行。请把每次面板的状态放在
-  `mount()` 中，并在 `unmount()` 中清理。
-- `mount()` 可以是异步的，`unmount()` 也可以返回 Promise。宿主会等待清理完成，并把
-  失败显示为配置诊断信息。
+  `mount()` 中，并在返回的清理函数中清理。
+- `mount()` 可以是异步的，返回的清理函数也可以返回 Promise。宿主会等待清理完成，并
+  把失败显示为配置诊断信息。
 - 面板以浏览器 ESM 运行，无法直接访问 Node 或 Electron。需要暴露宿主数据时，使用
   plugin-manager preload realm 与 `contextBridge`；插件同时声明该 realm 时，宿主会先
   激活它再挂载面板。
@@ -367,12 +366,12 @@ Open Orpheus 发布版本一致。插件接口有意暴露较多宿主内部能�
 
 ## 速查表
 
-| 任务                 | API                                                               |
-| -------------------- | ----------------------------------------------------------------- |
-| 加载宿主模块         | `await runtime.registry.load("@main/...")`                        |
-| 获取其他插件导出     | `await runtime.plugins.load(id)`                                  |
-| 等待其他插件服务就绪 | `await runtime.plugins.whenActive(id)`                            |
-| 注册设置界面         | `window.pluginManager.register(id, { configuration: { mount } })` |
-| 移除设置界面         | `window.pluginManager.unregister(id)`                             |
-| 引用资源             | `assets://plugins/<id>/<path>`                                    |
-| 禁用插件系统         | `OPEN_ORPHEUS_DISABLE_PLUGINS=1`                                  |
+| 任务                 | API                                                             |
+| -------------------- | --------------------------------------------------------------- |
+| 加载宿主模块         | `await runtime.registry.load("@main/...")`                      |
+| 获取其他插件导出     | `await runtime.plugins.load(id)`                                |
+| 等待其他插件服务就绪 | `await runtime.plugins.whenActive(id)`                          |
+| 声明设置界面         | `metadata.json` 中 `"configuration": "configuration/index.mjs"` |
+| 实现设置界面         | 从该模块导出 `mount(root, context)`                             |
+| 引用资源             | `assets://plugins/<id>/<path>`                                  |
+| 禁用插件系统         | `OPEN_ORPHEUS_DISABLE_PLUGINS=1`                                |

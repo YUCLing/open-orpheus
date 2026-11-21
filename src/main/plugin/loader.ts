@@ -192,16 +192,17 @@ export class PluginLoader {
   async retry(id: string): Promise<void> {
     const record = this.require(id);
     this.pluginRegistry.forget(id);
-    this.moduleCache.delete(id);
+    this.invalidateModuleForRetry(record);
     record.lifecycle.retry();
     await this.waitForDecision(record);
   }
 
   /** Start a retry without waiting for convergence. */
   requestRetry(id: string): void {
+    const record = this.require(id);
     this.pluginRegistry.forget(id);
-    this.moduleCache.delete(id);
-    this.require(id).lifecycle.retry();
+    this.invalidateModuleForRetry(record);
+    record.lifecycle.retry();
   }
 
   async deactivateAll(): Promise<PluginDisposeResult[]> {
@@ -245,9 +246,28 @@ export class PluginLoader {
     return record;
   }
 
+  /**
+   * Drop the cached evaluation only when it is safe to re-evaluate.
+   *
+   * A retry on a running plugin is a no-op in the lifecycle. Clearing its
+   * cache would make cross-plugin `load()` evaluate a second instance while
+   * `whenActive()` keeps returning the active one, splitting shared services.
+   */
+  private invalidateModuleForRetry(record: PluginRecord): void {
+    if (record.lifecycle.snapshot.state.kind === LifecycleStateKind.Running) return;
+    this.moduleCache.delete(record.plugin.metadata.id);
+  }
+
   private loadModule(id: string): Promise<PluginModule> {
     const record = this.require(id);
     if (!this.isEnabled(id)) return Promise.reject(new Error(`Plugin "${id}" is not enabled`));
+
+    // The running module is authoritative. `whenActive()` returns this same
+    // object, so cross-plugin `load()` must not hand out a second evaluation.
+    const snapshot = record.lifecycle.snapshot;
+    if (snapshot.state.kind === LifecycleStateKind.Running && snapshot.module) {
+      return Promise.resolve(snapshot.module);
+    }
 
     // Lifecycle activation and cross-plugin `load()` share this evaluation.
     // Imports are cache-busted, so without sharing they would produce two
