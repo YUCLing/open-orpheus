@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "build:modules": "node scripts/build-modules.ts",
+    "build:plugin-api": "pnpm --filter @open-orpheus/plugin-api build",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
@@ -26,7 +27,9 @@
     "format:check": "oxfmt --check",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:plugins": "node scripts/build-plugins.ts",
+    "check:plugins": "pnpm -r --if-present --filter \"./packages/plugin-*\" check"
   },
   "keywords": [],
   "author": {
@@ -86,7 +89,8 @@
     "typescript": "catalog:",
     "unzipper": "^0.12.5",
     "vite": "^8.3.5",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "zod": "^4.6.7"
   },
   "dependencies": {
     "7z-wasm": "^1.2.0",

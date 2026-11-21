@@ -85,13 +85,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Update version in package.json
+      - name: Update versions
         if: ${{ !inputs.skip_commit }}
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json
-          mv tmp.json package.json
+          for manifest in package.json packages/plugin-api/package.json; do
+            jq --arg v "$VERSION" '.version = $v' "$manifest" > tmp.json
+            mv tmp.json "$manifest"
+          done
+
+      # Fails if the plugin API version, keyv pin, or declared type deps drift
+      # from the host. Also runs for skip_commit, validating the committed state.
+      - name: Validate plugin API package
+        run: pnpm build:plugin-api
 
       - name: Clean up existing release if any
         env:
@@ -153,7 +160,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          git add package.json packaging/flatpak/metainfo.xml packaging/resources/debian/changelog packaging/resources/rpm.changelog
+          git add package.json packages/plugin-api/package.json packaging/flatpak/metainfo.xml packaging/resources/debian/changelog packaging/resources/rpm.changelog
           git commit -m "chore: bump version to ${VERSION}" -m "[skip ci]"
           git push origin main
 
@@ -260,9 +267,66 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run flathub.yml --ref main
 
+  publish-sdk:
+    name: Stage plugin API on npm
+    needs: [prepare, build, publish]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      # Trusted publishing: npm exchanges this short-lived GitHub OIDC token
+      # for a stage credential. There is no NPM_TOKEN.
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.commit-sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build plugin API
+        run: pnpm build:plugin-api
+
+      - name: Stage on npm
+        run: |
+          VERSION="$(node -p "require('./packages/plugin-api/package.json').version")"
+          if pnpm view "@open-orpheus/plugin-api@$VERSION" version >/dev/null 2>&1; then
+            echo "@open-orpheus/plugin-api@$VERSION is already published; skipping"
+            exit 0
+          fi
+
+          cd packages/plugin-api
+          pnpm stage publish --provenance --access public --ignore-scripts --no-git-checks
+
+          {
+            echo "### Plugin API staged for approval"
+            echo ""
+            echo "\`@open-orpheus/plugin-api@$VERSION\` is in npm's staged queue and is not installable yet."
+            echo "Approve it with 2FA from npmjs.com → the package → Staged versions, or locally:"
+            echo ""
+            echo '```sh'
+            echo "pnpm stage list"
+            echo "pnpm stage approve <stage-id>"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   cleanup:
     name: Clean up draft release on failure
-    needs: [prepare, build, publish]
+    needs: [prepare, build, publish, publish-sdk]
     if: failure() || cancelled()
     runs-on: ubuntu-latest
     environment:

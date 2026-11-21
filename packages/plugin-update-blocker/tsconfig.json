@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@open-orpheus/plugin-api": ["../plugin-api/dist/index.d.ts"]
+    }
+  },
+  "include": ["src"]
+}

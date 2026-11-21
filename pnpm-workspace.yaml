@@ -2,6 +2,7 @@ packages:
   - "."
   - "gui/"
   - "modules/*"
+  - "packages/*"
 catalog:
   "@electron/fuses": ^2.1.3
   keyv: 6.1.0

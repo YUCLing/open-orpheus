@@ -5,6 +5,8 @@ import PinoWorkerPlugin from "./plugins/PinoWorkerPlugin.js";
 import NoS3Plugin from "./plugins/NoS3Plugin.js";
 import LoggerPlugin from "./plugins/LoggerPlugin.js";
 import ForceESPlugin from "./plugins/ForceESPlugin.js";
+import RegistryPlugin from "./plugins/RegistryPlugin.js";
+import BuiltinPluginsPlugin from "./plugins/BuiltinPluginsPlugin.js";
 
 // https://vitejs.dev/config
 export default defineConfig({
@@ -41,5 +43,12 @@ export default defineConfig({
   },
   // unzipper has a dependency on @aws-sdk/client-s3, which is not needed in
   // our context and causes build issues. This plugin mocks it out.
-  plugins: [NoS3Plugin(), ForceESPlugin(), LoggerPlugin(), PinoWorkerPlugin()],
+  plugins: [
+    BuiltinPluginsPlugin(),
+    NoS3Plugin(),
+    ForceESPlugin(),
+    LoggerPlugin(),
+    PinoWorkerPlugin(),
+    RegistryPlugin({ realm: "main" }),
+  ],
 });
