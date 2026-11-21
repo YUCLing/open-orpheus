@@ -1,10 +1,11 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 import RegistryPlugin from "./plugins/RegistryPlugin.js";
+import RealmRuntimePlugin from "./plugins/RealmRuntimePlugin.js";
 import { createAliases } from "./scripts/tsconfigAliases.js";
 
 export default defineConfig({
-  plugins: [RegistryPlugin({ realm: "main" }), RegistryPlugin({ realm: "preload" })],
+  plugins: [RegistryPlugin(), RealmRuntimePlugin()],
   resolve: {
     alias: createAliases(),
   },

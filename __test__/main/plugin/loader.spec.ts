@@ -5,7 +5,7 @@ import type { Registry } from "@shared/plugin/registry";
 
 import type { DiscoveredPlugin } from "../../../src/main/plugin/discover";
 import { PluginLoader, PluginStatus } from "../../../src/main/plugin/loader";
-import type { PluginModule, PluginRuntime } from "../../../src/main/plugin/types";
+import type { PluginModule, PluginRuntime } from "@shared/plugin/realms/main/index";
 import { installLoggerStub } from "../../helpers/globals";
 
 const logger = installLoggerStub();

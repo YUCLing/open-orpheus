@@ -2,9 +2,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 import rootPackage from "../package.json" with { type: "json" };
+import RealmRuntimePlugin from "../plugins/RealmRuntimePlugin.js";
 
 export default defineConfig({
-  plugins: [tailwindcss(), sveltekit()],
+  plugins: [tailwindcss(), sveltekit(), RealmRuntimePlugin()],
   define: {
     __APP_VERSION__: JSON.stringify(rootPackage.version),
   },

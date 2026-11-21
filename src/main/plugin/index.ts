@@ -3,6 +3,7 @@ import path from "node:path";
 import { app, ipcMain, webContents } from "electron";
 
 import { PluginKind, PluginPreloadStatus } from "@shared/contracts/plugin-manager-api";
+import { LOADED_REALM_IDS } from "virtual:open-orpheus/realm-runtime";
 import { toError } from "@shared/util";
 import { load } from "virtual:open-orpheus/registry";
 
@@ -96,22 +97,27 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
     },
     onChanged: notifyPluginManager,
   });
-  pluginManager = new PluginManager(loader, state, (id, enabled) => {
+  pluginManager = new PluginManager(loader, state, (id, realm, enabled) => {
     for (const contents of webContents.getAllWebContents()) {
-      contents.send("plugins.preloadChanged", { id, enabled });
+      contents.send("plugins.realmChanged", { realm, id, enabled });
     }
   });
 
-  const watchedPreloadSenders = new Set<number>();
+  const watchedRealmSenders = new Set<number>();
 
-  ipcMain.on("plugins.preloadStatus", (event, payload: unknown) => {
+  const isLoadedRealmId = (value: unknown): value is string =>
+    typeof value === "string" && LOADED_REALM_IDS.includes(value);
+
+  ipcMain.on("plugins.realmStatus", (event, payload: unknown) => {
     if (payload === null || typeof payload !== "object") return;
-    const { id, status, error } = payload as {
+    const { realm, id, status, error } = payload as {
+      realm?: unknown;
       id?: unknown;
       status?: unknown;
       error?: unknown;
     };
     if (
+      !isLoadedRealmId(realm) ||
       typeof id !== "string" ||
       !Object.values(PluginPreloadStatus).includes(status as PluginPreloadStatus)
     ) {
@@ -119,48 +125,58 @@ export async function installPluginSystem(): Promise<PluginLoader | null> {
     }
 
     const senderId = event.sender.id;
-    pluginManager?.setPreloadStatus(
+    pluginManager?.setRealmStatus(
       senderId,
+      realm,
       id,
       status as PluginPreloadStatus,
       typeof error === "string" ? error : undefined
     );
-    if (!watchedPreloadSenders.has(senderId)) {
-      watchedPreloadSenders.add(senderId);
+    if (!watchedRealmSenders.has(senderId)) {
+      watchedRealmSenders.add(senderId);
       event.sender.once("destroyed", () => {
-        watchedPreloadSenders.delete(senderId);
-        pluginManager?.clearPreloadStatus(senderId);
+        watchedRealmSenders.delete(senderId);
+        pluginManager?.clearRealmStatus(senderId);
         notifyPluginManager();
       });
     }
     notifyPluginManager();
   });
 
-  // Preload plugins are evaluated by the preload itself; only their discovered
-  // sources cross IPC, keyed by plugin id.
-  const preloadSources = new Map<string, string>();
-  for (const { plugin } of loader.plugins) {
-    const preload = plugin.metadata.realms.preload;
-    if (!preload) continue;
-    try {
-      preloadSources.set(
-        plugin.metadata.id,
-        (await plugin.tree.readFile(preload)).toString("utf8")
-      );
-    } catch (error) {
-      LOGGER.error(
-        { pluginId: plugin.metadata.id, err: toError(error) },
-        "Failed to read preload plugin source"
-      );
+  // Plugins are evaluated by each preload itself; only their discovered
+  // sources cross IPC, keyed by realm and plugin id.
+  const realmSources = new Map<string, Map<string, string>>();
+  for (const realm of LOADED_REALM_IDS) {
+    const sourcesForRealm = new Map<string, string>();
+    for (const { plugin } of loader.plugins) {
+      const entry = plugin.metadata.realms[realm];
+      if (!entry) continue;
+      try {
+        sourcesForRealm.set(
+          plugin.metadata.id,
+          (await plugin.tree.readFile(entry)).toString("utf8")
+        );
+      } catch (error) {
+        LOGGER.error(
+          { pluginId: plugin.metadata.id, realm, err: toError(error) },
+          "Failed to read plugin realm source"
+        );
+      }
     }
+    realmSources.set(realm, sourcesForRealm);
   }
 
-  ipcMain.handle("plugins.preload", () =>
-    [...preloadSources.keys()].filter((id) => pluginManager?.isEnabled(id) ?? false)
-  );
-  ipcMain.handle("plugins.preloadSource", (_event, id: unknown) => {
-    if (typeof id !== "string" || !pluginManager?.isEnabled(id)) return null;
-    return preloadSources.get(id) ?? null;
+  ipcMain.handle("plugins.realm", (_event, realm: unknown) => {
+    if (!isLoadedRealmId(realm)) return [];
+    return [...(realmSources.get(realm)?.keys() ?? [])].filter(
+      (id) => pluginManager?.isEnabled(id) ?? false
+    );
+  });
+  ipcMain.handle("plugins.realmSource", (_event, realm: unknown, id: unknown) => {
+    if (!isLoadedRealmId(realm) || typeof id !== "string" || !pluginManager?.isEnabled(id)) {
+      return null;
+    }
+    return realmSources.get(realm)?.get(id) ?? null;
   });
 
   registerShutdownTask({

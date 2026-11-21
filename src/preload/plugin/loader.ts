@@ -7,7 +7,7 @@ import {
 } from "@shared/plugin/registry";
 import { toError } from "@shared/util";
 
-import type { PreloadPluginModule, PreloadPluginRuntime } from "./types";
+import type { PluginModule, PluginRuntime } from "@shared/plugin/realms/preload/index";
 
 /** Only Electron is available to an evaluated preload bundle. */
 export type PreloadRequire = (id: string) => unknown;
@@ -56,9 +56,9 @@ export interface PreloadPluginLoaderOptions {
 
 export interface PreloadPluginRecord {
   id: string;
-  lifecycle: RealmLifecycle<PreloadPluginModule>;
+  lifecycle: RealmLifecycle<PluginModule>;
   readonly status: "pending" | "active" | "failed";
-  readonly module: PreloadPluginModule | undefined;
+  readonly module: PluginModule | undefined;
   readonly error: unknown;
 }
 
@@ -72,7 +72,7 @@ export interface PreloadPluginRecord {
  */
 export class PreloadPluginLoader {
   private readonly records: PreloadPluginRecord[] = [];
-  private readonly runtime: PreloadPluginRuntime;
+  private readonly runtime: PluginRuntime;
   private readonly pluginRegistry: MutablePluginRegistry;
   private readonly evaluate: (source: string, id: string) => unknown;
   private readonly loaders = new Map<string, () => Promise<unknown>>();
@@ -195,7 +195,7 @@ export class PreloadPluginLoader {
     if (this.loaders.has(id)) return;
 
     let lastStatus: PluginPreloadStatus | undefined;
-    const lifecycle = new RealmLifecycle<PreloadPluginModule>({
+    const lifecycle = new RealmLifecycle<PluginModule>({
       timeoutMs: this.activationTimeoutMs,
       adapter: {
         load: () => this.loadSourceModule(id),
@@ -257,12 +257,12 @@ export class PreloadPluginLoader {
     });
   }
 
-  private async loadSourceModule(id: string): Promise<PreloadPluginModule> {
+  private async loadSourceModule(id: string): Promise<PluginModule> {
     const provider = this.sourceProviders.get(id);
     if (!provider) throw new Error(`Plugin "${id}" has no source`);
     const source = await provider();
     if (source === null) throw new Error(`Plugin "${id}" source is unavailable`);
-    return toPreloadPluginModule(this.evaluate(source, id), id);
+    return toPluginModule(this.evaluate(source, id), id);
   }
 
   private waitForDecision(record: PreloadPluginRecord): Promise<void> {
@@ -279,7 +279,7 @@ export class PreloadPluginLoader {
 }
 
 function reportableStatus(
-  snapshot: LifecycleSnapshot<PreloadPluginModule>
+  snapshot: LifecycleSnapshot<PluginModule>
 ): PluginPreloadStatus | undefined {
   if (snapshot.phase === LifecyclePhase.Active) return PluginPreloadStatus.Active;
   if (
@@ -294,9 +294,7 @@ function reportableStatus(
   return undefined;
 }
 
-function toPreloadStatus(
-  lifecycle: RealmLifecycle<PreloadPluginModule>
-): "pending" | "active" | "failed" {
+function toPreloadStatus(lifecycle: RealmLifecycle<PluginModule>): "pending" | "active" | "failed" {
   const snapshot = lifecycle.snapshot;
   if (snapshot.phase === LifecyclePhase.Active) return "active";
   if (
@@ -308,16 +306,16 @@ function toPreloadStatus(
   return "pending";
 }
 
-function toPreloadPluginModule(imported: unknown, id: string): PreloadPluginModule {
+function toPluginModule(imported: unknown, id: string): PluginModule {
   if (imported === null || typeof imported !== "object") {
     throw new Error(`Plugin ${id} did not export a preload module object`);
   }
-  const candidate = imported as Partial<PreloadPluginModule>;
+  const candidate = imported as Partial<PluginModule>;
   if (typeof candidate.activate !== "function") {
     throw new Error(`Plugin ${id} does not export an activate() function in its preload realm`);
   }
   if (candidate.deactivate !== undefined && typeof candidate.deactivate !== "function") {
     throw new Error(`Plugin ${id} exports a non-function deactivate in its preload realm`);
   }
-  return candidate as PreloadPluginModule;
+  return candidate as PluginModule;
 }

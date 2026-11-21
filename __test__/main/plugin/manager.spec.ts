@@ -168,39 +168,76 @@ describe("PluginManager", () => {
     expect(state.isEnabled("user", PluginKind.User)).toBe(false);
   });
 
-  it("notifies when a preload plugin is toggled", async () => {
+  it("notifies each declared secondary realm when toggled", async () => {
     const state = createState();
     const plugin = discovered("pre", PluginKind.User);
     plugin.metadata.realms.preload = "preload/index.cjs";
-    const changes: Array<[string, boolean]> = [];
+    plugin.metadata.realms["plugin-manager"] = "plugin-manager/index.cjs";
+    const changes: Array<[string, string, boolean]> = [];
     const loader = createLoader(state, [plugin]);
-    const manager = new PluginManager(loader, state, (id, enabled) => {
-      changes.push([id, enabled]);
+    const manager = new PluginManager(loader, state, (id, realm, enabled) => {
+      changes.push([id, realm, enabled]);
     });
 
     await manager.setEnabled("pre", true);
     await manager.setEnabled("pre", false);
 
     expect(changes).toEqual([
-      ["pre", true],
-      ["pre", false],
+      ["pre", "preload", true],
+      ["pre", "plugin-manager", true],
+      ["pre", "preload", false],
+      ["pre", "plugin-manager", false],
     ]);
   });
 
-  it("reports a partial status when the preload realm fails", async () => {
+  it("reports a partial status when a secondary realm fails", async () => {
     const state = createState();
     const plugin = discovered("pre", PluginKind.User);
     plugin.metadata.realms.preload = "preload/index.cjs";
+    plugin.metadata.realms["plugin-manager"] = "plugin-manager/index.cjs";
     const loader = createLoader(state, [plugin]);
     const manager = new PluginManager(loader, state);
 
     await manager.setEnabled("pre", true);
-    manager.setPreloadStatus(1, "pre", PluginPreloadStatus.Failed, "preload boom");
+    manager.setRealmStatus(1, "preload", "pre", PluginPreloadStatus.Active);
+    manager.setRealmStatus(2, "plugin-manager", "pre", PluginPreloadStatus.Failed, "manager boom");
 
     expect(manager.list().plugins[0]).toMatchObject({
       status: PluginActivationStatus.Partial,
-      preloadStatus: PluginPreloadStatus.Failed,
-      preloadError: "preload boom",
+      realmStatus: {
+        preload: { status: PluginPreloadStatus.Active },
+        "plugin-manager": {
+          status: PluginPreloadStatus.Failed,
+          error: "manager boom",
+        },
+      },
     });
+  });
+
+  it("reports pending status for every declared secondary realm", async () => {
+    const state = createState();
+    const plugin = discovered("pre", PluginKind.User);
+    plugin.metadata.realms.preload = "preload/index.cjs";
+    plugin.metadata.realms["plugin-manager"] = "plugin-manager/index.cjs";
+    const loader = createLoader(state, [plugin]);
+    const manager = new PluginManager(loader, state);
+
+    await manager.setEnabled("pre", true);
+
+    expect(manager.list().plugins[0]?.realmStatus).toEqual({
+      preload: { status: PluginPreloadStatus.Pending },
+      "plugin-manager": { status: PluginPreloadStatus.Pending },
+    });
+  });
+
+  it("does not report secondary realm status for a disabled plugin", async () => {
+    const state = createState();
+    const plugin = discovered("pre", PluginKind.User);
+    plugin.metadata.realms.preload = "preload/index.cjs";
+    plugin.metadata.realms["plugin-manager"] = "plugin-manager/index.cjs";
+    const loader = createLoader(state, [plugin]);
+    const manager = new PluginManager(loader, state);
+
+    expect(manager.list().plugins[0]?.realmStatus).toBeUndefined();
   });
 });
