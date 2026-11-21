@@ -58,10 +58,32 @@ deadline the plugin is reported as hung; cleanup starts only after activation
 settles. A disable received during activation is applied immediately after that
 activation finishes.
 
-Re-enabling a main-realm plugin reactivates the same cached ESM module instance;
-top-level side effects are not guaranteed to run again. Preload and
-plugin-manager bundles are re-evaluated after a full disable. Editing plugin
-files requires restarting the realm or application.
+Main-realm entries (and renderer configuration modules) are imported with a
+cache-busting `?t=<timestamp>-<rand>` query, so each enable/disable cycle
+evaluates the entry afresh. Within one enable epoch, activation and cross-plugin
+`load()` share a single evaluation. Top-level code therefore runs again on every
+enable: keep it declarative and put setup in `activate()` and teardown in
+`deactivate()`.
+
+Only the entry is cache-busted. Modules the entry imports resolve without the
+query and keep their first evaluation for the life of the process (main realm) or
+window document (configuration UI). So:
+
+- Module-level state in an imported helper survives disable/enable. Keep
+  per-activation state in the entry or in `activate()`.
+- Never create listeners, timers, IPC handlers, or `contextBridge` APIs at the
+  top level of an imported module; that code does not run again, while the entry
+  that owns it does.
+- `deactivate()` must clean up explicitly; do not rely on imported modules being
+  reset.
+- Build output matters: shared chunks or separate lazy-import chunks are exactly
+  these uncached modules. Inlining each entry (no code splitting) makes all of
+  its code re-evaluate, at the cost of bundle size; otherwise treat every emitted
+  chunk as a process-lifetime singleton.
+
+Preload and plugin-manager bundles are CommonJS evaluated by the host and are
+re-evaluated after a full disable, but not on retry. Editing plugin files
+requires restarting the realm or application.
 
 ## Cross-plugin exports
 

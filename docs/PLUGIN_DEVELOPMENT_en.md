@@ -241,85 +241,93 @@ Desired state (enabled/disabled) is persisted separately from runtime state.
   a retry action; enabling an already-enabled failed plugin is idempotent and
   does not retry.
 - Cleanup failures are shown as failed cleanup, not as a successful disable.
-- Re-enabling a main-realm plugin runs the hooks again on the same cached ESM
-  module instance. Preload/plugin-manager bundles are re-evaluated after a full
-  disable. Do not rely on top-level module side effects for per-activation setup;
-  put setup in `activate()` and teardown in `deactivate()`.
+- Main-realm entries and renderer configuration modules are imported through a
+  cache-busted URL of the form `?t=<timestamp>-<rand>`. Their evaluation is
+  therefore scoped to one activation epoch: disabling and re-enabling the
+  plugin re-evaluates the entry instead of reusing the previous module
+  instance. Within one epoch, main activation and cross-plugin `load()` share a
+  single evaluation, so both observe the same exports. Main-realm retries also
+  start a new epoch.
+- Preload and plugin-manager bundles are CommonJS evaluated by the host rather
+  than imported by URL. The host already re-evaluates them after a full
+  disable; a retry reuses the current evaluation.
+- Because evaluation follows the enable/disable cycle, the entry's top-level
+  code runs again on each enable. Keep it limited to declarations; put setup in
+  `activate()` and teardown in `deactivate()` so repeated evaluation stays
+  correct.
+- **Only the entry is cache-busted.** Every module the entry imports — static or
+  dynamic, including relative imports within `assets/` — resolves to a URL
+  without the query and therefore keeps its first evaluation for the lifetime of
+  the process (main realm) or window document (configuration UI). Re-enabling
+  re-runs the entry, but not the modules it pulls in.
+  - A module-level singleton defined in a helper module survives disable/enable.
+    Put per-activation state in the entry or in `activate()`, not in a shared
+    helper's module scope.
+  - Never register listeners, timers, IPC handlers, or `contextBridge` APIs at
+    the top level of an imported helper. That code runs once, and the handles
+    would survive a realm restart while the entry that owns them is evaluated
+    again.
+  - `deactivate()` must return the realm to a clean state explicitly; it cannot
+    rely on imported modules being reset.
+  - Whether this affects you depends on your build. A bundler that emits shared
+    chunks or separate lazy-import chunks creates exactly these uncached
+    modules. Inlining each entry (no code splitting) makes all of its code
+    re-evaluate, at the cost of bundle size; otherwise treat every emitted chunk
+    as a process-lifetime singleton.
 - Plugin files are captured when a realm instance starts. Editing a plugin
-  package requires restarting the plugin (disable/enable may re-read preload
-  bundles, but the main ESM module and an already-open window's source snapshot
-  are not hot-reloaded).
+  package requires restarting the plugin: an already-open window keeps its
+  source snapshot and its existing module evaluations. Disable/enable picks up
+  the new files for future epochs, including the main realm.
 
 ## Configuration UI
 
-`window.pluginManager` exists only in the plugin manager window's **main world**,
-not in the preload context where the plugin-manager realm runs. Inject a renderer
-script from `assets/` and register there.
+Configuration UI is a browser ESM entry the host imports and owns. Declare it at
+the top level of `metadata.json`; the path is relative to `assets/` and must be
+an `.mjs` file:
 
-`src/plugin-manager/preload.ts`:
+```json
+"configuration": "configuration/index.mjs"
+```
+
+Export `mount(root, context)` and return an instance with `unmount()`:
 
 ```ts
-import type { PluginModule } from "@open-orpheus/plugin-api/plugin-manager";
-import { contextBridge } from "electron";
+import type { ConfigurationModule } from "@open-orpheus/plugin-api/configuration";
 
-export const activate: PluginModule["activate"] = () => {
-  contextBridge.executeInMainWorld({
-    func: function () {
-      const script = document.createElement("script");
-      script.src = "assets://plugins/com.example.my-plugin/ui.cjs";
-      document.body.append(script);
-    },
-  });
-};
+export const mount: ConfigurationModule["mount"] = (root, context) => {
+  root.textContent = "Settings";
 
-export const deactivate: PluginModule["deactivate"] = () => {
-  contextBridge.executeInMainWorld({
-    func: function () {
-      (
-        window as unknown as {
-          pluginManager?: { unregister(id: string): void };
-        }
-      ).pluginManager?.unregister("com.example.my-plugin");
+  return {
+    unmount() {
+      root.replaceChildren();
     },
-  });
+  };
 };
 ```
 
-`src/plugin-manager/ui.ts` (built to `assets/ui.cjs`):
-
-```ts
-import type { API } from "@open-orpheus/plugin-api/plugin-manager";
-
-const manager = (window as unknown as { pluginManager: API }).pluginManager;
-const id = "com.example.my-plugin";
-
-// Safe to re-run when the script is injected again after a re-enable.
-manager.unregister(id);
-manager.register(id, {
-  configuration: {
-    mount(element) {
-      element.textContent = "Settings";
-      return () => {
-        // Optional cleanup when the panel unmounts.
-      };
-    },
-  },
-});
-```
+`context` provides `pluginId`, `assetsBaseUrl`, and a `signal` that aborts when
+the host closes or invalidates the panel.
 
 Rules:
 
-- `register` throws if that id is already registered. It never silently
-  overwrites another contribution.
-- `unregister` is idempotent. Call it from `deactivate()`.
-- The host does not unregister for you. A plugin that forgets this leaves a
-  stale panel and a visible lifecycle problem.
-- `mount` may return an unmount callback. It runs when the registration is
-  removed, the panel closes, or the component is replaced.
-- Throw from `mount`/unmount only for genuine errors; the plugin manager shows
-  them as plugin-manager realm diagnostics.
-- Use the same plugin id as `metadata.json`; a mismatch is a bug even though the
-  API cannot enforce it.
+- The host creates and owns the root element and decides when the panel mounts.
+  There is no registration API and no plugin id to repeat.
+- The host appends a `?t=<timestamp>-<rand>` query to the module URL. Evaluation
+  follows the enable/disable cycle, and closing the panel only unmounts the
+  instance. Keep module top level declarative; put all behavior in `mount()`.
+- Only that entry is cache-busted. Modules it imports are shared for the life of
+  the window document, so helper-module state persists across panels and no
+  top-level helper code reruns. Keep per-panel state in `mount()` and clean it up
+  in `unmount()`.
+- `mount()` may be async and `unmount()` may return a promise. The host awaits
+  cleanup and reports failures as configuration diagnostics.
+- The panel runs as browser ESM. It has no direct Node or Electron access. To
+  expose host data, use the plugin-manager preload realm and
+  `contextBridge`; the host activates that realm before mounting the panel when
+  the plugin declares it.
+- Throw only for genuine errors; failures are reported per plugin and do not
+  disable the plugin's other realms.
+- A plugin may declare `configuration`, a `plugin-manager` realm, or both.
 
 ## Assets
 

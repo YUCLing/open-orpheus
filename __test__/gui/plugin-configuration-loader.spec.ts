@@ -45,7 +45,7 @@ describe("PluginConfigurationLoader", () => {
     expect(loader.snapshot().p.kind).toBe(PluginConfigurationStateKind.Mounted);
     expect(mount).toHaveBeenCalledTimes(1);
     expect(importModule).toHaveBeenCalledWith(
-      expect.stringContaining("assets://plugins/p/configuration/index.mjs?openOrpheusEpoch=")
+      expect.stringMatching(/^assets:\/\/plugins\/p\/configuration\/index\.mjs\?t=\d+-[a-z0-9]+$/)
     );
 
     await loader.close("p");

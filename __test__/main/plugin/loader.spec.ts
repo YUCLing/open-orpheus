@@ -40,16 +40,18 @@ describe("PluginLoader", () => {
     const loader = new PluginLoader({
       registry,
       plugins: [discovered("a"), discovered("b")],
-      importModule: async (entryPath) => ({
+      importModule: async (entryUrl) => ({
         activate(runtime: { registry: Registry }) {
-          calls.push(`${entryPath}:${String(runtime.registry === registry)}`);
+          calls.push(`${entryUrl}:${String(runtime.registry === registry)}`);
         },
       }),
     });
 
     await loader.activateAll();
 
-    expect(calls).toEqual(["/plugins/a/main/index.mjs:true", "/plugins/b/main/index.mjs:true"]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatch(/^file:\/\/\/plugins\/a\/main\/index\.mjs\?t=\d+-[a-z0-9]+:true$/);
+    expect(calls[1]).toMatch(/^file:\/\/\/plugins\/b\/main\/index\.mjs\?t=\d+-[a-z0-9]+:true$/);
     expect(loader.plugins.map((record) => record.status)).toEqual([
       PluginStatus.Active,
       PluginStatus.Active,
@@ -194,8 +196,8 @@ describe("PluginLoader", () => {
     const loader = new PluginLoader({
       registry: createRegistry(),
       plugins: [discovered("a"), discovered("b")],
-      importModule: async (entryPath) => {
-        const id = entryPath.split("/")[2];
+      importModule: async (entryUrl) => {
+        const id = new URL(entryUrl).pathname.split("/")[2];
         const module: PluginModule = {
           activate() {},
           deactivate() {
@@ -551,6 +553,55 @@ describe("PluginLoader", () => {
     );
 
     await expect(runtime?.plugins.whenActive("a")).rejects.toThrow();
+  });
+
+  it("evaluates once per activation epoch and re-evaluates after re-enable", async () => {
+    const urls: string[] = [];
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a")],
+      importModule: async (entryUrl) => {
+        urls.push(entryUrl);
+        return { activate() {} };
+      },
+    });
+
+    await loader.activate("a");
+    expect(urls).toHaveLength(1);
+
+    // Cross-plugin reads share the epoch's evaluation.
+    await loader.activate("a");
+    expect(urls).toHaveLength(1);
+
+    await loader.deactivate("a");
+    await loader.activate("a");
+
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).not.toBe(urls[1]);
+  });
+
+  it("shares one cache-busted evaluation between activation and cross-plugin load", async () => {
+    const urls: string[] = [];
+    let loadedByA: unknown;
+    const loader = new PluginLoader({
+      registry: createRegistry(),
+      plugins: [discovered("a"), discovered("b")],
+      importModule: async (entryUrl) => {
+        urls.push(entryUrl);
+        if (entryUrl.includes("/b/")) return { activate() {}, engine: "b" };
+        return {
+          async activate(runtime: PluginRuntime) {
+            loadedByA = await runtime.plugins.load("b");
+          },
+        };
+      },
+    });
+
+    await loader.activateAll();
+
+    const moduleB = loader.plugins.find((record) => record.plugin.metadata.id === "b")?.module;
+    expect(urls.filter((url) => url.includes("/b/"))).toHaveLength(1);
+    expect(loadedByA).toBe(moduleB);
   });
 
   it("clears the exports cache before waiting for deactivation", async () => {

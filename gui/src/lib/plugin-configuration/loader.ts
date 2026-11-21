@@ -4,6 +4,7 @@ import {
   type PluginConfigurationState,
   type PluginRealmActivationOutcome,
 } from "@shared/contracts/plugin-configuration";
+import { cacheBustUrl } from "@shared/plugin/cache-bust";
 import type { ConfigurationInstance, ConfigurationModule } from "@shared/plugin/configuration";
 import { toError } from "@shared/util";
 
@@ -195,7 +196,7 @@ export class PluginConfigurationLoader extends EventTarget {
 
       let imported: unknown;
       try {
-        imported = await this.importModule(this.importUrl(request.entryUrl, epoch, attempt));
+        imported = await this.importModule(this.importUrl(request.entryUrl));
       } catch (error) {
         if (!this.isStale(record, epoch, generation)) {
           this.fail(record, PluginConfigurationFailureStage.Import, error);
@@ -339,10 +340,8 @@ export class PluginConfigurationLoader extends EventTarget {
     return run;
   }
 
-  private importUrl(entryUrl: string, epoch: number, attempt: number): string {
-    const url = new URL(entryUrl);
-    url.searchParams.set("openOrpheusEpoch", `${epoch}-${attempt}`);
-    return url.toString();
+  private importUrl(entryUrl: string): string {
+    return cacheBustUrl(entryUrl);
   }
 }
 

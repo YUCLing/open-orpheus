@@ -218,77 +218,74 @@ const ready = await runtime.plugins.whenActive("com.example.other");
 - 激活失败**不会自动重试**。插件管理界面提供“重试”操作；对已经启用但失败的插件
   再次“启用”是幂等的，不会触发重试。
 - 清理失败会显示为清理失败，而不是成功禁用。
-- 重新启用 main realm 插件时，会在同一个已缓存的 ESM 模块实例上再次执行钩子；
-  preload/plugin-manager 包在完整禁用后会重新求值。不要依赖模块顶层副作用完成每次
-  激活的初始化，应把初始化放在 `activate()`，清理放在 `deactivate()`。
-- 插件文件在 realm 实例启动时确定。修改插件包后需要重启插件（禁用/启用可能重新读取
-  preload 包，但 main ESM 模块与已打开窗口的源码快照不会热更新）。
+- main realm 入口与渲染进程配置模块通过缓存破除参数 `?t=<时间戳>-<随机数>`
+  导入。其求值作用域因此限定在一次激活纪元内：禁用后重新启用会重新求值入口，
+  而不是复用上一个模块实例。同一纪元内，main 激活与跨插件 `load()` 共享同一次
+  求值，因此观察到相同的导出；main realm 的重试也会开启新纪元。
+- preload 与 plugin-manager 包是由宿主直接求值的 CommonJS，而不是通过 URL 导入。
+  宿主本来就会在完整禁用后重新求值；重试则复用当前求值。
+- 由于求值跟随启用/禁用周期，入口的顶层代码会在每次启用时再次执行。请只把声明放在
+  顶层，把初始化放在 `activate()`，清理放在 `deactivate()`。
+- **只有入口会被缓存破除。** 入口导入的所有模块——静态或动态、包括 `assets/` 内的
+  相对导入——解析出的 URL 都不带该参数，因此只会在首次求值一次，并在进程（main
+  realm）或窗口文档（配置界面）的整个生命周期内复用。重新启用只会重新执行入口，
+  不会重新求值它导入的模块。
+  - helper 模块里的模块级单例会在禁用/启用后继续存在。请把每次激活的状态放在入口或
+    `activate()` 中，不要放在共享 helper 的模块作用域里。
+  - 不要在导入的 helper 顶层注册监听器、定时器、IPC 处理器或 `contextBridge` API。
+    这类代码只执行一次，其句柄会在 realm 重启后继续存在，而持有它们的入口却会被重新
+    求值。
+  - `deactivate()` 必须显式把 realm 恢复到干净状态，不能依赖导入模块被重置。
+  - 是否受影响取决于构建方式。会产出共享 chunk 或独立懒加载 chunk 的打包器，正好会
+    创建这些不被破除缓存的模块。把每个入口内联（关闭代码分割）可以让入口的全部代码
+    一起重新求值，代价是包体积变大；否则请把每个产出的 chunk 都当作进程级单例。
+- 插件文件在 realm 实例启动时确定。修改插件包后需要重启插件：已打开的窗口会保留
+  源码快照与既有的模块求值。禁用/启用会让后续纪元读取新文件，包括 main realm。
 
 ## 配置界面
 
-`window.pluginManager` 只存在于插件管理窗口的**主世界**，不在 plugin-manager
-realm 运行的 preload 环境中。因此需要从 `assets/` 注入渲染脚本，在脚本中注册。
+配置界面是一个由宿主导入并管理的浏览器 ESM 入口。在 `metadata.json` 顶层声明；
+路径相对于 `assets/`，且必须是 `.mjs` 文件：
 
-`src/plugin-manager/preload.ts`：
+```json
+"configuration": "configuration/index.mjs"
+```
+
+导出 `mount(root, context)`，并返回带 `unmount()` 的实例：
 
 ```ts
-import type { PluginModule } from "@open-orpheus/plugin-api/plugin-manager";
-import { contextBridge } from "electron";
+import type { ConfigurationModule } from "@open-orpheus/plugin-api/configuration";
 
-export const activate: PluginModule["activate"] = () => {
-  contextBridge.executeInMainWorld({
-    func: function () {
-      const script = document.createElement("script");
-      script.src = "assets://plugins/com.example.my-plugin/ui.cjs";
-      document.body.append(script);
-    },
-  });
-};
+export const mount: ConfigurationModule["mount"] = (root, context) => {
+  root.textContent = "设置";
 
-export const deactivate: PluginModule["deactivate"] = () => {
-  contextBridge.executeInMainWorld({
-    func: function () {
-      (
-        window as unknown as {
-          pluginManager?: { unregister(id: string): void };
-        }
-      ).pluginManager?.unregister("com.example.my-plugin");
+  return {
+    unmount() {
+      root.replaceChildren();
     },
-  });
+  };
 };
 ```
 
-`src/plugin-manager/ui.ts`（构建到 `assets/ui.cjs`）：
-
-```ts
-import type { API } from "@open-orpheus/plugin-api/plugin-manager";
-
-const manager = (window as unknown as { pluginManager: API }).pluginManager;
-const id = "com.example.my-plugin";
-
-// 重新启用后脚本可能再次注入，先注销是幂等的。
-manager.unregister(id);
-manager.register(id, {
-  configuration: {
-    mount(element) {
-      element.textContent = "设置";
-      return () => {
-        // 面板卸载时的可选清理。
-      };
-    },
-  },
-});
-```
+`context` 提供 `pluginId`、`assetsBaseUrl`，以及宿主关闭或作废面板时触发的
+`signal`。
 
 规则：
 
-- `register` 在 id 已注册时会抛错，不会静默覆盖其他插件的贡献。
-- `unregister` 是幂等的，应在 `deactivate()` 中调用。
-- 宿主不会代为注销。忘记注销会留下失效面板，并表现为可见的生命周期问题。
-- `mount` 可以返回卸载回调，在注册被移除、面板关闭或组件被替换时执行。
-- 仅在真正出错时从 `mount`/卸载回调中抛错；插件管理界面会将其显示为
-  plugin-manager realm 的诊断信息。
-- 使用与 `metadata.json` 相同的插件 id；即使 API 无法强制校验，不一致也是 bug。
+- 根元素由宿主创建与持有，面板的挂载时机也由宿主决定。没有注册 API，也无需重复
+  插件 id。
+- 宿主会在模块 URL 后追加 `?t=<时间戳>-<随机数>`。求值跟随启用/禁用周期；关闭面板
+  只会卸载实例。模块顶层保持声明式，把行为放进 `mount()`。
+- 只有该入口会被缓存破除。它导入的模块在窗口文档的整个生命周期内共享，因此 helper
+  模块的状态会跨面板保留，helper 的顶层代码也不会再次执行。请把每次面板的状态放在
+  `mount()` 中，并在 `unmount()` 中清理。
+- `mount()` 可以是异步的，`unmount()` 也可以返回 Promise。宿主会等待清理完成，并把
+  失败显示为配置诊断信息。
+- 面板以浏览器 ESM 运行，无法直接访问 Node 或 Electron。需要暴露宿主数据时，使用
+  plugin-manager preload realm 与 `contextBridge`；插件同时声明该 realm 时，宿主会先
+  激活它再挂载面板。
+- 仅在真正出错时抛错；失败按插件单独报告，不会影响插件的其他 realm。
+- 插件可以只声明 `configuration`、只声明 `plugin-manager` realm，或两者都声明。
 
 ## 资源文件
 

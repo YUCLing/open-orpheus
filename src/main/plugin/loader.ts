@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 import type { PluginDesiredState } from "@shared/contracts/plugin-manager-api";
+import { cacheBustUrl } from "@shared/plugin/cache-bust";
 import {
   LifecycleStateKind,
   PluginDisposeStatus,
@@ -40,8 +41,8 @@ export interface PluginLoaderOptions {
   plugins: DiscoveredPlugin[];
   /** Initial desired state for `activateAll`. */
   isEnabled?: (id: string) => boolean;
-  /** Injectable for tests; defaults to a dynamic ESM import. */
-  importModule?: (entryPath: string) => Promise<unknown>;
+  /** Injectable for tests. Receives a cache-busted module URL. */
+  importModule?: (entryUrl: string) => Promise<unknown>;
   /** Soft per-plugin activation and cleanup deadline. */
   activationTimeoutMs?: number;
   /** Called when a plugin's lifecycle snapshot changes. */
@@ -58,15 +59,22 @@ export interface PluginLoaderOptions {
 export class PluginLoader {
   private readonly records: PluginRecord[] = [];
   private readonly recordsById = new Map<string, PluginRecord>();
-  private readonly importModule: (entryPath: string) => Promise<unknown>;
+  /**
+   * One evaluation per activation epoch, shared by lifecycle activation and
+   * cross-plugin `load()`.
+   *
+   * Imports use a cache-busting URL, so without this cache the two callers
+   * would evaluate the entry twice and observe different module instances.
+   */
+  private readonly moduleCache = new Map<string, Promise<PluginModule>>();
+  private readonly importModule: (entryUrl: string) => Promise<unknown>;
   private readonly isEnabled: (id: string) => boolean;
   private readonly revisions = new Map<string, number>();
   private readonly pluginRegistry: MutablePluginRegistry;
   private readonly registry: Registry;
 
   constructor(options: PluginLoaderOptions) {
-    this.importModule =
-      options.importModule ?? ((entryPath) => import(pathToFileURL(entryPath).href));
+    this.importModule = options.importModule ?? ((entryUrl) => import(entryUrl));
     this.isEnabled = options.isEnabled ?? (() => true);
     this.registry = options.registry;
     const onChanged = options.onChanged;
@@ -82,7 +90,7 @@ export class PluginLoader {
       const lifecycle = new RealmLifecycle<PluginModule>({
         timeoutMs: options.activationTimeoutMs,
         adapter: {
-          load: async () => toPluginModule(await this.importModule(plugin.entryPaths.main), id),
+          load: () => this.loadModule(id),
           activate: (module) => module.activate(this.runtimeFor(id)),
           deactivate: (module) => module.deactivate?.(),
         },
@@ -149,6 +157,8 @@ export class PluginLoader {
       // readiness exactly like `deactivate` does. Otherwise a cached
       // `whenActive` result would bypass the enabled check after cleanup.
       this.pluginRegistry.forget(id);
+      // The next enable starts a new evaluation epoch.
+      this.moduleCache.delete(id);
     }
     record.lifecycle.applyDesiredState(desired);
   }
@@ -181,6 +191,8 @@ export class PluginLoader {
   /** Request a fresh attempt without changing desired state. */
   async retry(id: string): Promise<void> {
     const record = this.require(id);
+    this.pluginRegistry.forget(id);
+    this.moduleCache.delete(id);
     record.lifecycle.retry();
     await this.waitForDecision(record);
   }
@@ -188,6 +200,7 @@ export class PluginLoader {
   /** Start a retry without waiting for convergence. */
   requestRetry(id: string): void {
     this.pluginRegistry.forget(id);
+    this.moduleCache.delete(id);
     this.require(id).lifecycle.retry();
   }
 
@@ -199,6 +212,7 @@ export class PluginLoader {
     return Promise.all(
       records.map(async (record) => {
         this.pluginRegistry.forget(record.plugin.metadata.id);
+        this.moduleCache.delete(record.plugin.metadata.id);
         try {
           const result = await record.lifecycle.dispose(2000);
           if (result.status !== "stopped") {
@@ -231,13 +245,25 @@ export class PluginLoader {
     return record;
   }
 
-  private async loadModule(id: string): Promise<PluginModule> {
+  private loadModule(id: string): Promise<PluginModule> {
     const record = this.require(id);
-    if (!this.isEnabled(id)) throw new Error(`Plugin "${id}" is not enabled`);
-    return toPluginModule(
-      await this.importModule(record.plugin.entryPaths.main),
-      record.plugin.metadata.id
+    if (!this.isEnabled(id)) return Promise.reject(new Error(`Plugin "${id}" is not enabled`));
+
+    // Lifecycle activation and cross-plugin `load()` share this evaluation.
+    // Imports are cache-busted, so without sharing they would produce two
+    // different module instances for one activation.
+    const cached = this.moduleCache.get(id);
+    if (cached) return cached;
+
+    const entryUrl = cacheBustUrl(pathToFileURL(record.plugin.entryPaths.main).href);
+    const pending = this.importModule(entryUrl).then((imported) =>
+      toPluginModule(imported, record.plugin.metadata.id)
     );
+    this.moduleCache.set(id, pending);
+    void pending.catch(() => {
+      if (this.moduleCache.get(id) === pending) this.moduleCache.delete(id);
+    });
+    return pending;
   }
 
   private async whenActive(id: string): Promise<PluginModule> {
