@@ -172,12 +172,26 @@ export class PluginManager {
     const current = this.state.desired(report.id, plugin.kind);
     if (report.desiredRevision < current.revision) return;
 
-    let byPlugin = this.reports.get(webContentsId);
-    if (!byPlugin) {
-      byPlugin = new Map();
-      this.reports.set(webContentsId, byPlugin);
+    const byPlugin = this.reports.get(webContentsId);
+    if (
+      report.state.kind === PluginRuntimeStateKind.Stopped ||
+      report.state.kind === PluginRuntimeStateKind.Disposed
+    ) {
+      // A clean stop is not a live instance any more. Keeping it would leave
+      // "已停止" entries in the plugin manager after the plugin is disabled.
+      if (byPlugin?.delete(report.id)) {
+        if (byPlugin.size === 0) this.reports.delete(webContentsId);
+        this.onChanged?.();
+      }
+      return;
     }
-    byPlugin.set(report.id, {
+
+    let reports = byPlugin;
+    if (!reports) {
+      reports = new Map();
+      this.reports.set(webContentsId, reports);
+    }
+    reports.set(report.id, {
       desiredRevision: report.desiredRevision,
       attempt: report.attempt,
       state: report.state,
@@ -230,6 +244,12 @@ export class PluginManager {
       shadowed: shadowedSources,
       main,
       realms,
+      configuration: {
+        declared: plugin.metadata.configuration !== undefined,
+        url: plugin.metadata.configuration
+          ? pluginAssetsUrl(id, plugin.metadata.configuration)
+          : undefined,
+      },
       presentation: presentationFor(desired, availability, main, realms),
       error: main.error,
     };
@@ -257,6 +277,7 @@ export class PluginManager {
       shadowed: [],
       main: { kind: PluginRuntimeStateKind.Stopped, desiredRevision: 0 },
       realms: {},
+      configuration: { declared: false },
       presentation: PluginPresentationStatus.Unavailable,
       error: `Conflicting plugin id "${entry.id}" in the ${entry.layer} layer`,
     };
@@ -280,6 +301,7 @@ export class PluginManager {
       shadowed: [],
       main: { kind: PluginRuntimeStateKind.Stopped, desiredRevision: 0 },
       realms: {},
+      configuration: { declared: false },
       presentation: PluginPresentationStatus.Unavailable,
       error: toError(error).message,
     };

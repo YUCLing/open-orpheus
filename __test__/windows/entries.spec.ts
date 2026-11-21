@@ -3,13 +3,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // `exposeApi` reaches for `contextBridge`/`ipcRenderer`, so the bridge is faked.
 const hoisted = vi.hoisted(() => ({
   exposeInMainWorld: vi.fn(),
+  bridgeExposeInMainWorld: vi.fn(),
+  executeInMainWorld: vi.fn(({ func }: { func: () => void }) => func()),
   installPreloadPlugins: vi.fn(),
   pluginManagerRegistry: { load: {}, realm: "plugin-manager" },
 }));
 
 vi.mock("electron", () => ({
   contextBridge: {
-    executeInMainWorld: vi.fn(({ func }: { func: () => void }) => func()),
+    executeInMainWorld: hoisted.executeInMainWorld,
+    exposeInMainWorld: hoisted.bridgeExposeInMainWorld,
   },
 }));
 
@@ -88,38 +91,45 @@ describe("window preload entry points", () => {
 
     expect(hoisted.installPreloadPlugins).toHaveBeenCalledWith(
       hoisted.pluginManagerRegistry.load,
-      hoisted.pluginManagerRegistry.realm
+      hoisted.pluginManagerRegistry.realm,
+      expect.objectContaining({
+        onControl: expect.any(Function),
+        beforeDeactivate: expect.any(Function),
+      })
     );
   });
 
-  it("notifies plugin-manager configuration listeners", async () => {
+  it("exposes the plugin-manager host bridge", async () => {
     vi.resetModules();
     vi.stubGlobal("window", {});
+    hoisted.bridgeExposeInMainWorld.mockClear();
+    hoisted.installPreloadPlugins.mockClear();
+
     await import("../../src/windows/plugin-manager");
 
-    const manager = (
-      globalThis as unknown as {
-        window: { pluginManager: import("@shared/plugin/realms/plugin-manager/ui").API };
-      }
-    ).window.pluginManager;
-    const changed = vi.fn();
-    const mount = vi.fn();
+    const [name, bridge] = hoisted.bridgeExposeInMainWorld.mock.calls.at(-1)! as [
+      string,
+      import("@shared/contracts/plugin-configuration").PluginManagerHostBridge,
+    ];
+    expect(name).toBe("pluginManagerHost");
 
-    manager.addEventListener("changed", changed);
-    manager.register("p", { configuration: { mount } });
-    expect(changed).toHaveBeenCalledTimes(1);
-    expect(manager.plugins.p?.configuration?.mount).toBe(mount);
+    const options = hoisted.installPreloadPlugins.mock.calls.at(-1)![2] as {
+      onControl(control: {
+        ready: Promise<void>;
+        loader: { waitForSnapshot(id: string): Promise<unknown> };
+      }): void;
+      beforeDeactivate(id: string, desired: { enabled: boolean; revision: number }): unknown;
+    };
+    const waitForSnapshot = vi.fn().mockResolvedValue({ state: { kind: "running" } });
+    options.onControl({ ready: Promise.resolve(), loader: { waitForSnapshot } });
 
-    manager.unregister("p");
-    expect(changed).toHaveBeenCalledTimes(2);
-    expect(manager.plugins.p).toBeUndefined();
+    await expect(bridge.waitForRealm("p")).resolves.toEqual({ kind: "running" });
+    expect(waitForSnapshot).toHaveBeenCalledWith("p");
 
-    manager.unregister("missing");
-    expect(changed).toHaveBeenCalledTimes(2);
-
-    manager.removeEventListener("changed", changed);
-    manager.register("q", {});
-    expect(changed).toHaveBeenCalledTimes(2);
+    const dispose = vi.fn();
+    bridge.setConfigurationHost({ dispose });
+    await options.beforeDeactivate("p", { enabled: false, revision: 4 });
+    expect(dispose).toHaveBeenCalledWith("p", 4);
   });
 
   it("exposes the same manage API in Flatpak", async () => {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { SvelteMap } from "svelte/reactivity";
 
   import * as Accordion from "$lib/components/ui/accordion/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
@@ -19,7 +20,13 @@
     type PluginRealmSummary,
     type SerializablePluginRuntimeState,
   } from "@shared/contracts/plugin-manager-api";
-  import type { API, ManagerUIPlugin, MountFn } from "@shared/plugin/realms/plugin-manager/ui";
+  import {
+    PluginConfigurationFailureStage,
+    PluginConfigurationStateKind,
+    type PluginConfigurationState,
+    type PluginManagerHostBridge,
+  } from "@shared/contracts/plugin-configuration";
+  import { PluginConfigurationLoader } from "$lib/plugin-configuration/loader";
   import { REALM_DISPLAY_NAMES } from "virtual:open-orpheus/realm-display";
 
   import Package from "@lucide/svelte/icons/package";
@@ -87,11 +94,21 @@
   let managerState = $state<PluginManagerState | null>(null);
   let busy = $state<string | null>(null);
   let error = $state<string | null>(null);
-  let configPlugins = $state<Record<string, ManagerUIPlugin>>({});
+  let configurationStates = $state<Record<string, PluginConfigurationState>>({});
 
-  const refreshConfigPlugins = () => {
-    configPlugins = { ...manager.plugins };
-  };
+  const hostBridge = (window as unknown as { pluginManagerHost?: PluginManagerHostBridge })
+    .pluginManagerHost;
+
+  const configurationLoader = new PluginConfigurationLoader({
+    waitForRealm: async (pluginId) =>
+      (await hostBridge?.waitForRealm(pluginId)) ?? { kind: "missing" },
+  });
+
+  hostBridge?.setConfigurationHost({
+    dispose: (pluginId, revision) => configurationLoader.dispose(pluginId, revision),
+  });
+
+  const configurationRoots = new SvelteMap<string, HTMLDivElement>();
 
   const plugins = $derived(managerState?.plugins ?? []);
   const running = $derived(
@@ -104,19 +121,35 @@
     plugins.filter((plugin) => BLOCKED_PRESENTATIONS.includes(plugin.presentation))
   );
 
+  const refreshConfigurationStates = () => {
+    configurationStates = configurationLoader.snapshot();
+  };
+
   onMount(() => {
-    refreshConfigPlugins();
-    manager.addEventListener("changed", refreshConfigPlugins);
+    refreshConfigurationStates();
+    configurationLoader.addEventListener("changed", refreshConfigurationStates);
 
     void load();
     api.events.changed(() => void load());
 
-    return () => manager.removeEventListener("changed", refreshConfigPlugins);
+    return () => {
+      configurationLoader.removeEventListener("changed", refreshConfigurationStates);
+      void configurationLoader.disposeAll();
+    };
   });
+
+  function applyManagerState(state: PluginManagerState) {
+    managerState = state;
+    for (const plugin of state.plugins) {
+      if (!plugin.desired.enabled) {
+        void configurationLoader.dispose(plugin.id, plugin.desired.revision);
+      }
+    }
+  }
 
   async function load() {
     try {
-      managerState = await api.list();
+      applyManagerState(await api.list());
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     }
@@ -126,7 +159,7 @@
     busy = plugin.id;
     error = null;
     try {
-      managerState = await api.setEnabled(plugin.id, !plugin.desired.enabled);
+      applyManagerState(await api.setEnabled(plugin.id, !plugin.desired.enabled));
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -138,12 +171,25 @@
     busy = plugin.id;
     error = null;
     try {
-      managerState = await api.retry(plugin.id);
+      applyManagerState(await api.retry(plugin.id));
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
       busy = null;
     }
+  }
+
+  async function retryConfiguration(plugin: PluginManagerEntry) {
+    const root = configurationRoots.get(plugin.id);
+    const entryUrl = plugin.configuration.url;
+    if (!root || !entryUrl) return;
+    await configurationLoader.retry({
+      pluginId: plugin.id,
+      entryUrl,
+      revision: plugin.desired.revision,
+      requiresPreload: plugin.realms["plugin-manager"]?.declared === true,
+      root,
+    });
   }
 
   function retryable(plugin: PluginManagerEntry): boolean {
@@ -176,27 +222,71 @@
     return Object.entries(entry.realms);
   }
 
-  const manager = (window as unknown as { pluginManager: API }).pluginManager;
-  const pluginConfigurationAttachment: (mount: MountFn) => Attachment = (mount) => {
-    return (element) => {
+  const configurationAttachments = new SvelteMap<string, { key: string; attachment: Attachment }>();
+
+  function configurationAttachment(plugin: PluginManagerEntry): Attachment {
+    const requiresPreload = plugin.realms["plugin-manager"]?.declared === true;
+    const key = [
+      plugin.id,
+      plugin.desired.revision,
+      plugin.configuration.url ?? "",
+      requiresPreload,
+    ].join("\0");
+    const cached = configurationAttachments.get(plugin.id);
+    if (cached?.key === key) return cached.attachment;
+
+    const attachment: Attachment = (element) => {
       if (!(element instanceof HTMLDivElement)) return;
-      let unmount: void | (() => void);
-      try {
-        unmount = mount(element);
-      } catch (cause) {
-        error = `插件配置挂载失败：${cause instanceof Error ? cause.message : String(cause)}`;
-        return;
-      }
-      if (!unmount) return;
+      const entryUrl = plugin.configuration.url;
+      if (!plugin.configuration.declared || !entryUrl || !plugin.desired.enabled) return;
+
+      configurationRoots.set(plugin.id, element);
+      void configurationLoader.open({
+        pluginId: plugin.id,
+        entryUrl,
+        revision: plugin.desired.revision,
+        requiresPreload,
+        root: element,
+      });
+
       return () => {
-        try {
-          unmount();
-        } catch (cause) {
-          error = `插件配置卸载失败：${cause instanceof Error ? cause.message : String(cause)}`;
-        }
+        configurationRoots.delete(plugin.id);
+        void configurationLoader.close(plugin.id);
       };
     };
+
+    configurationAttachments.set(plugin.id, { key, attachment });
+    return attachment;
+  }
+
+  const CONFIGURATION_LABELS: Record<PluginConfigurationStateKind, string> = {
+    [PluginConfigurationStateKind.Unloaded]: "未加载",
+    [PluginConfigurationStateKind.WaitingForPreload]: "正在等待插件管理器运行环境...",
+    [PluginConfigurationStateKind.Loading]: "正在加载配置界面...",
+    [PluginConfigurationStateKind.Ready]: "就绪",
+    [PluginConfigurationStateKind.Mounting]: "正在挂载配置界面...",
+    [PluginConfigurationStateKind.Mounted]: "已挂载",
+    [PluginConfigurationStateKind.Unmounting]: "正在卸载配置界面...",
+    [PluginConfigurationStateKind.Failed]: "配置界面加载失败",
   };
+
+  const CONFIGURATION_STAGE_LABELS: Record<PluginConfigurationFailureStage, string> = {
+    [PluginConfigurationFailureStage.Preload]: "运行环境",
+    [PluginConfigurationFailureStage.Import]: "加载模块",
+    [PluginConfigurationFailureStage.Validate]: "校验模块",
+    [PluginConfigurationFailureStage.Mount]: "挂载",
+    [PluginConfigurationFailureStage.Unmount]: "卸载",
+  };
+
+  function configurationBusy(state: PluginConfigurationState | undefined): boolean {
+    if (!state) return false;
+    return (
+      state.kind === PluginConfigurationStateKind.WaitingForPreload ||
+      state.kind === PluginConfigurationStateKind.Loading ||
+      state.kind === PluginConfigurationStateKind.Mounting ||
+      state.kind === PluginConfigurationStateKind.Unmounting
+    );
+  }
 </script>
 
 <svelte:head>
@@ -214,7 +304,7 @@
 {/snippet}
 
 {#snippet pluginCard(plugin: PluginManagerEntry)}
-  {@const mount = configPlugins[plugin.id]?.configuration?.mount}
+  {@const configuration = configurationStates[plugin.id]}
   <Card.Root class="shadow-md">
     <Card.Header class="flex items-center gap-2 drop-shadow-lg">
       <button
@@ -357,12 +447,40 @@
           {/if}
         </Dialog.Description>
       </Dialog.Header>
-      {#if mount}
-        {#key mount}
-          <div class="[all:initial]" {@attach pluginConfigurationAttachment(mount)}></div>
-        {/key}
-      {:else}
+      {#if !plugin.configuration.declared}
         <p class="text-center">此插件暂无配置项</p>
+      {:else if !plugin.desired.enabled}
+        <p class="text-center">启用插件后可配置</p>
+      {:else}
+        <div class="space-y-2">
+          {#if configuration?.kind === PluginConfigurationStateKind.Failed}
+            <div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p>
+                {CONFIGURATION_STAGE_LABELS[
+                  configuration.stage ?? PluginConfigurationFailureStage.Import
+                ]}失败：{configuration.error}
+              </p>
+              {#if configuration.retryable}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="mt-2"
+                  onclick={() => void retryConfiguration(plugin)}
+                >
+                  重试配置
+                </Button>
+              {/if}
+            </div>
+          {:else if configurationBusy(configuration)}
+            <p class="text-sm text-gray-600">{CONFIGURATION_LABELS[configuration!.kind]}</p>
+          {/if}
+          <div
+            class="[all:initial]"
+            data-plugin-configuration
+            data-plugin-id={plugin.id}
+            {@attach configurationAttachment(plugin)}
+          ></div>
+        </div>
       {/if}
     </Dialog.Content>
   </Dialog.Root>

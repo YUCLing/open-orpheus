@@ -397,4 +397,37 @@ describe("PreloadPluginLoader", () => {
     releaseB();
     await Promise.all([removing, loader.waitForAll()]);
   });
+
+  it("runs beforeDeactivate before the module's deactivate", async () => {
+    const order: string[] = [];
+    (globalThis as { __preloadOrder?: string[] }).__preloadOrder = order;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const loader = new PreloadPluginLoader({
+      sources: new Map([
+        [
+          "p",
+          "module.exports = { activate() {}, deactivate() { globalThis.__preloadOrder.push('deactivate'); } };",
+        ],
+      ]),
+      registry: createRegistry(),
+      evaluate: (source, id) => evaluatePreloadModule(source, id, () => ({})),
+      beforeDeactivate: async () => {
+        order.push("before");
+        await gate;
+        order.push("after-before");
+      },
+    });
+
+    await loader.activateAll();
+    const removing = loader.remove("p");
+    await vi.waitFor(() => expect(order).toEqual(["before"]));
+    release();
+    await removing;
+
+    expect(order).toEqual(["before", "after-before", "deactivate"]);
+    expect(loader.plugins).toHaveLength(0);
+  });
 });

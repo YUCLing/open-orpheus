@@ -16,6 +16,18 @@ const preloadRequire: PreloadRequire = (id) => {
   throw new Error(`Plugin preloads may only require "electron" (got "${id}")`);
 };
 
+export interface PreloadRealmControl {
+  loader: PreloadPluginLoader;
+  /** Resolves once the bootstrap has registered and started every record. */
+  ready: Promise<void>;
+}
+
+export interface InstallPreloadPluginsOptions {
+  /** Receives the loader before bootstrap, so a window can expose host APIs. */
+  onControl?: (control: PreloadRealmControl) => void;
+  beforeDeactivate?: (id: string, desired: PluginDesiredState) => void | Promise<void>;
+}
+
 /**
  * Ask the main process for a revisioned bootstrap snapshot, evaluate the CJS
  * bundles in this preload context, and activate the enabled plugins.
@@ -24,16 +36,26 @@ const preloadRequire: PreloadRequire = (id) => {
  * sandboxed preload can evaluate a bundle with a restricted `require` (only
  * `electron`), while the renderer cannot.
  */
-export async function installPreloadPlugins(load: RegistryLoad, realm: string): Promise<void> {
+export async function installPreloadPlugins(
+  load: RegistryLoad,
+  realm: string,
+  options: InstallPreloadPluginsOptions = {}
+): Promise<void> {
   if (!LOADED_REALM_IDS.includes(realm)) {
     throw new Error(`Unknown plugin realm "${realm}"`);
   }
 
   const latest = new Map<string, PluginDesiredState>();
+  let resolveReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    resolveReady = resolve;
+  });
+
   const current = new PreloadPluginLoader({
     sources: new Map(),
     registry: createRegistry(load),
     requireModule: preloadRequire,
+    beforeDeactivate: options.beforeDeactivate,
     onStatus: (id, snapshot) => {
       electron.ipcRenderer.send("plugins.realmReport", {
         realm,
@@ -44,6 +66,8 @@ export async function installPreloadPlugins(load: RegistryLoad, realm: string): 
       });
     },
   });
+
+  options.onControl?.({ loader: current, ready });
 
   window.addEventListener("unload", () => {
     void current.deactivateAll();
@@ -126,6 +150,7 @@ export async function installPreloadPlugins(load: RegistryLoad, realm: string): 
       if (!desired.enabled && current.has(id)) removals.push(current.remove(id, desired));
     }
     await Promise.all(removals);
+    resolveReady();
   }
 
   await current.waitForAll();

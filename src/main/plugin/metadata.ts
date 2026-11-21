@@ -44,6 +44,10 @@ function createMetadataSchema(base: string) {
       error: "must be a relative path inside the plugin's assets directory",
     });
 
+  const configurationEntry = safeAssetPath.refine((value) => value.endsWith(".mjs"), {
+    error: "must point at an .mjs file",
+  });
+
   return z.object({
     id: z
       .string()
@@ -59,6 +63,11 @@ function createMetadataSchema(base: string) {
     license: z.string().min(1, "must not be empty").optional(),
     /** Path relative to the plugin's `assets/` directory. */
     icon: safeAssetPath.optional(),
+    /**
+     * Browser ESM configuration module, relative to the plugin's `assets/`
+     * directory. Loaded and owned by the plugin manager renderer.
+     */
+    configuration: configurationEntry.optional(),
     realms: (() => {
       const shape: Record<string, z.ZodType> = {};
       for (const realm of PLUGIN_REALM_IDS) {

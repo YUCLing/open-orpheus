@@ -55,6 +55,12 @@ export interface PreloadPluginLoaderOptions {
   requireModule?: PreloadRequire;
   /** Report per-plugin lifecycle snapshots back to the main process. */
   onStatus?: (id: string, snapshot: LifecycleSnapshot<PluginModule>) => void;
+  /**
+   * Runs before a plugin module's `deactivate()`. The plugin-manager realm uses
+   * this to tear down renderer configuration UI while its preload APIs are
+   * still alive.
+   */
+  beforeDeactivate?: (id: string, desired: PluginDesiredState) => void | Promise<void>;
   /** Soft per-plugin activation and cleanup deadline. */
   activationTimeoutMs?: number;
 }
@@ -95,6 +101,10 @@ export class PreloadPluginLoader {
   /** Records whose late-settling operation must finish before removal. */
   private readonly pendingRemovals = new Set<string>();
   private readonly onStatus?: (id: string, snapshot: LifecycleSnapshot<PluginModule>) => void;
+  private readonly beforeDeactivate?: (
+    id: string,
+    desired: PluginDesiredState
+  ) => void | Promise<void>;
   private readonly activationTimeoutMs?: number;
 
   constructor(options: PreloadPluginLoaderOptions) {
@@ -103,6 +113,7 @@ export class PreloadPluginLoader {
       ((source: string, id: string) =>
         evaluatePreloadModule(source, id, options.requireModule ?? unavailableRequire));
     this.onStatus = options.onStatus;
+    this.beforeDeactivate = options.beforeDeactivate;
     this.activationTimeoutMs = options.activationTimeoutMs;
 
     for (const [id, source] of options.sources) {
@@ -187,6 +198,18 @@ export class PreloadPluginLoader {
     this.moduleCache.delete(id);
     this.registerSource(id, getSource);
     this.recordsById.get(id)?.lifecycle.applyDesiredState(desired);
+  }
+
+  /**
+   * The current snapshot once this plugin's lifecycle has reached a decision
+   * (running, failed, hung, abandoned, or stopped while disabled), or `null`
+   * when the plugin is not registered.
+   */
+  async waitForSnapshot(id: string): Promise<LifecycleSnapshot<PluginModule> | null> {
+    const record = this.recordsById.get(id);
+    if (!record) return null;
+    await this.waitForDecision(record);
+    return record.snapshot;
   }
 
   /** Retry one plugin's failed lifecycle, if it is still enabled. */
@@ -363,7 +386,16 @@ export class PreloadPluginLoader {
       adapter: {
         load: () => this.ensureModule(id),
         activate: (module) => module.activate(this.runtimeFor(id)),
-        deactivate: (module) => module.deactivate?.(),
+        deactivate: async (module) => {
+          // Use the revision of the epoch being cleaned up, not the latest
+          // desired state: a re-enable can arrive while cleanup is running.
+          const snapshot = this.recordsById.get(id)?.lifecycle.snapshot;
+          const desired: PluginDesiredState = snapshot
+            ? { enabled: snapshot.desired.enabled, revision: snapshot.state.desiredRevision }
+            : { enabled: false, revision: 0 };
+          await this.beforeDeactivate?.(id, desired);
+          await module.deactivate?.();
+        },
       },
       onChange: (snapshot) => {
         if (snapshot.state.kind === LifecycleStateKind.Failed) {

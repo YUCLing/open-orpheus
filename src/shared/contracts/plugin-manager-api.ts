@@ -89,6 +89,14 @@ export interface PluginRealmSummary {
   counts: Partial<Record<PluginRuntimeStateKind, number>>;
 }
 
+/** Configuration UI declared by the plugin, independent of its execution realms. */
+/** @internal */
+export interface PluginConfigurationSummary {
+  declared: boolean;
+  /** Resolved `assets://plugins/<id>/<path>` URL, when declared. */
+  url?: string;
+}
+
 /** @internal */
 export interface PluginShadowedSource {
   layer: PluginLayer;
@@ -118,6 +126,8 @@ export interface PluginManagerEntry {
   main: SerializablePluginRuntimeState;
   /** Per-window secondary-realm instances, keyed by realm. */
   realms: Record<string, PluginRealmSummary>;
+  /** Declared configuration UI module. */
+  configuration: PluginConfigurationSummary;
   /** Derived presentation category; raw state above remains authoritative. */
   presentation: PluginPresentationStatus;
   error?: string;

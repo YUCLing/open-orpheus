@@ -18,5 +18,3 @@ export interface PluginModule {
   activate(runtime: PluginRuntime): void | Promise<void>;
   deactivate?(): void | Promise<void>;
 }
-
-export type { API, ManagerUIPlugin, MountFn } from "./ui";

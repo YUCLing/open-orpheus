@@ -199,6 +199,19 @@ describe("PluginManager", () => {
     expect(manager.list().plugins[0]?.icon).toBe("assets://plugins/iconed/icons/plugin.png");
   });
 
+  it("exposes the declared configuration module as an assets:// URL", () => {
+    const state = createState();
+    const plugin = discovered("configured", PluginKind.User);
+    plugin.metadata.configuration = "configuration/index.mjs";
+    const loader = createLoader(state, [plugin]);
+    const manager = createManager(loader, state, [plugin]);
+
+    expect(manager.list().plugins[0]?.configuration).toEqual({
+      declared: true,
+      url: "assets://plugins/configured/configuration/index.mjs",
+    });
+  });
+
   it("does not change activation when persisting the toggle fails", async () => {
     const base = createState();
     const state: PluginStateStore = {
@@ -322,6 +335,38 @@ describe("PluginManager", () => {
         attempt: 1,
       })
     );
+    expect(manager.list().plugins[0]?.realms.preload.instances).toHaveLength(0);
+  });
+
+  it("drops a cleanly stopped realm instance instead of listing it", async () => {
+    const state = createState();
+    const plugin = discovered("pre", PluginKind.User);
+    plugin.metadata.realms.preload = "preload/index.cjs";
+    const loader = createLoader(state, [plugin]);
+    const manager = createManager(loader, state, [plugin]);
+
+    await manager.setEnabled("pre", true);
+    manager.registerHost(4, "preload");
+    manager.setRealmReport(
+      4,
+      report("pre", "preload", 1, {
+        kind: PluginRuntimeStateKind.Running,
+        desiredRevision: 1,
+        attempt: 1,
+      })
+    );
+    expect(manager.list().plugins[0]?.realms.preload.instances).toHaveLength(1);
+
+    await manager.setEnabled("pre", false);
+    manager.setRealmReport(
+      4,
+      report("pre", "preload", 2, {
+        kind: PluginRuntimeStateKind.Stopped,
+        desiredRevision: 2,
+        attempt: 1,
+      })
+    );
+
     expect(manager.list().plugins[0]?.realms.preload.instances).toHaveLength(0);
   });
 

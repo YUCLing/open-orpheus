@@ -92,6 +92,48 @@ describe("plugin discovery", () => {
     expect(builtin.metadata.builtin?.defaultEnabled).toBe(true);
   });
 
+  it("accepts a configuration module under assets", async () => {
+    const plugin = path.join(pluginsDir, "org.example.configured");
+    await mkdir(path.join(plugin, "main"), { recursive: true });
+    await mkdir(path.join(plugin, "assets", "configuration"), { recursive: true });
+    await writeFile(
+      path.join(plugin, "metadata.json"),
+      JSON.stringify({
+        id: "org.example.configured",
+        name: "Configured",
+        version: "1.0.0",
+        configuration: "configuration/index.mjs",
+        realms: { main: "main/index.mjs" },
+      })
+    );
+    await writeFile(path.join(plugin, "main/index.mjs"), "export function activate() {}\n");
+    await writeFile(
+      path.join(plugin, "assets/configuration/index.mjs"),
+      "export function mount() {}\n"
+    );
+
+    const discovered = await loadDiscoveredPlugin(plugin, PluginKind.User);
+    expect(discovered.metadata.configuration).toBe("configuration/index.mjs");
+  });
+
+  it("rejects a tree without the declared configuration entry", async () => {
+    const plugin = path.join(pluginsDir, "org.example.missing-configuration");
+    await mkdir(path.join(plugin, "main"), { recursive: true });
+    await writeFile(
+      path.join(plugin, "metadata.json"),
+      JSON.stringify({
+        id: "org.example.missing-configuration",
+        name: "Missing Configuration",
+        version: "1.0.0",
+        configuration: "configuration/index.mjs",
+        realms: { main: "main/index.mjs" },
+      })
+    );
+    await writeFile(path.join(plugin, "main/index.mjs"), "export function activate() {}\n");
+
+    await expect(loadDiscoveredPlugin(plugin)).rejects.toThrow(/configuration entry/);
+  });
+
   it("resolves a plugin-manager entry", async () => {
     const plugin = path.join(pluginsDir, "org.example.plugin-manager");
     await mkdir(path.join(plugin, "main"), { recursive: true });

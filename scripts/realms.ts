@@ -59,6 +59,33 @@ export interface RealmDefinition {
   sdk?: RealmSdkConfig;
 }
 
+/** A type-only SDK entry that has no realm or runtime registry. */
+export interface TypeOnlySdkConfig {
+  /** Contract file, relative to the project root. */
+  contract: string;
+  /** Directory holding the emitted `src/**` declarations, relative to the SDK package. */
+  host: string;
+  /** Package entry point, relative to the SDK package. */
+  index: string;
+  /** Export lines for the package entry point. */
+  indexExports: string[];
+  /** Package subpath served by this SDK entry, e.g. "./configuration". */
+  packageSubpath: string;
+}
+
+/** Type-only entry points that are not realms. */
+export const TYPE_ONLY_SDKS = {
+  configuration: {
+    contract: "src/shared/plugin/configuration/index.ts",
+    host: "dist/configuration/host",
+    index: "dist/configuration/index.d.ts",
+    indexExports: [
+      'export type { ConfigurationContext, ConfigurationInstance, ConfigurationModule } from "./host/src/shared/plugin/configuration/index";',
+    ],
+    packageSubpath: "./configuration",
+  },
+} as const satisfies Record<string, TypeOnlySdkConfig>;
+
 export const REALMS = {
   main: {
     virtualId: "virtual:open-orpheus/registry",
@@ -141,7 +168,6 @@ export const REALMS = {
       index: "dist/plugin-manager/index.d.ts",
       indexExports: [
         'export type { PluginModule, PluginRuntime } from "./host/src/shared/plugin/realms/plugin-manager/index";',
-        'export type { API, ManagerUIPlugin, MountFn } from "./host/src/shared/plugin/realms/plugin-manager/ui";',
         'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
         'export type { RegistryLoad } from "./registry-map";',
       ],
