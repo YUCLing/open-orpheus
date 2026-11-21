@@ -61,6 +61,12 @@ function createMetadataSchema(base: string) {
       main: mainRealmEntry,
       preload: preloadRealmEntry.optional(),
     }),
+    /** Internal switch; only honored for built-in plugins. */
+    builtin: z
+      .object({
+        defaultEnabled: z.boolean().optional(),
+      })
+      .optional(),
   });
 }
 

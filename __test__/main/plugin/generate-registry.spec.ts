@@ -12,6 +12,12 @@ describe("collectRegistryEntries", () => {
     expect(keys).toContain("@/constants");
   });
 
+  it("includes hardcoded preload surface entries", () => {
+    const keys = collectRegistryEntries({ realm: "preload" }).map((entry) => entry.key);
+
+    expect(keys).toContain("@preload/logger");
+  });
+
   it("excludes the plugin framework itself", () => {
     const keys = collectRegistryEntries().map((entry) => entry.key);
 

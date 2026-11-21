@@ -7,9 +7,6 @@
     "build": "tsdown",
     "check": "tsc --noEmit"
   },
-  "openOrpheus": {
-    "builtinPlugin": true
-  },
   "dependencies": {
     "@open-orpheus/plugin-api": "workspace:*"
   },

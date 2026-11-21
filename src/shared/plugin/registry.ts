@@ -7,6 +7,14 @@
 export type RegistryLoad = Record<string, () => Promise<unknown>>;
 
 /**
+ * The resolved value type for a registry key.
+ *
+ * `LoadedModule<"@main/logger">` is equivalent to
+ * `Awaited<ReturnType<RegistryLoad["@main/logger"]>>`.
+ */
+export type LoadedModule<Key extends keyof RegistryLoad> = Awaited<ReturnType<RegistryLoad[Key]>>;
+
+/**
  * Lazy access to a realm's host module surface.
  *
  * Every module is imported on demand; the registry itself has no static

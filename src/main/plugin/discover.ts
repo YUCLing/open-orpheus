@@ -81,6 +81,9 @@ export async function loadDiscoveredPlugin(
   }
 
   const metadata = parsePluginMetadata(parsed, source);
+  if (kind !== PluginKind.Builtin && metadata.builtin !== undefined) {
+    throw new Error(`Plugin ${metadata.id} declares builtin metadata but is not a built-in plugin`);
+  }
 
   const entryPaths: DiscoveredPlugin["entryPaths"] = {
     main: path.join(source, metadata.realms.main),

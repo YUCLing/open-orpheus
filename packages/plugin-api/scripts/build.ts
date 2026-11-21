@@ -62,7 +62,7 @@ const REALM_BUILDS: RealmBuild[] = [
     index: path.join(DIST, "index.d.ts"),
     indexExports: [
       'export type { PluginModule, PluginRuntime } from "./host/src/main/plugin/types";',
-      'export type { PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
+      'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
       'export type { RegistryLoad } from "./registry-map";',
     ],
   },
@@ -74,7 +74,7 @@ const REALM_BUILDS: RealmBuild[] = [
     index: path.join(DIST, "preload/index.d.ts"),
     indexExports: [
       'export type { PreloadPluginModule, PreloadPluginRuntime } from "./host/src/preload/plugin/types";',
-      'export type { PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
+      'export type { LoadedModule, PluginRegistry, Registry } from "./host/src/shared/plugin/registry";',
       'export type { RegistryLoad } from "./registry-map";',
     ],
   },
@@ -746,8 +746,13 @@ function assertConsumable(): void {
       [
         'import type * as main from "@open-orpheus/plugin-api";',
         'import type * as preload from "@open-orpheus/plugin-api/preload";',
+        'import type { LoadedModule, RegistryLoad } from "@open-orpheus/plugin-api";',
         "export type Main = typeof main;",
         "export type Preload = typeof preload;",
+        'export type Logger = LoadedModule<"@main/logger">;',
+        'export type LoggerViaLoad = Awaited<ReturnType<RegistryLoad["@main/logger"]>>;',
+        "type Assert<T extends true> = T;",
+        "export type LoggerMatches = Assert<Logger extends LoggerViaLoad ? true : false>;",
         "",
       ].join("\n")
     );

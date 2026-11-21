@@ -35,10 +35,11 @@ function discovered(id: string, kind: PluginKind, icon?: string): DiscoveredPlug
   };
 }
 
-function createState(): PluginStateStore {
+function createState(defaults: Record<string, boolean> = {}): PluginStateStore {
   const overrides = new Map<string, boolean>();
   return {
-    isEnabled: (id, kind) => overrides.get(id) ?? kind === PluginKind.Builtin,
+    isEnabled: (id, kind) =>
+      overrides.get(id) ?? (kind === PluginKind.Builtin && defaults[id] === true),
     setEnabled: async (id, enabled) => {
       overrides.set(id, enabled);
     },
@@ -62,8 +63,8 @@ function createLoader(
 }
 
 describe("PluginManager", () => {
-  it("defaults built-in plugins on and user plugins off", async () => {
-    const state = createState();
+  it("uses a builtin default and leaves user plugins off", async () => {
+    const state = createState({ builtin: true });
     const loader = createLoader(state, [
       discovered("builtin", PluginKind.Builtin),
       discovered("user", PluginKind.User),
@@ -101,7 +102,7 @@ describe("PluginManager", () => {
   });
 
   it("disables a built-in plugin and deactivates it", async () => {
-    const state = createState();
+    const state = createState({ builtin: true });
     const plugins = [discovered("builtin", PluginKind.Builtin)];
     const loader = createLoader(state, plugins);
     await loader.activateAll();

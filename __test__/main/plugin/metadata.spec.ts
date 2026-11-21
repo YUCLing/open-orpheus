@@ -83,4 +83,15 @@ describe("parsePluginMetadata", () => {
       /assets directory/
     );
   });
+
+  it("accepts builtin.defaultEnabled", () => {
+    const metadata = parsePluginMetadata({ ...valid, builtin: { defaultEnabled: true } }, "test");
+    expect(metadata.builtin?.defaultEnabled).toBe(true);
+  });
+
+  it("rejects a non-boolean builtin.defaultEnabled", () => {
+    expect(() =>
+      parsePluginMetadata({ ...valid, builtin: { defaultEnabled: "yes" } }, "test")
+    ).toThrow(/defaultEnabled/);
+  });
 });

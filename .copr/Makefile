@@ -4,6 +4,8 @@
 srpm:
 	# Install minimal dependencies (only Node.js needed for SRPM generation)
 	dnf -y install git tar
+	# Copr checks out the repository without submodules.
+	git submodule update --init --recursive
 	# Download and install nvm:
 	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
 	# in lieu of restarting the shell

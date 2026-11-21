@@ -181,6 +181,7 @@ overrides:
   '@keyv/sqlite>better-sqlite3': '-'
   '@keyv/sqlite>sqlite3': '-'
   '@electron-forge/plugin-fuses>@electron/fuses': ^2.1.3
+  '@open-orpheus/plugin-example-plugin>@open-orpheus/plugin-api': workspace:*
 
 patchedDependencies:
   '@discordjs/rpc@0.2.0-dev.1794009739-5bb74922a': 141df1452d082410d3a4fa7542bb1a1a8cae832e21e101505c403eaf6ead76c5
@@ -703,7 +704,17 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
-  packages/plugin-update-blocker:
+  packages/plugin-builtin-example-plugin:
+    dependencies:
+      '@open-orpheus/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+    devDependencies:
+      tsdown:
+        specifier: ^0.23.7
+        version: 0.23.7(typescript@6.0.3)
+
+  packages/plugin-builtin-update-blocker:
     dependencies:
       '@open-orpheus/plugin-api':
         specifier: workspace:*

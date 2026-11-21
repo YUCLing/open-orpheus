@@ -13,8 +13,14 @@ import { createDirectoryTarball, createProjectTarball } from "../../packaging/co
 
 type FakeChild = EventEmitter & { stdin: { end: ReturnType<typeof vi.fn> } };
 
-/** Make the two `git ls-files` calls return the given NUL-separated lists. */
-function gitReturns(files: string[], deleted: string[] = []) {
+interface GitReturnsOptions {
+  untracked?: string[];
+  submoduleStatus?: string;
+  submoduleChanges?: string;
+}
+
+/** Return deterministic output for every git call made by createProjectTarball. */
+function gitReturns(files: string[], deleted: string[] = [], options: GitReturnsOptions = {}) {
   hoisted.execFile.mockImplementation(
     (
       _cmd: string,
@@ -22,7 +28,12 @@ function gitReturns(files: string[], deleted: string[] = []) {
       _opts: unknown,
       cb: (error: Error | null, result?: { stdout: string }) => void
     ) => {
-      const stdout = args.includes("--deleted") ? deleted.join("\0") : files.join("\0");
+      let stdout = "";
+      if (args.includes("--deleted")) stdout = deleted.join("\0");
+      else if (args.includes("--cached")) stdout = files.join("\0");
+      else if (args.includes("--others")) stdout = (options.untracked ?? []).join("\0");
+      else if (args.includes("foreach")) stdout = options.submoduleChanges ?? "";
+      else if (args.includes("status")) stdout = options.submoduleStatus ?? "";
       cb(null, { stdout });
       return {} as never;
     }
@@ -59,8 +70,11 @@ describe("createProjectTarball", () => {
     await settle();
 
     expect(hoisted.execFile.mock.calls.map(([, args]) => args)).toEqual([
-      ["-C", "/repo", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+      ["-C", "/repo", "ls-files", "--cached", "--recurse-submodules", "-z"],
+      ["-C", "/repo", "ls-files", "--others", "--exclude-standard", "-z"],
       ["-C", "/repo", "ls-files", "--deleted", "-z"],
+      ["-C", "/repo", "submodule", "status", "--recursive"],
+      ["-C", "/repo", "submodule", "foreach", "--quiet", "--recursive", "git status --porcelain"],
     ]);
     expect(hoisted.spawn).toHaveBeenCalledWith(
       "tar",
@@ -208,5 +222,40 @@ describe("createDirectoryTarball", () => {
 
     child.emit("close", 0);
     await promise;
+  });
+
+  it("includes initialized submodule files", async () => {
+    gitReturns(["packages/plugin-builtin-example-plugin/metadata.json"]);
+    const child = nextTar();
+
+    const promise = createProjectTarball("/repo", "/out/a.tgz", "app", "1.0.0");
+    await settle();
+
+    expect(tarInput(child)).toContain("packages/plugin-builtin-example-plugin/metadata.json");
+
+    child.emit("close", 0);
+    await promise;
+  });
+
+  it("rejects when a submodule is not initialized or mismatched", async () => {
+    gitReturns(["a.ts"], [], {
+      submoduleStatus: "-0123456789abcdef packages/plugin-builtin-example-plugin",
+    });
+
+    await expect(createProjectTarball("/repo", "/out/a.tgz", "app", "1.0.0")).rejects.toThrow(
+      /uninitialized or mismatched submodule/
+    );
+    expect(hoisted.spawn).not.toHaveBeenCalled();
+  });
+
+  it("rejects when a submodule has uncommitted changes", async () => {
+    gitReturns(["a.ts"], [], {
+      submoduleChanges: " M packages/plugin-builtin-example-plugin/metadata.json",
+    });
+
+    await expect(createProjectTarball("/repo", "/out/a.tgz", "app", "1.0.0")).rejects.toThrow(
+      /dirty submodule/
+    );
+    expect(hoisted.spawn).not.toHaveBeenCalled();
   });
 });
