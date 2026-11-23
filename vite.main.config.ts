@@ -1,13 +1,13 @@
 import { defineConfig } from "vite";
 
-import { createAliases } from "./scripts/tsconfigAliases.js";
-import PinoWorkerPlugin from "./plugins/PinoWorkerPlugin.js";
-import NoS3Plugin from "./plugins/NoS3Plugin.js";
-import LoggerPlugin from "./plugins/LoggerPlugin.js";
-import ForceESPlugin from "./plugins/ForceESPlugin.js";
-import RegistryPlugin from "./plugins/RegistryPlugin.js";
-import RealmRuntimePlugin from "./plugins/RealmRuntimePlugin.js";
-import BuiltinPluginsPlugin from "./plugins/BuiltinPluginsPlugin.js";
+import { createAliases } from "./tools/shared/tsconfig.js";
+import PinoWorkerPlugin from "./tools/forge/plugins/PinoWorkerPlugin.js";
+import NoS3Plugin from "./tools/forge/plugins/NoS3Plugin.js";
+import LoggerPlugin from "./tools/forge/plugins/LoggerPlugin.js";
+import ForceESPlugin from "./tools/forge/plugins/ForceESPlugin.js";
+import RegistryPlugin from "./tools/forge/plugins/RegistryPlugin.js";
+import RealmRuntimePlugin from "./tools/forge/plugins/RealmRuntimePlugin.js";
+import BuiltinPluginsPlugin from "./tools/forge/plugins/BuiltinPluginsPlugin.js";
 
 // https://vitejs.dev/config
 export default defineConfig({
@@ -19,10 +19,6 @@ export default defineConfig({
     sourcemap: process.env.INLINE_SOURCEMAP ? "inline" : false,
     rolldownOptions: {
       external: [
-        // Node built-ins
-        "sqlite",
-        // Keyv SQLite driver workarounds
-        "better-sqlite3",
         // Native/WASM Modules
         "7z-wasm",
         "music-tag-native",

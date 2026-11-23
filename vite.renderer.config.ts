@@ -2,7 +2,7 @@ import { defineConfig, type Plugin, type UserConfig } from "vite";
 import { fork } from "node:child_process";
 import { resolve } from "node:path";
 
-const WRAPPER = resolve(import.meta.dirname, "scripts/gui-wrapper.ts");
+const WRAPPER = resolve(import.meta.dirname, "tools/forge/gui-wrapper.ts");
 // Port for the SvelteKit dev server spawned alongside the dummy Vite dev server.
 const SVELTEKIT_DEV_PORT = 5174;
 

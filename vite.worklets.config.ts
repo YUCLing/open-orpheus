@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-import { createAliases } from "./scripts/tsconfigAliases.js";
+import { createAliases } from "./tools/shared/tsconfig.js";
 
 // https://vitejs.dev/config
 export default defineConfig({

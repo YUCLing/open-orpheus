@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 
 import { vol } from "memfs";
 
-import { writeIcons } from "../../packaging/common/icons";
+import { writeIcons } from "../../tools/packaging/common/icons";
 
 /**
  * Fixtures use absolute paths on purpose: memfs anchors relative paths at

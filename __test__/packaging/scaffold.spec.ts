@@ -5,7 +5,7 @@ vi.mock("node:fs/promises");
 
 import { vol } from "memfs";
 
-import { writeScaffold } from "../../packaging/common/scaffold";
+import { writeScaffold } from "../../tools/packaging/common/scaffold";
 
 describe.runIf(process.platform === "linux")("writeScaffold", () => {
   beforeEach(() => {

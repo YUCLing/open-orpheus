@@ -153,7 +153,7 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           VERSION: ${{ inputs.version }}
         run: |
-          node scripts/generate-changelog.ts \
+          node tools/scripts/generate-changelog.ts \
             --notes /tmp/release-notes.md \
             --version "$VERSION"
 
@@ -162,7 +162,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          git add package.json packages/plugin-api/package.json packaging/flatpak/metainfo.xml packaging/resources/debian/changelog packaging/resources/rpm.changelog
+          git add package.json packages/plugin-api/package.json tools/packaging/flatpak/metainfo.xml tools/packaging/resources/debian/changelog tools/packaging/resources/rpm.changelog
           git commit -m "chore: bump version to ${VERSION}" -m "[skip ci]"
           git push origin main
 

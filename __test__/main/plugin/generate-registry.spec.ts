@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { collectRegistryEntries } from "../../../scripts/registry-scan";
-import { REALMS, REALM_IDS } from "../../../scripts/realms";
+import { collectRegistryEntries } from "../../../tools/registry/scan";
+import { REALMS, REALM_IDS } from "../../../tools/config/realms";
 
 describe("collectRegistryEntries", () => {
   it("derives keys from the root tsconfig aliases", () => {

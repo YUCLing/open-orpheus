@@ -98,7 +98,7 @@ jobs:
 
       - name: Validate metainfo
         if: runner.os == 'Linux'
-        run: appstreamcli validate packaging/flatpak/metainfo.xml
+        run: appstreamcli validate tools/packaging/flatpak/metainfo.xml
 
       - name: Restore built native modules
         id: modules
@@ -115,7 +115,7 @@ jobs:
           # either must invalidate the cached binaries.
           # No restore-keys: only an exact hit may skip the build, otherwise a
           # partial restore would silently leave addons missing.
-          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'packaging/common/toolchain.ts', 'scripts/build-modules.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
+          key: modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'Cargo.lock', 'Cargo.toml', '.cargo/config.toml', 'tools/config/toolchain.ts', 'tools/scripts/build-modules.ts', 'tools/scripts/lib/modules/**', 'tools/shared/paths.ts', 'tools/shared/process.ts', 'modules/*/Cargo.toml', 'modules/*/package.json', 'modules/*/build.rs', 'modules/*/src/**', 'modules/*/.cargo/config.toml') }}
 
       - name: Build native modules
         if: steps.modules.outputs.cache-hit != 'true'

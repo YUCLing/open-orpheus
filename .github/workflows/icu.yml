@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - package.json
-      - packaging/resources/icu-filters.json
+      - tools/packaging/resources/icu-filters.json
   workflow_dispatch:
 
 permissions:
@@ -29,8 +29,8 @@ jobs:
       contents: read
 
     env:
-      OUTPUT_DAT: packaging/resources/icudtl.dat
-      FILTER_FILE: packaging/resources/icu-filters.json
+      OUTPUT_DAT: tools/packaging/resources/icudtl.dat
+      FILTER_FILE: tools/packaging/resources/icu-filters.json
 
     steps:
       # Bootstrap checkout: the steps below run against this working tree.
@@ -177,8 +177,8 @@ jobs:
             exit 0
           fi
 
-          required=$(node scripts/icu-data.ts version --input "$ELECTRON_DAT")
-          committed=$(node scripts/icu-data.ts version --input "$OUTPUT_DAT")
+          required=$(node tools/scripts/icu-data.ts version --input "$ELECTRON_DAT")
+          committed=$(node tools/scripts/icu-data.ts version --input "$OUTPUT_DAT")
           if [ "$required" = "$committed" ]; then
             echo "ICU data version unchanged ($committed); skipping rebuild."
             echo "rebuild=false" >> "$GITHUB_OUTPUT"
@@ -192,7 +192,7 @@ jobs:
         env:
           ELECTRON_DAT: ${{ steps.electron.outputs.dat }}
         run: |
-          node scripts/icu-data.ts build \
+          node tools/scripts/icu-data.ts build \
             --input "$ELECTRON_DAT" \
             --filter "$FILTER_FILE" \
             --output "$OUTPUT_DAT"

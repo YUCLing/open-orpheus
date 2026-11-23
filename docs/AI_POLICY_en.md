@@ -1,6 +1,6 @@
 # AI-Assisted Contribution Policy
 
-[中文版](../AI_POLICY.md)
+[中文版](./AI_POLICY.md)
 
 This policy covers every pull request in this repository, along with the issues, comments, and review threads around it.
 

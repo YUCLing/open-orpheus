@@ -23,22 +23,17 @@ import {
   readAliases,
   readCompilerOptions,
   type RegistryEntry,
-} from "../../../scripts/registry-scan.ts";
-import {
-  REALMS,
-  REALM_IDS,
-  TYPE_ONLY_SDKS,
-  type RealmId,
-  type TypeOnlySdkConfig,
-} from "../../../scripts/realms.ts";
+} from "../../../tools/registry/scan.ts";
+import { REALMS, REALM_IDS, TYPE_ONLY_SDKS, type RealmId } from "../../../tools/config/realms.ts";
+import type { TypeOnlySdkConfig } from "../../../tools/registry/realms.types.ts";
 
 /**
  * Generate the self-contained `@open-orpheus/plugin-api` type package.
  *
  * This pipeline only produces declarations. Each realm's runtime registry is a
- * separate build-time concern (`plugins/RegistryPlugin.ts`, served as
+ * separate build-time concern (`tools/forge/plugins/RegistryPlugin.ts`, served as
  * `virtual:open-orpheus/registry[/<realm>]`); the two share only the reader in
- * `scripts/registry-scan.ts`.
+ * `tools/registry/scan.ts`.
  */
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(SCRIPT_DIR, "..");

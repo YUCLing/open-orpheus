@@ -1,8 +1,8 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
-import RegistryPlugin from "./plugins/RegistryPlugin.js";
-import RealmRuntimePlugin from "./plugins/RealmRuntimePlugin.js";
-import { createAliases } from "./scripts/tsconfigAliases.js";
+import RegistryPlugin from "./tools/forge/plugins/RegistryPlugin.js";
+import RealmRuntimePlugin from "./tools/forge/plugins/RealmRuntimePlugin.js";
+import { createAliases } from "./tools/shared/tsconfig.js";
 
 export default defineConfig({
   plugins: [RegistryPlugin(), RealmRuntimePlugin()],
@@ -15,7 +15,7 @@ export default defineConfig({
     setupFiles: ["__test__/helpers/setup.ts", "__test__/helpers/electron.ts"],
     exclude: [...configDefaults.exclude, "modules/*", "__test__/e2e/*"],
     coverage: {
-      include: ["src/**/*.ts", "packaging/**/*.ts"],
+      include: ["src/**/*.ts", "tools/packaging/**/*.ts"],
       exclude: [
         "src/{preload,worklets}/**/*.ts",
         // Type-only declarations
@@ -23,8 +23,8 @@ export default defineConfig({
         // Generated plugin artifacts
         "packages/plugin-api/dist/**",
         // Constants
-        "packaging/resources/metadata.ts",
-        "packaging/common/toolchain.ts",
+        "tools/config/packaging.ts",
+        "tools/config/toolchain.ts",
         "src/constants.ts",
       ],
     },

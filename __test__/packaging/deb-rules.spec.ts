@@ -7,8 +7,8 @@ import { readFile } from "node:fs/promises";
 
 import { vol } from "memfs";
 
-import { createRulesFile, generateRules, type RulesOptions } from "../../packaging/deb/rules";
-import { RUST_VERSION } from "../../packaging/common/toolchain";
+import { createRulesFile, generateRules, type RulesOptions } from "../../tools/packaging/deb/rules";
+import { RUST_VERSION } from "../../tools/config/toolchain";
 
 const base: RulesOptions = {
   name: "open-orpheus",
@@ -40,7 +40,7 @@ describe("generateRules", () => {
   it("interpolates the package name into the scaffolder call", async () => {
     const rules = await generateRules({ ...base, name: "my-app" });
 
-    expect(rules).toContain("node scripts/build-scaffold.ts rpm-scaffold --name my-app");
+    expect(rules).toContain("node tools/scripts/build-scaffold.ts rpm-scaffold --name my-app");
   });
 
   it("skips the toolchain when installTools is false", async () => {

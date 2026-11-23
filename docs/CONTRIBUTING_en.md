@@ -69,11 +69,15 @@ open-orpheus/
 │   ├── av3a/               # AV3A (Audio Vivid) decoder
 │   ├── dbus/               # Linux D-Bus integration (generic client, MPRIS media session, lyrics service)
 │   ├── nowplaying/         # macOS media session (MPNowPlayingInfoCenter)
-│   ├── sys-win32/          # Windows media session (SMTC) and scheduled power-off
-│   └── lifecycle/          # Exit callbacks and lifecycle utilities
-├── plugins/                # Electron Forge plugins & Makers (deb / rpm / flatpak, logging, etc.)
-├── scripts/                # Build scripts (module compilation, Flatpak, etc.)
-├── packaging/              # Per-platform packaging configuration
+│   └── sys-win32/          # Windows media session (SMTC) and scheduled power-off
+├── tools/                  # Build tooling (Forge, packaging, scripts)
+│   ├── config/             # Frequently edited config data (realms, packaging metadata, Rust toolchain)
+│   ├── forge/              # Electron Forge config, Vite plugins, makers, and hooks
+│   ├── packaging/          # Per-platform packaging implementations and templates/resources
+│   ├── registry/           # Plugin realm types and registry scanning
+│   ├── scripts/            # Build/release CLI entry points
+│   └── shared/             # Shared path, process, CLI, and tsconfig helpers
+├── __test__/               # Unit tests and E2E tests
 ├── data/                   # Development runtime data (resources, cache, logs)
 └── patches/                # Dependency patches
 ```

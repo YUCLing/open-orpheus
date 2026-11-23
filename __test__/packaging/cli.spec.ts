@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseFlags } from "../../packaging/common/cli";
+import { parseFlags } from "../../tools/packaging/common/cli";
 
 describe("parseFlags", () => {
   it("defaults to a clean, toolchain-less, non-prebuilt build", () => {

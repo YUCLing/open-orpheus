@@ -69,11 +69,15 @@ open-orpheus/
 │   ├── av3a/               # AV3A（Audio Vivid）解码器
 │   ├── dbus/               # Linux D-Bus 集成（通用客户端、MPRIS 媒体会话、歌词服务）
 │   ├── nowplaying/         # macOS 媒体会话（MPNowPlayingInfoCenter）
-│   ├── sys-win32/          # Windows 媒体会话（SMTC）与定时关机
-│   └── lifecycle/          # 退出回调等生命周期工具
-├── plugins/                # Electron Forge 插件与 Maker（deb / rpm / flatpak、日志等）
-├── scripts/                # 构建脚本（模块编译、Flatpak 等）
-├── packaging/              # 各平台打包配置
+│   └── sys-win32/          # Windows 媒体会话（SMTC）与定时关机
+├── tools/                  # 构建工具（Forge、打包、构建脚本）
+│   ├── config/             # 频繁调整的配置数据（realm、打包元数据、Rust 工具链）
+│   ├── forge/              # Electron Forge 配置、Vite 插件、Maker 与 hooks
+│   ├── packaging/          # 各平台打包实现与模板/资源
+│   ├── registry/           # 插件 realm 类型与注册表扫描
+│   ├── scripts/            # 构建/发布 CLI 入口
+│   └── shared/             # 工具间共享的路径、进程、CLI、tsconfig 辅助
+├── __test__/               # 单元测试与 E2E 测试
 ├── data/                   # 开发用运行时数据（资源、缓存、日志）
 └── patches/                # 依赖补丁
 ```
@@ -168,7 +172,7 @@ Issue 是反馈 Bug、提出功能建议或讨论项目方向的主要渠道。�
 
 唯一的硬性要求是：**提交的每一行你都得能自己解释。** 答不出「没有这个改动会怎样」「谁会遇到」「怎么验证过」的 PR，会在 review 里停下；长期没有回应的，可能会被关闭。
 
-具体标准、review 中的回答方式以及各类改动的前置讨论要求，见 [AI 辅助贡献政策](./AI_POLICY.md)。
+具体标准、review 中的回答方式以及各类改动的前置讨论要求，见 [AI 辅助贡献政策](./docs/AI_POLICY.md)。
 
 ### 关于 Codecov
 

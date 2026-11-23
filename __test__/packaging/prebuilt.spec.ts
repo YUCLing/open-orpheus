@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -5,48 +6,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // memfs-backed, see `__mocks__/fs/promises.cts`.
 vi.mock("node:fs/promises");
 
-const hoisted = vi.hoisted(() => ({ execFile: vi.fn() }));
-
-vi.mock("node:child_process", () => ({
-  execFile: hoisted.execFile,
-  spawn: vi.fn(),
-}));
-
 import { vol } from "memfs";
 
-import { createPrebuiltBundle, resolvePrebuiltAppDir } from "../../packaging/common/prebuilt";
+import { createPrebuiltBundle, resolvePrebuiltAppDir } from "../../tools/packaging/common/prebuilt";
 
 const REPO = resolve("repo");
 const OUT = join(REPO, "out");
 const STAGE = resolve("stage", "prebuilt");
-const PB_STAGE = resolve("stage", "pb");
 const prebuilt = (name: string) => join(OUT, name);
 
-type ExecFileCallback = (error: Error | null, result?: { stdout: string; stderr: string }) => void;
-
-/** `execFile` in callback style, so `promisify` works on the mock. */
-function execFileSucceeds() {
-  hoisted.execFile.mockImplementation(
-    (_cmd: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
-      cb(null, { stdout: "", stderr: "" });
-      return {} as never;
-    }
-  );
-}
-
-function execFileFails(message: string) {
-  hoisted.execFile.mockImplementation(
-    (_cmd: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
-      cb(new Error(message));
-      return {} as never;
-    }
-  );
-}
+/** The icons the shared packaging metadata installs, at their project-relative paths. */
+const METADATA_ICONS = {
+  [join(REPO, "assets", "icon_256.png")]: "256",
+  [join(REPO, "assets", "icon_512.png")]: "512",
+  [join(REPO, "assets", "icon.svg")]: "<svg />",
+};
 
 beforeEach(() => {
   vol.reset();
-  hoisted.execFile.mockReset();
-  execFileSucceeds();
+  // memfs starts empty; `mkdtemp` needs its parent and the metadata icons
+  // must be readable through the mocked `fs/promises`.
+  vol.fromJSON({
+    ...METADATA_ICONS,
+  });
+  vol.mkdirSync(tmpdir(), { recursive: true });
 });
 
 describe("resolvePrebuiltAppDir", () => {
@@ -90,7 +73,7 @@ describe("resolvePrebuiltAppDir", () => {
   });
 });
 
-describe("createPrebuiltBundle", () => {
+describe.runIf(process.platform !== "win32")("createPrebuiltBundle", () => {
   it("stages the app and generates the scaffold", async () => {
     vol.fromJSON({
       [join(OUT, "open-orpheus-linux-x64", "open-orpheus")]: "binary",
@@ -107,18 +90,18 @@ describe("createPrebuiltBundle", () => {
     expect(dest).toBe(STAGE);
     expect(vol.existsSync(join(STAGE, "app", "open-orpheus"))).toBe(true);
     expect(vol.existsSync(join(STAGE, "app", "resources", "app.asar"))).toBe(true);
-    expect(vol.existsSync(join(STAGE, "scaffold"))).toBe(true);
-    expect(hoisted.execFile).toHaveBeenCalledWith(
-      process.execPath,
-      [
-        join(REPO, "scripts", "build-scaffold.ts"),
-        join(STAGE, "scaffold"),
-        "--name",
-        "open-orpheus",
-      ],
-      { cwd: REPO },
-      expect.any(Function)
-    );
+    expect(vol.existsSync(join(STAGE, "scaffold", "usr", "share", "applications"))).toBe(true);
+    expect(
+      vol.existsSync(
+        join(STAGE, "scaffold", "usr", "share", "applications", "open-orpheus.desktop")
+      )
+    ).toBe(true);
+    expect(
+      vol.existsSync(join(STAGE, "scaffold", "usr", "share", "icons", "hicolor", "256x256", "apps"))
+    ).toBe(true);
+    const binLink = join(STAGE, "scaffold", "usr", "bin", "open-orpheus");
+    expect(vol.lstatSync(binLink).isSymbolicLink()).toBe(true);
+    expect(vol.readlinkSync(binLink)).toBe("../lib/open-orpheus/open-orpheus");
   });
 
   it("replaces an existing bundle", async () => {
@@ -133,14 +116,5 @@ describe("createPrebuiltBundle", () => {
     expect(vol.existsSync(join(STAGE, "app", "stale"))).toBe(false);
     expect(vol.existsSync(join(STAGE, "keep.txt"))).toBe(false);
     expect(vol.existsSync(join(STAGE, "app", "app"))).toBe(true);
-  });
-
-  it("surfaces scaffolder failures", async () => {
-    vol.fromJSON({ [join(OUT, "app-linux-x64", "app")]: "binary" });
-    execFileFails("scaffold exploded");
-
-    await expect(
-      createPrebuiltBundle(REPO, join(OUT, "app-linux-x64"), "app", PB_STAGE)
-    ).rejects.toThrow("scaffold exploded");
   });
 });

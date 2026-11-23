@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appimageArch, flatpakArch, nodeArch, rpmArch } from "../../packaging/common/arch";
+import { appimageArch, flatpakArch, nodeArch, rpmArch } from "../../tools/packaging/common/arch";
 
 describe("nodeArch", () => {
   it("passes the arch through", () => {

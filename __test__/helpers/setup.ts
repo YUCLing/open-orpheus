@@ -3,7 +3,7 @@ import { vi } from "vitest";
 /**
  * Install the compile-time-injected `LOGGER` global for every test file.
  *
- * Production code gets `LOGGER` from `plugins/LoggerPlugin.ts`, but Vitest runs
+ * Production code gets `LOGGER` from `tools/forge/plugins/LoggerPlugin.ts`, but Vitest runs
  * the untransformed sources, so the global does not exist unless a spec stubs
  * it. Installing it once here keeps specs that exercise a logging code path
  * (including the preload bridge helpers) from throwing `ReferenceError: LOGGER

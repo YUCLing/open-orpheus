@@ -19,7 +19,7 @@ import {
   prebuiltAppModule,
   writeManifest,
   type ManifestContext,
-} from "../../packaging/flatpak/manifest";
+} from "../../tools/packaging/flatpak/manifest";
 
 const OUT = resolve("out");
 const MANIFEST_DIR = join(OUT, "make", "flatpak-builder");

@@ -10,7 +10,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { vol } from "memfs";
 
-import { makeInStaging } from "../../packaging/common/maker";
+import { makeInStaging } from "../../tools/packaging/common/maker";
 
 const OUT_DIR = resolve("out", "deb");
 const out = (name: string) => join(OUT_DIR, name);

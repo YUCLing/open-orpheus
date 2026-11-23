@@ -12,7 +12,7 @@ import {
   generateControl,
   resolveControlOptions,
   type ControlOptions,
-} from "../../packaging/deb/control";
+} from "../../tools/packaging/deb/control";
 
 const pkg = {
   name: "open-orpheus",

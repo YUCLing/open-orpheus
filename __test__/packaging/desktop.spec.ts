@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateDesktop } from "../../packaging/common/desktop.js";
+import { generateDesktop } from "../../tools/packaging/common/desktop.js";
 
 describe("Desktop file generation", async () => {
   it("generates with default options", async () => {
