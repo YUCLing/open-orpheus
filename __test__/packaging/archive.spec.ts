@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
   spawn: hoisted.spawn,
 }));
 
-import { createDirectoryTarball, createProjectTarball } from "../../packaging/common/archive";
+import { createDirectoryTarball, createProjectTarball } from "../../tools/packaging/common/archive";
 
 type FakeChild = EventEmitter & { stdin: { end: ReturnType<typeof vi.fn> } };
 
@@ -113,21 +113,21 @@ describe("createProjectTarball", () => {
 
   it("drops excluded paths and their contents", async () => {
     gitReturns([
-      "packaging/resources/debian/control.ejs",
-      "packaging/resources/debian/rules.ejs",
-      "packaging/resources/misc/file",
-      "packaging/resources/metadata.ts",
+      "tools/packaging/resources/debian/control.ejs",
+      "tools/packaging/resources/debian/rules.ejs",
+      "tools/packaging/resources/misc/file",
+      "tools/config/packaging.ts",
     ]);
     const child = nextTar();
 
     const promise = createProjectTarball("/repo", "/out/a.tgz", "app", "1.0.0", [
-      "packaging/resources/debian",
+      "tools/packaging/resources/debian",
     ]);
     await settle();
 
     expect(tarInput(child)).toEqual([
-      "packaging/resources/misc/file",
-      "packaging/resources/metadata.ts",
+      "tools/packaging/resources/misc/file",
+      "tools/config/packaging.ts",
     ]);
 
     child.emit("close", 0);

@@ -1,5 +1,5 @@
 name: Resolve pinned Rust version
-description: Read the Rust toolchain version declared in packaging/common/toolchain.ts.
+description: Read the Rust toolchain version declared in tools/config/toolchain.ts.
 
 outputs:
   rust:
@@ -9,13 +9,13 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Read packaging/common/toolchain.ts
+    - name: Read tools/config/toolchain.ts
       id: read
       shell: bash
       run: |
         set -euo pipefail
 
-        file="packaging/common/toolchain.ts"
+        file="tools/config/toolchain.ts"
         version=$(sed -n 's/.*RUST_VERSION = "\([^"]*\)".*/\1/p' "$file")
         if [ -z "$version" ]; then
           echo "::error::Cannot read RUST_VERSION from ${file}" >&2

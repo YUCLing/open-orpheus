@@ -7,8 +7,8 @@ import { readFile } from "node:fs/promises";
 
 import { vol } from "memfs";
 
-import { createSpecFile, generateSpec, type SpecOptions } from "../../packaging/rpm/spec";
-import { RUST_VERSION } from "../../packaging/common/toolchain";
+import { createSpecFile, generateSpec, type SpecOptions } from "../../tools/packaging/rpm/spec";
+import { RUST_VERSION } from "../../tools/config/toolchain";
 
 const base: SpecOptions = {
   name: "open-orpheus",
@@ -72,7 +72,7 @@ describe("generateSpec", () => {
     expect(spec).toContain("pnpm run build:modules");
     expect(spec).toContain("pnpm run package");
     expect(spec).toContain(
-      "node scripts/build-scaffold.ts %{_builddir}/%{name}-%{version}/rpm-scaffold --name %{name}"
+      "node tools/scripts/build-scaffold.ts %{_builddir}/%{name}-%{version}/rpm-scaffold --name %{name}"
     );
   });
 

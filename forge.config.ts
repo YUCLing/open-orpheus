@@ -1,8 +1,3 @@
-import { existsSync } from "node:fs";
-import { copyFile, cp, mkdir, readdir, rm } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fork } from "node:child_process";
-
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
@@ -12,14 +7,17 @@ import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
 import pkg from "./package.json" with { type: "json" };
-import { metadata } from "./packaging/resources/metadata";
+import { metadata } from "./tools/config/packaging.ts";
 
-import MakerAppImage from "./plugins/MakerAppImage";
-import MakerDeb from "./plugins/MakerDeb";
-import MakerFlatpak from "./plugins/MakerFlatpak";
-import MakerRpm from "./plugins/MakerRpm";
-
-const LOCALES = ["en", "en-US", "zh-CN"];
+import MakerAppImage from "./tools/forge/makers/MakerAppImage.ts";
+import MakerDeb from "./tools/forge/makers/MakerDeb.ts";
+import MakerFlatpak from "./tools/forge/makers/MakerFlatpak.ts";
+import MakerRpm from "./tools/forge/makers/MakerRpm.ts";
+import { copyBuiltinPlugins } from "./tools/forge/hooks/builtin-plugins.ts";
+import { deployDependencies, restoreDependencies } from "./tools/forge/hooks/deploy-deps.ts";
+import { extractLicenses } from "./tools/forge/hooks/licenses.ts";
+import { pruneLocales } from "./tools/forge/hooks/locales.ts";
+import { replaceIcuData } from "./tools/forge/hooks/icu.ts";
 
 let icon;
 switch (process.platform) {
@@ -41,109 +39,9 @@ const config: ForgeConfig = {
       unpack: "**/*.{so*,dylib,dll}",
     },
 
-    beforeCopy: [
-      async () => {
-        // Blocker if we want to run Vite build only
-        if ("FORGE_BUILD_ONLY" in process.env) throw new Error("FORGE_BUILD_ONLY");
-        // Deploy our modules as published version, so source code of modules will not be bundled
-        // into the final packaged app.
-        await new Promise<void>((resolve, reject) => {
-          const proc = fork("scripts/deploy-deps.ts");
-          proc.on("error", reject);
-          proc.on("exit", (code) => {
-            if (code !== 0) reject(code);
-            resolve();
-          });
-        });
-      },
-    ],
-    afterCopy: [
-      async () => {
-        // Best effort to restore, don't fail the build if something went wrong
-        await new Promise<void>((resolve) => {
-          const proc = fork("scripts/deploy-deps.ts", ["--restore"]);
-          proc.on("error", resolve);
-          proc.on("exit", resolve);
-        });
-      },
-      // Copy built-in plugins into the app directory before asar packaging.
-      async ({ buildPath }) => {
-        const source = resolve(import.meta.dirname, "out", "builtin-plugins");
-        if (!existsSync(source)) return;
-        await cp(source, resolve(buildPath, "builtin-plugins"), { recursive: true });
-      },
-    ],
-
-    afterExtract: [
-      async ({ buildPath, platform }) => {
-        if (platform === "mas" || platform === "darwin") {
-          const resourcesPath = resolve(buildPath, "Electron.app/Contents/Resources");
-          const frameworkResourcesPath = resolve(
-            buildPath,
-            "Electron.app/Contents/Frameworks/Electron Framework.framework/Resources"
-          );
-
-          const resources = await readdir(resourcesPath, {
-            withFileTypes: true,
-          });
-          const frameworkResources = await readdir(frameworkResourcesPath, {
-            withFileTypes: true,
-          });
-          await Promise.all(
-            [...resources, ...frameworkResources].map(async (locale) => {
-              if (!locale.isDirectory() || !locale.name.endsWith(".lproj")) return;
-              if (LOCALES.some((v) => locale.name.replace("_", "-").startsWith(v))) return;
-              await rm(resolve(locale.parentPath, locale.name), {
-                recursive: true,
-              });
-            })
-          );
-
-          return;
-        }
-        const localesPath = resolve(buildPath, "locales");
-
-        const locales = await readdir(localesPath, { withFileTypes: true });
-        await Promise.all(
-          locales.map(async (locale) => {
-            if (!locale.isFile()) return;
-            if (
-              LOCALES.includes(locale.name.substring(0, locale.name.length - 4).replace("_", "-"))
-            )
-              return;
-            await rm(resolve(locale.parentPath, locale.name));
-          })
-        );
-      },
-      // Extract LICENSES.chromium.html to a separate directory when
-      // EXTRACT_LICENSES_TO is set, then remove it from the build.
-      async ({ buildPath, platform }) => {
-        const destDir = process.env.EXTRACT_LICENSES_TO;
-        if (destDir) {
-          platform = platform === "mas" ? "darwin" : platform;
-          const src = resolve(buildPath, "LICENSES.chromium.html");
-          const dest = resolve(destDir, `LICENSES.chromium.${platform}.html`);
-          await mkdir(dirname(dest), { recursive: true });
-          await copyFile(src, dest);
-          await rm(src);
-        }
-      },
-      // Replace icudtl.dat with our smaller, filtered build.
-      async ({ buildPath, platform }) => {
-        const source = resolve("packaging/resources/icudtl.dat");
-        if (!existsSync(source)) return;
-
-        const target =
-          platform === "mas" || platform === "darwin"
-            ? resolve(
-                buildPath,
-                "Electron.app/Contents/Frameworks/Electron Framework.framework/Resources/icudtl.dat"
-              )
-            : resolve(buildPath, "icudtl.dat");
-
-        await copyFile(source, target);
-      },
-    ],
+    beforeCopy: [deployDependencies],
+    afterCopy: [restoreDependencies, copyBuiltinPlugins],
+    afterExtract: [pruneLocales, extractLicenses, replaceIcuData],
 
     // In offline environments (e.g. flatpak sandbox), SHASUMS256.txt cannot be
     // downloaded from GitHub. The electron zip is already verified by sha256 in

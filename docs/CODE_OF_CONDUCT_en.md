@@ -1,6 +1,6 @@
 # Code of Conduct
 
-[中文版](./CODE_OF_CONDUCT.md)
+[中文版](../CODE_OF_CONDUCT.md)
 
 ## Our Pledge
 

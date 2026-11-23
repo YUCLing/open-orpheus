@@ -4,9 +4,9 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildAppImage } from "../../packaging/appimage/image";
-import { resolveRuntime } from "../../packaging/appimage/runtime";
-import { readPackageJson } from "../../packaging/common/package-json";
+import { buildAppImage } from "../../tools/packaging/appimage/image";
+import { resolveRuntime } from "../../tools/packaging/appimage/runtime";
+import { readPackageJson } from "../../tools/packaging/common/package-json";
 
 /** `\x7fELF` + a marker byte, so the fixtures are distinguishable and pass the ELF check. */
 const runtimeBytes = (marker: number): Uint8Array<ArrayBuffer> =>

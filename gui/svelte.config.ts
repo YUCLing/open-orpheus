@@ -1,7 +1,7 @@
 import adapter from "@sveltejs/adapter-static";
 import type { Config } from "@sveltejs/kit";
 
-import { createAliases } from "../scripts/tsconfigAliases.ts";
+import { createAliases } from "../tools/shared/tsconfig.ts";
 
 const config: Config = {
   kit: {

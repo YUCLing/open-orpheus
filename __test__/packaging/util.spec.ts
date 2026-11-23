@@ -5,7 +5,7 @@ vi.mock("node:fs/promises");
 
 import { vol } from "memfs";
 
-import { createSymlink } from "../../packaging/common/util";
+import { createSymlink } from "../../tools/packaging/common/util";
 
 // POSIX symlink targets are part of the Linux package layout. Windows would
 // create reparse points with backslash targets (and needs extra privileges),

@@ -20,13 +20,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "src",
-    "forge.env.d.ts",
-    "packaging/**/*.ts",
-    "scripts/*.ts",
-    "plugins/*.ts",
-    "__test__/**/*.ts"
-  ],
+  "include": ["src", "forge.env.d.ts", "tools/**/*.ts", "__test__/**/*.ts"],
   "exclude": ["gui"]
 }
