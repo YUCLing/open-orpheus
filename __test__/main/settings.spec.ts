@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { SETTINGS } from "@shared/settings";
+import {
+  SETTINGS,
+  type TrayClickBehavior,
+  type WindowLifecycle,
+  type WindowSizeLimitOverride,
+} from "@shared/settings";
 
 // The real store is a native sqlite database behind keyv, so only the decorated
 // keyv instance that `initialize` builds is under test here.
@@ -108,6 +113,17 @@ describe("initialize", () => {
     >();
     expectTypeOf(() => kv.get("nope.unknown")).returns.toEqualTypeOf<Promise<unknown>>();
 
+    // Enumerated settings carry their union, not the widened default string.
+    expectTypeOf(() => kv.get(SETTINGS.kTrayClickBehavior)).returns.toEqualTypeOf<
+      Promise<TrayClickBehavior | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kWindowLifecycle)).returns.toEqualTypeOf<
+      Promise<WindowLifecycle | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kWindowOverrideMainWindowSizeLimit)).returns.toEqualTypeOf<
+      Promise<WindowSizeLimitOverride | undefined>
+    >();
+
     const dynamicKey: string = SETTINGS.kProxy;
     expectTypeOf(() => kv.get(dynamicKey)).returns.toEqualTypeOf<Promise<unknown>>();
 
@@ -119,9 +135,17 @@ describe("initialize", () => {
     ).returns.toMatchTypeOf<Promise<(string | number | undefined)[]>>();
 
     // A known key only accepts the value type inferred from its default.
-    // @ts-expect-error strings are not valid opacity values
-    const invalidWrite = () => kv.set(SETTINGS.kDesktopLyricsOpacity, "nope");
-    void invalidWrite;
+    function invalidWrites() {
+      // @ts-expect-error strings are not valid opacity values
+      void kv.set(SETTINGS.kDesktopLyricsOpacity, "nope");
+      // @ts-expect-error not a tray click behavior
+      void kv.set(SETTINGS.kTrayClickBehavior, "minimize");
+      // @ts-expect-error not a window lifecycle
+      void kv.set(SETTINGS.kWindowLifecycle, "persistent");
+      // @ts-expect-error the override is stored as a string, not a boolean
+      void kv.set(SETTINGS.kWindowOverrideMainWindowSizeLimit, true);
+    }
+    void invalidWrites;
   });
 
   it("applies the default value of a known key", async () => {
@@ -145,6 +169,8 @@ describe("initialize", () => {
   });
 
   it("keeps a stored value over the default", async () => {
+    // "minimize" is not a `TrayClickBehavior`: reads are not validated against
+    // the union, so a value written by an older build still comes back as is.
     hoisted.values.set(SETTINGS.kTrayClickBehavior, "minimize");
     initialize();
 

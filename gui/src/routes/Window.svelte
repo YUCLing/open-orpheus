@@ -3,7 +3,7 @@
   import * as Field from "$lib/components/ui/field";
 
   import * as settings from "$lib/settings";
-  import { SETTINGS } from "@shared/settings";
+  import { SETTINGS, type WindowLifecycle, type WindowSizeLimitOverride } from "@shared/settings";
 
   let overrideMainWindowSizeLimitPromise = $state(
     settings.get(SETTINGS.kWindowOverrideMainWindowSizeLimit)
@@ -24,8 +24,8 @@
     <RadioGroup.Root
       class="mt-2"
       bind:value={
-        () => (value as string) || "false",
-        (v) => {
+        () => (value as WindowSizeLimitOverride | undefined) || "false",
+        (v: WindowSizeLimitOverride) => {
           settings.set(SETTINGS.kWindowOverrideMainWindowSizeLimit, v);
           overrideMainWindowSizeLimitPromise = Promise.resolve(v);
         }
@@ -63,8 +63,8 @@
     <RadioGroup.Root
       class="mt-2"
       bind:value={
-        () => (value as string) || "on-demand",
-        (v) => {
+        () => (value as WindowLifecycle | undefined) || "on-demand",
+        (v: WindowLifecycle) => {
           settings.set(SETTINGS.kWindowLifecycle, v);
           windowLifecyclePromise = Promise.resolve(v);
         }

@@ -1,11 +1,12 @@
 import { SETTINGS, type SettingsKey } from "./keys";
+import type { TrayClickBehavior, WindowLifecycle, WindowSizeLimitOverride } from "./values";
 
 /**
  * Defaults for every known setting.
  *
- * `undefined` means the entry has no default value; the `as T | undefined`
- * annotations keep the type the entry holds once it is set. `satisfies` (rather
- * than an annotation) keeps the key and value types available for inference.
+ * `undefined` means the entry has no default value; the `as T` annotations keep
+ * the type the entry holds once it is set. `satisfies` (rather than an
+ * annotation) keeps the key and value types available for inference.
  */
 export const SETTINGS_DEFAULTS = {
   [SETTINGS.kAudioCurrentDevice]: undefined as string | undefined,
@@ -14,10 +15,10 @@ export const SETTINGS_DEFAULTS = {
   [SETTINGS.kDiscordPresenceEnabled]: false,
   [SETTINGS.kPluginsEnabled]: {} as Record<string, unknown>,
   [SETTINGS.kProxy]: undefined as string | undefined,
-  [SETTINGS.kTrayClickBehavior]: "always-show-menu",
+  [SETTINGS.kTrayClickBehavior]: "always-show-menu" as TrayClickBehavior,
   [SETTINGS.kUpdateAutoInstall]: undefined as string | undefined,
-  [SETTINGS.kWindowLifecycle]: "on-demand",
-  [SETTINGS.kWindowOverrideMainWindowSizeLimit]: undefined as string | undefined,
+  [SETTINGS.kWindowLifecycle]: "on-demand" as WindowLifecycle,
+  [SETTINGS.kWindowOverrideMainWindowSizeLimit]: undefined as WindowSizeLimitOverride | undefined,
 } satisfies Record<SettingsKey, unknown>;
 
 /** Value of a setting, inferred from its default. */
