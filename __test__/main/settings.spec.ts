@@ -102,9 +102,6 @@ describe("initialize", () => {
     expectTypeOf(() => kv.get(SETTINGS.kDesktopLyricsOpacity)).returns.toEqualTypeOf<
       Promise<number | undefined>
     >();
-    expectTypeOf(() => kv.get(SETTINGS.kDiscordPresenceEnabled)).returns.toEqualTypeOf<
-      Promise<boolean | undefined>
-    >();
     expectTypeOf(() => kv.get(SETTINGS.kProxy)).returns.toEqualTypeOf<
       Promise<string | undefined>
     >();
@@ -153,19 +150,6 @@ describe("initialize", () => {
 
     await expect(kv.get(SETTINGS.kTrayClickBehavior)).resolves.toBe("always-show-menu");
     await expect(kv.get(SETTINGS.kDesktopLyricsOpacity)).resolves.toBe(1);
-    await expect(kv.get(SETTINGS.kDiscordPresenceEnabled)).resolves.toBe(false);
-  });
-
-  it("旧对象配置不会启用分享或被修改", async () => {
-    const previous = { enabled: true };
-    hoisted.values.set("discordPresence", previous);
-
-    initialize();
-
-    await expect(kv.get(SETTINGS.kDiscordPresenceEnabled)).resolves.toBe(false);
-    expect(hoisted.values.get("discordPresence")).toBe(previous);
-    expect(hoisted.store.set).not.toHaveBeenCalled();
-    expect(hoisted.store.delete).not.toHaveBeenCalled();
   });
 
   it("keeps a stored value over the default", async () => {
@@ -218,11 +202,11 @@ describe("initialize", () => {
     const value = true;
     hoisted.store.set.mockReturnValueOnce(write.promise);
 
-    const operation = kv.set(SETTINGS.kDiscordPresenceEnabled, value, 1500);
+    const operation = kv.set(SETTINGS.kDesktopLyricsInterpolatedLyricLine, value, 1500);
     await flush();
     expect(seen).toEqual([]);
     expect(hoisted.store.set).toHaveBeenLastCalledWith(
-      SETTINGS.kDiscordPresenceEnabled,
+      SETTINGS.kDesktopLyricsInterpolatedLyricLine,
       value,
       1500
     );
@@ -232,7 +216,7 @@ describe("initialize", () => {
     await flush();
 
     expect(seen).toEqual([
-      { event: "change", data: { key: SETTINGS.kDiscordPresenceEnabled, value } },
+      { event: "change", data: { key: SETTINGS.kDesktopLyricsInterpolatedLyricLine, value } },
     ]);
   });
 
@@ -241,7 +225,7 @@ describe("initialize", () => {
     const seen = recordEvents();
     hoisted.store.set.mockResolvedValueOnce(false);
 
-    await expect(kv.set(SETTINGS.kDiscordPresenceEnabled, true)).resolves.toBe(false);
+    await expect(kv.set(SETTINGS.kDesktopLyricsInterpolatedLyricLine, true)).resolves.toBe(false);
     await flush();
 
     expect(seen).toEqual([]);
@@ -253,7 +237,7 @@ describe("initialize", () => {
     const error = new Error("write failed");
     hoisted.store.set.mockRejectedValueOnce(error);
 
-    await expect(kv.set(SETTINGS.kDiscordPresenceEnabled, true)).rejects.toBe(error);
+    await expect(kv.set(SETTINGS.kDesktopLyricsInterpolatedLyricLine, true)).rejects.toBe(error);
     await flush();
 
     expect(seen).toEqual([]);
@@ -263,7 +247,7 @@ describe("initialize", () => {
     initialize();
     const seen = recordEvents();
     const entries = [
-      { key: SETTINGS.kDiscordPresenceEnabled, value: true },
+      { key: SETTINGS.kDesktopLyricsInterpolatedLyricLine, value: true },
       { key: SETTINGS.kProxy, value: "failed" },
       { key: SETTINGS.kDesktopLyricsOpacity, value: 0.5 },
     ];
@@ -298,7 +282,7 @@ describe("initialize", () => {
     const seen = recordEvents();
 
     hoisted.store.hooks.get("after:delete")?.({
-      key: SETTINGS.kDiscordPresenceEnabled,
+      key: SETTINGS.kDesktopLyricsInterpolatedLyricLine,
       value: false,
     });
     await flush();
@@ -311,7 +295,11 @@ describe("initialize", () => {
     const seen = recordEvents();
 
     hoisted.store.hooks.get("after:delete")?.({
-      key: [SETTINGS.kProxy, SETTINGS.kDiscordPresenceEnabled, SETTINGS.kDesktopLyricsOpacity],
+      key: [
+        SETTINGS.kProxy,
+        SETTINGS.kDesktopLyricsInterpolatedLyricLine,
+        SETTINGS.kDesktopLyricsOpacity,
+      ],
       value: [true, false, true],
     });
     await flush();

@@ -1,12 +1,19 @@
 import { Events, RPCClient } from "@discordjs/rpc";
-import type PlaybackController from "../PlaybackController";
-import { PlaybackStatus, type TrackInfo } from "../types";
+import type { LoadedModule } from "@open-orpheus/plugin-api";
+
+/** The host playback singleton exposed through the plugin registry. */
+type PlaybackController = LoadedModule<"@main/mediaSession">["playbackController"];
+type PlaybackSnapshot = PlaybackController["snapshot"];
+type TrackInfo = NonNullable<PlaybackSnapshot["track"]>;
+type PlaybackStatus = PlaybackSnapshot["status"];
+type HostLogger = LoadedModule<"@main/logger">["default"];
 
 const DISCORD_APPLICATION_ID = "1569539057950658691";
 const CONNECT_TIMEOUT_MS = 1000;
 const ACTIVITY_TIMEOUT_MS = 5000;
 const RECONNECT_DELAY_MS = 5000;
 const CLOSE_TIMEOUT_MS = 250;
+const PLAYING_STATUS: PlaybackStatus = "playing" as PlaybackStatus;
 
 const MAX_TEXT_BYTES = 128;
 const ABSOLUTE_PATH_OR_URL = /^(?:[~/]\/|\/|[a-z]:[\\/]|\\\\|[a-z][a-z\d+.-]*:\/\/)/i;
@@ -54,11 +61,12 @@ export default class DiscordPresence {
 
   constructor(
     private readonly playback: PlaybackController,
+    private readonly logger: HostLogger,
     private readonly ipcOptions?: DiscordIpcOptions
   ) {
     const { track, position, status } = playback.snapshot;
     this.positionTrack = position === null ? null : track;
-    this.advancing = status === PlaybackStatus.Playing;
+    this.advancing = status === PLAYING_STATUS;
 
     const refresh = () => this.ipc?.refresh();
     this.unsubscribe = [
@@ -80,7 +88,7 @@ export default class DiscordPresence {
       }),
       playback.on("positionchanged", ({ data }) => {
         if (!data.seeked) return;
-        this.advancing = playback.snapshot.status === PlaybackStatus.Playing;
+        this.advancing = playback.snapshot.status === PLAYING_STATUS;
         refresh();
       }),
     ];
@@ -97,7 +105,7 @@ export default class DiscordPresence {
     // 重新开启前先清除旧连接的活动，避免迟到的清除影响新活动。
     void this.closing.then(() => {
       if (!this.enabled || this.disposed || this.ipc) return;
-      this.ipc = new DiscordIpc(() => this.activity(), this.ipcOptions);
+      this.ipc = new DiscordIpc(() => this.activity(), this.logger, this.ipcOptions);
       this.ipc.refresh();
     });
   }
@@ -111,7 +119,7 @@ export default class DiscordPresence {
 
   private activity(): DiscordActivity | null {
     const { track, status, position, duration, rate } = this.playback.snapshot;
-    if (!track || status !== PlaybackStatus.Playing) return null;
+    if (!track || status !== PLAYING_STATUS) return null;
     const title = presenceText(track.title);
     if (!title) return null;
 
@@ -158,6 +166,7 @@ class DiscordIpc {
 
   constructor(
     private readonly activity: () => DiscordActivity | null,
+    private readonly logger: HostLogger,
     private readonly options: DiscordIpcOptions = {}
   ) {}
 
@@ -218,7 +227,7 @@ class DiscordIpc {
           await client.setActivity({ ...activity }, process.pid, { signal });
         }
         this.published = next;
-        LOGGER.debug(
+        this.logger.debug(
           { operation: activity === null ? "clear" : "publish" },
           "Discord acknowledged a Rich Presence update"
         );
@@ -242,7 +251,7 @@ class DiscordIpc {
     this.client = client;
     this.published = null;
     let connected = false;
-    client.transport.on("error", () => LOGGER.debug("Discord IPC connection error"));
+    client.transport.on("error", () => this.logger.debug("Discord IPC connection error"));
     client.on(Events.Disconnected, () => {
       // 登录失败交给外层退避重试，连接建立后断开时再安排重连。
       if (!connected || this.client !== client) return;

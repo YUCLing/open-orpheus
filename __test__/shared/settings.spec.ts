@@ -57,7 +57,6 @@ describe("settings keys", () => {
       "audio.currentDevice",
       "desktopLyrics.interpolatedLyricLine",
       "desktopLyrics.opacity",
-      "discordPresence.enabled",
       "plugins.enabled",
       "proxy",
       "tray.clickBehavior",

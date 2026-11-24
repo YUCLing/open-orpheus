@@ -10,7 +10,6 @@ export const SETTINGS = {
   kAudioCurrentDevice: "audio.currentDevice",
   kDesktopLyricsInterpolatedLyricLine: "desktopLyrics.interpolatedLyricLine",
   kDesktopLyricsOpacity: "desktopLyrics.opacity",
-  kDiscordPresenceEnabled: "discordPresence.enabled",
   kPluginsEnabled: "plugins.enabled",
   kProxy: "proxy",
   kTrayClickBehavior: "tray.clickBehavior",
