@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { SETTINGS } from "@shared/settings";
+import { SETTINGS_DEFAULTS } from "@shared/settings/defaults";
 
 const ROOT = join(import.meta.dirname, "../..");
 const CONSTANTS_FILE = join(ROOT, "src", "shared", "settings", "keys.ts");
@@ -41,6 +42,10 @@ function findLiteralKeys(text: string): string[] {
 describe("settings keys", () => {
   it("uses Chromium's k prefix for every constant", () => {
     expect(Object.keys(SETTINGS).filter((name) => !name.startsWith("k"))).toEqual([]);
+  });
+
+  it("declares exactly one default per constant", () => {
+    expect(Object.keys(SETTINGS_DEFAULTS).sort()).toEqual(Object.values(SETTINGS).sort());
   });
 
   it("keeps persisted values stable and unique", () => {

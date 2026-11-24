@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { SETTINGS } from "@shared/settings";
 
@@ -90,6 +90,40 @@ type EmitteryLike = {
 };
 
 describe("initialize", () => {
+  it("types known keys from their defaults and leaves unknown keys open", () => {
+    // `expectTypeOf` is a no-op at runtime; the assertions are checked by tsc
+    // (and by oxlint's type-aware rules in CI). The wrappers avoid reading the
+    // store before `initialize` has run.
+    expectTypeOf(() => kv.get(SETTINGS.kDesktopLyricsOpacity)).returns.toEqualTypeOf<
+      Promise<number | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kDiscordPresenceEnabled)).returns.toEqualTypeOf<
+      Promise<boolean | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kProxy)).returns.toEqualTypeOf<
+      Promise<string | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kPluginsEnabled)).returns.toEqualTypeOf<
+      Promise<Record<string, unknown> | undefined>
+    >();
+    expectTypeOf(() => kv.get("nope.unknown")).returns.toEqualTypeOf<Promise<unknown>>();
+
+    const dynamicKey: string = SETTINGS.kProxy;
+    expectTypeOf(() => kv.get(dynamicKey)).returns.toEqualTypeOf<Promise<unknown>>();
+
+    expectTypeOf(() => kv.set(SETTINGS.kDesktopLyricsOpacity, 0.5)).returns.toEqualTypeOf<
+      Promise<boolean>
+    >();
+    expectTypeOf(() =>
+      kv.getMany([SETTINGS.kProxy, SETTINGS.kDesktopLyricsOpacity])
+    ).returns.toMatchTypeOf<Promise<(string | number | undefined)[]>>();
+
+    // A known key only accepts the value type inferred from its default.
+    // @ts-expect-error strings are not valid opacity values
+    const invalidWrite = () => kv.set(SETTINGS.kDesktopLyricsOpacity, "nope");
+    void invalidWrite;
+  });
+
   it("applies the default value of a known key", async () => {
     initialize();
 
