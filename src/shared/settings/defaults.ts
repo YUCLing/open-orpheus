@@ -12,7 +12,6 @@ export const SETTINGS_DEFAULTS = {
   [SETTINGS.kAudioCurrentDevice]: undefined as string | undefined,
   [SETTINGS.kDesktopLyricsInterpolatedLyricLine]: true,
   [SETTINGS.kDesktopLyricsOpacity]: 1,
-  [SETTINGS.kDiscordPresenceEnabled]: false,
   [SETTINGS.kPluginsEnabled]: {} as Record<string, unknown>,
   [SETTINGS.kProxy]: undefined as string | undefined,
   [SETTINGS.kTrayClickBehavior]: "always-show-menu" as TrayClickBehavior,

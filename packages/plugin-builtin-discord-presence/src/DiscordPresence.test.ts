@@ -5,9 +5,100 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import DiscordPresence from "@main/playback/adapters/DiscordPresence";
-import PlaybackController from "@main/playback/PlaybackController";
-import { PlaybackChange } from "@main/playback/types";
+import DiscordPresence from "./DiscordPresence";
+
+const PlaybackChange = {
+  Playing: "playing",
+  Paused: "paused",
+  Stopped: "stopped",
+  Stalled: "stalled",
+  Seeking: "seeking",
+} as const;
+
+type PlaybackChange = (typeof PlaybackChange)[keyof typeof PlaybackChange];
+type PlaybackStatus = "playing" | "paused" | "stopped";
+
+interface TrackInfo {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+}
+
+type PlaybackListener = (event: { name: string; data: unknown }) => void;
+
+/** Minimal playback surface consumed by the presence adapter. */
+class FakePlayback {
+  private readonly listeners = new Map<string, Set<PlaybackListener>>();
+
+  readonly snapshot: {
+    track: TrackInfo | null;
+    status: PlaybackStatus;
+    position: number | null;
+    duration: number | null;
+    rate: number;
+  } = {
+    track: null,
+    status: "stopped",
+    position: null,
+    duration: null,
+    rate: 1,
+  };
+
+  on(event: string, listener: PlaybackListener): () => void {
+    let listeners = this.listeners.get(event);
+    if (!listeners) {
+      listeners = new Set();
+      this.listeners.set(event, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }
+
+  emit(event: string, data: unknown): Promise<void> {
+    for (const listener of this.listeners.get(event) ?? []) listener({ name: event, data });
+    return Promise.resolve();
+  }
+
+  setTrack(track: TrackInfo | null): void {
+    if (this.snapshot.track?.id === track?.id) return;
+    this.snapshot.track = track;
+    if (track === null && this.snapshot.status !== "stopped") {
+      this.snapshot.status = "stopped";
+      void this.emit("statuschanged", "stopped");
+    }
+    void this.emit("trackchanged", track);
+  }
+
+  applyCover(_artUrl: string | null): void {}
+
+  applyDuration(duration: number | null): void {
+    this.snapshot.duration = duration;
+    void this.emit("durationchanged", duration);
+  }
+
+  applyPosition(position: number | null, seeked = false): void {
+    this.snapshot.position = position;
+    if (position === null) return;
+    void this.emit("timeupdate", position);
+    if (seeked) void this.emit("positionchanged", { position, seeked: true });
+  }
+
+  applyPlaybackChange(change: PlaybackChange): void {
+    void this.emit("advancingchange", change === "playing");
+    if (change === "stalled" || change === "seeking") return;
+    if (this.snapshot.status === change) return;
+    this.snapshot.status = change;
+    void this.emit("statuschanged", change);
+  }
+
+  applyRate(rate: number): void {
+    this.snapshot.rate = rate;
+    void this.emit("ratechanged", rate);
+  }
+}
 
 const applicationId = "1569539057950658691";
 const now = 1_760_000_000;
@@ -95,15 +186,24 @@ const waitFor = (assertion: () => void) => vi.waitFor(assertion, { interval: 5, 
 describe.runIf(process.platform === "linux")("Discord Rich Presence over local IPC", () => {
   let discord: Awaited<ReturnType<typeof mockDiscord>>;
   let presence: DiscordPresence;
-  let player: PlaybackController;
+  let player: FakePlayback;
+  let logger: { debug: ReturnType<typeof vi.fn> };
+
+  const createPresence = (options?: { retryDelay?: number; requestTimeout?: number }) =>
+    new DiscordPresence(
+      player as unknown as ConstructorParameters<typeof DiscordPresence>[0],
+      logger as unknown as ConstructorParameters<typeof DiscordPresence>[1],
+      options
+    );
 
   beforeEach(async () => {
     vi.spyOn(Date, "now").mockReturnValue(now * 1000);
     discord = await mockDiscord();
     vi.stubEnv("XDG_RUNTIME_DIR", discord.dir);
     vi.stubEnv("TMPDIR", discord.dir);
-    player = new PlaybackController();
-    presence = new DiscordPresence(player, { retryDelay: 15 });
+    player = new FakePlayback();
+    logger = { debug: vi.fn() };
+    presence = createPresence({ retryDelay: 15 });
   });
 
   afterEach(async () => {
@@ -114,7 +214,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
   });
 
   it("只在启用后共享歌名、歌手和时间，在暂停时清除，切歌后重新计时", async () => {
-    const debug = vi.spyOn(LOGGER, "debug");
+    const debug = logger.debug;
     const acknowledgement = "Discord acknowledged a Rich Presence update";
     player.setTrack({
       id: "/home/example/id",
@@ -329,7 +429,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
 
   it("发布回执超时后可以清除可能已显示的活动", async () => {
     await presence.dispose();
-    presence = new DiscordPresence(player, { retryDelay: 15, requestTimeout: 50 });
+    presence = createPresence({ retryDelay: 15, requestTimeout: 50 });
     player.setTrack({ id: "1", title: "第一首", artist: "", album: "" });
     player.applyPlaybackChange(PlaybackChange.Playing);
     presence.configure(true);
@@ -445,7 +545,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
   it("握手失败后等待退避，再重试连接", async () => {
     await presence.dispose();
     const retryDelay = 200;
-    presence = new DiscordPresence(player, { retryDelay });
+    presence = createPresence({ retryDelay });
     player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
     player.applyPlaybackChange(PlaybackChange.Playing);
     presence.configure(true);
@@ -472,7 +572,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
       vi.stubEnv("TMPDIR", discord.dir);
       const symlinkPath = join(dirname(discord.path), "discord-ipc-0");
       await symlink(other.path, symlinkPath);
-      presence = new DiscordPresence(player);
+      presence = createPresence();
       player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
       player.applyPlaybackChange(PlaybackChange.Playing);
       presence.configure(true);
@@ -492,7 +592,7 @@ describe.runIf(process.platform === "linux")("Discord Rich Presence over local I
       // 如果没找到 Flatpak 的 socket，连接也只会落到测试服务。
       vi.stubEnv("TMPDIR", discord.dir);
       await presence.dispose();
-      presence = new DiscordPresence(player);
+      presence = createPresence();
       player.setTrack({ id: "1", title: "测试歌曲", artist: "", album: "" });
       player.applyPlaybackChange(PlaybackChange.Playing);
       presence.configure(true);

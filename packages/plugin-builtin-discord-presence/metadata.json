@@ -1,0 +1,14 @@
+{
+  "id": "io.github.fengying1314.discord-presence",
+  "name": "Discord 听歌状态",
+  "version": "1.0.0",
+  "description": "通过本机 Discord 桌面端分享正在播放的歌曲。",
+  "author": "枫莹",
+  "license": "MIT",
+  "realms": {
+    "main": "main/index.mjs"
+  },
+  "builtin": {
+    "defaultEnabled": false
+  }
+}

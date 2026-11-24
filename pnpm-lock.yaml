@@ -217,9 +217,6 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
     devDependencies:
-      '@discordjs/rpc':
-        specifier: 0.2.0-dev.1794009739-5bb74922a
-        version: 0.2.0-dev.1794009739-5bb74922a(patch_hash=141df1452d082410d3a4fa7542bb1a1a8cae832e21e101505c403eaf6ead76c5)
       '@electron-forge/cli':
         specifier: ^8.0.1
         version: 8.0.1
@@ -704,6 +701,19 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  packages/plugin-builtin-discord-presence:
+    dependencies:
+      '@discordjs/rpc':
+        specifier: 0.2.0-dev.1794009739-5bb74922a
+        version: 0.2.0-dev.1794009739-5bb74922a(patch_hash=141df1452d082410d3a4fa7542bb1a1a8cae832e21e101505c403eaf6ead76c5)
+      '@open-orpheus/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+    devDependencies:
+      tsdown:
+        specifier: ^0.23.7
+        version: 0.23.7(typescript@6.0.3)
+
   packages/plugin-builtin-example-plugin:
     dependencies:
       '@open-orpheus/plugin-api':
@@ -772,6 +782,7 @@ packages:
   '@discordjs/rpc@0.2.0-dev.1794009739-5bb74922a':
     resolution: {integrity: sha512-k8reN/bU5K4picyNYekuzXcI0Wu784AG+jbGuFPA0nh/DM22iRJMyKc7+4lP3YaMr2yy7d3q9d8c7vqdDQskvA==}
     engines: {node: '>=24.17.0'}
+    deprecated: This version is deprecated. Please use a newer version.
 
   '@electron-forge/cli@8.0.1':
     resolution: {integrity: sha512-zbkmgt7vtL8OBY7YDwVizhCfAHJLpmQtA35iOKGWPpLWRZbGADVyIUZz3QZrbc2V81/BkrBerURIBXdd/fnyhQ==}
@@ -3088,6 +3099,7 @@ packages:
 
   electron-squirrel-startup@1.0.1:
     resolution: {integrity: sha512-sTfFIHGku+7PsHLJ7v0dRcZNkALrV+YEozINTW8X1nM//e5O3L+rfYuvSW00lmGHnYmUjARZulD8F2V8ISI9RA==}
+    deprecated: This package is archived and deprecated, it will not get any updates.
 
   electron-winstaller@5.4.4:
     resolution: {integrity: sha512-j9ETcBGJaXxAY/b6UBpR7LZfjdU4BAO+yvr4ifqHEdyuc3UNCy91PDGkWKY5UQ4coHNYfnwFggrqD6QPeFGAlg==}
