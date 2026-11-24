@@ -3,11 +3,12 @@
   import * as Field from "$lib/components/ui/field";
 
   import * as settings from "$lib/settings";
+  import { SETTINGS } from "@shared/settings";
 
   let overrideMainWindowSizeLimitPromise = $state(
-    settings.get("window.overrideMainWindowSizeLimit")
+    settings.get(SETTINGS.kWindowOverrideMainWindowSizeLimit)
   );
-  let windowLifecyclePromise = $state(settings.get("window.lifecycle"));
+  let windowLifecyclePromise = $state(settings.get(SETTINGS.kWindowLifecycle));
 </script>
 
 <h1 class="text-2xl font-bold">窗口设置</h1>
@@ -25,7 +26,7 @@
       bind:value={
         () => (value as string) || "false",
         (v) => {
-          settings.set("window.overrideMainWindowSizeLimit", v);
+          settings.set(SETTINGS.kWindowOverrideMainWindowSizeLimit, v);
           overrideMainWindowSizeLimitPromise = Promise.resolve(v);
         }
       }
@@ -64,7 +65,7 @@
       bind:value={
         () => (value as string) || "on-demand",
         (v) => {
-          settings.set("window.lifecycle", v);
+          settings.set(SETTINGS.kWindowLifecycle, v);
           windowLifecyclePromise = Promise.resolve(v);
         }
       }

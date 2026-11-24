@@ -16,6 +16,7 @@ import {
 import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
 import { sendIfAlive } from "../util/send";
 import { registerIpcHandlers } from "../bridge/register";
+import { SETTINGS } from "@shared/settings";
 import { toError } from "@shared/util";
 import type {
   DesktopLyricsContract,
@@ -193,7 +194,7 @@ function registerLifecycleSwitch() {
   lifecycleSwitchRegistered = true;
 
   settingsEvents.on("change", (e) => {
-    if (e.data.key !== "window.lifecycle" || !window) return;
+    if (e.data.key !== SETTINGS.kWindowLifecycle || !window) return;
     window = switchWindowPolicy(window, () => createWindowForLifecycle(e.data.value));
     LOGGER.info({ lifecycle: e.data.value }, "Desktop lyrics window lifecycle changed");
   });
@@ -201,7 +202,7 @@ function registerLifecycleSwitch() {
 
 export let window: ManagedWindow;
 export default async function createDesktopLyricsWindow() {
-  const lifecycle = await settings.get("window.lifecycle");
+  const lifecycle = await settings.get(SETTINGS.kWindowLifecycle);
   window = createWindowForLifecycle(lifecycle);
   LOGGER.info({ lifecycle }, "Desktop lyrics window created");
   registerLifecycleSwitch();

@@ -2,6 +2,7 @@ import { BrowserWindow, clipboard, nativeImage } from "electron";
 import path from "node:path";
 import os from "node:os";
 
+import { SETTINGS } from "@shared/settings";
 import type { AppMenuItem } from "@shared/types/menu";
 import { DesktopEnvironment, dragWindow, getDesktopEnvironment } from "@open-orpheus/window";
 
@@ -149,7 +150,7 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
     const scaleFactor = shouldApplyScaleFactor() ? getWindowScaleFactor(wnd) : 1;
     if (
       wnd !== mainWindow ||
-      (await settings.kv.get("window.overrideMainWindowSizeLimit")) !== "true"
+      (await settings.kv.get(SETTINGS.kWindowOverrideMainWindowSizeLimit)) !== "true"
     ) {
       // Use window module to set maximum size to avoid issues with maximized/fullscreen windows
       const managed = ManagedWindow.fromBrowserWindow(wnd);
@@ -166,7 +167,7 @@ registerCallHandler<[{ x: number; y: number }, { x: number; y: number }], void>(
 settings.events.on("change", (e) => {
   if (!mainWindow) return;
   const { key, value } = e.data;
-  if (key === "window.overrideMainWindowSizeLimit") {
+  if (key === SETTINGS.kWindowOverrideMainWindowSizeLimit) {
     const managed = ManagedWindow.fromBrowserWindow(mainWindow);
     if (!managed) return;
     if (value === "true" || !mainWindowSizeLimits) {
@@ -359,7 +360,8 @@ registerCallHandler<MenuRequest, void>("winhelper.popupMenu", async (event, data
   const parsedMenuData = parseMenuData(data);
   const platform = os.platform();
   const injectShowMainWindowMenuItem =
-    platform === "linux" && (await settings.kv.get("tray.clickBehavior")) === "always-show-menu";
+    platform === "linux" &&
+    (await settings.kv.get(SETTINGS.kTrayClickBehavior)) === "always-show-menu";
   for (let i = 0; i < parsedMenuData.content.length; i++) {
     const item = parsedMenuData.content[i];
     // Inject "Manage Open Orpheus" menu item after "Settings" menu item

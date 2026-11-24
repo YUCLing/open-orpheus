@@ -9,6 +9,7 @@ import { sanitizeRelativePath } from "./util/path";
 import { data as dataDir, pack as packageDir } from "./folders";
 import { events as lifecycleEvents, registerShutdownTask } from "./lifecycle";
 import { kv as settings } from "./settings";
+import { SETTINGS } from "@shared/settings";
 import { toError } from "@shared/util";
 import { decodeNcae } from "./ncae";
 import { registerIpcHandlers } from "./bridge/register";
@@ -125,11 +126,11 @@ lifecycleEvents.on("mainwindowcreated", (e) => {
   const mainWindow = e.data;
   mainWindow.webContents.ipc.handle("audio.setDevice", async (e, deviceId) => {
     LOGGER.info({ deviceId }, "Audio output device changed");
-    return settings.set("audio.currentDevice", deviceId);
+    return settings.set(SETTINGS.kAudioCurrentDevice, deviceId);
   });
 
   mainWindow.webContents.ipc.handle("audio.getDevice", async () => {
-    return settings.get("audio.currentDevice");
+    return settings.get(SETTINGS.kAudioCurrentDevice);
   });
 
   mainWindow.webContents.ipc.handle(

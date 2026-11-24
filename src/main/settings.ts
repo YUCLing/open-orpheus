@@ -1,24 +1,34 @@
-// Known entries, undefined refers to no default value
-const KV_ENTRIES: Record<string, unknown> = {
-  "audio.currentDevice": undefined,
-  "desktopLyrics.interpolatedLyricLine": true,
-  "desktopLyrics.opacity": 1,
-  "discordPresence.enabled": false,
-  "tray.clickBehavior": "always-show-menu",
-  "window.overrideMainWindowSizeLimit": undefined,
-  "window.lifecycle": "on-demand",
-  "plugins.enabled": {},
-  proxy: undefined,
-};
-
 import Emittery from "emittery";
 import { Keyv, KeyvHooks } from "keyv";
 import { KeyvSqlite } from "@keyv/sqlite";
 
+import { SETTINGS, type SettingsKey } from "@shared/settings";
 import { SettingsEvents } from "@shared/types/settings";
 import createKeyvSqliteDriver from "./database/KeyvSqliteDriver";
 import { nativeDb } from "./database";
 import { registerShutdownTask } from "./lifecycle";
+
+// Known entries, undefined refers to no default value
+const KV_ENTRIES = {
+  [SETTINGS.kAudioCurrentDevice]: undefined,
+  [SETTINGS.kDesktopLyricsInterpolatedLyricLine]: true,
+  [SETTINGS.kDesktopLyricsOpacity]: 1,
+  [SETTINGS.kDiscordPresenceEnabled]: false,
+  [SETTINGS.kTrayClickBehavior]: "always-show-menu",
+  [SETTINGS.kWindowOverrideMainWindowSizeLimit]: undefined,
+  [SETTINGS.kWindowLifecycle]: "on-demand",
+  [SETTINGS.kPluginsEnabled]: {},
+  [SETTINGS.kProxy]: undefined,
+  [SETTINGS.kUpdateAutoInstall]: undefined,
+} satisfies Record<SettingsKey, unknown>;
+
+/**
+ * Default for a key, `undefined` when it has none. Unknown keys (plugins and
+ * forward compatibility) are looked up as well, so the map is read loosely.
+ */
+function lookupDefault(key: string): unknown {
+  return (KV_ENTRIES as Record<string, unknown>)[key];
+}
 
 export let kv: Keyv;
 export let events: Emittery<SettingsEvents>;
@@ -47,7 +57,7 @@ export function initialize() {
   kv.get = async (keyOrKeys) => {
     if (Array.isArray(keyOrKeys)) return get(keyOrKeys);
     const ret = await get(keyOrKeys);
-    const defaultValue = KV_ENTRIES[keyOrKeys];
+    const defaultValue = lookupDefault(keyOrKeys);
     if (ret === undefined && defaultValue !== undefined) return defaultValue;
     return ret;
   };
@@ -56,7 +66,7 @@ export function initialize() {
   kv.getMany = async (keys) => {
     const ret = await getMany(keys);
     for (let i = 0; i < keys.length; i++) {
-      const defaultValue = KV_ENTRIES[keys[i]];
+      const defaultValue = lookupDefault(keys[i]);
       if (ret[i] === undefined && defaultValue !== undefined) ret[i] = defaultValue as never;
     }
     return ret;

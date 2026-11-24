@@ -2,8 +2,9 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
   import * as settings from "$lib/settings";
+  import { SETTINGS } from "@shared/settings";
 
-  let enabledPromise = $state(settings.get("discordPresence.enabled"));
+  let enabledPromise = $state(settings.get(SETTINGS.kDiscordPresenceEnabled));
   let saving = $state(false);
   let saveFailed = $state(false);
 
@@ -12,7 +13,7 @@
     saving = true;
     saveFailed = false;
     try {
-      if (await settings.set("discordPresence.enabled", value)) {
+      if (await settings.set(SETTINGS.kDiscordPresenceEnabled, value)) {
         enabledPromise = Promise.resolve(value);
       } else {
         saveFailed = true;
