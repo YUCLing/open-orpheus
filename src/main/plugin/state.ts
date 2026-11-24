@@ -1,10 +1,11 @@
 import type { PluginDesiredState } from "@shared/contracts/plugin-manager-api";
 import { PluginKind } from "@shared/contracts/plugin-manager-api";
+import { SETTINGS } from "@shared/settings";
 import { toError } from "@shared/util";
 
 import { kv } from "../settings";
 
-const KEY = "plugins.enabled";
+const KEY = SETTINGS.kPluginsEnabled;
 
 export interface PluginStateStore {
   /** Effective desired state for a plugin, including built-in defaults. */

@@ -1,3 +1,5 @@
+import { SETTINGS } from "@shared/settings";
+
 import { registerShutdownTask } from "../lifecycle";
 import { events, kv } from "../settings";
 import type PlaybackController from "./PlaybackController";
@@ -7,12 +9,12 @@ export async function initializeDiscordPresence(playback: PlaybackController): P
   const presence = new DiscordPresence(playback);
   let changed = false;
   const unlistenChange = events.on("change", ({ data }) => {
-    if (data.key !== "discordPresence.enabled") return;
+    if (data.key !== SETTINGS.kDiscordPresenceEnabled) return;
     changed = true;
     presence.configure(data.value === true);
   });
   const unlistenDelete = events.on("delete", ({ data }) => {
-    if (data.key !== "discordPresence.enabled") return;
+    if (data.key !== SETTINGS.kDiscordPresenceEnabled) return;
     changed = true;
     presence.configure(false);
   });
@@ -24,7 +26,7 @@ export async function initializeDiscordPresence(playback: PlaybackController): P
       return presence.dispose();
     },
   });
-  const stored = await kv.get("discordPresence.enabled");
+  const stored = await kv.get(SETTINGS.kDiscordPresenceEnabled);
   // 初始读取期间发生的设置更新优先，避免用旧值覆盖用户刚切换的开关。
   if (!changed) presence.configure(stored === true);
 }

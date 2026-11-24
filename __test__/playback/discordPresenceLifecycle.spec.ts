@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SETTINGS } from "@shared/settings";
+
 const mocks = vi.hoisted(() => ({
   get: vi.fn<(key: string) => Promise<unknown>>(),
   configure: vi.fn(),
@@ -45,7 +47,7 @@ describe("Discord 听歌状态初始化", () => {
     vi.stubEnv("FLATPAK_ID", "io.github.yucling.open-orpheus");
     mocks.get.mockResolvedValue(true);
     await initializeDiscordPresence(new PlaybackController());
-    expect(mocks.get).toHaveBeenCalledWith("discordPresence.enabled");
+    expect(mocks.get).toHaveBeenCalledWith(SETTINGS.kDiscordPresenceEnabled);
     expect(mocks.configure).toHaveBeenCalledWith(true);
     expect(mocks.registerShutdownTask).toHaveBeenCalledOnce();
   });
@@ -55,19 +57,19 @@ describe("Discord 听歌状态初始化", () => {
     await initializeDiscordPresence(new PlaybackController());
     expect(mocks.configure).toHaveBeenCalledWith(true);
 
-    await events.emit("change", { key: "discordPresence.enabled", value: false });
+    await events.emit("change", { key: SETTINGS.kDiscordPresenceEnabled, value: false });
     expect(mocks.configure).toHaveBeenLastCalledWith(false);
-    await events.emit("change", { key: "discordPresence.enabled", value: true });
+    await events.emit("change", { key: SETTINGS.kDiscordPresenceEnabled, value: true });
     expect(mocks.configure).toHaveBeenLastCalledWith(true);
-    await events.emit("delete", { key: "discordPresence.enabled" });
+    await events.emit("delete", { key: SETTINGS.kDiscordPresenceEnabled });
     expect(mocks.configure).toHaveBeenLastCalledWith(false);
 
     mocks.configure.mockClear();
-    await events.emit("change", { key: "proxy", value: { enabled: true } });
+    await events.emit("change", { key: SETTINGS.kProxy, value: { enabled: true } });
     expect(mocks.configure).not.toHaveBeenCalled();
     await mocks.registerShutdownTask.mock.calls[0][0].run();
     expect(mocks.dispose).toHaveBeenCalledOnce();
-    await events.emit("change", { key: "discordPresence.enabled", value: true });
+    await events.emit("change", { key: SETTINGS.kDiscordPresenceEnabled, value: true });
     expect(mocks.configure).not.toHaveBeenCalled();
   });
 
@@ -75,7 +77,7 @@ describe("Discord 听歌状态初始化", () => {
     const stored = Promise.withResolvers<unknown>();
     mocks.get.mockReturnValue(stored.promise);
     const initializing = initializeDiscordPresence(new PlaybackController());
-    await events.emit("change", { key: "discordPresence.enabled", value: true });
+    await events.emit("change", { key: SETTINGS.kDiscordPresenceEnabled, value: true });
     stored.resolve(false);
     await initializing;
     expect(mocks.configure.mock.calls).toEqual([[true]]);
@@ -85,7 +87,7 @@ describe("Discord 听歌状态初始化", () => {
     const stored = Promise.withResolvers<unknown>();
     mocks.get.mockReturnValue(stored.promise);
     const initializing = initializeDiscordPresence(new PlaybackController());
-    await events.emit("delete", { key: "discordPresence.enabled" });
+    await events.emit("delete", { key: SETTINGS.kDiscordPresenceEnabled });
     stored.resolve(true);
     await initializing;
     expect(mocks.configure.mock.calls).toEqual([[false]]);

@@ -2,13 +2,9 @@
   import * as RadioGroup from "$lib/components/ui/radio-group";
   import * as Field from "$lib/components/ui/field";
   import * as settings from "$lib/settings";
+  import { SETTINGS, type TrayClickBehavior } from "@shared/settings";
 
-  type TrayClickBehavior =
-    | "depends-on-main-window"
-    | "always-show-menu"
-    | "always-show-main-window";
-
-  let clickBehaviorPromise = $state(settings.get("tray.clickBehavior"));
+  let clickBehaviorPromise = $state(settings.get(SETTINGS.kTrayClickBehavior));
 </script>
 
 <h1 class="text-2xl font-bold">托盘图标</h1>
@@ -18,9 +14,9 @@
   <RadioGroup.Root
     class="mt-2"
     bind:value={
-      () => (value || "depends-on-main-window") as TrayClickBehavior,
-      (v) => {
-        settings.set("tray.clickBehavior", v);
+      () => (value as TrayClickBehavior | undefined) || "depends-on-main-window",
+      (v: TrayClickBehavior) => {
+        settings.set(SETTINGS.kTrayClickBehavior, v);
         clickBehaviorPromise = Promise.resolve(v);
       }
     }

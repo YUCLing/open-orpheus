@@ -4,11 +4,12 @@
   import { Slider } from "$lib/components/ui/slider";
 
   import * as settings from "$lib/settings";
+  import { SETTINGS } from "@shared/settings";
 
   let opacity = $state(100);
   let storedOpacity: number | null = null;
   const opacityPromise = $state(
-    (settings.get("desktopLyrics.opacity") as Promise<number>).then((v) => {
+    (settings.get(SETTINGS.kDesktopLyricsOpacity) as Promise<number>).then((v) => {
       if (typeof v !== "number") v = 1;
       opacity = v * 100;
       storedOpacity = v;
@@ -17,13 +18,13 @@
   $effect(() => {
     const newValue = opacity / 100;
     if (storedOpacity !== null && storedOpacity !== newValue) {
-      settings.set("desktopLyrics.opacity", newValue);
+      settings.set(SETTINGS.kDesktopLyricsOpacity, newValue);
       storedOpacity = newValue;
     }
   });
 
   let interpolatedLyricLinePromise = $state(
-    settings.get("desktopLyrics.interpolatedLyricLine") as Promise<boolean>
+    settings.get(SETTINGS.kDesktopLyricsInterpolatedLyricLine) as Promise<boolean>
   );
 </script>
 
@@ -48,7 +49,7 @@
       bind:checked={
         () => interpolatedLyricLine ?? true,
         (v) => {
-          settings.set("desktopLyrics.interpolatedLyricLine", v);
+          settings.set(SETTINGS.kDesktopLyricsInterpolatedLyricLine, v);
           interpolatedLyricLinePromise = Promise.resolve(v);
         }
       }

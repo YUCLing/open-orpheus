@@ -12,6 +12,7 @@
   import { inputRegionAttachment } from "$lib/inputRegion";
   import { lyricsBridgeEmitter, getLyrics, getSlogan, getPlayState, getTime } from "$lib/lyrics";
   import * as settings from "$lib/settings";
+  import { SETTINGS } from "@shared/settings";
   import multihover from "$lib/multihover";
   import { onpointerdrag } from "$lib/pointer";
 
@@ -124,17 +125,17 @@
   // This component would never be unmounted, events does not need to be removed.
   settings.events.on("change", (e) => {
     const { key, value } = e.data;
-    if (key === "desktopLyrics.interpolatedLyricLine") {
+    if (key === SETTINGS.kDesktopLyricsInterpolatedLyricLine) {
       interpolatedLyricLine = value as boolean;
-    } else if (key === "desktopLyrics.opacity") {
+    } else if (key === SETTINGS.kDesktopLyricsOpacity) {
       opacity = value as number;
     }
   });
-  settings.get("desktopLyrics.interpolatedLyricLine").then((v) => {
+  settings.get(SETTINGS.kDesktopLyricsInterpolatedLyricLine).then((v) => {
     if (v === undefined) return;
     interpolatedLyricLine = v as boolean;
   });
-  settings.get("desktopLyrics.opacity").then((v) => {
+  settings.get(SETTINGS.kDesktopLyricsOpacity).then((v) => {
     if (v === undefined) return;
     opacity = v as number;
   });

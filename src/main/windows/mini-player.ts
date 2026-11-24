@@ -10,6 +10,7 @@ import { dragWindow } from "@open-orpheus/window";
 import { guiUrl, mainWindow, ManagedWindow, OnDemandWindow, switchWindowPolicy } from "../window";
 import { sendIfAlive } from "../util/send";
 import { registerIpcHandlers } from "../bridge/register";
+import { SETTINGS } from "@shared/settings";
 import { toError } from "@shared/util";
 import { MiniPlayerContract } from "@shared/contracts/mini-player-api";
 import type { BtnImages, BtnState } from "@shared/types/dui";
@@ -506,7 +507,7 @@ function registerLifecycleSwitch() {
   lifecycleSwitchRegistered = true;
 
   settingsEvents.on("change", (e) => {
-    if (e.data.key !== "window.lifecycle" || !window) return;
+    if (e.data.key !== SETTINGS.kWindowLifecycle || !window) return;
     window = switchWindowPolicy(window, () => createWindowForLifecycle(e.data.value));
     LOGGER.info({ lifecycle: e.data.value }, "Mini player window lifecycle changed");
   });
@@ -514,7 +515,7 @@ function registerLifecycleSwitch() {
 
 export let window: ManagedWindow;
 export default async function createMiniPlayerWindow() {
-  const lifecycle = await settings.get("window.lifecycle");
+  const lifecycle = await settings.get(SETTINGS.kWindowLifecycle);
   window = createWindowForLifecycle(lifecycle);
   LOGGER.debug({ lifecycle }, "Configured mini player window lifecycle");
   registerLifecycleSwitch();

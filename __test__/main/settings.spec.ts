@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+
+import {
+  SETTINGS,
+  type TrayClickBehavior,
+  type WindowLifecycle,
+  type WindowSizeLimitOverride,
+} from "@shared/settings";
 
 // The real store is a native sqlite database behind keyv, so only the decorated
 // keyv instance that `initialize` builds is under test here.
@@ -88,12 +95,65 @@ type EmitteryLike = {
 };
 
 describe("initialize", () => {
+  it("types known keys from their defaults and leaves unknown keys open", () => {
+    // `expectTypeOf` is a no-op at runtime; the assertions are checked by tsc
+    // (and by oxlint's type-aware rules in CI). The wrappers avoid reading the
+    // store before `initialize` has run.
+    expectTypeOf(() => kv.get(SETTINGS.kDesktopLyricsOpacity)).returns.toEqualTypeOf<
+      Promise<number | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kDiscordPresenceEnabled)).returns.toEqualTypeOf<
+      Promise<boolean | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kProxy)).returns.toEqualTypeOf<
+      Promise<string | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kPluginsEnabled)).returns.toEqualTypeOf<
+      Promise<Record<string, unknown> | undefined>
+    >();
+    expectTypeOf(() => kv.get("nope.unknown")).returns.toEqualTypeOf<Promise<unknown>>();
+
+    // Enumerated settings carry their union, not the widened default string.
+    expectTypeOf(() => kv.get(SETTINGS.kTrayClickBehavior)).returns.toEqualTypeOf<
+      Promise<TrayClickBehavior | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kWindowLifecycle)).returns.toEqualTypeOf<
+      Promise<WindowLifecycle | undefined>
+    >();
+    expectTypeOf(() => kv.get(SETTINGS.kWindowOverrideMainWindowSizeLimit)).returns.toEqualTypeOf<
+      Promise<WindowSizeLimitOverride | undefined>
+    >();
+
+    const dynamicKey: string = SETTINGS.kProxy;
+    expectTypeOf(() => kv.get(dynamicKey)).returns.toEqualTypeOf<Promise<unknown>>();
+
+    expectTypeOf(() => kv.set(SETTINGS.kDesktopLyricsOpacity, 0.5)).returns.toEqualTypeOf<
+      Promise<boolean>
+    >();
+    expectTypeOf(() =>
+      kv.getMany([SETTINGS.kProxy, SETTINGS.kDesktopLyricsOpacity])
+    ).returns.toMatchTypeOf<Promise<(string | number | undefined)[]>>();
+
+    // A known key only accepts the value type inferred from its default.
+    function invalidWrites() {
+      // @ts-expect-error strings are not valid opacity values
+      void kv.set(SETTINGS.kDesktopLyricsOpacity, "nope");
+      // @ts-expect-error not a tray click behavior
+      void kv.set(SETTINGS.kTrayClickBehavior, "minimize");
+      // @ts-expect-error not a window lifecycle
+      void kv.set(SETTINGS.kWindowLifecycle, "persistent");
+      // @ts-expect-error the override is stored as a string, not a boolean
+      void kv.set(SETTINGS.kWindowOverrideMainWindowSizeLimit, true);
+    }
+    void invalidWrites;
+  });
+
   it("applies the default value of a known key", async () => {
     initialize();
 
-    await expect(kv.get("tray.clickBehavior")).resolves.toBe("always-show-menu");
-    await expect(kv.get("desktopLyrics.opacity")).resolves.toBe(1);
-    await expect(kv.get("discordPresence.enabled")).resolves.toBe(false);
+    await expect(kv.get(SETTINGS.kTrayClickBehavior)).resolves.toBe("always-show-menu");
+    await expect(kv.get(SETTINGS.kDesktopLyricsOpacity)).resolves.toBe(1);
+    await expect(kv.get(SETTINGS.kDiscordPresenceEnabled)).resolves.toBe(false);
   });
 
   it("旧对象配置不会启用分享或被修改", async () => {
@@ -102,30 +162,32 @@ describe("initialize", () => {
 
     initialize();
 
-    await expect(kv.get("discordPresence.enabled")).resolves.toBe(false);
+    await expect(kv.get(SETTINGS.kDiscordPresenceEnabled)).resolves.toBe(false);
     expect(hoisted.values.get("discordPresence")).toBe(previous);
     expect(hoisted.store.set).not.toHaveBeenCalled();
     expect(hoisted.store.delete).not.toHaveBeenCalled();
   });
 
   it("keeps a stored value over the default", async () => {
-    hoisted.values.set("tray.clickBehavior", "minimize");
+    // "minimize" is not a `TrayClickBehavior`: reads are not validated against
+    // the union, so a value written by an older build still comes back as is.
+    hoisted.values.set(SETTINGS.kTrayClickBehavior, "minimize");
     initialize();
 
-    await expect(kv.get("tray.clickBehavior")).resolves.toBe("minimize");
+    await expect(kv.get(SETTINGS.kTrayClickBehavior)).resolves.toBe("minimize");
   });
 
   it("leaves keys without default as they are", async () => {
     initialize();
 
-    await expect(kv.get("proxy")).resolves.toBeUndefined();
+    await expect(kv.get(SETTINGS.kProxy)).resolves.toBeUndefined();
     await expect(kv.get("nope.unknown")).resolves.toBeUndefined();
   });
 
   it("forwards an array request to keyv untouched", async () => {
     initialize();
     hoisted.store.get.mockResolvedValueOnce(["stored"]);
-    const keys = ["desktopLyrics.opacity", "proxy", "nope.unknown"];
+    const keys = [SETTINGS.kDesktopLyricsOpacity, SETTINGS.kProxy, "nope.unknown"];
 
     // Defaults are only applied by `getMany`, not by this passthrough.
     await expect(kv.get(keys)).resolves.toEqual(["stored"]);
@@ -136,21 +198,17 @@ describe("initialize", () => {
     initialize();
     hoisted.store.get.mockResolvedValueOnce([0.5, "http://proxy", "kept"]);
 
-    await expect(kv.get(["desktopLyrics.opacity", "proxy", "nope.unknown"])).resolves.toEqual([
-      0.5,
-      "http://proxy",
-      "kept",
-    ]);
+    await expect(
+      kv.get([SETTINGS.kDesktopLyricsOpacity, SETTINGS.kProxy, "nope.unknown"])
+    ).resolves.toEqual([0.5, "http://proxy", "kept"]);
   });
 
   it("fills defaults when many keys are read at once", async () => {
     initialize();
 
-    await expect(kv.getMany(["desktopLyrics.opacity", "proxy", "nope.unknown"])).resolves.toEqual([
-      1,
-      undefined,
-      undefined,
-    ]);
+    await expect(
+      kv.getMany([SETTINGS.kDesktopLyricsOpacity, SETTINGS.kProxy, "nope.unknown"])
+    ).resolves.toEqual([1, undefined, undefined]);
   });
 
   it("emits the original key and value only after a successful set", async () => {
@@ -160,16 +218,22 @@ describe("initialize", () => {
     const value = true;
     hoisted.store.set.mockReturnValueOnce(write.promise);
 
-    const operation = kv.set("discordPresence.enabled", value, 1500);
+    const operation = kv.set(SETTINGS.kDiscordPresenceEnabled, value, 1500);
     await flush();
     expect(seen).toEqual([]);
-    expect(hoisted.store.set).toHaveBeenLastCalledWith("discordPresence.enabled", value, 1500);
+    expect(hoisted.store.set).toHaveBeenLastCalledWith(
+      SETTINGS.kDiscordPresenceEnabled,
+      value,
+      1500
+    );
 
     write.resolve(true);
     await expect(operation).resolves.toBe(true);
     await flush();
 
-    expect(seen).toEqual([{ event: "change", data: { key: "discordPresence.enabled", value } }]);
+    expect(seen).toEqual([
+      { event: "change", data: { key: SETTINGS.kDiscordPresenceEnabled, value } },
+    ]);
   });
 
   it("does not emit a change event when set returns false", async () => {
@@ -177,7 +241,7 @@ describe("initialize", () => {
     const seen = recordEvents();
     hoisted.store.set.mockResolvedValueOnce(false);
 
-    await expect(kv.set("discordPresence.enabled", true)).resolves.toBe(false);
+    await expect(kv.set(SETTINGS.kDiscordPresenceEnabled, true)).resolves.toBe(false);
     await flush();
 
     expect(seen).toEqual([]);
@@ -189,7 +253,7 @@ describe("initialize", () => {
     const error = new Error("write failed");
     hoisted.store.set.mockRejectedValueOnce(error);
 
-    await expect(kv.set("discordPresence.enabled", true)).rejects.toBe(error);
+    await expect(kv.set(SETTINGS.kDiscordPresenceEnabled, true)).rejects.toBe(error);
     await flush();
 
     expect(seen).toEqual([]);
@@ -199,9 +263,9 @@ describe("initialize", () => {
     initialize();
     const seen = recordEvents();
     const entries = [
-      { key: "discordPresence.enabled", value: true },
-      { key: "proxy", value: "failed" },
-      { key: "desktopLyrics.opacity", value: 0.5 },
+      { key: SETTINGS.kDiscordPresenceEnabled, value: true },
+      { key: SETTINGS.kProxy, value: "failed" },
+      { key: SETTINGS.kDesktopLyricsOpacity, value: 0.5 },
     ];
 
     hoisted.store.hooks.get("after:setMany")?.({ entries, values: [true, false, true] });
@@ -233,7 +297,10 @@ describe("initialize", () => {
     initialize();
     const seen = recordEvents();
 
-    hoisted.store.hooks.get("after:delete")?.({ key: "discordPresence.enabled", value: false });
+    hoisted.store.hooks.get("after:delete")?.({
+      key: SETTINGS.kDiscordPresenceEnabled,
+      value: false,
+    });
     await flush();
 
     expect(seen).toEqual([]);
@@ -244,14 +311,14 @@ describe("initialize", () => {
     const seen = recordEvents();
 
     hoisted.store.hooks.get("after:delete")?.({
-      key: ["proxy", "discordPresence.enabled", "desktopLyrics.opacity"],
+      key: [SETTINGS.kProxy, SETTINGS.kDiscordPresenceEnabled, SETTINGS.kDesktopLyricsOpacity],
       value: [true, false, true],
     });
     await flush();
 
     expect(seen).toEqual([
-      { event: "delete", data: { key: "proxy" } },
-      { event: "delete", data: { key: "desktopLyrics.opacity" } },
+      { event: "delete", data: { key: SETTINGS.kProxy } },
+      { event: "delete", data: { key: SETTINGS.kDesktopLyricsOpacity } },
     ]);
   });
 });

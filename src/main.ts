@@ -33,6 +33,7 @@ import { mainWindow } from "./main/window";
 import { sendIfAlive } from "./main/util/send";
 import registerAsProtocolClient from "./main/protocol";
 import { parseLocalFile, parseWebCommand, raceArgument } from "./main/arguments";
+import { SETTINGS } from "@shared/settings";
 import { toError } from "@shared/util";
 import { installLifecycle, setStartupTask } from "./main/lifecycle";
 import { checkEnvFlagPresent } from "./main/util/env";
@@ -399,7 +400,7 @@ app.on("ready", async () => {
 
         // Apply stored proxy settings
         const { kv: settings } = await import("./main/settings");
-        const proxy = await settings.get("proxy");
+        const proxy = await settings.get(SETTINGS.kProxy);
         if (typeof proxy !== "string" || !proxy) return;
 
         try {

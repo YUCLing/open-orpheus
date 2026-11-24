@@ -6,6 +6,7 @@ import { app, Menu, MenuItemConstructorOptions, nativeImage, NativeImage, Tray }
 import { mainWindow } from "./window";
 import { sendIfAlive } from "./util/send";
 import { registerShutdownTask } from "./lifecycle";
+import { SETTINGS } from "@shared/settings";
 import { kv as settings } from "./settings";
 import showManageWindow from "./windows/manage";
 
@@ -90,7 +91,7 @@ async function clickHandler() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   // Linux can only receives click, so a different behavior is used
   // The `onclick` will be send when main window is invisible, and `onrightclick` will be send when main window is visible
-  const clickBehavior = await settings.get("tray.clickBehavior");
+  const clickBehavior = await settings.get(SETTINGS.kTrayClickBehavior);
   sendIfAlive(
     mainWindow,
     "channel.call",

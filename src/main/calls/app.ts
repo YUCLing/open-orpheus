@@ -8,6 +8,7 @@ import { loadFromOrpheusUrl } from "../orpheus";
 import { fileExists } from "../util/fs";
 import { sendIfAlive } from "../util/send";
 import { pngFromIco } from "../util/image";
+import { SETTINGS } from "@shared/settings";
 import { toError } from "@shared/util";
 import packManager from "../pack";
 import { kv as settings } from "../settings";
@@ -103,13 +104,13 @@ registerCallHandler<[string, string], [string]>(
     // TODO: Implement this properly
     switch (item) {
       case "Proxy": {
-        const proxyConf = await settings.get("proxy");
+        const proxyConf = await settings.get(SETTINGS.kProxy);
         if (typeof proxyConf !== "string") return [""];
         return [proxyConf];
       }
       case "Update":
         if (subItem === "Install") {
-          const updateConf = await settings.get("update.autoInstall");
+          const updateConf = await settings.get(SETTINGS.kUpdateAutoInstall);
           if (typeof updateConf !== "string") return [""];
           return [updateConf];
         }
@@ -130,11 +131,11 @@ registerCallHandler<[string, string, string], void>(
     LOGGER.debug({ item, subItem }, "Local config update requested");
     switch (item) {
       case "Proxy":
-        await settings.set("proxy", value);
+        await settings.set(SETTINGS.kProxy, value);
         return;
       case "Update":
         if (subItem === "Install") {
-          await settings.set("update.autoInstall", value);
+          await settings.set(SETTINGS.kUpdateAutoInstall, value);
         }
         return;
       case "setting":
