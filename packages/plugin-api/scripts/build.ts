@@ -80,6 +80,8 @@ export function generateApi(): number {
 
   addDeclarationExtensions(DIST);
 
+  downgradeEnums();
+
   assertKeyvVersion();
   assertVersionConsistency();
   assertPackageExports();
@@ -750,6 +752,223 @@ function addDeclarationExtensions(root: string): void {
   }
 }
 
+interface EnumMemberInfo {
+  name: string;
+  value: string | number;
+  /** Leading JSDoc/comments for the member, if any. */
+  docs: string;
+}
+
+interface EnumInfo {
+  members: EnumMemberInfo[];
+  isConst: boolean;
+  isExported: boolean;
+}
+
+/**
+ * Rewrite enums as literal unions.
+ *
+ * A normal enum keeps a `const` declaration describing the host's runtime
+ * object, so values loaded from the registry retain their literal types:
+ *
+ *   export declare const E: { readonly A: "a" };
+ *   export type E = "a";
+ *
+ * A `const enum` has no runtime object, so it becomes a union only.
+ *
+ * Host signatures that mention the enum name automatically switch to the union;
+ * enum member references in type positions are rewritten to their literal.
+ */
+function downgradeEnums(): void {
+  const files = [...walk(DIST)].filter((file) => file.endsWith(".d.ts"));
+  const program = ts.createProgram(files, {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.Preserve,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    skipLibCheck: true,
+    noEmit: true,
+    types: ["node"],
+  });
+  const checker = program.getTypeChecker();
+  const distRoot = `${path.resolve(DIST)}${path.sep}`;
+  const sources = program
+    .getSourceFiles()
+    .filter((source) => path.resolve(source.fileName).startsWith(distRoot));
+  const enums = new Map<ts.Symbol, EnumInfo>();
+
+  for (const source of sources) {
+    for (const statement of source.statements) {
+      if (!ts.isEnumDeclaration(statement)) continue;
+      if (!ts.isSourceFile(statement.parent)) {
+        throw new Error(
+          `Cannot downgrade a nested enum in ${path.relative(ROOT, source.fileName)}`
+        );
+      }
+      const symbol = checker.getSymbolAtLocation(statement.name);
+      if (!symbol) {
+        throw new Error(
+          `Cannot resolve enum ${statement.name.text} in ${path.relative(ROOT, source.fileName)}`
+        );
+      }
+
+      let next = 0;
+      const members: EnumMemberInfo[] = [];
+      for (const member of statement.members) {
+        const name =
+          ts.isIdentifier(member.name) ||
+          ts.isStringLiteral(member.name) ||
+          ts.isNumericLiteral(member.name)
+            ? member.name.text
+            : member.name.getText(source);
+        let value = checker.getConstantValue(member);
+        if (value === undefined) {
+          if (member.initializer) {
+            throw new Error(
+              `Enum member ${statement.name.text}.${name} in ` +
+                `${path.relative(ROOT, source.fileName)} is not a constant`
+            );
+          }
+          value = next;
+        }
+        if (typeof value === "number" && !Number.isFinite(value)) {
+          throw new Error(
+            `Enum member ${statement.name.text}.${name} in ` +
+              `${path.relative(ROOT, source.fileName)} has a non-finite value`
+          );
+        }
+        members.push({
+          name,
+          value,
+          docs: source.text.slice(member.getStart(source, true), member.getStart(source)),
+        });
+        next = typeof value === "number" ? value + 1 : Number.NaN;
+      }
+
+      enums.set(symbol, {
+        members,
+        isConst: (statement.modifiers ?? []).some(
+          (modifier) => modifier.kind === ts.SyntaxKind.ConstKeyword
+        ),
+        isExported: (statement.modifiers ?? []).some(
+          (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword
+        ),
+      });
+    }
+  }
+
+  for (const source of sources) {
+    const text = source.text;
+    const edits: Array<{ start: number; end: number; text: string }> = [];
+
+    for (const statement of source.statements) {
+      if (!ts.isEnumDeclaration(statement)) continue;
+      const symbol = checker.getSymbolAtLocation(statement.name);
+      const info = symbol ? enums.get(symbol) : undefined;
+      if (!info) continue;
+
+      const start = statement.getStart(source, true);
+      const leading = text.slice(start, statement.getStart(source));
+      const name = statement.name.text;
+      const prefix = info.isExported ? "export " : "";
+      const union =
+        info.members.length > 0
+          ? info.members.map((member) => literal(member.value)).join(" | ")
+          : "never";
+      const replacement = info.isConst
+        ? `${leading}${prefix}type ${name} = ${union};`
+        : `${leading}${prefix}declare const ${name}: ${renderConstObject(info.members)};\n` +
+          `${leading}${prefix}type ${name} = ${union};` +
+          renderEnumNamespace(name, info, prefix);
+      edits.push({ start, end: statement.getEnd(), text: replacement });
+    }
+
+    const visit = (node: ts.Node): void => {
+      if (ts.isTypeReferenceNode(node) && ts.isQualifiedName(node.typeName)) {
+        const value = enumMemberValue(node.typeName, checker, enums);
+        if (value !== undefined) {
+          edits.push({ start: node.getStart(source), end: node.getEnd(), text: literal(value) });
+          return;
+        }
+      }
+      if (ts.isTypeQueryNode(node) && ts.isQualifiedName(node.exprName)) {
+        const value = enumMemberValue(node.exprName, checker, enums);
+        if (value !== undefined) {
+          edits.push({ start: node.getStart(source), end: node.getEnd(), text: literal(value) });
+          return;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+
+    edits.sort((left, right) => right.start - left.start);
+    for (let index = 1; index < edits.length; index++) {
+      if (edits[index].end > edits[index - 1].start) {
+        throw new Error(`Overlapping enum edits in ${path.relative(ROOT, source.fileName)}`);
+      }
+    }
+
+    let output = text;
+    for (const edit of edits) {
+      output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+    }
+    if (output !== text) writeFileSync(source.fileName, output);
+  }
+}
+
+function enumMemberValue(
+  name: ts.QualifiedName,
+  checker: ts.TypeChecker,
+  enums: ReadonlyMap<ts.Symbol, EnumInfo>
+): string | number | undefined {
+  let symbol = checker.getSymbolAtLocation(name.left);
+  if (!symbol) return undefined;
+  if (symbol.flags & ts.SymbolFlags.Alias) {
+    try {
+      symbol = checker.getAliasedSymbol(symbol);
+    } catch {
+      return undefined;
+    }
+  }
+  return enums.get(symbol)?.members.find((member) => member.name === name.right.text)?.value;
+}
+
+function literal(value: string | number): string {
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
+function renderConstObject(members: EnumMemberInfo[]): string {
+  if (members.length === 0) return "{}";
+  const properties = members.map((member) => {
+    const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(member.name)
+      ? member.name
+      : JSON.stringify(member.name);
+    const docs = member.docs.trim();
+    const comment = docs.length > 0 ? `${indent(docs, 4)}\n` : "";
+    return `${comment}    readonly ${key}: ${literal(member.value)};`;
+  });
+  return `{\n${properties.join("\n")}\n}`;
+}
+
+function renderEnumNamespace(name: string, info: EnumInfo, prefix: string): string {
+  const members = info.members.filter((member) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(member.name));
+  if (members.length === 0) return "";
+  const lines = members.map((member) => {
+    const docs = member.docs.trim();
+    const comment = docs.length > 0 ? `${indent(docs, 4)}\n` : "";
+    return `${comment}    type ${member.name} = ${literal(member.value)};`;
+  });
+  return `\n${prefix}declare namespace ${name} {\n${lines.join("\n")}\n}`;
+}
+
+function indent(text: string, spaces: number): string {
+  const pad = " ".repeat(spaces);
+  return text
+    .split("\n")
+    .map((line) => (line.trim().length > 0 ? pad + line : line))
+    .join("\n");
+}
+
 /**
  * Type-check every emitted declaration, not just the reachable entry graph.
  *
@@ -855,6 +1074,8 @@ function assertConsumable(): void {
         'import type * as configuration from "@open-orpheus/plugin-api/configuration";',
         'import type { LoadedModule, RegistryLoad } from "@open-orpheus/plugin-api";',
         'import type { PlaybackMode } from "@open-orpheus/plugin-api/host/src/shared/types/playback-mode.js";',
+        'import type { PlaybackStatus } from "@open-orpheus/plugin-api/host/src/main/playback/types.js";',
+        'import type { AegisEncryptState } from "@open-orpheus/plugin-api/host/src/main/xeapi.js";',
         'import type { RealmLifecycle } from "@open-orpheus/plugin-api/host/src/shared/plugin/lifecycle.js";',
         'import type PlaybackController from "@open-orpheus/plugin-api/host/src/main/playback/PlaybackController.js";',
         'import type { AudioPlayerState } from "@open-orpheus/plugin-api/preload/host/src/preload/Player.js";',
@@ -875,6 +1096,20 @@ function assertConsumable(): void {
         "export type DirectPlaybackController = PlaybackController;",
         "export type DirectAudioPlayerState = AudioPlayerState;",
         "export type DirectPluginManagerState = PluginManagerState;",
+        'export const playbackLiteral: PlaybackStatus = "playing";',
+        "export const constEnumLiteral: AegisEncryptState = 0;",
+        "// @ts-expect-error invalid enum literal",
+        'export const invalidPlaybackLiteral: PlaybackStatus = "invalid";',
+        "// @ts-expect-error invalid const enum value",
+        "export const invalidConstEnumLiteral: AegisEncryptState = 9;",
+        'export type PlaybackStatusIsUnion = Assert<PlaybackStatus extends "playing" | "paused" | "stopped" ? true : false>;',
+        "export type PlaybackMemberType = PlaybackStatus.Playing;",
+        'export type PlaybackMemberTypeIsLiteral = Assert<PlaybackMemberType extends "playing" ? true : false>;',
+        'type PlaybackMember = typeof import("@open-orpheus/plugin-api/host/src/main/playback/types.js").PlaybackStatus.Playing;',
+        'export type PlaybackMemberIsLiteral = Assert<PlaybackMember extends "playing" ? true : false>;',
+        'type PlaybackValues = LoadedModule<"@main/playback/types">["PlaybackStatus"];',
+        'export type PlaybackHasValues = Assert<"Playing" extends keyof PlaybackValues ? true : false>;',
+        'export type PlaybackValueIsLiteral = Assert<PlaybackValues["Playing"] extends "playing" ? true : false>;',
         "",
       ].join("\n")
     );

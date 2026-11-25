@@ -204,8 +204,17 @@ import type { PlaybackMode } from "@open-orpheus/plugin-api/host/src/shared/type
 需要长期可用的行为请依赖 `PluginModule`、`PluginRuntime`、`Registry`、
 `LoadedModule` 以及生成的 registry 键。
 
-枚举在包中仅作为类型提供。使用 `import type` 导入枚举类型；普通枚举的值可从
-暴露该模块的 registry 键读取。`const enum` 的值在运行时不可用。
+在生成的声明中，枚举会转换为字面量联合类型，因此宿主签名可以直接接受对应的值：
+
+```ts
+import type { PlaybackStatus } from "@open-orpheus/plugin-api/host/src/main/playback/types.js";
+
+const status: PlaybackStatus = "playing";
+```
+
+普通枚举还保留一个 `declare const` 对象以及成员类型别名的命名空间，因此从 registry
+读取的值仍保留字面量类型，`Enum.Member` 也仍可用于类型位置。`const enum` 仅保留
+联合类型，其值与 `Enum.Member` 类型名均不可用。
 
 ## 跨插件导出
 
