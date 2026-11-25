@@ -35,6 +35,9 @@
     },
     "./configuration": {
       "types": "./dist/configuration/index.d.ts"
+    },
+    "./*": {
+      "types": "./dist/*"
     }
   },
   "files": [

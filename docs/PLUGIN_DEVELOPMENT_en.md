@@ -205,6 +205,30 @@ type Logger = LoadedModule<"@main/logger">;
 Keys are realm-scoped. The same alias can map to different modules in different
 realms; import the type package for the realm you are writing.
 
+### Direct type imports and stability
+
+The generated package mirrors the host's module graph and exposes it through a
+wildcard, so implementation types can also be imported directly:
+
+```ts
+import type { PlaybackMode } from "@open-orpheus/plugin-api/host/src/shared/types/playback-mode.js";
+```
+
+Use the `.js` extension. These are type-only imports; the package ships no
+runtime code. They are not part of the supported plugin API: they follow the
+host source rather than a compatibility contract. Declarations tagged
+`@internal` in the host, and implementation modules such as
+`host/src/main/plugin/**`, are **more unstable than the rest of the generated
+surface** — the package entry points and registry keys. The tag is a stability
+marker, not access control: the declaration remains importable. These entries
+can change, move, or disappear in any release without notice. Rely on
+`PluginModule`, `PluginRuntime`, `Registry`, `LoadedModule`, and the generated
+registry keys for behavior you need to keep working.
+
+Enums are type-only in the package. Import the enum type with `import type`; a
+normal enum's values can be read from the registry key that exposes its module.
+`const enum` values are not available at runtime.
+
 ## Cross-plugin exports
 
 A plugin's entry exports are available to other plugins through

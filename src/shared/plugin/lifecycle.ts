@@ -16,10 +16,10 @@ export interface PluginDesiredState {
 /**
  * In-process lifecycle state names.
  *
- * Deliberately separate from the manager contract: the contract enums are
- * `@internal` and stripped from the published SDK, so a cross-module reference
- * would leave a dangling import. The serializer maps these values onto the
- * IPC-facing enums.
+ * Deliberately separate from the manager contract. Both sets carry the internal
+ * marker to flag them as unstable host internals rather than supported plugin
+ * API; the generated package publishes them because it mirrors the host
+ * declaration tree. The serializer maps these values onto the IPC-facing enums.
  */
 /** @internal */
 export enum LifecycleStateKind {

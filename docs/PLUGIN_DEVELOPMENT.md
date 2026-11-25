@@ -188,6 +188,25 @@ type Logger = LoadedModule<"@main/logger">;
 registry 的 key 按 realm 划分。同一个别名在不同 realm 中可能指向不同模块，请导入
 目标 realm 的类型包。
 
+### 直接导入类型与稳定性
+
+生成包镜像宿主的模块图，并通过通配符暴露，因此也可以直接导入实现类型：
+
+```ts
+import type { PlaybackMode } from "@open-orpheus/plugin-api/host/src/shared/types/playback-mode.js";
+```
+
+必须带 `.js` 扩展名。这些导入仅提供类型，包本身不包含运行时代码。这类深层导入
+不属于受支持的插件 API：它们跟随宿主源码，而不是兼容性契约。宿主中标记为
+`@internal` 的声明以及 `host/src/main/plugin/**` 等实现模块，**比生成表面的
+其余部分（包入口和 registry 键）更不稳定**。该标记仅表示稳定性，不构成访问控制：
+声明仍然可以被导入。这些内容可能在任意版本中变更、移动或删除，且不会提前通知。
+需要长期可用的行为请依赖 `PluginModule`、`PluginRuntime`、`Registry`、
+`LoadedModule` 以及生成的 registry 键。
+
+枚举在包中仅作为类型提供。使用 `import type` 导入枚举类型；普通枚举的值可从
+暴露该模块的 registry 键读取。`const enum` 的值在运行时不可用。
+
 ## 跨插件导出
 
 插件入口的导出可以通过 `runtime.plugins` 提供给其他插件：

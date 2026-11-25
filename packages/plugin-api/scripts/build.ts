@@ -83,12 +83,20 @@ export function generateApi(): number {
   assertKeyvVersion();
   assertVersionConsistency();
   assertPackageExports();
-  assertInternalStripped();
+  assertDeclarationTreesResolve();
   assertConsumable();
 
   return declarations;
 }
 
+/**
+ * Emit the reachable declaration tree without `stripInternal`.
+ *
+ * `@internal` stays in the source as a marker for unstable host internals. It
+ * is intentionally not stripped: deep imports are exposed by the package
+ * wildcard, and removing a declaration while other declarations still import
+ * it leaves the emitted tree inconsistent.
+ */
 function generateRealm(realm: RealmBuild): number {
   const entries = collectRegistryEntries({ root: ROOT, realm: realm.id });
 
@@ -99,7 +107,6 @@ function generateRealm(realm: RealmBuild): number {
     noEmit: false,
     outDir: realm.host,
     rootDir: ROOT,
-    stripInternal: true,
   };
 
   const rootNames = [
@@ -155,7 +162,6 @@ function generateTypeOnly(sdk: TypeOnlySdkConfig): number {
     noEmit: false,
     outDir: host,
     rootDir: ROOT,
-    stripInternal: true,
   };
 
   const program = ts.createProgram(
@@ -744,31 +750,33 @@ function addDeclarationExtensions(root: string): void {
   }
 }
 
-/** Fail if an @internal declaration leaked into the published SDK. */
-function assertInternalStripped(): void {
-  const samples = [
-    [
-      "lifecycle",
-      "shared/plugin/lifecycle.d.ts",
-      /\b(?:RealmLifecycle|LifecycleSnapshot|LifecycleRuntimeState)\b/,
-    ],
-    [
-      "plugin-manager contract",
-      "shared/contracts/plugin-manager-api.d.ts",
-      /\b(?:PluginManagerEntry|SerializablePluginRuntimeState|PluginRealmReport)\b/,
-    ],
-  ] as const;
-  const hosts = ["host", "preload/host", "plugin-manager/host"];
-  for (const host of hosts) {
-    for (const [name, relative, pattern] of samples) {
-      const file = path.join(DIST, host, "src", relative);
-      if (!existsSync(file)) continue;
-      if (pattern.test(readFileSync(file, "utf8"))) {
-        throw new Error(
-          `@internal declaration leaked into the SDK: ${path.relative(ROOT, file)} (${name})`
-        );
-      }
-    }
+/**
+ * Type-check every emitted declaration, not just the reachable entry graph.
+ *
+ * `@internal` declarations are published, so the whole tree must be
+ * self-consistent. Diagnostics inside third-party declarations are ignored:
+ * they are not ours and can vary with the consumer's TypeScript version.
+ */
+function assertDeclarationTreesResolve(): void {
+  const rootNames = [...walk(DIST)].filter((file) => file.endsWith(".d.ts"));
+  const program = ts.createProgram(rootNames, {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.Preserve,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    strict: true,
+    skipLibCheck: false,
+    noEmit: true,
+    types: ["node"],
+  });
+  const distRoot = `${path.resolve(DIST)}${path.sep}`;
+  const diagnostics = ts.getPreEmitDiagnostics(program).filter((diagnostic) => {
+    if (!diagnostic.file) return true;
+    return path.resolve(diagnostic.file.fileName).startsWith(distRoot);
+  });
+  if (diagnostics.length > 0) {
+    throw new Error(
+      "Generated declarations do not type-check as a tree:\n" + formatDiagnostics(diagnostics)
+    );
   }
 }
 
@@ -785,6 +793,11 @@ function assertPackageExports(): void {
 
   for (const [name, sdk] of Object.entries(TYPE_ONLY_SDKS)) {
     assertSdkExport(packageJson, sdk, `type-only entry "${name}"`);
+  }
+
+  const wildcard = packageJson.exports?.["./*"];
+  if (!wildcard || wildcard.types !== "./dist/*") {
+    throw new Error('package.json exports["./*"].types must be "./dist/*"');
   }
 }
 
@@ -841,6 +854,11 @@ function assertConsumable(): void {
         'import type * as pluginManager from "@open-orpheus/plugin-api/plugin-manager";',
         'import type * as configuration from "@open-orpheus/plugin-api/configuration";',
         'import type { LoadedModule, RegistryLoad } from "@open-orpheus/plugin-api";',
+        'import type { PlaybackMode } from "@open-orpheus/plugin-api/host/src/shared/types/playback-mode.js";',
+        'import type { RealmLifecycle } from "@open-orpheus/plugin-api/host/src/shared/plugin/lifecycle.js";',
+        'import type PlaybackController from "@open-orpheus/plugin-api/host/src/main/playback/PlaybackController.js";',
+        'import type { AudioPlayerState } from "@open-orpheus/plugin-api/preload/host/src/preload/Player.js";',
+        'import type { PluginManagerState } from "@open-orpheus/plugin-api/plugin-manager/host/src/shared/contracts/plugin-manager-api.js";',
         "export type Main = typeof main;",
         "export type Preload = typeof preload;",
         "export type PluginManager = typeof pluginManager;",
@@ -852,6 +870,11 @@ function assertConsumable(): void {
         'export type LoggerViaLoad = Awaited<ReturnType<RegistryLoad["@main/logger"]>>;',
         "type Assert<T extends true> = T;",
         "export type LoggerMatches = Assert<Logger extends LoggerViaLoad ? true : false>;",
+        "export type DirectPlaybackMode = PlaybackMode;",
+        "export type DirectLifecycle = RealmLifecycle<unknown>;",
+        "export type DirectPlaybackController = PlaybackController;",
+        "export type DirectAudioPlayerState = AudioPlayerState;",
+        "export type DirectPluginManagerState = PluginManagerState;",
         "",
       ].join("\n")
     );

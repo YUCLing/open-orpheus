@@ -47,6 +47,34 @@ The plugin-manager realm runs only in the plugin manager window. Declare it in
 `metadata.json` as a `plugin-manager` entry; it is optional and separate from
 the main and preload entries.
 
+## Deep imports and stability
+
+The generated tree mirrors the host's module graph, so implementation types can
+be imported directly through the package wildcard:
+
+```ts
+import type { PlaybackMode } from "@open-orpheus/plugin-api/host/src/shared/types/playback-mode.js";
+import type PlaybackController from "@open-orpheus/plugin-api/host/src/main/playback/PlaybackController.js";
+```
+
+Include the `.js` extension: the package is ESM and the emitted declarations use
+explicit specifiers. These are type-only imports; the package ships no runtime
+code.
+
+Deep imports are **not** part of the supported plugin API. Declarations tagged
+`@internal` in the host, and implementation modules such as
+`host/src/main/plugin/**`, are published only because the tree is generated from
+the host source. The tag is a stability marker, not access control: the
+declaration remains importable. These entries are **more unstable than the rest
+of the generated surface** — the package entry points and registry keys. They
+can change, move, or disappear in any release without a deprecation cycle.
+Prefer `PluginModule`, `PluginRuntime`, `Registry`, `LoadedModule`, and the
+generated registry keys for anything a plugin depends on.
+
+Enums are type-only here. Import the enum type with `import type`; a normal
+enum's values can be read from the registry key that exposes its module.
+`const enum` values are not available at runtime.
+
 ## Lifecycle
 
 `activate` runs for each realm instance. `deactivate` is optional, but should be
