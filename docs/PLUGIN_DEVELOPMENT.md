@@ -213,8 +213,9 @@ const status: PlaybackStatus = "playing";
 ```
 
 普通枚举还保留一个 `declare const` 对象以及成员类型别名的命名空间，因此从 registry
-读取的值仍保留字面量类型，`Enum.Member` 也仍可用于类型位置。`const enum` 仅保留
-联合类型，其值与 `Enum.Member` 类型名均不可用。
+读取的值仍保留字面量类型，`Enum.Member` 也仍可用于类型位置。数字枚举保留反向索引，
+因此 `Enum[value]` 仍然可用。`const enum` 仅保留联合类型，其值与 `Enum.Member`
+类型名均不可用。
 
 ## 跨插件导出
 

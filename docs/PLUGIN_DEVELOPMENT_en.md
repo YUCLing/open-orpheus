@@ -236,8 +236,9 @@ const status: PlaybackStatus = "playing";
 
 Normal enums also keep a `declare const` object and a namespace of member type
 aliases, so values loaded from the registry retain their literal types and
-`Enum.Member` still works in type positions. `const enum`s are union-only;
-neither their values nor their `Enum.Member` type names are available.
+`Enum.Member` still works in type positions. Numeric enums keep their reverse
+index, so `Enum[value]` remains valid. `const enum`s are union-only; neither
+their values nor their `Enum.Member` type names are available.
 
 ## Cross-plugin exports
 

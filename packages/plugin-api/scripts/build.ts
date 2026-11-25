@@ -947,7 +947,12 @@ function renderConstObject(members: EnumMemberInfo[]): string {
     const comment = docs.length > 0 ? `${indent(docs, 4)}\n` : "";
     return `${comment}    readonly ${key}: ${literal(member.value)};`;
   });
-  return `{\n${properties.join("\n")}\n}`;
+  // Numeric enums expose a reverse mapping at runtime. Keep it addressable so
+  // `Enum[value]` keeps the type it had before the enum was downgraded.
+  const reverse = members.some((member) => typeof member.value === "number")
+    ? "\n    readonly [x: number]: string;"
+    : "";
+  return `{\n${properties.join("\n")}${reverse}\n}`;
 }
 
 function renderEnumNamespace(name: string, info: EnumInfo, prefix: string): string {
@@ -1077,6 +1082,7 @@ function assertConsumable(): void {
         'import type { PlaybackStatus } from "@open-orpheus/plugin-api/host/src/main/playback/types.js";',
         'import type { AegisEncryptState } from "@open-orpheus/plugin-api/host/src/main/xeapi.js";',
         'import type { RealmLifecycle } from "@open-orpheus/plugin-api/host/src/shared/plugin/lifecycle.js";',
+        'import { LifecycleState, state } from "@open-orpheus/plugin-api/host/src/main/lifecycle.js";',
         'import type PlaybackController from "@open-orpheus/plugin-api/host/src/main/playback/PlaybackController.js";',
         'import type { AudioPlayerState } from "@open-orpheus/plugin-api/preload/host/src/preload/Player.js";',
         'import type { PluginManagerState } from "@open-orpheus/plugin-api/plugin-manager/host/src/shared/contracts/plugin-manager-api.js";',
@@ -1096,6 +1102,7 @@ function assertConsumable(): void {
         "export type DirectPlaybackController = PlaybackController;",
         "export type DirectAudioPlayerState = AudioPlayerState;",
         "export type DirectPluginManagerState = PluginManagerState;",
+        "export const lifecycleStateName: string = LifecycleState[state];",
         'export const playbackLiteral: PlaybackStatus = "playing";',
         "export const constEnumLiteral: AegisEncryptState = 0;",
         "// @ts-expect-error invalid enum literal",
