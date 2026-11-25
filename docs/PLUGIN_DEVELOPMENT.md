@@ -188,6 +188,35 @@ type Logger = LoadedModule<"@main/logger">;
 registry 的 key 按 realm 划分。同一个别名在不同 realm 中可能指向不同模块，请导入
 目标 realm 的类型包。
 
+### 直接导入类型与稳定性
+
+生成包镜像宿主的模块图，并通过通配符暴露，因此也可以直接导入实现类型：
+
+```ts
+import type { PlaybackMode } from "@open-orpheus/plugin-api/host/src/shared/types/playback-mode.js";
+```
+
+必须带 `.js` 扩展名。这些导入仅提供类型，包本身不包含运行时代码。这类深层导入
+不属于受支持的插件 API：它们跟随宿主源码，而不是兼容性契约。宿主中标记为
+`@internal` 的声明以及 `host/src/main/plugin/**` 等实现模块，**比生成表面的
+其余部分（包入口和 registry 键）更不稳定**。该标记仅表示稳定性，不构成访问控制：
+声明仍然可以被导入。这些内容可能在任意版本中变更、移动或删除，且不会提前通知。
+需要长期可用的行为请依赖 `PluginModule`、`PluginRuntime`、`Registry`、
+`LoadedModule` 以及生成的 registry 键。
+
+在生成的声明中，枚举会转换为字面量联合类型，因此宿主签名可以直接接受对应的值：
+
+```ts
+import type { PlaybackStatus } from "@open-orpheus/plugin-api/host/src/main/playback/types.js";
+
+const status: PlaybackStatus = "playing";
+```
+
+普通枚举还保留一个 `declare const` 对象以及成员类型别名的命名空间，因此从 registry
+读取的值仍保留字面量类型，`Enum.Member` 也仍可用于类型位置。数字枚举保留反向索引，
+因此 `Enum[value]` 仍然可用。`const enum` 仅保留联合类型，其值与 `Enum.Member`
+类型名均不可用。
+
 ## 跨插件导出
 
 插件入口的导出可以通过 `runtime.plugins` 提供给其他插件：

@@ -1,11 +1,11 @@
 import { Events, RPCClient } from "@discordjs/rpc";
 import type { LoadedModule } from "@open-orpheus/plugin-api";
+import type PlaybackController from "@open-orpheus/plugin-api/host/src/main/playback/PlaybackController.js";
+import type {
+  PlaybackStatus,
+  TrackInfo,
+} from "@open-orpheus/plugin-api/host/src/main/playback/types.js";
 
-/** The host playback singleton exposed through the plugin registry. */
-type PlaybackController = LoadedModule<"@main/mediaSession">["playbackController"];
-type PlaybackSnapshot = PlaybackController["snapshot"];
-type TrackInfo = NonNullable<PlaybackSnapshot["track"]>;
-type PlaybackStatus = PlaybackSnapshot["status"];
 type HostLogger = LoadedModule<"@main/logger">["default"];
 
 const DISCORD_APPLICATION_ID = "1569539057950658691";
@@ -13,7 +13,7 @@ const CONNECT_TIMEOUT_MS = 1000;
 const ACTIVITY_TIMEOUT_MS = 5000;
 const RECONNECT_DELAY_MS = 5000;
 const CLOSE_TIMEOUT_MS = 250;
-const PLAYING_STATUS: PlaybackStatus = "playing" as PlaybackStatus;
+const PLAYING_STATUS: PlaybackStatus = "playing";
 
 const MAX_TEXT_BYTES = 128;
 const ABSOLUTE_PATH_OR_URL = /^(?:[~/]\/|\/|[a-z]:[\\/]|\\\\|[a-z][a-z\d+.-]*:\/\/)/i;

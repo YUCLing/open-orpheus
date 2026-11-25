@@ -5,6 +5,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type {
+  PlaybackChange as PlaybackChangeType,
+  PlaybackStatus,
+  TrackInfo,
+} from "@open-orpheus/plugin-api/host/src/main/playback/types.js";
+
 import DiscordPresence from "./DiscordPresence";
 
 const PlaybackChange = {
@@ -14,16 +20,6 @@ const PlaybackChange = {
   Stalled: "stalled",
   Seeking: "seeking",
 } as const;
-
-type PlaybackChange = (typeof PlaybackChange)[keyof typeof PlaybackChange];
-type PlaybackStatus = "playing" | "paused" | "stopped";
-
-interface TrackInfo {
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-}
 
 type PlaybackListener = (event: { name: string; data: unknown }) => void;
 
@@ -86,7 +82,7 @@ class FakePlayback {
     if (seeked) void this.emit("positionchanged", { position, seeked: true });
   }
 
-  applyPlaybackChange(change: PlaybackChange): void {
+  applyPlaybackChange(change: PlaybackChangeType): void {
     void this.emit("advancingchange", change === "playing");
     if (change === "stalled" || change === "seeking") return;
     if (this.snapshot.status === change) return;
