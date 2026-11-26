@@ -57,7 +57,7 @@ const hoisted = vi.hoisted(() => {
     }),
     /** Stands in for the native decoration of a managed title. */
     decorateTitle: vi.fn((id: string, title: string) => `#${id}#${title}`),
-    layerShellAvailable: vi.fn(() => true),
+    layerShellVersion: vi.fn((): number | null => 5),
     /** Layer-shell policy registrations made by the time a window was built. */
     policyCallsAtConstruction: [] as number[],
     lifecycle: { state: 0 },
@@ -84,7 +84,7 @@ vi.mock("@open-orpheus/window", () => ({
   onLayerShellRoleRefused: hoisted.onLayerShellRefused,
   decorateWindowTitle: hoisted.decorateTitle,
   drainWindowCallbacks: hoisted.drainWindowCallbacks,
-  isLayerShellAvailable: hoisted.layerShellAvailable,
+  layerShellVersion: hoisted.layerShellVersion,
 }));
 
 vi.mock("../../src/main/lifecycle", () => ({
@@ -310,8 +310,8 @@ beforeEach(() => {
   hoisted.validateLayerShell.mockReset();
   hoisted.validateLayerShell.mockReturnValue(true);
   hoisted.decorateTitle.mockClear();
-  hoisted.layerShellAvailable.mockReset();
-  hoisted.layerShellAvailable.mockReturnValue(true);
+  hoisted.layerShellVersion.mockReset();
+  hoisted.layerShellVersion.mockReturnValue(5);
   hoisted.policyCallsAtConstruction.length = 0;
   hoisted.lifecycle.state = 0;
 });
@@ -956,7 +956,7 @@ describe("ManagedWindow layer shell", () => {
   });
 
   it("refuses when the compositor has no layer shell", () => {
-    hoisted.layerShellAvailable.mockReturnValue(false);
+    hoisted.layerShellVersion.mockReturnValue(null);
     const managed = new TestWindow();
     hoisted.setWindowLayerShell.mockClear();
 
@@ -975,12 +975,12 @@ describe("ManagedWindow layer shell", () => {
     expect(hoisted.setWindowLayerShell).not.toHaveBeenCalled();
   });
 
-  it("reports availability only on Wayland", () => {
-    expect(ManagedWindow.isLayerShellAvailable()).toBe(true);
+  it("reports the layer-shell version only on Wayland", () => {
+    expect(ManagedWindow.layerShellVersion()).toBe(5);
 
     hoisted.desktop.mockReturnValue(X11);
 
-    expect(ManagedWindow.isLayerShellAvailable()).toBe(false);
+    expect(ManagedWindow.layerShellVersion()).toBeNull();
   });
 });
 

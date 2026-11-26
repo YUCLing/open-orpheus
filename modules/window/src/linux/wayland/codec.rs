@@ -11,6 +11,7 @@ pub(crate) enum Iface {
     WlCompositor,
     WlSeat,
     WlPointer,
+    WlKeyboard,
     WlTouch,
     /// A `wl_output` the client bound. Kept so a layer surface can name the
     /// output the application asked for.
@@ -44,7 +45,10 @@ pub(crate) const REQ_BIND: u16 = 0;
 pub(crate) const REQ_CREATE_SURFACE: u16 = 0;
 pub(crate) const REQ_CREATE_REGION: u16 = 1;
 pub(crate) const REQ_GET_POINTER: u16 = 0;
+pub(crate) const REQ_GET_KEYBOARD: u16 = 1;
 pub(crate) const REQ_GET_TOUCH: u16 = 2;
+pub(crate) const EVT_KEYBOARD_ENTER: u16 = 1;
+pub(crate) const EVT_KEYBOARD_LEAVE: u16 = 2;
 pub(crate) const EVT_ENTER: u16 = 0;
 pub(crate) const EVT_LEAVE: u16 = 1;
 pub(crate) const EVT_BUTTON: u16 = 3;
@@ -89,6 +93,10 @@ pub(crate) const EVT_GLOBAL_REMOVE: u16 = 1;
 // wl_output events
 /// `wl_output.name` (v4): the compositor's name for the output, e.g. `DP-1`.
 pub(crate) const EVT_OUTPUT_NAME: u16 = 4;
+
+// wl_surface events
+pub(crate) const EVT_SURFACE_ENTER: u16 = 0;
+pub(crate) const EVT_SURFACE_LEAVE: u16 = 1;
 
 // xdg_toplevel events
 pub(crate) const EVT_TOPLEVEL_CONFIGURE: u16 = 0;

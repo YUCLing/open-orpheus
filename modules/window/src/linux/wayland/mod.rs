@@ -24,8 +24,30 @@ pub(super) fn is_wayland() -> bool {
     state::is_wayland()
 }
 
-pub(super) fn is_layer_shell_available() -> bool {
-    state::is_layer_shell_available()
+pub(super) fn layer_shell_version() -> Option<u32> {
+    state::layer_shell_version()
+}
+
+/// Resize an existing layer surface.
+pub(super) fn set_layer_size(window_id: &str, width: u32, height: u32) -> bool {
+    if disable_display_server_hooks() {
+        return false;
+    }
+    state::set_layer_size(window_id, width, height)
+}
+
+fn disable_display_server_hooks() -> bool {
+    crate::linux::disable_display_server_hooks()
+}
+
+/// Whether the compositor gives this window keyboard focus.
+pub(super) fn window_keyboard_focused(window_id: &str) -> bool {
+    state::window_keyboard_focused(window_id)
+}
+
+/// The output a window's surface entered.
+pub(super) fn window_output_display_id(window_id: &str) -> Option<u32> {
+    state::window_output_display_id(window_id)
 }
 
 /// The compositor's name for an output, by the `Display.id` naming it.

@@ -1,8 +1,4 @@
-import {
-  DesktopEnvironment,
-  getDesktopEnvironment,
-  isLayerShellAvailable,
-} from "@open-orpheus/window";
+import { DesktopEnvironment, getDesktopEnvironment, layerShellVersion } from "@open-orpheus/window";
 
 import { registerCallHandler } from "../calls";
 import { registerShutdownTask } from "../lifecycle";
@@ -35,7 +31,7 @@ registerCallHandler<
   {
     offscreen: false,
     support:
-      isLayerShellAvailable() ||
+      layerShellVersion() !== null ||
       [DesktopEnvironment.X11, DesktopEnvironment.Windows, DesktopEnvironment.Darwin].includes(
         getDesktopEnvironment()
       ),

@@ -11,6 +11,8 @@
 //! object the client bound for that output. The registry is per connection
 //! because global names are scoped to one `wl_display`.
 
+use super::codec::{EVT_SURFACE_ENTER, EVT_SURFACE_LEAVE, WlMessage};
+use super::handlers::Action;
 use super::state::WaylandConn;
 
 /// The interface name the compositor advertises an output under.
@@ -53,6 +55,42 @@ pub(crate) fn destroyed(conn: &mut WaylandConn, object_id: u32) {
     for output in conn.outputs.values_mut() {
         output.objects.retain(|id| *id != object_id);
     }
+    // A surface can no longer be reported as being on this output.
+    for outputs in conn.surface_outputs.values_mut() {
+        outputs.retain(|id| *id != object_id);
+    }
+}
+
+/// Record the output a surface entered or left.
+pub(crate) fn on_surface_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    let Some(output) = msg.u32_arg(8) else {
+        return Action::Forward;
+    };
+    match msg.opcode {
+        EVT_SURFACE_ENTER => {
+            let outputs = conn.surface_outputs.entry(msg.object_id).or_default();
+            if !outputs.contains(&output) {
+                outputs.push(output);
+            }
+        }
+        EVT_SURFACE_LEAVE => {
+            if let Some(outputs) = conn.surface_outputs.get_mut(&msg.object_id) {
+                outputs.retain(|id| *id != output);
+                if outputs.is_empty() {
+                    conn.surface_outputs.remove(&msg.object_id);
+                }
+            }
+        }
+        _ => {}
+    }
+    Action::Forward
+}
+
+/// The `Display.id` an output object was bound for.
+pub(crate) fn display_id_for_object(conn: &WaylandConn, object_id: u32) -> Option<u32> {
+    conn.outputs
+        .iter()
+        .find_map(|(display_id, output)| output.objects.contains(&object_id).then_some(*display_id))
 }
 
 /// Record the compositor's name for the output a `wl_output` object belongs to.

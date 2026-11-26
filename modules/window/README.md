@@ -36,6 +36,8 @@ everything it does:
 | `WaylandConn::surface_roles`                                | `wl_surface` → `SurfaceRole`       | the surface is destroyed     |
 | `WaylandConn::outputs`                                      | `Display.id` → `wl_output` objects | the global is withdrawn      |
 | `WaylandConn::layer_windows`, `wl_to_layer`, `xdg_to_layer` | the per-show role objects          | the role object is destroyed |
+| `WaylandConn::surface_outputs`                              | `wl_surface` → entered outputs     | the surface is destroyed     |
+| `WaylandConn::layer_sizes`                                  | `wl_surface` → pending `set_size`  | the next commit              |
 | `WaylandConn::pending_role`                                 | the open role transaction          | it is decided                |
 | `WINDOW_ROLES`                                              | managed id → the role it asked for | consumed, or cleared         |
 | `RECORDED_INPUT_REGIONS`                                    | managed id → input region          | cleared by the application   |
@@ -59,10 +61,16 @@ surface** and the API is a policy registered ahead of that decision:
 
 - `setWindowLayerShell(windowId, options)` registers (or replaces) the policy for
   a managed window; `setWindowLayerShell(windowId, null)` clears it.
+- `setWindowLayerShellSize(windowId, width, height)` resizes a surface that
+  already took the layer role.
+- `getWindowOutputDisplayId(windowId)` reports the `Display.id` of the output a
+  window's surface entered, so a caller never has to guess from the global
+  cursor.
 - `validateLayerShellOptions(options)` runs the same checks without storing
   anything, so a caller can report options that could never be sent.
-- `isLayerShellAvailable()` reports whether the compositor advertises the
-  protocol. Everywhere but Wayland on Linux it is `false`.
+- `layerShellVersion()` returns the highest layer-shell version advertised by a
+  live connection, or `null` when the protocol is unavailable. Everywhere but
+  Wayland on Linux it is `null`.
 
 The policy is keyed by the id the application names the window with, so it can be
 registered before the window — and therefore before its surface — exists. Options
@@ -70,6 +78,61 @@ that say nothing about size or anchors cover the output (all four anchors, size
 chosen by the compositor). An axis given a size of `0` must anchor both opposite
 edges there, so combinations that cannot be sent are refused rather than allowed
 to raise a protocol error.
+
+### Runtime size
+
+`setWindowLayerShellSize(windowId, width, height)` resizes a layer surface that
+already exists, without touching its anchors or margins. Layer state is
+double-buffered, so the request is queued in `WaylandConn::layer_sizes` and
+emitted immediately before the surface's next `wl_surface.commit`; the caller
+must also make the window commit. The cached `SurfaceRole::Layer` and the
+window's `WINDOW_ROLES` policy are updated, so a re-created surface keeps the
+new size. Runtime _margin_ changes are deliberately not offered: some
+compositors (notably KWin) do not move a mapped layer surface on a margin
+change, which is why menus create their layer surface at the final position
+instead of repositioning a capture surface.
+
+### Cursor capture
+
+Wayland only reports the pointer relative to a surface, so a menu that has no
+anchor first opens a transparent fullscreen layer window and captures the
+pointer enter on it. That window deliberately omits `output`: the compositor
+picks the output the user is on. `getWindowOutputDisplayId(windowId)` reads the
+`wl_surface.enter` events the proxy records and returns that output's
+`Display.id`; placement uses that display's bounds and work area.
+
+The capture window is an ordinary Electron layer window (`BaseWindow`/
+`BrowserWindow`), not a proxy-owned surface. The proxy must not create surfaces
+on the client's connection for this: Chromium recycles libwayland object ids
+(e.g. `wl_callback` ids) as soon as it destroys an object, so an id the proxy
+steals from a `delete_id` can still be live in the client's object map. Using
+one for a viewport or layer surface terminates the display connection with
+"invalid object". Cursor capture belongs on a surface the client owns.
+
+### Menu focus and dismissal
+
+A layer menu asks for `keyboard_interactivity.on_demand`, not `exclusive`. An
+exclusive layer surface keeps keyboard focus until it unmaps, so focus loss can
+never signal that the user clicked elsewhere. With `on_demand`, the compositor
+moves focus normally, and the proxy's `wl_keyboard.enter`/`leave` tracking is
+the authoritative focus state (`isWindowKeyboardFocused`), not Electron's
+xdg-activation-based `isFocused()`.
+
+The menu window listens for Electron's `focus` and `blur` events (Chromium
+derives these from `wl_keyboard` on Wayland). A blur closes the menu unless another surface on the menu path already has
+keyboard focus or a child menu is still opening. There is no polling and no
+synthetic focus grace. Pointer-based dismissal is not used: pointer focus is independent of
+keyboard focus, and a click outside normally takes keyboard focus with it.
+
+### Layer popups
+
+A layer surface cannot be an `xdg_popup`'s _xdg_ parent, but it can be the
+popup's layer parent. A popup for a layer window is created with
+`xdg_surface.get_popup(popup, /* parent */ 0, positioner)` and then handed to
+`zwlr_layer_surface_v1.get_popup(layer_id, popup)` before the popup's initial
+commit. The proxy already tracks `wl_to_layer` for converted windows, and
+`build_popup_role` emits the two-request sequence when the parent role is a
+layer surface.
 
 ### Outputs
 

@@ -8,10 +8,11 @@ import {
   drainWindowCallbacks,
   forgetWindowState,
   getDesktopEnvironment,
-  isLayerShellAvailable,
+  layerShellVersion as nativeLayerShellVersion,
   onLayerShellRoleRefused,
   setInputRegion,
   setWindowLayerShell,
+  setWindowLayerShellSize,
   transferWindowState,
   validateLayerShellOptions,
   DesktopEnvironment,
@@ -444,9 +445,14 @@ export abstract class ManagedWindow<
     return wnd;
   }
 
-  /** Whether the compositor can take layer surfaces at all. */
-  static isLayerShellAvailable(): boolean {
-    return getDesktopEnvironment() === DesktopEnvironment.Wayland && isLayerShellAvailable();
+  /**
+   * The layer-shell version advertised by a live compositor, or `null` when
+   * layer shell is unavailable.
+   */
+  static layerShellVersion(): number | null {
+    return getDesktopEnvironment() === DesktopEnvironment.Wayland
+      ? nativeLayerShellVersion()
+      : null;
   }
 
   /**
@@ -471,7 +477,24 @@ export abstract class ManagedWindow<
     if (!this.isWayland()) return options === null;
     setWindowLayerShell(this.id, options);
     if (options === null) return true;
-    return ManagedWindow.isLayerShellAvailable() && validateLayerShellOptions(options);
+    return ManagedWindow.layerShellVersion() !== null && validateLayerShellOptions(options);
+  }
+
+  /**
+   * Resize a layer surface that already exists.
+   *
+   * Only the size changes; anchors and margins stay as they were at role
+   * creation. The request is applied at the surface's next commit (layer state
+   * is double-buffered), so the caller must also make the window commit, which
+   * `BaseWindowMenuSurface.applyMeasurement` does.
+   */
+  setLayerShellSize(width: number, height: number): boolean {
+    if (!this.isWayland()) return false;
+    return setWindowLayerShellSize(
+      this.id,
+      Math.max(1, Math.round(width)),
+      Math.max(1, Math.round(height))
+    );
   }
 
   /**
@@ -792,6 +815,33 @@ export class BasicManagedWindow extends ManagedWindow {
 export class BaseWindowManagedWindow extends ManagedWindow<WindowData, BaseWindow> {
   attach(window: BaseWindow): void {
     this.bindWindow(window);
+  }
+}
+
+/**
+ * A short-lived `BrowserWindow` created as a layer surface.
+ *
+ * Cursor capture needs a mapped surface with a renderer; it is not a menu
+ * surface, so it gets its own managed window. Keeping construction here is
+ * what keeps every `BrowserWindow` creation inside the managed wrapper.
+ */
+export class LayerCaptureWindow extends ManagedWindow<WindowData, BrowserWindow> {
+  constructor(
+    options: BrowserWindowConstructorOptions,
+    layerShell: LayerShellOptions,
+    title: string
+  ) {
+    super();
+    if (!this.setLayerShell(layerShell)) {
+      throw new Error("layer-shell capture policy was refused");
+    }
+    try {
+      this.createBrowserWindow(options);
+    } catch (error) {
+      this.setLayerShell(null);
+      throw error;
+    }
+    this.setTitle(title);
   }
 }
 

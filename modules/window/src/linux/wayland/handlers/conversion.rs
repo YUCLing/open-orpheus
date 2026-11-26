@@ -222,7 +222,7 @@ mod tests {
         // deliberately high so it cannot collide with a real socket descriptor
         // used by another test's connection entry.
         let registered = Registered::new(93_007, WaylandConn::new());
-        assert!(!state::is_layer_shell_available());
+        assert_eq!(state::layer_shell_version(), None);
 
         registered.with(|conn| {
             let mut body = word(63);
@@ -230,13 +230,13 @@ mod tests {
             body.extend_from_slice(&word(5));
             on_registry_global(conn, &message(5, EVT_GLOBAL, &body));
         });
-        assert!(state::is_layer_shell_available());
+        assert_eq!(state::layer_shell_version(), Some(5));
 
         registered.with(|conn| {
             on_registry_global_remove(conn, &message(5, EVT_GLOBAL_REMOVE, &word(63)));
         });
         assert!(
-            !state::is_layer_shell_available(),
+            state::layer_shell_version() != Some(5),
             "a withdrawn global is not available"
         );
     }
