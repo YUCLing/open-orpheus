@@ -94,9 +94,29 @@ pub fn is_x11() -> bool {
     x11::is_x11()
 }
 
-/// Whether the compositor advertises `zwlr_layer_shell_v1`.
-pub fn is_layer_shell_available() -> bool {
-    wayland::is_layer_shell_available()
+/// The highest layer-shell version advertised by a live compositor.
+pub fn layer_shell_version() -> Option<u32> {
+    wayland::layer_shell_version()
+}
+
+/// Resize an existing layer surface, keeping its anchors and margins.
+pub fn set_layer_size(window_id: &str, width: u32, height: u32) -> bool {
+    wayland::set_layer_size(window_id, width, height)
+}
+
+pub fn window_keyboard_focused(window_id: &str) -> bool {
+    if disable_display_server_hooks() {
+        return false;
+    }
+    wayland::window_keyboard_focused(window_id)
+}
+
+/// The `Display.id` of the output a window's surface entered.
+pub fn window_output_display_id(window_id: &str) -> Option<u32> {
+    if disable_display_server_hooks() {
+        return None;
+    }
+    wayland::window_output_display_id(window_id)
 }
 
 /// The compositor's name for the output Electron reports as a `Display.id`.
@@ -342,6 +362,16 @@ pub fn capture_cursor_enter(window_id: String, timeout_ms: u32) -> Option<(i32, 
             let _ = sender.send(position);
         }),
     )?;
+
+    // The surface may already be under the pointer: an enter emitted between
+    // mapping and registration would not produce another event.
+    if let Some((x, y)) = wayland::window_pointer_position(&window_id)
+        && x >= 0
+        && y >= 0
+    {
+        wayland::cancel_window_cursor_enter(token);
+        return Some((x, y));
+    }
 
     match receiver.recv_timeout(Duration::from_millis(u64::from(timeout_ms))) {
         Ok(Some((x, y))) if x >= 0 && y >= 0 => Some((x, y)),

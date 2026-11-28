@@ -12,7 +12,11 @@ test("module can load", async (t) => {
     t.is(typeof window.captureWindowNextPointerAxis, "function");
     t.is(typeof window.drainWindowCallbacks, "function");
     t.is(typeof window.getUniqueDisplayId, "function");
+    t.is(typeof window.getWindowOutputDisplayId, "function");
+    t.is(typeof window.isWindowKeyboardFocused, "function");
+    t.is(typeof window.layerShellVersion, "function");
     t.is(typeof window.setWindowLayerShell, "function");
+    t.is(typeof window.setWindowLayerShellSize, "function");
     t.is(typeof window.setWindowPopupPolicy, "function");
     t.is(typeof window.supportsNativeWaylandPopup, "function");
   });

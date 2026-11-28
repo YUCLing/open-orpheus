@@ -220,6 +220,20 @@ pub(super) fn transfer_input_region(from_id: &str, to_id: &str) -> bool {
     true
 }
 
+/// The `set_size` request a layer surface owes before its next commit, if any.
+///
+/// Like the input region, layer state is double-buffered: the compositor only
+/// adopts it at the surface's commit. Emitting the request just before that
+/// commit keeps it from being applied a frame late.
+pub(super) fn layer_size_requests_for_commit(
+    conn: &mut WaylandConn,
+    wl_surface_id: u32,
+) -> Option<Vec<Vec<u8>>> {
+    let (width, height) = conn.layer_sizes.remove(&wl_surface_id)?;
+    let layer_id = conn.wl_to_layer.get(&wl_surface_id).copied()?;
+    Some(vec![super::layer_shell::set_size(layer_id, width, height)])
+}
+
 pub(super) fn send_xdg_toplevel_move() -> bool {
     let Some(button) = LAST_BUTTON
         .get()
@@ -425,6 +439,32 @@ mod tests {
         // It is emitted immediately before the surface's next commit, because
         // that commit is what makes the compositor adopt it.
         assert!(fixture.injected().is_empty());
+    }
+
+    #[test]
+    fn a_commit_carries_a_layer_size_before_itself() {
+        let _serial = lock_press_state();
+        let fixture = Fixture::new();
+        fixture.with_connection();
+        fixture.with_conn(|conn| {
+            conn.wl_to_layer.insert(7, 60);
+            conn.ifaces
+                .insert(60, super::super::codec::Iface::ZwlrLayerSurface);
+            conn.layer_sizes.insert(7, (320, 240));
+        });
+
+        let requests = fixture
+            .with_conn_ref(|conn| layer_size_requests_for_commit(conn, 7))
+            .expect("the size is pending");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            super::super::test_support::header(&requests[0]),
+            (60, super::super::codec::REQ_LAYER_SET_SIZE, 16)
+        );
+        assert!(
+            fixture.with_conn_ref(|conn| conn.layer_sizes.is_empty()),
+            "the size is emitted once"
+        );
     }
 
     #[test]

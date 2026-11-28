@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   class BaseWindow {
     static instances: BaseWindow[] = [];
+    static pendingLoad: Promise<void> | null = null;
     contentView = { addChildView: vi.fn() };
     handlers = new Map<string, Array<() => void>>();
     destroyed = false;
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => {
       BaseWindow.instances.push(this);
     }
     setTitle = vi.fn();
+    loadURL = vi.fn(() => BaseWindow.pendingLoad ?? Promise.resolve());
     show = vi.fn();
     showInactive = vi.fn();
     maximize = vi.fn();
@@ -48,6 +50,7 @@ const mocks = vi.hoisted(() => {
       isDestroyed: () => false,
       close: vi.fn(),
       focus: vi.fn(),
+      invalidate: vi.fn(),
       on: vi.fn(),
       once: vi.fn(),
     };
@@ -61,12 +64,18 @@ const mocks = vi.hoisted(() => {
 
   class BaseWindowManagedWindow {
     static nextId = 1;
+    static instances: BaseWindowManagedWindow[] = [];
     readonly id = String(BaseWindowManagedWindow.nextId++);
     window: InstanceType<typeof BaseWindow> | null = null;
+    constructor() {
+      BaseWindowManagedWindow.instances.push(this);
+    }
     attach(window: InstanceType<typeof BaseWindow>) {
       this.window = window;
     }
     setTitle = vi.fn();
+    setLayerShell = vi.fn((_options: Record<string, unknown>) => true);
+    setLayerShellSize = vi.fn((_width: number, _height: number) => true);
     destroy = () => {
       this.window?.destroy();
     };
@@ -74,9 +83,21 @@ const mocks = vi.hoisted(() => {
     setWindowInputRegion = vi.fn(() => true);
   }
 
+  class LayerCaptureWindow {
+    static nextId = 1;
+    readonly id = `capture-${LayerCaptureWindow.nextId++}`;
+    readonly window: InstanceType<typeof BaseWindow>;
+    constructor(options: Record<string, unknown>) {
+      this.window = new BaseWindow(options);
+    }
+    setTitle = vi.fn();
+    releaseNativeState = vi.fn();
+  }
+
   return {
     BaseWindow,
     BaseWindowManagedWindow,
+    LayerCaptureWindow,
     WebContentsView,
     parentWindow: {
       isDestroyed: () => false,
@@ -98,12 +119,16 @@ const mocks = vi.hoisted(() => {
       ageMs: number;
     } | null,
     desktop: "wayland" as "wayland" | "x11",
+    layerVersion: null as number | null,
+    pointer: null as [number, number] | null,
+    keyboardFocus: false,
     policy: vi.fn(() => true),
   };
 });
 
 vi.mock("electron", () => ({
   BaseWindow: mocks.BaseWindow,
+  BrowserWindow: mocks.BaseWindow,
   WebContentsView: mocks.WebContentsView,
   screen: {
     getPrimaryDisplay: () => ({ bounds: { x: 0, y: 0, width: 1920, height: 1080 } }),
@@ -111,12 +136,20 @@ vi.mock("electron", () => ({
     getDisplayNearestPoint: () => ({
       workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     }),
+    getAllDisplays: () => [
+      {
+        id: 7,
+        bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+      },
+    ],
     screenToDipPoint: (point: { x: number; y: number }) => point,
   },
 }));
 
 vi.mock("@open-orpheus/window", () => ({
   DesktopEnvironment: { Wayland: "wayland", X11: "x11", Windows: "windows" },
+  LayerShellLayer: { Overlay: 3 },
   getDesktopEnvironment: () => mocks.desktop,
   supportsNativeWaylandPopup: () => true,
   getPopupCapability: () => ({ supported: true }),
@@ -133,7 +166,10 @@ vi.mock("@open-orpheus/window", () => ({
   getCursorPosition: () => null,
   captureNextWindowFirstCursorEnter: vi.fn(() => 1),
   cancelNextWindowFirstCursorEnter: vi.fn(() => true),
-  captureCursorEnter: vi.fn(async () => null),
+  captureCursorEnter: vi.fn(async () => mocks.pointer),
+  getWindowOutputDisplayId: vi.fn(() => 7),
+  isWindowKeyboardFocused: vi.fn(() => mocks.keyboardFocus),
+  setWindowLayerShellSize: vi.fn(() => true),
   captureWindowTouch: vi.fn(() => 1),
   cancelWindowTouch: vi.fn(() => true),
 }));
@@ -142,8 +178,10 @@ vi.mock("../../src/main/window", () => ({
   ManagedWindow: {
     fromBrowserWindow: () => ({ id: "parent-1" }),
     fromId: () => ({ window: mocks.parentWindow }),
+    layerShellVersion: () => mocks.layerVersion,
   },
   BaseWindowManagedWindow: mocks.BaseWindowManagedWindow,
+  LayerCaptureWindow: mocks.LayerCaptureWindow,
   guiUrl: (route: string) => route,
 }));
 
@@ -207,11 +245,16 @@ describe("new menu controller", () => {
   beforeEach(async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     mocks.BaseWindow.instances.length = 0;
+    mocks.BaseWindow.pendingLoad = null;
     mocks.WebContentsView.instances.length = 0;
     mocks.BaseWindowManagedWindow.nextId = 1;
     mocks.policy.mockClear();
     mocks.desktop = "wayland";
     mocks.latestPress = null;
+    mocks.layerVersion = null;
+    mocks.pointer = null;
+    mocks.keyboardFocus = false;
+    mocks.BaseWindowManagedWindow.instances.length = 0;
   });
 
   it("opens a native popup using the available anchor and resolves visible", async () => {
@@ -345,6 +388,148 @@ describe("new menu controller", () => {
     );
     menu.close();
     await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  it("opens a layer-shell menu at the compositor-chosen output", async () => {
+    mocks.layerVersion = 5;
+    mocks.pointer = [100, 100];
+    const menu = new AppMenu([item("play")]);
+    const showing = menu.show(mocks.parentWindow as never);
+    const view = await waitForView();
+    await driveSurface(view);
+    await showing;
+
+    const host = mocks.BaseWindowManagedWindow.instances.find(
+      (entry) => entry.setLayerShell.mock.calls.length > 0
+    );
+    expect(host).toBeDefined();
+    const options = host!.setLayerShell.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options).toMatchObject({
+      layer: 3,
+      output: 7,
+      width: 232,
+      height: 281,
+      anchorTop: true,
+      anchorLeft: true,
+      marginTop: 76,
+      marginLeft: 76,
+      exclusiveZone: -1,
+      keyboardInteractivity: 2,
+    });
+    expect(mocks.BaseWindow.instances[0].setPosition).not.toHaveBeenCalled();
+    menu.close();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  it("closes a pending capture window when the menu is cancelled", async () => {
+    mocks.layerVersion = 5;
+    mocks.pointer = [100, 100];
+    let resolveLoad!: () => void;
+    mocks.BaseWindow.pendingLoad = new Promise((resolve) => {
+      resolveLoad = resolve;
+    });
+    const menu = new AppMenu([item("play")]);
+    const showing = menu.show(mocks.parentWindow as never);
+    await vi.waitFor(() => expect(mocks.BaseWindow.instances.length).toBeGreaterThan(0));
+    const captureWindow = mocks.BaseWindow.instances[0]!;
+
+    menu.close();
+    resolveLoad();
+    await showing.catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(captureWindow.destroyed).toBe(true);
+    expect(captureWindow.show).not.toHaveBeenCalled();
+  });
+
+  it("falls back to overlay when layer-shell capture fails", async () => {
+    mocks.layerVersion = 5;
+    mocks.pointer = null;
+    const menu = new AppMenu([item("play")]);
+    const showing = menu.show(mocks.parentWindow as never);
+    await vi.waitFor(() => expect(mocks.WebContentsView.instances.length).toBeGreaterThan(1));
+    for (const entry of mocks.WebContentsView.instances) {
+      if (entry === mocks.WebContentsView.instances[0]) continue;
+      await vi.waitFor(() => expect(entry.handlers.has("menu.surface.ready")).toBe(true));
+      await entry.handlers.get("menu.surface.ready")!({});
+    }
+    const overlayView = await vi.waitFor(() => {
+      const candidate = mocks.WebContentsView.instances.find(
+        (entry) =>
+          entry !== mocks.WebContentsView.instances[0] &&
+          entry.sent.some((message) => message.channel === "menu.surface.prepare")
+      );
+      if (!candidate) throw new Error("overlay surface was not created");
+      return candidate;
+    });
+    await driveSurface(overlayView);
+    await showing;
+    expect(mocks.BaseWindow.instances.length).toBeGreaterThanOrEqual(1);
+    menu.close();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  it("falls back to overlay when the compositor lacks on_demand focus", async () => {
+    mocks.layerVersion = 3;
+    const menu = new AppMenu([item("play")]);
+    const showing = menu.show(mocks.parentWindow as never);
+    const view = await waitForView();
+    await driveSurface(view);
+    await showing;
+    expect(mocks.BaseWindow.instances.length).toBeGreaterThanOrEqual(1);
+    menu.close();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  it("flips the layer-shell menu left and up near an output corner", async () => {
+    mocks.layerVersion = 5;
+    mocks.pointer = [1900, 1000];
+    const menu = new AppMenu([item("play")]);
+    const showing = menu.show(mocks.parentWindow as never);
+    const view = await waitForView();
+    await driveSurface(view);
+    await showing;
+
+    const host = mocks.BaseWindowManagedWindow.instances.find(
+      (entry) => entry.setLayerShell.mock.calls.length > 0
+    );
+    const options = host!.setLayerShell.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options).toMatchObject({
+      anchorTop: false,
+      anchorBottom: true,
+      anchorLeft: false,
+      anchorRight: true,
+      marginBottom: 56,
+      marginRight: 0,
+    });
+    menu.close();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  it("closes the layer-shell menu when keyboard focus is lost", async () => {
+    mocks.layerVersion = 5;
+    mocks.pointer = [100, 100];
+    mocks.keyboardFocus = false;
+    const menu = new AppMenu([item("play")]);
+    const showing = menu.show(mocks.parentWindow as never);
+    const view = await waitForView();
+    await driveSurface(view);
+    await showing;
+
+    const rootWindow = mocks.BaseWindow.instances.at(-1)!;
+    mocks.keyboardFocus = true;
+    for (const handler of rootWindow.handlers.get("focus") ?? []) handler();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const closed = new Promise<void>((resolve) => menu.on("close", () => resolve()));
+    mocks.keyboardFocus = false;
+    for (const handler of rootWindow.handlers.get("blur") ?? []) handler();
+    await Promise.race([
+      closed,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("menu did not close on focus loss")), 500)
+      ),
+    ]);
   });
 
   describe("AppMenu.update", () => {

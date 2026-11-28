@@ -208,6 +208,7 @@ pub fn capture_cursor_enter(window_id: String, timeout_ms: u32) -> AsyncTask<Cap
         timeout_ms,
     })
 }
+
 /// Register the intent to present `target_window_id` as an xdg_popup of
 /// `parent_window_id`, with the size the renderer measured.
 ///
@@ -518,19 +519,60 @@ pub fn get_cursor_position() -> Result<Option<(f64, f64)>> {
     }
 }
 
-/// Whether the compositor advertises `zwlr_layer_shell_v1`.
+/// Whether the compositor currently gives this window keyboard focus.
 ///
-/// Only meaningful for Wayland on Linux; everywhere else it is `false`.
+/// This is the authoritative `wl_keyboard.enter`/`leave` state, not Electron's
+/// xdg-activation-based `isFocused()`. Layer surfaces can be keyboard-focused
+/// without ever receiving an xdg `activated` state.
 #[napi]
-pub fn is_layer_shell_available() -> bool {
+pub fn is_window_keyboard_focused(window_id: String) -> bool {
     #[cfg(target_os = "linux")]
     {
-        crate::linux::is_layer_shell_available()
+        crate::linux::window_keyboard_focused(&window_id)
     }
 
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = window_id;
         false
+    }
+}
+
+/// The `Display.id` of the output a managed window's surface entered.
+///
+/// Wayland does not report a window's global position, but it does report which
+/// outputs its surface entered. This maps that back to the `Display.id` Electron
+/// uses. `null` when the window has no surface, has not entered an output yet,
+/// or the compositor is too old to expose the mapping.
+#[napi]
+pub fn get_window_output_display_id(window_id: String) -> Option<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::window_output_display_id(&window_id)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window_id;
+        None
+    }
+}
+
+/// The layer-shell version advertised by a live compositor, or `null`.
+///
+/// `null` means no live connection advertises `zwlr_layer_shell_v1`. A version
+/// of 4 or higher supports `on_demand` keyboard focus, which menus require for
+/// focus-loss dismissal.
+#[napi]
+pub fn layer_shell_version() -> Option<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::layer_shell_version()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
     }
 }
 
@@ -559,6 +601,24 @@ pub fn set_window_layer_shell(window_id: String, options: Option<LayerShellOptio
     {
         let _ = window_id;
         options.is_none()
+    }
+}
+
+/// Resize an existing layer surface, keeping its anchors and margins.
+///
+/// The request is applied at the surface's next commit, because layer state is
+/// double-buffered. Returns whether the window currently is a layer surface.
+#[napi]
+pub fn set_window_layer_shell_size(window_id: String, width: u32, height: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::set_layer_size(&window_id, width, height)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window_id, width, height);
+        false
     }
 }
 
@@ -607,7 +667,7 @@ pub fn forget_window_state(window_id: String) -> bool {
 /// settings UI can check a choice before anything is created.
 ///
 /// This answers for the options only, never for the compositor: whether it
-/// takes layer surfaces at all is `isLayerShellAvailable()`, and a caller that
+/// takes layer surfaces at all is `layerShellVersion()`, and a caller that
 /// needs both asks both.
 #[napi]
 pub fn validate_layer_shell_options(options: LayerShellOptions) -> bool {

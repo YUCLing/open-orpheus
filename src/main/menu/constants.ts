@@ -13,5 +13,8 @@ export const SURFACE_BLUR_DISMISS_MS = 100;
 /** Cursor capture bound. */
 export const DEFAULT_CURSOR_CAPTURE_TIMEOUT_MS = 100;
 
+/** The proxy's capture surface has to map and configure before the pointer arrives. */
+export const LAYER_CAPTURE_TIMEOUT_MS = 300;
+
 /** Touch presses stop anchoring after this age. */
 export const TOUCH_ANCHOR_MAX_AGE_MS = 1_000;

@@ -21,6 +21,7 @@ import { patchById } from "./patch";
 import { PARENT_BLUR_DISMISS_MS } from "./constants";
 import type { MenuBackend, MenuBackendContext } from "./backend/MenuBackend";
 import { WaylandPopupBackend } from "./backend/WaylandPopupBackend";
+import { WaylandLayerShellBackend } from "./backend/WaylandLayerShellBackend";
 import { WaylandOverlayBackend } from "./backend/WaylandOverlayBackend";
 import { DesktopWindowBackend } from "./backend/DesktopWindowBackend";
 
@@ -187,33 +188,29 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     };
     this.context = context;
 
-    const backend = await this.selectBackend(context);
-    this.backend = backend;
-
-    try {
-      await backend.open();
-      LOGGER.info({ itemCount: this.items.length }, "Menu opened");
-    } catch (error) {
-      await backend.close();
-      this.backend = null;
+    const candidates = this.backendCandidates(context);
+    let lastError: unknown = new Error("no menu backend is available");
+    for (const create of candidates) {
       if (this.closed) return;
-
-      if (backend instanceof WaylandPopupBackend) {
-        LOGGER.warn({ err: toError(error) }, "Wayland popup unavailable; falling back to overlay");
-        const overlay = new WaylandOverlayBackend(context);
-        this.backend = overlay;
-        try {
-          await overlay.open();
-        } catch (error) {
-          this.close();
-          throw error;
-        }
+      const backend = create();
+      this.backend = backend;
+      try {
+        await backend.open();
         LOGGER.info({ itemCount: this.items.length }, "Menu opened");
         return;
+      } catch (error) {
+        lastError = error;
+        await backend.close();
+        this.backend = null;
+        if (this.closed) return;
+        LOGGER.warn(
+          { err: toError(error), backend: backend.constructor.name },
+          "Menu backend failed; trying the next one"
+        );
       }
-      this.close();
-      throw error;
     }
+    this.close();
+    throw lastError;
   }
 
   private watchParent(parent: BrowserWindow): void {
@@ -289,19 +286,25 @@ export default class AppMenu extends Emittery<AppMenuEvents> {
     for (const cleanup of this.parentCleanups.splice(0)) cleanup();
   }
 
-  private async selectBackend(context: MenuBackendContext): Promise<MenuBackend> {
+  private backendCandidates(context: MenuBackendContext): Array<() => MenuBackend> {
     const desktop = getDesktopEnvironment();
     if (desktop !== DesktopEnvironment.Wayland) {
-      return new DesktopWindowBackend(context);
+      return [() => new DesktopWindowBackend(context)];
     }
 
+    const candidates: Array<() => MenuBackend> = [];
     const parent = context.parentWindow;
     const capability = getPopupCapability();
     const usePopup = Boolean(
       parent && !parent.isDestroyed() && capability.supported && context.anchor
     );
-    if (usePopup) return new WaylandPopupBackend(context);
-    return new WaylandOverlayBackend(context);
+    if (usePopup) candidates.push(() => new WaylandPopupBackend(context));
+    const layerShellVersion = ManagedWindow.layerShellVersion();
+    if (layerShellVersion !== null && layerShellVersion >= 4) {
+      candidates.push(() => new WaylandLayerShellBackend(context));
+    }
+    candidates.push(() => new WaylandOverlayBackend(context));
+    return candidates;
   }
 
   close() {

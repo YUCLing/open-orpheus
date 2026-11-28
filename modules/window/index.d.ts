@@ -90,14 +90,26 @@ export declare function getPopupCapability(): PopupCapability
 export declare function getUniqueDisplayId(displayId: number): string | null
 
 /**
- * Whether the compositor advertises `zwlr_layer_shell_v1`.
+ * The `Display.id` of the output a managed window's surface entered.
  *
- * Only meaningful for Wayland on Linux; everywhere else it is `false`.
+ * Wayland does not report a window's global position, but it does report which
+ * outputs its surface entered. This maps that back to the `Display.id` Electron
+ * uses. `null` when the window has no surface, has not entered an output yet,
+ * or the compositor is too old to expose the mapping.
  */
-export declare function isLayerShellAvailable(): boolean
+export declare function getWindowOutputDisplayId(windowId: string): number | null
 
 /** Whether the compositor currently reports the window's toplevel as activated. */
 export declare function isWindowActivated(windowId: string): boolean
+
+/**
+ * Whether the compositor currently gives this window keyboard focus.
+ *
+ * This is the authoritative `wl_keyboard.enter`/`leave` state, not Electron's
+ * xdg-activation-based `isFocused()`. Layer surfaces can be keyboard-focused
+ * without ever receiving an xdg `activated` state.
+ */
+export declare function isWindowKeyboardFocused(windowId: string): boolean
 
 /** Whether a pointer is currently over this window's surface. */
 export declare function isWindowPointerInside(windowId: string): boolean
@@ -164,6 +176,15 @@ export interface LayerShellOptions {
 }
 
 /**
+ * The layer-shell version advertised by a live compositor, or `null`.
+ *
+ * `null` means no live connection advertises `zwlr_layer_shell_v1`. A version
+ * of 4 or higher supports `on_demand` keyboard focus, which menus require for
+ * focus-loss dismissal.
+ */
+export declare function layerShellVersion(): number | null
+
+/**
  * Listen for windows whose layer-shell role was refused.
  *
  * A compositor never releases a surface's role, so a window whose surface is
@@ -211,6 +232,14 @@ export declare function setWindowAsBackground(hwnd: Buffer, displayId?: number |
 export declare function setWindowLayerShell(windowId: string, options?: LayerShellOptions | undefined | null): boolean
 
 /**
+ * Resize an existing layer surface, keeping its anchors and margins.
+ *
+ * The request is applied at the surface's next commit, because layer state is
+ * double-buffered. Returns whether the window currently is a layer surface.
+ */
+export declare function setWindowLayerShellSize(windowId: string, width: number, height: number): boolean
+
+/**
  * Register the intent to present `target_window_id` as an xdg_popup of
  * `parent_window_id`, with the size the renderer measured.
  *
@@ -246,7 +275,7 @@ export declare function transferWindowState(fromId: string, toId: string): boole
  * settings UI can check a choice before anything is created.
  *
  * This answers for the options only, never for the compositor: whether it
- * takes layer surfaces at all is `isLayerShellAvailable()`, and a caller that
+ * takes layer surfaces at all is `layerShellVersion()`, and a caller that
  * needs both asks both.
  */
 export declare function validateLayerShellOptions(options: LayerShellOptions): boolean

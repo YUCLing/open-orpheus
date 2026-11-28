@@ -4,12 +4,13 @@
 use std::os::fd::RawFd;
 
 use super::super::codec::{
-    EVT_OUTPUT_NAME, EVT_POPUP_CONFIGURE, EVT_POPUP_DONE, EVT_TOPLEVEL_CONFIGURE, Iface,
-    REQ_CREATE_POSITIONER, REQ_DESTROY, REQ_GET_POPUP, REQ_POSITIONER_SET_ANCHOR,
-    REQ_POSITIONER_SET_ANCHOR_RECT, REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT,
-    REQ_POSITIONER_SET_GRAVITY, REQ_POSITIONER_SET_SIZE, REQ_SET_WINDOW_GEOMETRY, WlMessage,
+    EVT_KEYBOARD_ENTER, EVT_KEYBOARD_LEAVE, EVT_OUTPUT_NAME, EVT_POPUP_CONFIGURE, EVT_POPUP_DONE,
+    EVT_TOPLEVEL_CONFIGURE, Iface, REQ_CREATE_POSITIONER, REQ_DESTROY, REQ_GET_POPUP,
+    REQ_POSITIONER_SET_ANCHOR, REQ_POSITIONER_SET_ANCHOR_RECT,
+    REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT, REQ_POSITIONER_SET_GRAVITY, REQ_POSITIONER_SET_SIZE,
+    REQ_SET_WINDOW_GEOMETRY, WlMessage,
 };
-use super::super::layer_shell::xdg_toplevel_configure;
+use super::super::layer_shell::{self, xdg_toplevel_configure};
 use super::super::outputs;
 use super::super::state::{
     LAST_BUTTON, PopupGeometry, PopupPolicy, SurfaceRole, WaylandConn, popup_policy,
@@ -83,6 +84,28 @@ pub(crate) fn on_get_pointer(conn: &mut WaylandConn, msg: &WlMessage) -> Action 
     Action::Forward
 }
 
+pub(crate) fn on_get_keyboard(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    if let Some(new_id) = msg.u32_arg(8) {
+        conn.ifaces.insert(new_id, Iface::WlKeyboard);
+    }
+    Action::Forward
+}
+
+pub(crate) fn on_keyboard_event(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
+    match msg.opcode {
+        EVT_KEYBOARD_ENTER => {
+            if let Some(surface) = msg.u32_arg(12) {
+                conn.keyboard_focus.insert(msg.object_id, surface);
+            }
+        }
+        EVT_KEYBOARD_LEAVE => {
+            conn.keyboard_focus.remove(&msg.object_id);
+        }
+        _ => {}
+    }
+    Action::Forward
+}
+
 pub(crate) fn on_get_touch(conn: &mut WaylandConn, msg: &WlMessage) -> Action {
     if let Some(new_id) = msg.u32_arg(8) {
         conn.ifaces.insert(new_id, Iface::WlTouch);
@@ -152,22 +175,30 @@ fn build_popup_role(
     policy: &PopupPolicy,
 ) -> Option<Vec<u8>> {
     let wm_base_id = conn.xdg_wm_base_id?;
-    // The parent has to be on this connection, and a layer surface cannot be an
-    // xdg_popup's xdg parent.
+    // The parent has to be on this connection.
     let parent_wl_surface = conn
         .surface_ids
         .iter()
         .find_map(|(surface, id)| (id == &policy.parent_window_id).then_some(*surface))?;
-    if matches!(
-        conn.surface_roles.get(&parent_wl_surface),
-        Some(SurfaceRole::Layer(_))
-    ) {
-        return None;
-    }
-    let parent_xdg_surface_id = conn
-        .xdg_to_wl
-        .iter()
-        .find_map(|(xdg, wl)| (*wl == parent_wl_surface).then_some(*xdg))?;
+    // A layer surface cannot be an xdg_popup's *xdg* parent, but it can be the
+    // popup's layer parent: create the popup with a null xdg parent and then
+    // hand it to `zwlr_layer_surface_v1.get_popup`.
+    let parent_layer_id = match conn.surface_roles.get(&parent_wl_surface) {
+        Some(SurfaceRole::Layer(_)) => Some(
+            conn.wl_to_layer
+                .get(&parent_wl_surface)
+                .copied()
+                .filter(|id| conn.ifaces.get(id) == Some(&Iface::ZwlrLayerSurface))?,
+        ),
+        _ => None,
+    };
+    let parent_xdg_surface_id = match parent_layer_id {
+        Some(_) => 0,
+        None => conn
+            .xdg_to_wl
+            .iter()
+            .find_map(|(xdg, wl)| (*wl == parent_wl_surface).then_some(*xdg))?,
+    };
     let (anchor_x, anchor_y) = match policy.anchor {
         Some(anchor) => anchor,
         None => {
@@ -231,7 +262,9 @@ fn build_popup_role(
         REQ_POSITIONER_SET_CONSTRAINT_ADJUSTMENT,
         &[POSITIONER_SLIDE_X | POSITIONER_SLIDE_Y | POSITIONER_FLIP_X | POSITIONER_FLIP_Y],
     );
-    // xdg_surface.get_popup(new_id, parent, positioner)
+    // xdg_surface.get_popup(new_id, parent, positioner). With a layer parent
+    // the xdg parent is null; the layer request below assigns the real parent
+    // before the initial commit.
     push_message(
         &mut replacement,
         xdg_surface_id,
@@ -242,6 +275,9 @@ fn build_popup_role(
             positioner_id as i32,
         ],
     );
+    if let Some(layer_id) = parent_layer_id {
+        replacement.extend(layer_shell::get_popup(layer_id, top_id));
+    }
     push_message(&mut replacement, positioner_id, REQ_DESTROY, &[]);
     // Position the menu itself, not the transparent shadow buffer.
     if geometry.inset > 0 {
@@ -470,8 +506,68 @@ mod deleted_id_tests {
 
 #[cfg(test)]
 mod popup_shadow_tests {
-    use super::super::super::test_support::{message, request};
+    use super::super::super::test_support::{message, request, u32_at};
     use super::*;
+
+    #[test]
+    fn a_layer_parent_uses_the_layer_get_popup_request() {
+        use super::super::super::{
+            codec::{REQ_GET_TOPLEVEL, REQ_LAYER_GET_POPUP, decode},
+            state::{self, LayerWindow, SurfaceRole},
+            test_support::{options, request},
+        };
+        state::init_state();
+        let fd = 94_102;
+        state::clear_runtime_state_for_fd(fd);
+        state::insert_popup_policy_for_test(
+            fd,
+            "layer-menu",
+            "layer-parent",
+            200,
+            100,
+            0,
+            Some((4, 5)),
+        );
+
+        let mut conn = WaylandConn::new();
+        conn.xdg_wm_base_id = Some(2);
+        conn.surface_ids.insert(10, "layer-parent".into());
+        conn.layer_windows.insert(
+            30,
+            LayerWindow {
+                wl_surface: 10,
+                xdg_surface: 9,
+            },
+        );
+        conn.wl_to_layer.insert(10, 30);
+        conn.ifaces.insert(30, Iface::ZwlrLayerSurface);
+        conn.surface_roles.insert(10, SurfaceRole::Layer(options()));
+        conn.xdg_to_wl.insert(40, 11);
+        conn.stolen_ids.push(900);
+
+        let msg = WlMessage::new(
+            40,
+            REQ_GET_TOPLEVEL,
+            request(40, REQ_GET_TOPLEVEL, 12, &[50]),
+        );
+        let Action::Replace(out) = on_get_toplevel(fd, &mut conn, &msg, Some("layer-menu")) else {
+            panic!("popup not converted")
+        };
+        let messages = decode(&out.concat()).0;
+
+        let popup = messages
+            .iter()
+            .find(|message| message.object_id == 40 && message.opcode == REQ_GET_POPUP)
+            .expect("xdg popup created with a null parent");
+        assert_eq!(u32_at(popup.raw(), 12), 0, "the xdg parent is null");
+        let layer_popup = messages
+            .iter()
+            .find(|message| message.object_id == 30 && message.opcode == REQ_LAYER_GET_POPUP)
+            .expect("the layer parent is assigned");
+        assert_eq!(u32_at(layer_popup.raw(), 8), 50);
+        assert_eq!(conn.ifaces.get(&50), Some(&Iface::XdgPopupShim));
+        state::clear_runtime_state_for_fd(fd);
+    }
 
     #[test]
     fn positioner_uses_content_size_and_preserves_the_anchor() {

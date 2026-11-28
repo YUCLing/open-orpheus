@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import { BaseWindow, screen, WebContentsView } from "electron";
 import { DesktopEnvironment, forgetWindowState, getDesktopEnvironment } from "@open-orpheus/window";
+import type { LayerShellOptions } from "@open-orpheus/window";
 
 import type { InputRegion } from "@shared/types/input-region";
 import type { MenuChildOpenRequest } from "@shared/types/menu-surface";
@@ -36,6 +37,7 @@ export interface MenuSurfaceHandlers {
   onOpenChild(request: MenuChildOpenRequest): void | Promise<void>;
   onCloseChildren(parentId: MenuSurfaceId): void;
   onBlur?(surfaceId: MenuSurfaceId): void;
+  onFocus?(surfaceId: MenuSurfaceId): void;
   onMeasurement?(surfaceId: MenuSurfaceId, measurement: MenuMeasurement): void;
 }
 
@@ -91,6 +93,8 @@ export class BaseWindowMenuSurface implements MenuSurface {
   private readonly host = new BaseWindowManagedWindow();
 
   private window: BaseWindow | null = null;
+  private layerShellOptions: LayerShellOptions | null = null;
+  private appliedLayerSize: { width: number; height: number } | null = null;
   private pendingInputRegions: InputRegion[] | null = null;
   private measurement: MenuMeasurement | null = null;
   private requestId = 0;
@@ -253,9 +257,38 @@ export class BaseWindowMenuSurface implements MenuSurface {
   private applyMeasurement(measurement: MenuMeasurement): void {
     const current = this.window;
     if (!current || current.isDestroyed()) return;
+    if (
+      this.layerShellOptions &&
+      (this.appliedLayerSize?.width !== measurement.width ||
+        this.appliedLayerSize?.height !== measurement.height)
+    ) {
+      // Layer state is double-buffered: queue set_size before the window
+      // resize commits the surface, or the compositor keeps the old size.
+      this.host.setLayerShellSize(measurement.width, measurement.height);
+      this.appliedLayerSize = { width: measurement.width, height: measurement.height };
+    }
     current.setSize(measurement.width, measurement.height);
     this.view.setBounds({ x: 0, y: 0, ...measurement });
+    if (this.layerShellOptions) {
+      // The pending set_size only takes effect at the surface's next commit.
+      // A repaint guarantees Chromium produces one even if the size itself did
+      // not change its buffer.
+      this.view.webContents.invalidate();
+    }
     this.handlers.onMeasurement?.(this.id, measurement);
+  }
+
+  /**
+   * Create this surface as a layer surface.
+   *
+   * Must be called before `present()`: the policy has to be registered before
+   * the window (and therefore its first role object) exists.
+   */
+  setLayerShell(options: LayerShellOptions): void {
+    if (this.presented) {
+      throw new Error("cannot set a layer-shell policy on a presented surface");
+    }
+    this.layerShellOptions = options;
   }
 
   present(): void {
@@ -265,6 +298,10 @@ export class BaseWindowMenuSurface implements MenuSurface {
     if (this.window) return;
 
     const { width, height } = this.measurement;
+    if (this.layerShellOptions && !this.host.setLayerShell(this.layerShellOptions)) {
+      throw new Error("layer-shell policy was refused");
+    }
+    this.appliedLayerSize = { width, height };
     const opaqueFallback = getDesktopEnvironment() === DesktopEnvironment.X11;
     this.view.setBackgroundColor(opaqueFallback ? this.backgroundColor : "#00000000");
     const window = new BaseWindow({
@@ -273,7 +310,7 @@ export class BaseWindowMenuSurface implements MenuSurface {
       width,
       height,
       fullscreen: this.options.fullscreen,
-      transparent: !opaqueFallback,
+      transparent: this.layerShellOptions !== null || !opaqueFallback,
       backgroundColor: opaqueFallback ? this.backgroundColor : "#00000000",
       resizable: false,
       skipTaskbar: true,
@@ -313,6 +350,9 @@ export class BaseWindowMenuSurface implements MenuSurface {
         this.host.releaseNativeState();
         this.handlers.onClose();
       }
+    });
+    window.on("focus", () => {
+      if (!this.closed) this.handlers.onFocus?.(this.id);
     });
     window.on("blur", () => {
       if (!this.closed && this.blurArmed) this.handlers.onBlur?.(this.id);

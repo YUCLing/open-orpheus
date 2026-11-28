@@ -84,6 +84,8 @@ pub(crate) struct WaylandConn {
     pub(crate) pointer_focus: HashMap<u32, u32>,
     pub(crate) pointer_position: HashMap<u32, (i32, i32)>,
     pub(crate) pointer_seat: HashMap<u32, u32>,
+    /// `wl_keyboard` → the surface it currently has focus on.
+    pub(crate) keyboard_focus: HashMap<u32, u32>,
     pub(crate) touch_seat: HashMap<u32, u32>,
     pub(crate) xdg_to_wl: HashMap<u32, u32>,
     pub(crate) wl_to_top: HashMap<u32, u32>,
@@ -104,6 +106,10 @@ pub(crate) struct WaylandConn {
     pub(crate) layer_shell_global: Option<(u32, u32)>,
     /// The shell object the proxy bound for itself, once it was first needed.
     pub(crate) layer_shell_id: Option<u32>,
+    /// The output objects each surface has entered.
+    pub(crate) surface_outputs: HashMap<u32, Vec<u32>>,
+    /// A layer surface's size update, applied at the next commit.
+    pub(crate) layer_sizes: HashMap<u32, (u32, u32)>,
     /// Converted windows, keyed by the id the client uses for its toplevel.
     pub(crate) layer_windows: HashMap<u32, LayerWindow>,
     /// The role each surface has taken, decided once at its first role
@@ -157,6 +163,7 @@ impl WaylandConn {
             pointer_focus: HashMap::new(),
             pointer_position: HashMap::new(),
             pointer_seat: HashMap::new(),
+            keyboard_focus: HashMap::new(),
             touch_seat: HashMap::new(),
             xdg_to_wl: HashMap::new(),
             wl_to_top: HashMap::new(),
@@ -171,6 +178,8 @@ impl WaylandConn {
             registry_id: None,
             layer_shell_global: None,
             layer_shell_id: None,
+            surface_outputs: HashMap::new(),
+            layer_sizes: HashMap::new(),
             layer_windows: HashMap::new(),
             surface_roles: HashMap::new(),
             surface_ids: HashMap::new(),
@@ -190,6 +199,7 @@ impl WaylandConn {
         self.pointer_focus.clear();
         self.pointer_position.clear();
         self.pointer_seat.clear();
+        self.keyboard_focus.clear();
         self.touch_seat.clear();
         self.xdg_to_wl.clear();
         self.wl_to_top.clear();
@@ -206,6 +216,8 @@ impl WaylandConn {
         // The layer shell object belongs to the client namespace, so it has to
         // be re-bound after a resync.
         self.layer_shell_id = None;
+        self.surface_outputs.clear();
+        self.layer_sizes.clear();
         self.layer_windows.clear();
         self.surface_roles.clear();
         self.surface_ids.clear();
@@ -244,6 +256,9 @@ impl WaylandConn {
                 self.pointer_position.remove(&id);
                 self.pointer_seat.remove(&id);
             }
+            Some(Iface::WlKeyboard) => {
+                self.keyboard_focus.remove(&id);
+            }
             Some(Iface::WlTouch) => {
                 self.touch_seat.remove(&id);
             }
@@ -258,6 +273,9 @@ impl WaylandConn {
                 self.surface_roles.remove(&id);
                 self.surface_ids.remove(&id);
                 self.activated_surfaces.remove(&id);
+                self.keyboard_focus.retain(|_, surface| *surface != id);
+                self.surface_outputs.remove(&id);
+                self.layer_sizes.remove(&id);
                 self.popup_geometries
                     .retain(|xdg, _| self.xdg_to_wl.get(xdg) != Some(&id));
                 self.xdg_to_wl.retain(|_, v| *v != id);
@@ -809,6 +827,17 @@ pub(crate) fn window_surface_in(
 /// A display id is one connection's registry global name; Chromium builds its
 /// display cache from the connection it read that registry on, so the live
 /// connections are scanned for the first one that has a name for the id.
+/// The `Display.id` of the output a managed window's surface entered.
+pub(crate) fn window_output_display_id(window_id: &str) -> Option<u32> {
+    let (fd, surface) = window_surface(window_id)?;
+    let conns = CONNS.get()?.lock().ok()?;
+    let conn = conns.get(&fd)?;
+    conn.surface_outputs
+        .get(&surface)?
+        .iter()
+        .find_map(|object| super::outputs::display_id_for_object(conn, *object))
+}
+
 pub(crate) fn output_name(display_id: u32) -> Option<String> {
     let conns = CONNS.get()?.lock().ok()?;
     conns
@@ -846,18 +875,16 @@ fn window_role(window_id: &str) -> Option<WindowRole> {
     window_roles()?.lock().ok()?.get(window_id).cloned()
 }
 
-/// Whether a connection knows a compositor that takes layer surfaces.
+/// The highest layer-shell version advertised by a live compositor.
 ///
-/// Derived from the live connections rather than remembered in a flag, so a
-/// compositor that withdraws the global stops being reported as available.
-pub(crate) fn is_layer_shell_available() -> bool {
-    let Some(conns) = CONNS.get() else {
-        return false;
-    };
-    let Ok(conns) = conns.lock() else {
-        return false;
-    };
-    conns.values().any(|conn| conn.layer_shell_global.is_some())
+/// `None` means no live connection advertises `zwlr_layer_shell_v1`. The
+/// version decides whether `on_demand` keyboard focus exists (v4+).
+pub(crate) fn layer_shell_version() -> Option<u32> {
+    let conns = CONNS.get()?.lock().ok()?;
+    conns
+        .values()
+        .filter_map(|conn| conn.layer_shell_global.map(|(_, version)| version))
+        .max()
 }
 
 /// Register (or replace) the layer-shell policy for a managed window.
@@ -895,6 +922,51 @@ pub(crate) fn layer_policy(window_id: &str) -> Option<LayerShellOptions> {
         WindowRole::Layer(options) => Some(options),
         WindowRole::Popup(_) => None,
     }
+}
+
+/// Resize an existing layer surface, keeping its anchors and margins.
+///
+/// The requests are queued for the surface's next commit: layer state is
+/// double-buffered, so sending `set_size` without a commit would do nothing.
+/// The cached role is updated as well, so a later surface for the same window
+/// is created at the new size.
+pub(crate) fn set_layer_size(window_id: &str, width: u32, height: u32) -> bool {
+    if width == 0 || height == 0 {
+        return false;
+    }
+    let Some(conns) = CONNS.get() else {
+        return false;
+    };
+    let Ok(mut conns) = conns.lock() else {
+        return false;
+    };
+    let Some((fd, surface)) = window_surface_in(&conns, window_id) else {
+        return false;
+    };
+    let Some(conn) = conns.get_mut(&fd) else {
+        return false;
+    };
+    let Some(layer_id) = conn.wl_to_layer.get(&surface).copied() else {
+        return false;
+    };
+    if conn.ifaces.get(&layer_id) != Some(&Iface::ZwlrLayerSurface) {
+        return false;
+    }
+    if let Some(SurfaceRole::Layer(options)) = conn.surface_roles.get_mut(&surface) {
+        options.width = width;
+        options.height = height;
+    }
+    conn.layer_sizes.insert(surface, (width, height));
+    drop(conns);
+
+    if let Some(roles) = window_roles()
+        && let Ok(mut roles) = roles.lock()
+        && let Some(WindowRole::Layer(options)) = roles.get_mut(window_id)
+    {
+        options.width = width;
+        options.height = height;
+    }
+    true
 }
 
 /// Whether any window has a layer-shell policy that could still apply.
@@ -1367,6 +1439,25 @@ pub(crate) fn window_last_press_age(window_id: &str) -> Option<Duration> {
 /// The compositor sends `wl_pointer.enter` and `leave` for the surface under
 /// the pointer, so this is occlusion-correct: a pointer that moved onto a
 /// window covering this one is not "inside" it.
+/// Whether the compositor currently gives this window keyboard focus.
+pub(crate) fn window_keyboard_focused(window_id: &str) -> bool {
+    let Some((fd, wl_surface_id)) = window_surface(window_id) else {
+        return false;
+    };
+    CONNS
+        .get()
+        .and_then(|conns| conns.lock().ok())
+        .and_then(|conns| {
+            let conn = conns.get(&fd)?;
+            Some(
+                conn.keyboard_focus
+                    .values()
+                    .any(|surface| *surface == wl_surface_id),
+            )
+        })
+        .unwrap_or(false)
+}
+
 pub(crate) fn window_pointer_inside(window_id: &str) -> bool {
     let Some((fd, wl_surface_id)) = window_surface(window_id) else {
         return false;
@@ -2147,6 +2238,39 @@ mod popup_tests {
         // The name is connection-scoped, so it goes away with the connection.
         on_close(fd);
         assert!(window_surface("test-window").is_none());
+    }
+
+    #[test]
+    fn a_layer_size_update_refreshes_both_caches_and_queues_a_commit() {
+        use super::super::test_support::{Registered, options, serial};
+
+        let _guard = serial();
+        init_state();
+        clear_all_layer_policies();
+
+        let mut conn = WaylandConn::new();
+        conn.ifaces.insert(10, Iface::WlSurface);
+        conn.ifaces.insert(30, Iface::ZwlrLayerSurface);
+        conn.surface_ids.insert(10, "layer-window".into());
+        conn.wl_to_layer.insert(10, 30);
+        conn.surface_roles.insert(10, SurfaceRole::Layer(options()));
+        set_layer_policy("layer-window", options());
+
+        let registered = Registered::new(41, conn);
+
+        assert!(set_layer_size("layer-window", 320, 240));
+        registered.with(|conn| {
+            assert_eq!(conn.layer_sizes.get(&10), Some(&(320, 240)));
+            match conn.surface_roles.get(&10) {
+                Some(SurfaceRole::Layer(cached)) => {
+                    assert_eq!((cached.width, cached.height), (320, 240));
+                }
+                _ => panic!("the cached layer role was not resized"),
+            }
+        });
+        let policy = layer_policy("layer-window").expect("policy");
+        assert_eq!((policy.width, policy.height), (320, 240));
+        clear_all_layer_policies();
     }
 
     #[test]

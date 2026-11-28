@@ -16,9 +16,10 @@ use std::os::fd::RawFd;
 
 use super::codec::{
     EVT_DELETE_ID, EVT_GLOBAL, EVT_GLOBAL_REMOVE, Iface, REQ_BIND, REQ_COMMIT, REQ_CREATE_SURFACE,
-    REQ_DESTROY, REQ_GET_POINTER, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL, REQ_GET_TOPLEVEL_DECORATION,
-    REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE, REQ_SET_WINDOW_GEOMETRY,
-    WL_OUTPUT_RELEASE, WL_POINTER_RELEASE, WL_SEAT_RELEASE, WL_TOUCH_RELEASE, WlMessage,
+    REQ_DESTROY, REQ_GET_KEYBOARD, REQ_GET_POINTER, REQ_GET_REGISTRY, REQ_GET_TOPLEVEL,
+    REQ_GET_TOPLEVEL_DECORATION, REQ_GET_TOUCH, REQ_GET_XDG_SURFACE, REQ_SET_ICON, REQ_SET_TITLE,
+    REQ_SET_WINDOW_GEOMETRY, WL_OUTPUT_RELEASE, WL_POINTER_RELEASE, WL_SEAT_RELEASE,
+    WL_TOUCH_RELEASE, WlMessage,
 };
 use super::inject;
 use super::state::WaylandConn;
@@ -90,6 +91,7 @@ fn dispatch_request_inner(
         (Iface::WlRegistry, REQ_BIND) => objects::on_bind(conn, msg),
         (Iface::WlCompositor, REQ_CREATE_SURFACE) => objects::on_create_surface(conn, msg),
         (Iface::WlSeat, REQ_GET_POINTER) => objects::on_get_pointer(conn, msg),
+        (Iface::WlSeat, REQ_GET_KEYBOARD) => objects::on_get_keyboard(conn, msg),
         (Iface::WlSeat, REQ_GET_TOUCH) => objects::on_get_touch(conn, msg),
         (Iface::XdgWmBase, REQ_GET_XDG_SURFACE) => objects::on_get_xdg_surface(conn, msg),
         (Iface::ZxdgDecorationManager, REQ_GET_TOPLEVEL_DECORATION) => {
@@ -115,12 +117,16 @@ fn dispatch_request_inner(
         // place it after this commit and leave the surface on the old region
         // until something committed again.
         (Iface::WlSurface, REQ_COMMIT) => {
-            match inject::region_requests_for_commit(conn, msg.object_id) {
-                Some(mut requests) => {
-                    requests.push(msg.raw().to_vec());
-                    Action::Replace(requests)
-                }
-                None => Action::Forward,
+            let mut requests =
+                inject::layer_size_requests_for_commit(conn, msg.object_id).unwrap_or_default();
+            if let Some(mut regions) = inject::region_requests_for_commit(conn, msg.object_id) {
+                requests.append(&mut regions);
+            }
+            if requests.is_empty() {
+                Action::Forward
+            } else {
+                requests.push(msg.raw().to_vec());
+                Action::Replace(requests)
             }
         }
         (Iface::WlSurface | Iface::XdgSurface | Iface::XdgToplevel, REQ_DESTROY) => {
@@ -147,6 +153,10 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
         return Action::Suppress;
     }
 
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlSurface) {
+        return super::outputs::on_surface_event(conn, msg);
+    }
+
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlRegistry) {
         return match msg.opcode {
             EVT_GLOBAL => conversion::on_registry_global(conn, msg),
@@ -165,6 +175,10 @@ pub(crate) fn dispatch_event(conn: &mut WaylandConn, msg: &WlMessage, fx: &mut E
 
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlPointer) {
         return pointer::on_pointer_event(conn, msg, fx);
+    }
+
+    if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlKeyboard) {
+        return objects::on_keyboard_event(conn, msg);
     }
 
     if conn.ifaces.get(&msg.object_id) == Some(&Iface::WlTouch) {
